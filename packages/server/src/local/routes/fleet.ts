@@ -4,12 +4,13 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { parseTier, getCapabilities } from '@waggle/shared';
+import { parseTier } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { runAgentLoop, isEnabled, detectTaskShape, listPersonas } from '@waggle/agent';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
+import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 
 const log = createLogger('fleet');
 
@@ -43,8 +44,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     // Tier-based maxSessions: FREE=3, PRO=10, TEAMS=25, ENTERPRISE/TRIAL=100
     const tierRaw = fastify.localConfig?.tier ?? '';
     const tier = parseTier(String(tierRaw)) ?? 'FREE';
-    const caps = getCapabilities(tier);
-    const maxSessions = tier === 'FREE' ? 3 : tier === 'PRO' ? 10 : tier === 'TEAMS' ? 25 : 100;
+    const maxSessions = maxWorkspaceSessionsForTier(tier);
 
     return { sessions, count: sessions.length, maxSessions };
   });

@@ -1,0 +1,116 @@
+{
+  "nodes": [
+    {
+      "id": "pipeline:.github/workflows/ci.yml",
+      "type": "pipeline",
+      "name": "ci.yml",
+      "filePath": ".github/workflows/ci.yml",
+      "summary": "Primary CI pipeline that runs on push/PR to main, executing TypeScript type-checking, ESLint, Vitest unit tests, and Playwright E2E tests (with package build and browser install) in two sequential jobs.",
+      "tags": ["ci-cd", "testing", "linting", "typescript", "e2e"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "pipeline:.github/workflows/deploy-www.yml",
+      "type": "pipeline",
+      "name": "deploy-www.yml",
+      "filePath": ".github/workflows/deploy-www.yml",
+      "summary": "GitHub Pages deployment pipeline for the apps/www landing site, triggered on pushes to main that touch apps/www/** with build and deploy jobs in sequence.",
+      "tags": ["ci-cd", "deployment", "landing-page", "github-pages"],
+      "complexity": "simple"
+    },
+    {
+      "id": "pipeline:.github/workflows/hive-mind-cli-cross-platform.yml",
+      "type": "pipeline",
+      "name": "hive-mind-cli-cross-platform.yml",
+      "filePath": ".github/workflows/hive-mind-cli-cross-platform.yml",
+      "summary": "Cross-platform install and smoke test for the hive-mind-cli package, running a 3-OS matrix (ubuntu, macos, windows) that builds the hive-mind package chain and verifies `hive-mind-cli doctor` passes without errors.",
+      "tags": ["ci-cd", "cross-platform", "testing", "hive-mind", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Uses a matrix strategy with fail-fast: false so all OS cells run even when one fails, providing full coverage breadth."
+    },
+    {
+      "id": "pipeline:.github/workflows/mind-parity-check.yml",
+      "type": "pipeline",
+      "name": "mind-parity-check.yml",
+      "filePath": ".github/workflows/mind-parity-check.yml",
+      "summary": "DEPRECATED audit-trail workflow (2026-04-30) that previously verified behavioral parity between the waggle-os memory substrate and the external hive-mind repo; trigger paths no longer exist after the monorepo migration so it never fires.",
+      "tags": ["ci-cd", "deprecated", "testing", "hive-mind", "parity"],
+      "complexity": "complex",
+      "languageNotes": "Preserved as a deprecation anchor per project policy; trigger paths packages/core/src/mind/** were moved to packages/hive-mind-core/ and are no longer tracked."
+    },
+    {
+      "id": "pipeline:.github/workflows/release.yml",
+      "type": "pipeline",
+      "name": "release.yml",
+      "filePath": ".github/workflows/release.yml",
+      "summary": "Release build pipeline triggered on v* tag pushes that builds Tauri desktop binaries for Windows (NSIS) and macOS (aarch64 + x86_64 DMG), publishes them as GitHub Release draft assets, and generates a Tauri auto-update latest.json manifest.",
+      "tags": ["ci-cd", "deployment", "release", "tauri", "desktop"],
+      "complexity": "complex",
+      "languageNotes": "Uses tauri-apps/tauri-action@v0 to orchestrate the Rust+Vite build pipeline; macOS leg uses a target matrix for universal binary support."
+    },
+    {
+      "id": "pipeline:.github/workflows/sync-mind.yml",
+      "type": "pipeline",
+      "name": "sync-mind.yml",
+      "filePath": ".github/workflows/sync-mind.yml",
+      "summary": "DEPRECATED audit-trail workflow (2026-04-30) that previously auto-synced waggle-os memory substrate changes to the external marolinik/hive-mind repo via filtered patch + PR; never fires now because its trigger paths no longer exist after monorepo migration.",
+      "tags": ["ci-cd", "deprecated", "sync", "hive-mind", "automation"],
+      "complexity": "complex",
+      "languageNotes": "Contained sophisticated EXTRACTION.md-based filtering to exclude proprietary files (vault.ts, compliance, evolution) from the OSS mirror sync; preserved as deprecation anchor per CLAUDE.md §7.5."
+    },
+    {
+      "id": "pipeline:.github/workflows/tauri-build-pr.yml",
+      "type": "pipeline",
+      "name": "tauri-build-pr.yml",
+      "filePath": ".github/workflows/tauri-build-pr.yml",
+      "summary": "Per-PR and main-push Tauri desktop build verification pipeline that builds the full package chain, sidecar, native deps, frontend, and Tauri binary for both Windows and macOS, uploading artifacts to the workflow run for download verification without publishing a release.",
+      "tags": ["ci-cd", "deployment", "tauri", "desktop", "build-system"],
+      "complexity": "complex",
+      "languageNotes": "Fetches @tauri-apps/cli@2 explicitly via npx --yes because it is absent from the lockfile; skips code signing (TAURI_PRIVATE_KEY='') so CI validates compilation only."
+    }
+  ],
+  "edges": [
+    {
+      "source": "pipeline:.github/workflows/ci.yml",
+      "target": "file:apps/web/src/main.tsx",
+      "type": "triggers",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "pipeline:.github/workflows/deploy-www.yml",
+      "target": "file:apps/www/src/index.tsx",
+      "type": "deploys",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "pipeline:.github/workflows/tauri-build-pr.yml",
+      "target": "file:app/src-tauri/src/main.rs",
+      "type": "deploys",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "pipeline:.github/workflows/release.yml",
+      "target": "file:app/src-tauri/src/main.rs",
+      "type": "deploys",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "pipeline:.github/workflows/tauri-build-pr.yml",
+      "target": "pipeline:.github/workflows/release.yml",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "pipeline:.github/workflows/hive-mind-cli-cross-platform.yml",
+      "target": "file:packages/hive-mind-cli/src/index.ts",
+      "type": "triggers",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

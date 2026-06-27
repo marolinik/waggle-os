@@ -1,0 +1,4238 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/agent/src/capability-acquisition.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 447,
+      "nonEmptyLines": 385,
+      "functions": [
+        {
+          "name": "extractKeywords",
+          "startLine": 64,
+          "endLine": 70,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "scoreMatch",
+          "startLine": 74,
+          "endLine": 97,
+          "params": [
+            "keywords",
+            "name",
+            "content"
+          ]
+        },
+        {
+          "name": "buildMatchReason",
+          "startLine": 99,
+          "endLine": 108,
+          "params": [
+            "nameHits",
+            "contentHits"
+          ]
+        },
+        {
+          "name": "loadStarterSkillsMeta",
+          "startLine": 142,
+          "endLine": 156,
+          "params": [
+            "starterDir"
+          ]
+        },
+        {
+          "name": "searchCapabilities",
+          "startLine": 179,
+          "endLine": 326,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "buildProposalSummary",
+          "startLine": 330,
+          "endLine": 407,
+          "params": [
+            "need",
+            "candidates",
+            "recommendation",
+            "alreadyHandled"
+          ]
+        },
+        {
+          "name": "capitalize",
+          "startLine": 409,
+          "endLine": 411,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "validateInstallCandidate",
+          "startLine": 424,
+          "endLine": 447,
+          "params": [
+            "name",
+            "source",
+            "starterSkillsDir",
+            "installedSkillNames"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "loadStarterSkillsMeta",
+          "line": 142,
+          "isDefault": false
+        },
+        {
+          "name": "searchCapabilities",
+          "line": 179,
+          "isDefault": false
+        },
+        {
+          "name": "validateInstallCandidate",
+          "line": 424,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase()\r\n    .split(/\\s+/)\r\n    .map(w => w.replace(/[^a-z0-9-_]/g, ''))\r\n    .filter",
+          "lineNumber": 65
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase()\r\n    .split(/\\s+/)\r\n    .map",
+          "lineNumber": 65
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase()\r\n    .split",
+          "lineNumber": 65
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase",
+          "lineNumber": 65
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "w.replace",
+          "lineNumber": 68
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "STOP_WORDS.has",
+          "lineNumber": 69
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "name.toLowerCase().replace",
+          "lineNumber": 75
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "name.toLowerCase",
+          "lineNumber": 75
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "content.toLowerCase",
+          "lineNumber": 76
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "nameLower.includes",
+          "lineNumber": 83
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "contentLower.includes",
+          "lineNumber": 84
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "nameHits.push",
+          "lineNumber": 88
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "contentHits.push",
+          "lineNumber": 91
+        },
+        {
+          "caller": "scoreMatch",
+          "callee": "Math.min",
+          "lineNumber": 95
+        },
+        {
+          "caller": "buildMatchReason",
+          "callee": "parts.push",
+          "lineNumber": 102
+        },
+        {
+          "caller": "buildMatchReason",
+          "callee": "nameHits.join",
+          "lineNumber": 102
+        },
+        {
+          "caller": "buildMatchReason",
+          "callee": "parts.push",
+          "lineNumber": 105
+        },
+        {
+          "caller": "buildMatchReason",
+          "callee": "contentHits.join",
+          "lineNumber": 105
+        },
+        {
+          "caller": "buildMatchReason",
+          "callee": "parts.join",
+          "lineNumber": 107
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "fs.existsSync",
+          "lineNumber": 143
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "fs.readdirSync(starterDir)\r\n    .filter(f => f.endsWith('.md'))\r\n    .map",
+          "lineNumber": 145
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "fs.readdirSync(starterDir)\r\n    .filter",
+          "lineNumber": 145
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "fs.readdirSync",
+          "lineNumber": 145
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "f.endsWith",
+          "lineNumber": 146
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "fs.readFileSync(path.join(starterDir, f), 'utf-8').trim",
+          "lineNumber": 148
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "fs.readFileSync",
+          "lineNumber": 148
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "path.join",
+          "lineNumber": 148
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "content.split('\\n').find(l => l.trim().length > 0)?.replace",
+          "lineNumber": 149
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "content.split('\\n').find",
+          "lineNumber": 149
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "content.split",
+          "lineNumber": 149
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "l.trim",
+          "lineNumber": 149
+        },
+        {
+          "caller": "loadStarterSkillsMeta",
+          "callee": "f.replace",
+          "lineNumber": 151
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "extractKeywords",
+          "lineNumber": 181
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "installedSkills.map",
+          "lineNumber": 195
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "toolName.replace",
+          "lineNumber": 199
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "scoreMatch",
+          "lineNumber": 200
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.push",
+          "lineNumber": 203
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "buildMatchReason",
+          "lineNumber": 210
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "assessTrust",
+          "lineNumber": 212
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "scoreMatch",
+          "lineNumber": 219
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "parseSkillFrontmatter",
+          "lineNumber": 222
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "skill.content.split('\\n').find(l => l.trim().length > 0)?.replace",
+          "lineNumber": 223
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "skill.content.split('\\n').find",
+          "lineNumber": 223
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "skill.content.split",
+          "lineNumber": 223
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "l.trim",
+          "lineNumber": 223
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.push",
+          "lineNumber": 224
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "buildMatchReason",
+          "lineNumber": 231
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "assessTrust",
+          "lineNumber": 233
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "loadStarterSkillsMeta",
+          "lineNumber": 239
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "installedNames.has",
+          "lineNumber": 242
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "scoreMatch",
+          "lineNumber": 244
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "parseSkillFrontmatter",
+          "lineNumber": 247
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.push",
+          "lineNumber": 248
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "buildMatchReason",
+          "lineNumber": 255
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "assessTrust",
+          "lineNumber": 257
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "installedNames.has",
+          "lineNumber": 265
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.some",
+          "lineNumber": 266
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "scoreMatch",
+          "lineNumber": 268
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "Math.min",
+          "lineNumber": 270
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "Math.max",
+          "lineNumber": 270
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.push",
+          "lineNumber": 273
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "buildMatchReason",
+          "lineNumber": 280
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "assessTrust",
+          "lineNumber": 282
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.sort",
+          "lineNumber": 295
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "Math.abs",
+          "lineNumber": 297
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.find",
+          "lineNumber": 302
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.find",
+          "lineNumber": 303
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.some",
+          "lineNumber": 316
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "buildProposalSummary",
+          "lineNumber": 321
+        },
+        {
+          "caller": "searchCapabilities",
+          "callee": "candidates.slice",
+          "lineNumber": 322
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 350
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "candidates.filter",
+          "lineNumber": 353
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "candidates.filter",
+          "lineNumber": 354
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 357
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "activeMatches.slice",
+          "lineNumber": 358
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 360
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 365
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "installable.slice",
+          "lineNumber": 366
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "formatTrustSummary",
+          "lineNumber": 367
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 368
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "capitalize",
+          "lineNumber": 375
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "String(recommendation.description || recommendation.matchReason || 'fills the requested capability gap')\r\n      .replace(/[{}<>]/g, '').replace(/\\s+/g, ' ').trim().slice",
+          "lineNumber": 383
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "String(recommendation.description || recommendation.matchReason || 'fills the requested capability gap')\r\n      .replace(/[{}<>]/g, '').replace(/\\s+/g, ' ').trim",
+          "lineNumber": 383
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "String(recommendation.description || recommendation.matchReason || 'fills the requested capability gap')\r\n      .replace(/[{}<>]/g, '').replace",
+          "lineNumber": 383
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "String(recommendation.description || recommendation.matchReason || 'fills the requested capability gap')\r\n      .replace",
+          "lineNumber": 383
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "String",
+          "lineNumber": 383
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "JSON.stringify",
+          "lineNumber": 385
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 390
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.push",
+          "lineNumber": 401
+        },
+        {
+          "caller": "buildProposalSummary",
+          "callee": "sections.join",
+          "lineNumber": 406
+        },
+        {
+          "caller": "capitalize",
+          "callee": "s.charAt(0).toUpperCase",
+          "lineNumber": 410
+        },
+        {
+          "caller": "capitalize",
+          "callee": "s.charAt",
+          "lineNumber": 410
+        },
+        {
+          "caller": "capitalize",
+          "callee": "s.slice",
+          "lineNumber": 410
+        },
+        {
+          "caller": "validateInstallCandidate",
+          "callee": "path.join",
+          "lineNumber": 436
+        },
+        {
+          "caller": "validateInstallCandidate",
+          "callee": "fs.existsSync",
+          "lineNumber": 437
+        },
+        {
+          "caller": "validateInstallCandidate",
+          "callee": "installedSkillNames.has",
+          "lineNumber": 442
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 3,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-autoextract.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 138,
+      "nonEmptyLines": 127,
+      "functions": [
+        {
+          "name": "skillFilename",
+          "startLine": 60,
+          "endLine": 65,
+          "params": [
+            "template"
+          ]
+        },
+        {
+          "name": "annotateWithScope",
+          "startLine": 72,
+          "endLine": 80,
+          "params": [
+            "md"
+          ]
+        },
+        {
+          "name": "autoExtractAndCreateSkill",
+          "startLine": 86,
+          "endLine": 138,
+          "params": [
+            "messages",
+            "deps"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "skillFilename",
+          "line": 60,
+          "isDefault": false
+        },
+        {
+          "name": "autoExtractAndCreateSkill",
+          "line": 86,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "skillFilename",
+          "callee": "template.name\r\n    .toLowerCase()\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace",
+          "lineNumber": 61
+        },
+        {
+          "caller": "skillFilename",
+          "callee": "template.name\r\n    .toLowerCase()\r\n    .replace",
+          "lineNumber": 61
+        },
+        {
+          "caller": "skillFilename",
+          "callee": "template.name\r\n    .toLowerCase",
+          "lineNumber": 61
+        },
+        {
+          "caller": "annotateWithScope",
+          "callee": "md.replace",
+          "lineNumber": 76
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "detectWorkflowPattern",
+          "lineNumber": 90
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "skillFilename",
+          "lineNumber": 95
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "fs.existsSync",
+          "lineNumber": 96
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 97
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "path.join",
+          "lineNumber": 99
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "fs.existsSync",
+          "lineNumber": 100
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "deps.enrichTemplate",
+          "lineNumber": 109
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "redactSkillContent",
+          "lineNumber": 117
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "annotateWithScope",
+          "lineNumber": 117
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "generateSkillMarkdown",
+          "lineNumber": 117
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 118
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "deps.improvementSignals.record",
+          "lineNumber": 122
+        },
+        {
+          "caller": "autoExtractAndCreateSkill",
+          "callee": "finalTemplate.tools.join",
+          "lineNumber": 125
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-creator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 227,
+      "nonEmptyLines": 193,
+      "functions": [
+        {
+          "name": "generateSkillMarkdown",
+          "startLine": 26,
+          "endLine": 62,
+          "params": [
+            "template"
+          ]
+        },
+        {
+          "name": "extractToolSequence",
+          "startLine": 68,
+          "endLine": 78,
+          "params": [
+            "messages"
+          ]
+        },
+        {
+          "name": "longestCommonSubsequenceLength",
+          "startLine": 84,
+          "endLine": 103,
+          "params": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "name": "toolSequenceSimilarity",
+          "startLine": 109,
+          "endLine": 113,
+          "params": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "name": "detectWorkflowPattern",
+          "startLine": 124,
+          "endLine": 211,
+          "params": [
+            "messages"
+          ]
+        },
+        {
+          "name": "inferCategory",
+          "startLine": 216,
+          "endLine": 227,
+          "params": [
+            "tools"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "generateSkillMarkdown",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "detectWorkflowPattern",
+          "line": 124,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.name\r\n    .toLowerCase()\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace",
+          "lineNumber": 27
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.name\r\n    .toLowerCase()\r\n    .replace",
+          "lineNumber": 27
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.name\r\n    .toLowerCase",
+          "lineNumber": 27
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.triggerPatterns.join",
+          "lineNumber": 33
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.steps.map((s, i) => `${i + 1}. ${s}`).join",
+          "lineNumber": 49
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.steps.map",
+          "lineNumber": 49
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.tools.map(t => `- ${t}`).join",
+          "lineNumber": 54
+        },
+        {
+          "caller": "generateSkillMarkdown",
+          "callee": "template.tools.map",
+          "lineNumber": 54
+        },
+        {
+          "caller": "extractToolSequence",
+          "callee": "tools.push",
+          "lineNumber": 74
+        },
+        {
+          "caller": "longestCommonSubsequenceLength",
+          "callee": "new Array(n + 1).fill",
+          "lineNumber": 88
+        },
+        {
+          "caller": "longestCommonSubsequenceLength",
+          "callee": "new Array(n + 1).fill",
+          "lineNumber": 89
+        },
+        {
+          "caller": "longestCommonSubsequenceLength",
+          "callee": "Math.max",
+          "lineNumber": 96
+        },
+        {
+          "caller": "longestCommonSubsequenceLength",
+          "callee": "curr.fill",
+          "lineNumber": 100
+        },
+        {
+          "caller": "toolSequenceSimilarity",
+          "callee": "longestCommonSubsequenceLength",
+          "lineNumber": 111
+        },
+        {
+          "caller": "toolSequenceSimilarity",
+          "callee": "Math.max",
+          "lineNumber": 112
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "extractToolSequence",
+          "lineNumber": 130
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "toolCounts.set",
+          "lineNumber": 143
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "toolCounts.get",
+          "lineNumber": 143
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "[...toolCounts.entries()]\r\n    .filter(([, count]) => count >= 2)\r\n    .map",
+          "lineNumber": 147
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "[...toolCounts.entries()]\r\n    .filter",
+          "lineNumber": 147
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "toolCounts.entries",
+          "lineNumber": 147
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "toolSeq.slice",
+          "lineNumber": 165
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "window.join",
+          "lineNumber": 166
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "windowCounts.has",
+          "lineNumber": 168
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "windowCounts.get",
+          "lineNumber": 169
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "windowCounts.set",
+          "lineNumber": 171
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "messages\r\n    .filter(m => m.role === 'user' && m.content)\r\n    .map",
+          "lineNumber": 186
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "messages\r\n    .filter",
+          "lineNumber": 186
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "bestPattern\r\n    .map(t => t.replace(/_/g, '-'))\r\n    .slice(0, 3)\r\n    .join",
+          "lineNumber": 191
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "bestPattern\r\n    .map(t => t.replace(/_/g, '-'))\r\n    .slice",
+          "lineNumber": 191
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "bestPattern\r\n    .map",
+          "lineNumber": 191
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "t.replace",
+          "lineNumber": 192
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "bestPattern.join",
+          "lineNumber": 197
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "userMessages.slice(0, 3).map",
+          "lineNumber": 202
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "userMessages.slice",
+          "lineNumber": 202
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "m.slice",
+          "lineNumber": 203
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "bestPattern.map",
+          "lineNumber": 205
+        },
+        {
+          "caller": "detectWorkflowPattern",
+          "callee": "inferCategory",
+          "lineNumber": 209
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "tools.join(' ').toLowerCase",
+          "lineNumber": 217
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "tools.join",
+          "lineNumber": 217
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 219
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 219
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 220
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 220
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 220
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 221
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 221
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 221
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 222
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 222
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 222
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 223
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 223
+        },
+        {
+          "caller": "inferCategory",
+          "callee": "toolStr.includes",
+          "lineNumber": 224
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-frontmatter.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 196,
+      "nonEmptyLines": 176,
+      "functions": [
+        {
+          "name": "parseSkillFrontmatter",
+          "startLine": 80,
+          "endLine": 153,
+          "params": [
+            "content"
+          ]
+        },
+        {
+          "name": "isSkillScope",
+          "startLine": 155,
+          "endLine": 157,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "isSkillInitiator",
+          "startLine": 159,
+          "endLine": 161,
+          "params": [
+            "s"
+          ]
+        },
+        {
+          "name": "nextScope",
+          "startLine": 167,
+          "endLine": 171,
+          "params": [
+            "current"
+          ]
+        },
+        {
+          "name": "serializeFrontmatter",
+          "startLine": 178,
+          "endLine": 196,
+          "params": [
+            "fm",
+            "body"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SKILL_SCOPE_ORDER",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "parseSkillFrontmatter",
+          "line": 80,
+          "isDefault": false
+        },
+        {
+          "name": "nextScope",
+          "line": 167,
+          "isDefault": false
+        },
+        {
+          "name": "serializeFrontmatter",
+          "line": 178,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.startsWith",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.indexOf",
+          "lineNumber": 87
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.slice(3, endIndex).trim",
+          "lineNumber": 92
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.slice",
+          "lineNumber": 92
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.slice(afterDelimiter).replace(/^\\r?\\n/, '').trimEnd",
+          "lineNumber": 95
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.slice(afterDelimiter).replace",
+          "lineNumber": 95
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "content.slice",
+          "lineNumber": 95
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "fmBlock.split",
+          "lineNumber": 102
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "line.trim",
+          "lineNumber": 103
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "trimmed.startsWith",
+          "lineNumber": 106
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "line.startsWith",
+          "lineNumber": 116
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "line.startsWith",
+          "lineNumber": 116
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "trimmed.match",
+          "lineNumber": 117
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "trimmed.match",
+          "lineNumber": 129
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "value.trim",
+          "lineNumber": 132
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "isSkillScope",
+          "lineNumber": 135
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "isSkillInitiator",
+          "lineNumber": 136
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "v.replace",
+          "lineNumber": 140
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "inner.split(',').map(s => s.trim().replace(/^[\"']|[\"']$/g, '')).filter",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "inner.split(',').map",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "inner.split",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "s.trim().replace",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "s.trim",
+          "lineNumber": 141
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "parts.filter",
+          "lineNumber": 142
+        },
+        {
+          "caller": "parseSkillFrontmatter",
+          "callee": "Object.keys",
+          "lineNumber": 148
+        },
+        {
+          "caller": "isSkillScope",
+          "callee": "SKILL_SCOPE_ORDER.includes",
+          "lineNumber": 156
+        },
+        {
+          "caller": "nextScope",
+          "callee": "SKILL_SCOPE_ORDER.indexOf",
+          "lineNumber": 168
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 180
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 181
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 182
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 183
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 184
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 186
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "fm.promoted_from.join",
+          "lineNumber": 186
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "Object.keys",
+          "lineNumber": 188
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 189
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "Object.entries",
+          "lineNumber": 190
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 191
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.push",
+          "lineNumber": 194
+        },
+        {
+          "caller": "serializeFrontmatter",
+          "callee": "lines.join",
+          "lineNumber": 195
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-recommender.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 251,
+      "nonEmptyLines": 220,
+      "functions": [
+        {
+          "name": "buildSynonymMap",
+          "startLine": 61,
+          "endLine": 75,
+          "params": []
+        },
+        {
+          "name": "extractKeywords",
+          "startLine": 79,
+          "endLine": 85,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "extractBigrams",
+          "startLine": 88,
+          "endLine": 94,
+          "params": [
+            "words"
+          ]
+        },
+        {
+          "name": "expandWithSynonyms",
+          "startLine": 97,
+          "endLine": 101,
+          "params": [
+            "keyword"
+          ]
+        },
+        {
+          "name": "buildTermFrequency",
+          "startLine": 107,
+          "endLine": 116,
+          "params": [
+            "text"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "SkillRecommender",
+          "startLine": 118,
+          "endLine": 251,
+          "methods": [
+            "constructor",
+            "recommend"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "SkillRecommender",
+          "line": 118,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildSynonymMap",
+          "callee": "map.get",
+          "lineNumber": 66
+        },
+        {
+          "caller": "buildSynonymMap",
+          "callee": "existing.add",
+          "lineNumber": 68
+        },
+        {
+          "caller": "buildSynonymMap",
+          "callee": "map.set",
+          "lineNumber": 70
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase()\r\n    .split(/[\\s\\-_]+/)\r\n    .map(w => w.replace(/[^a-z0-9]/g, ''))\r\n    .filter",
+          "lineNumber": 80
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase()\r\n    .split(/[\\s\\-_]+/)\r\n    .map",
+          "lineNumber": 80
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase()\r\n    .split",
+          "lineNumber": 80
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "text\r\n    .toLowerCase",
+          "lineNumber": 80
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "w.replace",
+          "lineNumber": 83
+        },
+        {
+          "caller": "extractKeywords",
+          "callee": "STOP_WORDS.has",
+          "lineNumber": 84
+        },
+        {
+          "caller": "extractBigrams",
+          "callee": "bigrams.push",
+          "lineNumber": 91
+        },
+        {
+          "caller": "expandWithSynonyms",
+          "callee": "SYNONYM_MAP.get",
+          "lineNumber": 98
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "text.toLowerCase().split(/[\\s\\-_.,;:!?()[\\]{}'\"]+/)\r\n    .map(w => w.replace(/[^a-z0-9]/g, ''))\r\n    .filter",
+          "lineNumber": 109
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "text.toLowerCase().split(/[\\s\\-_.,;:!?()[\\]{}'\"]+/)\r\n    .map",
+          "lineNumber": 109
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "text.toLowerCase().split",
+          "lineNumber": 109
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "text.toLowerCase",
+          "lineNumber": 109
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "w.replace",
+          "lineNumber": 110
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "STOP_WORDS.has",
+          "lineNumber": 111
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "tf.set",
+          "lineNumber": 113
+        },
+        {
+          "caller": "buildTermFrequency",
+          "callee": "tf.get",
+          "lineNumber": 113
+        },
+        {
+          "caller": "recommend",
+          "callee": "context.trim",
+          "lineNumber": 134
+        },
+        {
+          "caller": "recommend",
+          "callee": "extractKeywords",
+          "lineNumber": 136
+        },
+        {
+          "caller": "recommend",
+          "callee": "extractBigrams",
+          "lineNumber": 139
+        },
+        {
+          "caller": "recommend",
+          "callee": "this.deps.getSkills",
+          "lineNumber": 141
+        },
+        {
+          "caller": "recommend",
+          "callee": "buildTermFrequency",
+          "lineNumber": 147
+        },
+        {
+          "caller": "recommend",
+          "callee": "tf.keys",
+          "lineNumber": 148
+        },
+        {
+          "caller": "recommend",
+          "callee": "docFreq.set",
+          "lineNumber": 149
+        },
+        {
+          "caller": "recommend",
+          "callee": "docFreq.get",
+          "lineNumber": 149
+        },
+        {
+          "caller": "recommend",
+          "callee": "Math.max",
+          "lineNumber": 152
+        },
+        {
+          "caller": "recommend",
+          "callee": "activeSet.has",
+          "lineNumber": 157
+        },
+        {
+          "caller": "recommend",
+          "callee": "skill.name.toLowerCase().replace",
+          "lineNumber": 159
+        },
+        {
+          "caller": "recommend",
+          "callee": "skill.name.toLowerCase",
+          "lineNumber": 159
+        },
+        {
+          "caller": "recommend",
+          "callee": "extractKeywords",
+          "lineNumber": 160
+        },
+        {
+          "caller": "recommend",
+          "callee": "buildTermFrequency",
+          "lineNumber": 161
+        },
+        {
+          "caller": "recommend",
+          "callee": "skill.content.toLowerCase",
+          "lineNumber": 162
+        },
+        {
+          "caller": "recommend",
+          "callee": "docFreq.get",
+          "lineNumber": 171
+        },
+        {
+          "caller": "recommend",
+          "callee": "Math.log",
+          "lineNumber": 172
+        },
+        {
+          "caller": "recommend",
+          "callee": "nameLower.includes",
+          "lineNumber": 175
+        },
+        {
+          "caller": "recommend",
+          "callee": "nameWords.includes",
+          "lineNumber": 175
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedInName.push",
+          "lineNumber": 177
+        },
+        {
+          "caller": "recommend",
+          "callee": "expandWithSynonyms",
+          "lineNumber": 182
+        },
+        {
+          "caller": "recommend",
+          "callee": "nameLower.includes",
+          "lineNumber": 185
+        },
+        {
+          "caller": "recommend",
+          "callee": "nameWords.includes",
+          "lineNumber": 185
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedViaSynonym.push",
+          "lineNumber": 187
+        },
+        {
+          "caller": "recommend",
+          "callee": "contentTf.has",
+          "lineNumber": 195
+        },
+        {
+          "caller": "recommend",
+          "callee": "Math.min",
+          "lineNumber": 197
+        },
+        {
+          "caller": "recommend",
+          "callee": "contentTf.get",
+          "lineNumber": 197
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedInContent.push",
+          "lineNumber": 199
+        },
+        {
+          "caller": "recommend",
+          "callee": "contentTf.has",
+          "lineNumber": 205
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedViaSynonym.push",
+          "lineNumber": 207
+        },
+        {
+          "caller": "recommend",
+          "callee": "combinedText.includes",
+          "lineNumber": 216
+        },
+        {
+          "caller": "recommend",
+          "callee": "Math.min",
+          "lineNumber": 226
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedInName.join",
+          "lineNumber": 232
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedViaSynonym.map(s => s.split('~')[1]).join",
+          "lineNumber": 232
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedViaSynonym.map",
+          "lineNumber": 232
+        },
+        {
+          "caller": "recommend",
+          "callee": "s.split",
+          "lineNumber": 232
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedInName.join",
+          "lineNumber": 234
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedViaSynonym.map(s => `\"${s.split('~')[0]}\" (matches \"${s.split('~')[1]}\")`).join",
+          "lineNumber": 236
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedViaSynonym.map",
+          "lineNumber": 236
+        },
+        {
+          "caller": "recommend",
+          "callee": "s.split",
+          "lineNumber": 236
+        },
+        {
+          "caller": "recommend",
+          "callee": "s.split",
+          "lineNumber": 236
+        },
+        {
+          "caller": "recommend",
+          "callee": "matchedInContent.join",
+          "lineNumber": 238
+        },
+        {
+          "caller": "recommend",
+          "callee": "scored.push",
+          "lineNumber": 241
+        },
+        {
+          "caller": "recommend",
+          "callee": "Math.round",
+          "lineNumber": 244
+        },
+        {
+          "caller": "recommend",
+          "callee": "scored.sort",
+          "lineNumber": 248
+        },
+        {
+          "caller": "recommend",
+          "callee": "scored.slice",
+          "lineNumber": 249
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 5,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-redaction.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 62,
+      "nonEmptyLines": 56,
+      "functions": [
+        {
+          "name": "redactSkillContent",
+          "startLine": 36,
+          "endLine": 62,
+          "params": [
+            "content"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "redactSkillContent",
+          "line": 36,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "redactSkillContent",
+          "callee": "redactSecrets",
+          "lineNumber": 37
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "os.homedir",
+          "lineNumber": 43
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "out.includes",
+          "lineNumber": 44
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "out.split(home).join",
+          "lineNumber": 45
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "out.split",
+          "lineNumber": 45
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "redactions.add",
+          "lineNumber": 46
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "out.replace",
+          "lineNumber": 54
+        },
+        {
+          "caller": "redactSkillContent",
+          "callee": "redactions.add",
+          "lineNumber": 57
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-retirement.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 145,
+      "nonEmptyLines": 130,
+      "functions": [
+        {
+          "name": "lastActivityMs",
+          "startLine": 51,
+          "endLine": 69,
+          "params": [
+            "skillPath",
+            "skillName",
+            "usage"
+          ]
+        },
+        {
+          "name": "retireStaleSkills",
+          "startLine": 75,
+          "endLine": 145,
+          "params": [
+            "waggleHome",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "retireStaleSkills",
+          "line": 75,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "lastActivityMs",
+          "callee": "Date.parse",
+          "lineNumber": 58
+        },
+        {
+          "caller": "lastActivityMs",
+          "callee": "Number.isNaN",
+          "lineNumber": 59
+        },
+        {
+          "caller": "lastActivityMs",
+          "callee": "fs.statSync",
+          "lineNumber": 64
+        },
+        {
+          "caller": "lastActivityMs",
+          "callee": "stat.mtime.getTime",
+          "lineNumber": 65
+        },
+        {
+          "caller": "lastActivityMs",
+          "callee": "Date.now",
+          "lineNumber": 67
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "(opts.now ?? (() => new Date()))",
+          "lineNumber": 78
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "now.getTime",
+          "lineNumber": 79
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "path.join",
+          "lineNumber": 81
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "path.join",
+          "lineNumber": 82
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "fs.existsSync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "fs.existsSync",
+          "lineNumber": 95
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 96
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "loadSkillUsage",
+          "lineNumber": 99
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "fs.readdirSync(personalSkillsDir, { withFileTypes: true })\r\n    .filter",
+          "lineNumber": 100
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "fs.readdirSync",
+          "lineNumber": 100
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "d.isFile",
+          "lineNumber": 101
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "d.name.endsWith",
+          "lineNumber": 101
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "dirent.name.replace",
+          "lineNumber": 105
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "path.join",
+          "lineNumber": 106
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "lastActivityMs",
+          "lineNumber": 107
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "report.skipped.push",
+          "lineNumber": 110
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "report.retired.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "new Date(activity).toISOString().replace(/[:.]/g, '-').slice",
+          "lineNumber": 120
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "new Date(activity).toISOString().replace",
+          "lineNumber": 120
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "new Date(activity).toISOString",
+          "lineNumber": 120
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "path.join",
+          "lineNumber": 121
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "fs.renameSync",
+          "lineNumber": 123
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "report.retired.push",
+          "lineNumber": 124
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "report.archived.push",
+          "lineNumber": 125
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "forgetSkillUsage",
+          "lineNumber": 126
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "opts.improvementSignals.record",
+          "lineNumber": 130
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "String",
+          "lineNumber": 139
+        },
+        {
+          "caller": "retireStaleSkills",
+          "callee": "report.skipped.push",
+          "lineNumber": 140
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-tools.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 931,
+      "nonEmptyLines": 859,
+      "functions": [
+        {
+          "name": "getSecurityGate",
+          "startLine": 21,
+          "endLine": 27,
+          "params": []
+        },
+        {
+          "name": "getSkillDirForScope",
+          "startLine": 85,
+          "endLine": 102,
+          "params": [
+            "waggleHome",
+            "scope",
+            "ctx"
+          ]
+        },
+        {
+          "name": "createSkillTools",
+          "startLine": 104,
+          "endLine": 931,
+          "params": [
+            "deps"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "getSkillDirForScope",
+          "line": 85,
+          "isDefault": false
+        },
+        {
+          "name": "createSkillTools",
+          "line": 104,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getSecurityGate",
+          "callee": "import",
+          "lineNumber": 23
+        },
+        {
+          "caller": "getSkillDirForScope",
+          "callee": "path.join",
+          "lineNumber": 92
+        },
+        {
+          "caller": "getSkillDirForScope",
+          "callee": "path.join",
+          "lineNumber": 95
+        },
+        {
+          "caller": "getSkillDirForScope",
+          "callee": "path.join",
+          "lineNumber": 98
+        },
+        {
+          "caller": "getSkillDirForScope",
+          "callee": "path.join",
+          "lineNumber": 100
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 106
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 110
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 110
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 111
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 111
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 128
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(skillsDir).filter",
+          "lineNumber": 129
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 129
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.endsWith",
+          "lineNumber": 129
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "skillFiles.map",
+          "lineNumber": 132
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.replace",
+          "lineNumber": 133
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync(path.join(skillsDir, f), 'utf-8').trim",
+          "lineNumber": 134
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 134
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 134
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "content.slice",
+          "lineNumber": 138
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 144
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(pluginsDir, { withFileTypes: true }).filter",
+          "lineNumber": 145
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 145
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "d.isDirectory",
+          "lineNumber": 145
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "pluginEntries.map",
+          "lineNumber": 148
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 149
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 151
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "JSON.parse",
+          "lineNumber": 152
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 152
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "/^[a-zA-Z0-9_-]+$/.test",
+          "lineNumber": 208
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "generateSkillMarkdown",
+          "lineNumber": 225
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "writeSkill",
+          "lineNumber": 233
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "redactions.join",
+          "lineNumber": 241
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deleteSkillWrite",
+          "lineNumber": 261
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.includes",
+          "lineNumber": 283
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.includes",
+          "lineNumber": 283
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.includes",
+          "lineNumber": 283
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 286
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 287
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 290
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "(args.query as string).toLowerCase",
+          "lineNumber": 306
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 309
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(skillsDir).filter",
+          "lineNumber": 310
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 310
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.endsWith",
+          "lineNumber": 310
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "skillFiles\r\n          .map(f => {\r\n            const name = f.replace(/\\.md$/, '');\r\n            const content = fs.readFileSync(path.join(skillsDir, f), 'utf-8');\r\n            const nameMatch = name.toLowerCase().includes(query);\r\n            const contentMatch = content.toLowerCase().includes(query);\r\n            return { name, content, match: nameMatch || contentMatch, nameMatch };\r\n          })\r\n          .filter(s => s.match)\r\n          .map",
+          "lineNumber": 313
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "skillFiles\r\n          .map(f => {\r\n            const name = f.replace(/\\.md$/, '');\r\n            const content = fs.readFileSync(path.join(skillsDir, f), 'utf-8');\r\n            const nameMatch = name.toLowerCase().includes(query);\r\n            const contentMatch = content.toLowerCase().includes(query);\r\n            return { name, content, match: nameMatch || contentMatch, nameMatch };\r\n          })\r\n          .filter",
+          "lineNumber": 313
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "skillFiles\r\n          .map",
+          "lineNumber": 313
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.replace",
+          "lineNumber": 315
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 316
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 316
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.toLowerCase().includes",
+          "lineNumber": 317
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.toLowerCase",
+          "lineNumber": 317
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "content.toLowerCase().includes",
+          "lineNumber": 318
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "content.toLowerCase",
+          "lineNumber": 318
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "s.content.slice",
+          "lineNumber": 322
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "b.keywords.some",
+          "lineNumber": 339
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "query.includes",
+          "lineNumber": 339
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "suggestions.push",
+          "lineNumber": 340
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "matchingSkills.join",
+          "lineNumber": 346
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "suggestions.join",
+          "lineNumber": 349
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 381
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(skillsDir).filter",
+          "lineNumber": 382
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 382
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.endsWith",
+          "lineNumber": 382
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "files.map",
+          "lineNumber": 384
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.replace",
+          "lineNumber": 385
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync(path.join(skillsDir, f), 'utf-8').trim",
+          "lineNumber": 386
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 386
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 386
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "recommender.recommend",
+          "lineNumber": 392
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "suggestions.map((s, i) =>\r\n          `${i + 1}. **${s.skillName}** (relevance: ${(s.relevanceScore * 100).toFixed(0)}%)\\n   ${s.reason}`,\r\n        ).join",
+          "lineNumber": 398
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "suggestions.map",
+          "lineNumber": 398
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "(s.relevanceScore * 100).toFixed",
+          "lineNumber": 399
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "need.trim",
+          "lineNumber": 425
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.getInstalledSkills",
+          "lineNumber": 429
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "(() => {\r\n          const files = fs.existsSync(skillsDir)\r\n            ? fs.readdirSync(skillsDir).filter(f => f.endsWith('.md'))\r\n            : [];\r\n          return files.map(f => ({\r\n            name: f.replace(/\\.md$/, ''),\r\n            content: fs.readFileSync(path.join(skillsDir, f), 'utf-8').trim(),\r\n          }));\r\n        })",
+          "lineNumber": 429
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 430
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(skillsDir).filter",
+          "lineNumber": 431
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 431
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.endsWith",
+          "lineNumber": 431
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "files.map",
+          "lineNumber": 433
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.replace",
+          "lineNumber": 434
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync(path.join(skillsDir, f), 'utf-8').trim",
+          "lineNumber": 435
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 435
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 435
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.searchMarketplace",
+          "lineNumber": 446
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "searchCapabilities",
+          "lineNumber": 452
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.auditStore?.record",
+          "lineNumber": 463
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.includes",
+          "lineNumber": 507
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.includes",
+          "lineNumber": 507
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "name.includes",
+          "lineNumber": 507
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 513
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(skillsDir).filter(f => f.endsWith('.md')).map",
+          "lineNumber": 514
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync(skillsDir).filter",
+          "lineNumber": 514
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 514
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.endsWith",
+          "lineNumber": 514
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "f.replace",
+          "lineNumber": 514
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "validateInstallCandidate",
+          "lineNumber": 519
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.auditStore?.record",
+          "lineNumber": 522
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 537
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "getSecurityGate",
+          "lineNumber": 542
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "gate.scan",
+          "lineNumber": 557
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.auditStore?.record",
+          "lineNumber": 561
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "scanResult.findings.map((f) => `- [${f.severity}] ${f.title}: ${f.description}`).join",
+          "lineNumber": 572
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "scanResult.findings.map",
+          "lineNumber": 572
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "scanResult.findings.map((f) => `- [${f.severity}] ${f.title}`).join",
+          "lineNumber": 584
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "scanResult.findings.map",
+          "lineNumber": 584
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "assessTrust",
+          "lineNumber": 612
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.auditStore?.record",
+          "lineNumber": 619
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 632
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.copyFileSync",
+          "lineNumber": 633
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "onSkillsChanged",
+          "lineNumber": 636
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.auditStore?.record",
+          "lineNumber": 639
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 652
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "formatTrustSummary",
+          "lineNumber": 653
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.getWorkspaceId",
+          "lineNumber": 703
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.getTeamId",
+          "lineNumber": 704
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "getSkillDirForScope",
+          "lineNumber": 714
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 715
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 716
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 717
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 721
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "parseSkillFrontmatter",
+          "lineNumber": 733
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "nextScope",
+          "lineNumber": 737
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "nextScope",
+          "lineNumber": 741
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.hasTeamSkillLibrary",
+          "lineNumber": 754
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.isEnterprise",
+          "lineNumber": 761
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "getSkillDirForScope",
+          "lineNumber": 766
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 770
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 771
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "path.join",
+          "lineNumber": 773
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 774
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "redactSkillContent",
+          "lineNumber": 784
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "serializeFrontmatter",
+          "lineNumber": 784
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 790
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "fs.unlinkSync",
+          "lineNumber": 792
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.improvementSignals.record",
+          "lineNumber": 801
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "onSkillsChanged",
+          "lineNumber": 811
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "updatedFrontmatter.promoted_from!.join",
+          "lineNumber": 818
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "deps.getSessionMessages",
+          "lineNumber": 848
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "autoExtractAndCreateSkill",
+          "lineNumber": 852
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "onSkillsChanged",
+          "lineNumber": 857
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "result.template!.tools.join",
+          "lineNumber": 862
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "retireStaleSkills",
+          "lineNumber": 902
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "onSkillsChanged",
+          "lineNumber": 908
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "report.retired.join",
+          "lineNumber": 914
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "report.skipped.filter",
+          "lineNumber": 915
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "report.skipped.filter",
+          "lineNumber": 917
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "lines.push",
+          "lineNumber": 919
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "errors.map(e => `${e.name}: ${e.reason}`).join",
+          "lineNumber": 919
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "errors.map",
+          "lineNumber": 919
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "lines.push",
+          "lineNumber": 922
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "lines.push",
+          "lineNumber": 925
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "report.archived[0].replace",
+          "lineNumber": 925
+        },
+        {
+          "caller": "createSkillTools",
+          "callee": "lines.join",
+          "lineNumber": 927
+        }
+      ],
+      "metrics": {
+        "importCount": 10,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-usage.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 88,
+      "nonEmptyLines": 80,
+      "functions": [
+        {
+          "name": "getSkillUsagePath",
+          "startLine": 30,
+          "endLine": 32,
+          "params": [
+            "waggleHome"
+          ]
+        },
+        {
+          "name": "loadSkillUsage",
+          "startLine": 35,
+          "endLine": 48,
+          "params": [
+            "waggleHome"
+          ]
+        },
+        {
+          "name": "saveSkillUsage",
+          "startLine": 51,
+          "endLine": 59,
+          "params": [
+            "waggleHome",
+            "index"
+          ]
+        },
+        {
+          "name": "recordSkillUsage",
+          "startLine": 66,
+          "endLine": 80,
+          "params": [
+            "waggleHome",
+            "skillName",
+            "nowFn"
+          ]
+        },
+        {
+          "name": "forgetSkillUsage",
+          "startLine": 83,
+          "endLine": 88,
+          "params": [
+            "waggleHome",
+            "skillName"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "getSkillUsagePath",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "loadSkillUsage",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "saveSkillUsage",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "recordSkillUsage",
+          "line": 66,
+          "isDefault": false
+        },
+        {
+          "name": "forgetSkillUsage",
+          "line": 83,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getSkillUsagePath",
+          "callee": "path.join",
+          "lineNumber": 31
+        },
+        {
+          "caller": "loadSkillUsage",
+          "callee": "getSkillUsagePath",
+          "lineNumber": 36
+        },
+        {
+          "caller": "loadSkillUsage",
+          "callee": "fs.existsSync",
+          "lineNumber": 37
+        },
+        {
+          "caller": "loadSkillUsage",
+          "callee": "fs.readFileSync",
+          "lineNumber": 39
+        },
+        {
+          "caller": "loadSkillUsage",
+          "callee": "JSON.parse",
+          "lineNumber": 40
+        },
+        {
+          "caller": "loadSkillUsage",
+          "callee": "Array.isArray",
+          "lineNumber": 41
+        },
+        {
+          "caller": "saveSkillUsage",
+          "callee": "fs.existsSync",
+          "lineNumber": 52
+        },
+        {
+          "caller": "saveSkillUsage",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 53
+        },
+        {
+          "caller": "saveSkillUsage",
+          "callee": "getSkillUsagePath",
+          "lineNumber": 55
+        },
+        {
+          "caller": "saveSkillUsage",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 57
+        },
+        {
+          "caller": "saveSkillUsage",
+          "callee": "JSON.stringify",
+          "lineNumber": 57
+        },
+        {
+          "caller": "saveSkillUsage",
+          "callee": "fs.renameSync",
+          "lineNumber": 58
+        },
+        {
+          "caller": "recordSkillUsage",
+          "callee": "loadSkillUsage",
+          "lineNumber": 71
+        },
+        {
+          "caller": "recordSkillUsage",
+          "callee": "nowFn().toISOString",
+          "lineNumber": 74
+        },
+        {
+          "caller": "recordSkillUsage",
+          "callee": "nowFn",
+          "lineNumber": 74
+        },
+        {
+          "caller": "recordSkillUsage",
+          "callee": "saveSkillUsage",
+          "lineNumber": 78
+        },
+        {
+          "caller": "forgetSkillUsage",
+          "callee": "loadSkillUsage",
+          "lineNumber": 84
+        },
+        {
+          "caller": "forgetSkillUsage",
+          "callee": "saveSkillUsage",
+          "lineNumber": 87
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/skill-write-service.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 190,
+      "nonEmptyLines": 167,
+      "functions": [
+        {
+          "name": "invalidName",
+          "startLine": 61,
+          "endLine": 63,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "stampProvenance",
+          "startLine": 72,
+          "endLine": 98,
+          "params": [
+            "content",
+            "initiator",
+            "source"
+          ]
+        },
+        {
+          "name": "writeSkill",
+          "startLine": 105,
+          "endLine": 153,
+          "params": [
+            "deps",
+            "input"
+          ]
+        },
+        {
+          "name": "deleteSkill",
+          "startLine": 159,
+          "endLine": 190,
+          "params": [
+            "deps",
+            "input"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "writeSkill",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "deleteSkill",
+          "line": 159,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "invalidName",
+          "callee": "/^[a-zA-Z0-9_-]+$/.test",
+          "lineNumber": 62
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "content.startsWith",
+          "lineNumber": 75
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "content.indexOf",
+          "lineNumber": 76
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "content.slice",
+          "lineNumber": 78
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "content.slice",
+          "lineNumber": 80
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "block\n        .split('\\n')\n        .filter",
+          "lineNumber": 82
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "block\n        .split",
+          "lineNumber": 82
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "l.trim().toLowerCase",
+          "lineNumber": 85
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "l.trim",
+          "lineNumber": 85
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "key.startsWith",
+          "lineNumber": 86
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "key.startsWith",
+          "lineNumber": 86
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "kept[0].trim",
+          "lineNumber": 89
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "kept.shift",
+          "lineNumber": 89
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "kept[kept.length - 1].trim",
+          "lineNumber": 90
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "kept.pop",
+          "lineNumber": 90
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "[...kept, ...provLines].join",
+          "lineNumber": 91
+        },
+        {
+          "caller": "stampProvenance",
+          "callee": "provLines.join",
+          "lineNumber": 97
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "invalidName",
+          "lineNumber": 109
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "path.join",
+          "lineNumber": 113
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "fs.existsSync",
+          "lineNumber": 114
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "parseSkillFrontmatter",
+          "lineNumber": 125
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "fs.readFileSync",
+          "lineNumber": 125
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "redactSkillContent",
+          "lineNumber": 131
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "stampProvenance",
+          "lineNumber": 132
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "fs.existsSync",
+          "lineNumber": 134
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 134
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 135
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "auditStore?.record",
+          "lineNumber": 138
+        },
+        {
+          "caller": "writeSkill",
+          "callee": "onChange",
+          "lineNumber": 151
+        },
+        {
+          "caller": "deleteSkill",
+          "callee": "invalidName",
+          "lineNumber": 163
+        },
+        {
+          "caller": "deleteSkill",
+          "callee": "path.join",
+          "lineNumber": 167
+        },
+        {
+          "caller": "deleteSkill",
+          "callee": "fs.existsSync",
+          "lineNumber": 168
+        },
+        {
+          "caller": "deleteSkill",
+          "callee": "fs.unlinkSync",
+          "lineNumber": 172
+        },
+        {
+          "caller": "deleteSkill",
+          "callee": "auditStore?.record",
+          "lineNumber": 175
+        },
+        {
+          "caller": "deleteSkill",
+          "callee": "onChange",
+          "lineNumber": 188
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/trust-model.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 447,
+      "nonEmptyLines": 382,
+      "functions": [
+        {
+          "name": "resolveTrustSource",
+          "startLine": 60,
+          "endLine": 75,
+          "params": [
+            "capabilityType",
+            "source"
+          ]
+        },
+        {
+          "name": "testPatterns",
+          "startLine": 121,
+          "endLine": 123,
+          "params": [
+            "content",
+            "patterns"
+          ]
+        },
+        {
+          "name": "detectPermissions",
+          "startLine": 130,
+          "endLine": 139,
+          "params": [
+            "content"
+          ]
+        },
+        {
+          "name": "classifyRisk",
+          "startLine": 183,
+          "endLine": 188,
+          "params": [
+            "points"
+          ]
+        },
+        {
+          "name": "deriveApprovalClass",
+          "startLine": 203,
+          "endLine": 211,
+          "params": [
+            "riskLevel",
+            "blocked"
+          ]
+        },
+        {
+          "name": "collectRiskFactors",
+          "startLine": 215,
+          "endLine": 233,
+          "params": [
+            "trustSource",
+            "permissions"
+          ]
+        },
+        {
+          "name": "generateExplanation",
+          "startLine": 247,
+          "endLine": 291,
+          "params": [
+            "riskLevel",
+            "trustSource",
+            "permissions",
+            "assessmentMode"
+          ]
+        },
+        {
+          "name": "assertNeverRisk",
+          "startLine": 294,
+          "endLine": 296,
+          "params": [
+            "level"
+          ]
+        },
+        {
+          "name": "formatPermissionName",
+          "startLine": 298,
+          "endLine": 308,
+          "params": [
+            "key"
+          ]
+        },
+        {
+          "name": "determineAssessmentMode",
+          "startLine": 318,
+          "endLine": 325,
+          "params": [
+            "hasDeclaredMetadata",
+            "hasContentAnalysis"
+          ]
+        },
+        {
+          "name": "assessTrust",
+          "startLine": 345,
+          "endLine": 405,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "formatTrustSummary",
+          "startLine": 420,
+          "endLine": 443,
+          "params": [
+            "assessment"
+          ]
+        },
+        {
+          "name": "capitalize",
+          "startLine": 445,
+          "endLine": 447,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "RiskLevel",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "TrustSource",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "ApprovalClass",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "AssessmentMode",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "resolveTrustSource",
+          "line": 60,
+          "isDefault": false
+        },
+        {
+          "name": "detectPermissions",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "classifyRisk",
+          "line": 183,
+          "isDefault": false
+        },
+        {
+          "name": "deriveApprovalClass",
+          "line": 203,
+          "isDefault": false
+        },
+        {
+          "name": "assessTrust",
+          "line": 345,
+          "isDefault": false
+        },
+        {
+          "name": "formatTrustSummary",
+          "line": 420,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "testPatterns",
+          "callee": "patterns.some",
+          "lineNumber": 122
+        },
+        {
+          "caller": "testPatterns",
+          "callee": "p.test",
+          "lineNumber": 122
+        },
+        {
+          "caller": "detectPermissions",
+          "callee": "testPatterns",
+          "lineNumber": 132
+        },
+        {
+          "caller": "detectPermissions",
+          "callee": "testPatterns",
+          "lineNumber": 133
+        },
+        {
+          "caller": "detectPermissions",
+          "callee": "testPatterns",
+          "lineNumber": 134
+        },
+        {
+          "caller": "detectPermissions",
+          "callee": "testPatterns",
+          "lineNumber": 135
+        },
+        {
+          "caller": "detectPermissions",
+          "callee": "testPatterns",
+          "lineNumber": 136
+        },
+        {
+          "caller": "detectPermissions",
+          "callee": "testPatterns",
+          "lineNumber": 137
+        },
+        {
+          "caller": "collectRiskFactors",
+          "callee": "factors.push",
+          "lineNumber": 222
+        },
+        {
+          "caller": "collectRiskFactors",
+          "callee": "factors.push",
+          "lineNumber": 223
+        },
+        {
+          "caller": "collectRiskFactors",
+          "callee": "Object.entries",
+          "lineNumber": 226
+        },
+        {
+          "caller": "collectRiskFactors",
+          "callee": "factors.push",
+          "lineNumber": 228
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "Object.entries(permissions)\r\n    .filter(([, v]) => v)\r\n    .map",
+          "lineNumber": 255
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "Object.entries(permissions)\r\n    .filter",
+          "lineNumber": 255
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "Object.entries",
+          "lineNumber": 255
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "formatPermissionName",
+          "lineNumber": 257
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "activePerms.join",
+          "lineNumber": 270
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "activePerms.join",
+          "lineNumber": 274
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "activePerms.join",
+          "lineNumber": 278
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "activePerms.join",
+          "lineNumber": 287
+        },
+        {
+          "caller": "generateExplanation",
+          "callee": "assertNeverRisk",
+          "lineNumber": 290
+        },
+        {
+          "caller": "assertNeverRisk",
+          "callee": "String",
+          "lineNumber": 295
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "resolveTrustSource",
+          "lineNumber": 349
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "detectPermissions",
+          "lineNumber": 352
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "determineAssessmentMode",
+          "lineNumber": 367
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "collectRiskFactors",
+          "lineNumber": 373
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "Object.entries",
+          "lineNumber": 377
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "factors.push",
+          "lineNumber": 385
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "classifyRisk",
+          "lineNumber": 390
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "deriveApprovalClass",
+          "lineNumber": 391
+        },
+        {
+          "caller": "assessTrust",
+          "callee": "generateExplanation",
+          "lineNumber": 394
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "lines.push",
+          "lineNumber": 430
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "capitalize",
+          "lineNumber": 430
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "Object.entries(assessment.permissions)\r\n    .filter(([, v]) => v)\r\n    .map",
+          "lineNumber": 432
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "Object.entries(assessment.permissions)\r\n    .filter",
+          "lineNumber": 432
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "Object.entries",
+          "lineNumber": 432
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "formatPermissionName",
+          "lineNumber": 434
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "lines.push",
+          "lineNumber": 437
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "activePerms.join",
+          "lineNumber": 437
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "lines.push",
+          "lineNumber": 439
+        },
+        {
+          "caller": "formatTrustSummary",
+          "callee": "lines.join",
+          "lineNumber": 442
+        },
+        {
+          "caller": "capitalize",
+          "callee": "s.charAt(0).toUpperCase",
+          "lineNumber": 446
+        },
+        {
+          "caller": "capitalize",
+          "callee": "s.charAt",
+          "lineNumber": 446
+        },
+        {
+          "caller": "capitalize",
+          "callee": "s.slice",
+          "lineNumber": 446
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 10,
+        "functionCount": 13,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/workflow-capture.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 199,
+      "nonEmptyLines": 176,
+      "functions": [
+        {
+          "name": "shouldSuggestCapture",
+          "startLine": 50,
+          "endLine": 121,
+          "params": [
+            "params"
+          ]
+        },
+        {
+          "name": "extractCurrentToolSequence",
+          "startLine": 126,
+          "endLine": 136,
+          "params": [
+            "messages"
+          ]
+        },
+        {
+          "name": "computeSequenceSimilarity",
+          "startLine": 147,
+          "endLine": 163,
+          "params": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "name": "lcsLength",
+          "startLine": 168,
+          "endLine": 186,
+          "params": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "name": "inferCategoryFromTools",
+          "startLine": 191,
+          "endLine": 199,
+          "params": [
+            "tools"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "shouldSuggestCapture",
+          "line": 50,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "extractCurrentToolSequence",
+          "lineNumber": 54
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "computeSequenceSimilarity",
+          "lineNumber": 69
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "matchingSessions.push",
+          "lineNumber": 72
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "detectWorkflowPattern",
+          "lineNumber": 82
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "uniqueTools.slice(0, 3).join",
+          "lineNumber": 89
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "uniqueTools.slice",
+          "lineNumber": 89
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "uniqueTools.join",
+          "lineNumber": 90
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "currentToolSeq.map",
+          "lineNumber": 92
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "inferCategoryFromTools",
+          "lineNumber": 94
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "uniqueTools.slice(0, 4).join",
+          "lineNumber": 100
+        },
+        {
+          "caller": "shouldSuggestCapture",
+          "callee": "uniqueTools.slice",
+          "lineNumber": 100
+        },
+        {
+          "caller": "extractCurrentToolSequence",
+          "callee": "tools.push",
+          "lineNumber": 132
+        },
+        {
+          "caller": "computeSequenceSimilarity",
+          "callee": "[...setA].filter",
+          "lineNumber": 153
+        },
+        {
+          "caller": "computeSequenceSimilarity",
+          "callee": "setB.has",
+          "lineNumber": 153
+        },
+        {
+          "caller": "computeSequenceSimilarity",
+          "callee": "lcsLength",
+          "lineNumber": 158
+        },
+        {
+          "caller": "computeSequenceSimilarity",
+          "callee": "Math.max",
+          "lineNumber": 159
+        },
+        {
+          "caller": "lcsLength",
+          "callee": "new Array(n + 1).fill",
+          "lineNumber": 171
+        },
+        {
+          "caller": "lcsLength",
+          "callee": "new Array(n + 1).fill",
+          "lineNumber": 172
+        },
+        {
+          "caller": "lcsLength",
+          "callee": "Math.max",
+          "lineNumber": 179
+        },
+        {
+          "caller": "lcsLength",
+          "callee": "curr.fill",
+          "lineNumber": 183
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "tools.join(' ').toLowerCase",
+          "lineNumber": 192
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "tools.join",
+          "lineNumber": 192
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 193
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 193
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 194
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 194
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 194
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 195
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 195
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 196
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 196
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 196
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 197
+        },
+        {
+          "caller": "inferCategoryFromTools",
+          "callee": "joined.includes",
+          "lineNumber": 197
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/capability-acquisition-trust.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 271,
+      "nonEmptyLines": 225,
+      "callGraph": [
+        {
+          "caller": "writeStarter",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 22
+        },
+        {
+          "caller": "writeStarter",
+          "callee": "path.join",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/capability-acquisition.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 309,
+      "nonEmptyLines": 263,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/capability-marketplace.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 242,
+      "nonEmptyLines": 211,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/promote-skill.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 186,
+      "nonEmptyLines": 161,
+      "functions": [
+        {
+          "name": "seedSkill",
+          "startLine": 16,
+          "endLine": 21,
+          "params": [
+            "dir",
+            "name",
+            "scope",
+            "body"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedSkill",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 17
+        },
+        {
+          "caller": "seedSkill",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 20
+        },
+        {
+          "caller": "seedSkill",
+          "callee": "path.join",
+          "lineNumber": 20
+        },
+        {
+          "caller": "createTools",
+          "callee": "createSkillTools",
+          "lineNumber": 30
+        },
+        {
+          "caller": "run",
+          "callee": "tools.find",
+          "lineNumber": 43
+        },
+        {
+          "caller": "run",
+          "callee": "tool.execute",
+          "lineNumber": 45
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-autoextract.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 151,
+      "nonEmptyLines": 135,
+      "functions": [
+        {
+          "name": "repeatedSession",
+          "startLine": 25,
+          "endLine": 34,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-creator.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 394,
+      "nonEmptyLines": 329,
+      "callGraph": [
+        {
+          "caller": "run",
+          "callee": "tools.find",
+          "lineNumber": 311
+        },
+        {
+          "caller": "run",
+          "callee": "tool.execute",
+          "lineNumber": 313
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-frontmatter.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 286,
+      "nonEmptyLines": 242,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-recommender.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 114,
+      "nonEmptyLines": 102,
+      "functions": [
+        {
+          "name": "makeDeps",
+          "startLine": 4,
+          "endLine": 12,
+          "params": [
+            "skills",
+            "activeSkills"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-redaction.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 45,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-retirement.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 158,
+      "nonEmptyLines": 137,
+      "functions": [
+        {
+          "name": "seedSkill",
+          "startLine": 17,
+          "endLine": 24,
+          "params": [
+            "dir",
+            "name",
+            "mtimeMs",
+            "content"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedSkill",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 18
+        },
+        {
+          "caller": "seedSkill",
+          "callee": "path.join",
+          "lineNumber": 19
+        },
+        {
+          "caller": "seedSkill",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 20
+        },
+        {
+          "caller": "seedSkill",
+          "callee": "fs.utimesSync",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-tools.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 116,
+      "nonEmptyLines": 101,
+      "callGraph": [
+        {
+          "caller": "run",
+          "callee": "tools.find",
+          "lineNumber": 28
+        },
+        {
+          "caller": "run",
+          "callee": "tool.execute",
+          "lineNumber": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/skill-write-service.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 130,
+      "nonEmptyLines": 117,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/trust-model.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 370,
+      "nonEmptyLines": 319,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

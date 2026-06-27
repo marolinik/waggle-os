@@ -1,0 +1,2673 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 9,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "app/src-tauri/src/commands/agent.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 268,
+      "nonEmptyLines": 243,
+      "functions": [
+        {
+          "name": "run_agent_query",
+          "startLine": 34,
+          "endLine": 70,
+          "params": [
+            "app",
+            "state",
+            "query",
+            "shape",
+            "workspace_id",
+            "persona",
+            "model",
+            "session"
+          ]
+        },
+        {
+          "name": "stream_chat",
+          "startLine": 73,
+          "endLine": 194,
+          "params": [
+            "app",
+            "port",
+            "request_id",
+            "query",
+            "shape",
+            "workspace_id",
+            "persona",
+            "model",
+            "session"
+          ]
+        },
+        {
+          "name": "parse_sse_event",
+          "startLine": 200,
+          "endLine": 227,
+          "params": [
+            "block"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "run_agent_query",
+          "line": 34,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "run_agent_query",
+          "callee": "app.clone",
+          "lineNumber": 46
+        },
+        {
+          "caller": "run_agent_query",
+          "callee": "request_id.clone",
+          "lineNumber": 47
+        },
+        {
+          "caller": "run_agent_query",
+          "callee": "tokio::spawn",
+          "lineNumber": 49
+        },
+        {
+          "caller": "run_agent_query",
+          "callee": "stream_chat",
+          "lineNumber": 50
+        },
+        {
+          "caller": "run_agent_query",
+          "callee": "Ok",
+          "lineNumber": 69
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "reqwest::Client::builder()\r\n        .timeout(Duration::from_secs(STREAM_TIMEOUT_SECS)).build",
+          "lineNumber": 116
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "reqwest::Client::builder().timeout",
+          "lineNumber": 116
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "reqwest::Client::builder",
+          "lineNumber": 116
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "Duration::from_secs",
+          "lineNumber": 117
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 122
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "Err",
+          "lineNumber": 126
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "e.to_string",
+          "lineNumber": 126
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "client.post(&url).json(&body).send",
+          "lineNumber": 130
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "client.post(&url).json",
+          "lineNumber": 130
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "client.post",
+          "lineNumber": 130
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 133
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "Err",
+          "lineNumber": 137
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "e.to_string",
+          "lineNumber": 137
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "resp.status().is_success",
+          "lineNumber": 141
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "resp.status",
+          "lineNumber": 141
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "resp.status",
+          "lineNumber": 142
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "resp.text().await.unwrap_or_default",
+          "lineNumber": 143
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "resp.text",
+          "lineNumber": 143
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 144
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "Err",
+          "lineNumber": 151
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "String::new",
+          "lineNumber": 158
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "resp.chunk",
+          "lineNumber": 160
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "std::str::from_utf8",
+          "lineNumber": 162
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "buffer.push_str",
+          "lineNumber": 163
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "buffer.find",
+          "lineNumber": 165
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "buffer.drain(..idx + 2).collect",
+          "lineNumber": 166
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "buffer.drain",
+          "lineNumber": 166
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "parse_sse_event",
+          "lineNumber": 167
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 168
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 174
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "Err",
+          "lineNumber": 178
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "e.to_string",
+          "lineNumber": 178
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "buffer.trim",
+          "lineNumber": 185
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "tail.is_empty",
+          "lineNumber": 186
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "parse_sse_event",
+          "lineNumber": 187
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 188
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "app.emit",
+          "lineNumber": 192
+        },
+        {
+          "caller": "stream_chat",
+          "callee": "Ok",
+          "lineNumber": 193
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "String::from",
+          "lineNumber": 201
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "Vec::new",
+          "lineNumber": 202
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "block.lines",
+          "lineNumber": 204
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "line.strip_prefix",
+          "lineNumber": 205
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "rest.trim().to_string",
+          "lineNumber": 206
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "rest.trim",
+          "lineNumber": 206
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "line.strip_prefix",
+          "lineNumber": 207
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "rest.strip_prefix(' ').unwrap_or",
+          "lineNumber": 209
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "rest.strip_prefix",
+          "lineNumber": 209
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "data_lines.push",
+          "lineNumber": 210
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "value.to_string",
+          "lineNumber": 210
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "data_lines.is_empty",
+          "lineNumber": 215
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "data_lines.join",
+          "lineNumber": 219
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "serde_json::from_str(&data_str).unwrap_or_else",
+          "lineNumber": 221
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "serde_json::from_str",
+          "lineNumber": 221
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "Value::String",
+          "lineNumber": 221
+        },
+        {
+          "caller": "parse_sse_event",
+          "callee": "Some",
+          "lineNumber": 223
+        },
+        {
+          "caller": "parse_sse_simple_data_only",
+          "callee": "parse_sse_event(block).expect",
+          "lineNumber": 236
+        },
+        {
+          "caller": "parse_sse_simple_data_only",
+          "callee": "parse_sse_event",
+          "lineNumber": 236
+        },
+        {
+          "caller": "parse_sse_event_and_json_data",
+          "callee": "parse_sse_event(block).expect",
+          "lineNumber": 244
+        },
+        {
+          "caller": "parse_sse_event_and_json_data",
+          "callee": "parse_sse_event",
+          "lineNumber": 244
+        },
+        {
+          "caller": "parse_sse_multiline_data_joined_with_newline",
+          "callee": "parse_sse_event(block).expect",
+          "lineNumber": 252
+        },
+        {
+          "caller": "parse_sse_multiline_data_joined_with_newline",
+          "callee": "parse_sse_event",
+          "lineNumber": 252
+        },
+        {
+          "caller": "parse_sse_strips_single_leading_space_after_colon",
+          "callee": "parse_sse_event(block).expect",
+          "lineNumber": 265
+        },
+        {
+          "caller": "parse_sse_strips_single_leading_space_after_colon",
+          "callee": "parse_sse_event",
+          "lineNumber": 265
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/commands/http.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 43,
+      "nonEmptyLines": 37,
+      "functions": [
+        {
+          "name": "sidecar_url",
+          "startLine": 11,
+          "endLine": 13,
+          "params": [
+            "port",
+            "path"
+          ]
+        },
+        {
+          "name": "http_get",
+          "startLine": 15,
+          "endLine": 19,
+          "params": [
+            "url"
+          ]
+        },
+        {
+          "name": "http_post",
+          "startLine": 21,
+          "endLine": 29,
+          "params": [
+            "url",
+            "body"
+          ]
+        },
+        {
+          "name": "parse_json",
+          "startLine": 31,
+          "endLine": 43,
+          "params": [
+            "resp"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "sidecar_url",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "http_get",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "http_post",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "parse_json",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "http_get",
+          "callee": "reqwest::get(url)\r\n        .await.map_err",
+          "lineNumber": 16
+        },
+        {
+          "caller": "http_get",
+          "callee": "reqwest::get",
+          "lineNumber": 16
+        },
+        {
+          "caller": "http_post",
+          "callee": "reqwest::Client::new",
+          "lineNumber": 22
+        },
+        {
+          "caller": "http_post",
+          "callee": "client\r\n        .post(url)\r\n        .json(body)\r\n        .send()\r\n        .await.map_err",
+          "lineNumber": 23
+        },
+        {
+          "caller": "http_post",
+          "callee": "client\r\n        .post(url)\r\n        .json(body).send",
+          "lineNumber": 23
+        },
+        {
+          "caller": "http_post",
+          "callee": "client\r\n        .post(url).json",
+          "lineNumber": 23
+        },
+        {
+          "caller": "http_post",
+          "callee": "client.post",
+          "lineNumber": 23
+        },
+        {
+          "caller": "parse_json",
+          "callee": "resp.status",
+          "lineNumber": 32
+        },
+        {
+          "caller": "parse_json",
+          "callee": "status.is_success",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parse_json",
+          "callee": "resp\r\n            .text()\r\n            .await.unwrap_or_else",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse_json",
+          "callee": "resp.text",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse_json",
+          "callee": "\"<unreadable body>\".to_string",
+          "lineNumber": 37
+        },
+        {
+          "caller": "parse_json",
+          "callee": "Err",
+          "lineNumber": 38
+        },
+        {
+          "caller": "parse_json",
+          "callee": "resp.json::<Value>()\r\n        .await.map_err",
+          "lineNumber": 40
+        },
+        {
+          "caller": "parse_json",
+          "callee": "resp.json::<Value>",
+          "lineNumber": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/commands/memory.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 135,
+      "nonEmptyLines": 125,
+      "functions": [
+        {
+          "name": "recall_memory",
+          "startLine": 27,
+          "endLine": 51,
+          "params": [
+            "state",
+            "query",
+            "scope",
+            "limit",
+            "workspace_id"
+          ]
+        },
+        {
+          "name": "save_memory",
+          "startLine": 57,
+          "endLine": 78,
+          "params": [
+            "state",
+            "content",
+            "workspace_id",
+            "importance",
+            "source"
+          ]
+        },
+        {
+          "name": "search_entities",
+          "startLine": 83,
+          "endLine": 103,
+          "params": [
+            "state",
+            "workspace_id",
+            "scope"
+          ]
+        },
+        {
+          "name": "get_identity",
+          "startLine": 113,
+          "endLine": 120,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "identity_placeholder",
+          "startLine": 122,
+          "endLine": 135,
+          "params": [
+            "note"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "recall_memory",
+          "line": 27,
+          "isDefault": false
+        },
+        {
+          "name": "save_memory",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "search_entities",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "get_identity",
+          "line": 113,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "recall_memory",
+          "callee": "url.push_str",
+          "lineNumber": 40
+        },
+        {
+          "caller": "recall_memory",
+          "callee": "url.push_str",
+          "lineNumber": 43
+        },
+        {
+          "caller": "recall_memory",
+          "callee": "url.push_str",
+          "lineNumber": 46
+        },
+        {
+          "caller": "recall_memory",
+          "callee": "http_get",
+          "lineNumber": 49
+        },
+        {
+          "caller": "recall_memory",
+          "callee": "parse_json",
+          "lineNumber": 50
+        },
+        {
+          "caller": "save_memory",
+          "callee": "sidecar_url",
+          "lineNumber": 75
+        },
+        {
+          "caller": "save_memory",
+          "callee": "http_post",
+          "lineNumber": 76
+        },
+        {
+          "caller": "save_memory",
+          "callee": "parse_json",
+          "lineNumber": 77
+        },
+        {
+          "caller": "search_entities",
+          "callee": "sidecar_url(state.port, \"/api/memory/graph\").to_string",
+          "lineNumber": 88
+        },
+        {
+          "caller": "search_entities",
+          "callee": "sidecar_url",
+          "lineNumber": 88
+        },
+        {
+          "caller": "search_entities",
+          "callee": "Vec::new",
+          "lineNumber": 89
+        },
+        {
+          "caller": "search_entities",
+          "callee": "params.push",
+          "lineNumber": 91
+        },
+        {
+          "caller": "search_entities",
+          "callee": "params.push",
+          "lineNumber": 94
+        },
+        {
+          "caller": "search_entities",
+          "callee": "params.is_empty",
+          "lineNumber": 96
+        },
+        {
+          "caller": "search_entities",
+          "callee": "url.push",
+          "lineNumber": 97
+        },
+        {
+          "caller": "search_entities",
+          "callee": "url.push_str",
+          "lineNumber": 98
+        },
+        {
+          "caller": "search_entities",
+          "callee": "params.join",
+          "lineNumber": 98
+        },
+        {
+          "caller": "search_entities",
+          "callee": "http_get",
+          "lineNumber": 101
+        },
+        {
+          "caller": "search_entities",
+          "callee": "parse_json",
+          "lineNumber": 102
+        },
+        {
+          "caller": "get_identity",
+          "callee": "sidecar_url",
+          "lineNumber": 114
+        },
+        {
+          "caller": "get_identity",
+          "callee": "http_get",
+          "lineNumber": 115
+        },
+        {
+          "caller": "get_identity",
+          "callee": "resp.status().as_u16",
+          "lineNumber": 116
+        },
+        {
+          "caller": "get_identity",
+          "callee": "resp.status",
+          "lineNumber": 116
+        },
+        {
+          "caller": "get_identity",
+          "callee": "Ok",
+          "lineNumber": 116
+        },
+        {
+          "caller": "get_identity",
+          "callee": "identity_placeholder",
+          "lineNumber": 116
+        },
+        {
+          "caller": "get_identity",
+          "callee": "parse_json",
+          "lineNumber": 117
+        },
+        {
+          "caller": "get_identity",
+          "callee": "Ok",
+          "lineNumber": 118
+        },
+        {
+          "caller": "get_identity",
+          "callee": "identity_placeholder",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 4,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/commands/mod.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 8,
+      "nonEmptyLines": 7,
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/commands/onboarding.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 120,
+      "nonEmptyLines": 107,
+      "functions": [
+        {
+          "name": "home_dir",
+          "startLine": 19,
+          "endLine": 23,
+          "params": []
+        },
+        {
+          "name": "flag_path",
+          "startLine": 31,
+          "endLine": 41,
+          "params": []
+        },
+        {
+          "name": "is_first_launch",
+          "startLine": 48,
+          "endLine": 54,
+          "params": []
+        },
+        {
+          "name": "mark_first_launch_complete",
+          "startLine": 59,
+          "endLine": 68,
+          "params": []
+        },
+        {
+          "name": "reset_first_launch",
+          "startLine": 73,
+          "endLine": 80,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "is_first_launch",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "mark_first_launch_complete",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "reset_first_launch",
+          "line": 73,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "home_dir",
+          "callee": "std::env::var_os(\"USERPROFILE\")\r\n        .or_else(|| std::env::var_os(\"HOME\")).map",
+          "lineNumber": 20
+        },
+        {
+          "caller": "home_dir",
+          "callee": "std::env::var_os(\"USERPROFILE\").or_else",
+          "lineNumber": 20
+        },
+        {
+          "caller": "home_dir",
+          "callee": "std::env::var_os",
+          "lineNumber": 20
+        },
+        {
+          "caller": "home_dir",
+          "callee": "std::env::var_os",
+          "lineNumber": 21
+        },
+        {
+          "caller": "flag_path",
+          "callee": "std::env::var_os",
+          "lineNumber": 32
+        },
+        {
+          "caller": "flag_path",
+          "callee": "dir.is_empty",
+          "lineNumber": 33
+        },
+        {
+          "caller": "flag_path",
+          "callee": "Ok",
+          "lineNumber": 34
+        },
+        {
+          "caller": "flag_path",
+          "callee": "PathBuf::from(dir).join",
+          "lineNumber": 34
+        },
+        {
+          "caller": "flag_path",
+          "callee": "PathBuf::from",
+          "lineNumber": 34
+        },
+        {
+          "caller": "flag_path",
+          "callee": "home_dir().ok_or_else",
+          "lineNumber": 37
+        },
+        {
+          "caller": "flag_path",
+          "callee": "home_dir",
+          "lineNumber": 37
+        },
+        {
+          "caller": "flag_path",
+          "callee": "\"could not resolve user home directory (USERPROFILE/HOME unset)\".to_string",
+          "lineNumber": 38
+        },
+        {
+          "caller": "flag_path",
+          "callee": "Ok",
+          "lineNumber": 40
+        },
+        {
+          "caller": "flag_path",
+          "callee": "home.join(FLAG_DIR).join",
+          "lineNumber": 40
+        },
+        {
+          "caller": "flag_path",
+          "callee": "home.join",
+          "lineNumber": 40
+        },
+        {
+          "caller": "is_first_launch",
+          "callee": "flag_path",
+          "lineNumber": 49
+        },
+        {
+          "caller": "is_first_launch",
+          "callee": "Ok",
+          "lineNumber": 51
+        },
+        {
+          "caller": "is_first_launch",
+          "callee": "Ok",
+          "lineNumber": 53
+        },
+        {
+          "caller": "is_first_launch",
+          "callee": "path.exists",
+          "lineNumber": 53
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "flag_path",
+          "lineNumber": 60
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "path.parent",
+          "lineNumber": 61
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "std::fs::create_dir_all(parent).map_err",
+          "lineNumber": 62
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "std::fs::create_dir_all",
+          "lineNumber": 62
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "std::fs::write(&path, b\"completed\\n\").map_err",
+          "lineNumber": 65
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "std::fs::write",
+          "lineNumber": 65
+        },
+        {
+          "caller": "mark_first_launch_complete",
+          "callee": "Ok",
+          "lineNumber": 67
+        },
+        {
+          "caller": "reset_first_launch",
+          "callee": "flag_path",
+          "lineNumber": 74
+        },
+        {
+          "caller": "reset_first_launch",
+          "callee": "path.exists",
+          "lineNumber": 75
+        },
+        {
+          "caller": "reset_first_launch",
+          "callee": "std::fs::remove_file(&path).map_err",
+          "lineNumber": 76
+        },
+        {
+          "caller": "reset_first_launch",
+          "callee": "std::fs::remove_file",
+          "lineNumber": 76
+        },
+        {
+          "caller": "reset_first_launch",
+          "callee": "Ok",
+          "lineNumber": 79
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 90
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 90
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::set_var",
+          "lineNumber": 91
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::set_var",
+          "lineNumber": 92
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::remove_var",
+          "lineNumber": 95
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "flag_path().expect",
+          "lineNumber": 96
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "flag_path",
+          "lineNumber": 96
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::temp_dir().join",
+          "lineNumber": 104
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::temp_dir",
+          "lineNumber": 104
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::set_var",
+          "lineNumber": 105
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "flag_path().expect",
+          "lineNumber": 106
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "flag_path",
+          "lineNumber": 106
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::set_var",
+          "lineNumber": 111
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "flag_path().expect",
+          "lineNumber": 112
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "flag_path",
+          "lineNumber": 112
+        },
+        {
+          "caller": "flag_path_resolution_order",
+          "callee": "std::env::remove_var",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/commands/wiki.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 75,
+      "nonEmptyLines": 69,
+      "functions": [
+        {
+          "name": "get_wiki_pages",
+          "startLine": 28,
+          "endLine": 32,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "get_wiki_page",
+          "startLine": 37,
+          "endLine": 44,
+          "params": [
+            "state",
+            "slug"
+          ]
+        },
+        {
+          "name": "get_wiki_page_content",
+          "startLine": 49,
+          "endLine": 59,
+          "params": [
+            "state",
+            "slug"
+          ]
+        },
+        {
+          "name": "compile_wiki_section",
+          "startLine": 64,
+          "endLine": 75,
+          "params": [
+            "state",
+            "workspace_id"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "get_wiki_pages",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "get_wiki_page",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "get_wiki_page_content",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "compile_wiki_section",
+          "line": 64,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "get_wiki_pages",
+          "callee": "sidecar_url",
+          "lineNumber": 29
+        },
+        {
+          "caller": "get_wiki_pages",
+          "callee": "http_get",
+          "lineNumber": 30
+        },
+        {
+          "caller": "get_wiki_pages",
+          "callee": "parse_json",
+          "lineNumber": 31
+        },
+        {
+          "caller": "get_wiki_page",
+          "callee": "sidecar_url",
+          "lineNumber": 41
+        },
+        {
+          "caller": "get_wiki_page",
+          "callee": "http_get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "get_wiki_page",
+          "callee": "parse_json",
+          "lineNumber": 43
+        },
+        {
+          "caller": "get_wiki_page_content",
+          "callee": "sidecar_url",
+          "lineNumber": 53
+        },
+        {
+          "caller": "get_wiki_page_content",
+          "callee": "http_get",
+          "lineNumber": 57
+        },
+        {
+          "caller": "get_wiki_page_content",
+          "callee": "parse_json",
+          "lineNumber": 58
+        },
+        {
+          "caller": "compile_wiki_section",
+          "callee": "sidecar_url",
+          "lineNumber": 72
+        },
+        {
+          "caller": "compile_wiki_section",
+          "callee": "http_post",
+          "lineNumber": 73
+        },
+        {
+          "caller": "compile_wiki_section",
+          "callee": "parse_json",
+          "lineNumber": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 4,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/lib.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 157,
+      "nonEmptyLines": 146,
+      "functions": [
+        {
+          "name": "show_notification",
+          "startLine": 13,
+          "endLine": 21,
+          "params": [
+            "app",
+            "title",
+            "body"
+          ]
+        },
+        {
+          "name": "run",
+          "startLine": 24,
+          "endLine": 157,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "run",
+          "line": 24,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "show_notification",
+          "callee": "app.notification()\r\n        .builder()\r\n        .title(&title)\r\n        .body(&body)\r\n        .show().map_err",
+          "lineNumber": 15
+        },
+        {
+          "caller": "show_notification",
+          "callee": "app.notification()\r\n        .builder()\r\n        .title(&title)\r\n        .body(&body).show",
+          "lineNumber": 15
+        },
+        {
+          "caller": "show_notification",
+          "callee": "app.notification()\r\n        .builder()\r\n        .title(&title).body",
+          "lineNumber": 15
+        },
+        {
+          "caller": "show_notification",
+          "callee": "app.notification()\r\n        .builder().title",
+          "lineNumber": 15
+        },
+        {
+          "caller": "show_notification",
+          "callee": "app.notification().builder",
+          "lineNumber": 15
+        },
+        {
+          "caller": "show_notification",
+          "callee": "app.notification",
+          "lineNumber": 15
+        },
+        {
+          "caller": "show_notification",
+          "callee": "e.to_string",
+          "lineNumber": 20
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        ))\r\n        .manage(ServiceState::new(3333))\r\n        .invoke_handler(tauri::generate_handler![\r\n            service::ensure_service,\r\n            service::stop_service,\r\n            service::get_service_port,\r\n            show_notification,\r\n            commands::memory::recall_memory,\r\n            commands::memory::save_memory,\r\n            commands::memory::search_entities,\r\n            commands::memory::get_identity,\r\n            commands::wiki::get_wiki_pages,\r\n            commands::wiki::get_wiki_page,\r\n            commands::wiki::get_wiki_page_content,\r\n            commands::wiki::compile_wiki_section,\r\n            commands::agent::run_agent_query,\r\n            commands::onboarding::is_first_launch,\r\n            commands::onboarding::mark_first_launch_complete,\r\n            commands::onboarding::reset_first_launch,\r\n        ])\r\n        .setup(|app| {\r\n            tray::setup_tray(app.handle())?;\r\n\r\n            // Register global hotkey: Ctrl+Shift+W to toggle window visibility\r\n            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};\r\n            let app_handle = app.handle().clone();\r\n            app.handle().plugin(\r\n                tauri_plugin_global_shortcut::Builder::new()\r\n                    .with_handler(move |_app, _shortcut, event| {\r\n                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {\r\n                            if let Some(window) = app_handle.get_webview_window(\"main\") {\r\n                                if window.is_visible().unwrap_or(false) {\r\n                                    let _ = window.hide();\r\n                                } else {\r\n                                    let _ = window.show();\r\n                                    let _ = window.set_focus();\r\n                                }\r\n                            }\r\n                        }\r\n                    })\r\n                    .build(),\r\n            )?;\r\n\r\n            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyW);\r\n            // R7-005: a hotkey collision must not crash setup — log and continue.\r\n            if let Err(e) = app.global_shortcut().register(shortcut) {\r\n                eprintln!(\"[waggle] Failed to register Ctrl+Shift+W global shortcut: {}\", e);\r\n            }\r\n\r\n            // Auto-start the sidecar service before the webview loads so the\r\n            // React app finds it already healthy on localhost:3333.\r\n            let service_state = app.state::<ServiceState>();\r\n            let port = service_state.port;\r\n            match service::spawn_service_sync(port, &service_state.process) {\r\n                Ok(()) => eprintln!(\"[waggle] Sidecar spawn initiated on port {}\", port),\r\n                Err(e) => eprintln!(\"[waggle] Failed to auto-start sidecar: {}\", e),\r\n            }\r\n\r\n            // Start service watchdog\r\n            let app_handle_watchdog = app.handle().clone();\r\n            service::start_watchdog(app_handle_watchdog, port);\r\n\r\n            // 9D-7: Check for updates on startup (non-blocking)\r\n            let app_handle_update = app.handle().clone();\r\n            tauri::async_runtime::spawn(async move {\r\n                // Wait 5s for UI to load before checking\r\n                tokio::time::sleep(std::time::Duration::from_secs(5)).await;\r\n\r\n                match app_handle_update.updater() {\r\n                    Ok(updater) => match updater.check().await {\r\n                        Ok(Some(update)) => {\r\n                            let version = update.version.clone();\r\n                            let _ = app_handle_update.emit(\r\n                                \"waggle://update-available\",\r\n                                serde_json::json!({\r\n                                    \"version\": version,\r\n                                    \"body\": update.body.clone().unwrap_or_default(),\r\n                                }),\r\n                            );\r\n                            eprintln!(\"[waggle] Update available: v{}\", version);\r\n                        }\r\n                        Ok(None) => {\r\n                            eprintln!(\"[waggle] App is up to date\");\r\n                        }\r\n                        Err(e) => {\r\n                            eprintln!(\"[waggle] Update check failed: {}\", e);\r\n                        }\r\n                    }\r\n                    Err(e) => {\r\n                        eprintln!(\"[waggle] Updater init failed: {}\", e);\r\n                    }\r\n                }\r\n            });\r\n\r\n            Ok(())\r\n        })\r\n        // Window management: close minimizes to tray instead of quitting\r\n        .on_window_event(|window, event| {\r\n            if let tauri::WindowEvent::CloseRequested { api, .. } = event {\r\n                api.prevent_close();\r\n                let _ = window.hide();\r\n            }\r\n        })\r\n        .build(tauri::generate_context!())\r\n        .expect(\"error while building tauri application\").run",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        ))\r\n        .manage(ServiceState::new(3333))\r\n        .invoke_handler(tauri::generate_handler![\r\n            service::ensure_service,\r\n            service::stop_service,\r\n            service::get_service_port,\r\n            show_notification,\r\n            commands::memory::recall_memory,\r\n            commands::memory::save_memory,\r\n            commands::memory::search_entities,\r\n            commands::memory::get_identity,\r\n            commands::wiki::get_wiki_pages,\r\n            commands::wiki::get_wiki_page,\r\n            commands::wiki::get_wiki_page_content,\r\n            commands::wiki::compile_wiki_section,\r\n            commands::agent::run_agent_query,\r\n            commands::onboarding::is_first_launch,\r\n            commands::onboarding::mark_first_launch_complete,\r\n            commands::onboarding::reset_first_launch,\r\n        ])\r\n        .setup(|app| {\r\n            tray::setup_tray(app.handle())?;\r\n\r\n            // Register global hotkey: Ctrl+Shift+W to toggle window visibility\r\n            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};\r\n            let app_handle = app.handle().clone();\r\n            app.handle().plugin(\r\n                tauri_plugin_global_shortcut::Builder::new()\r\n                    .with_handler(move |_app, _shortcut, event| {\r\n                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {\r\n                            if let Some(window) = app_handle.get_webview_window(\"main\") {\r\n                                if window.is_visible().unwrap_or(false) {\r\n                                    let _ = window.hide();\r\n                                } else {\r\n                                    let _ = window.show();\r\n                                    let _ = window.set_focus();\r\n                                }\r\n                            }\r\n                        }\r\n                    })\r\n                    .build(),\r\n            )?;\r\n\r\n            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyW);\r\n            // R7-005: a hotkey collision must not crash setup — log and continue.\r\n            if let Err(e) = app.global_shortcut().register(shortcut) {\r\n                eprintln!(\"[waggle] Failed to register Ctrl+Shift+W global shortcut: {}\", e);\r\n            }\r\n\r\n            // Auto-start the sidecar service before the webview loads so the\r\n            // React app finds it already healthy on localhost:3333.\r\n            let service_state = app.state::<ServiceState>();\r\n            let port = service_state.port;\r\n            match service::spawn_service_sync(port, &service_state.process) {\r\n                Ok(()) => eprintln!(\"[waggle] Sidecar spawn initiated on port {}\", port),\r\n                Err(e) => eprintln!(\"[waggle] Failed to auto-start sidecar: {}\", e),\r\n            }\r\n\r\n            // Start service watchdog\r\n            let app_handle_watchdog = app.handle().clone();\r\n            service::start_watchdog(app_handle_watchdog, port);\r\n\r\n            // 9D-7: Check for updates on startup (non-blocking)\r\n            let app_handle_update = app.handle().clone();\r\n            tauri::async_runtime::spawn(async move {\r\n                // Wait 5s for UI to load before checking\r\n                tokio::time::sleep(std::time::Duration::from_secs(5)).await;\r\n\r\n                match app_handle_update.updater() {\r\n                    Ok(updater) => match updater.check().await {\r\n                        Ok(Some(update)) => {\r\n                            let version = update.version.clone();\r\n                            let _ = app_handle_update.emit(\r\n                                \"waggle://update-available\",\r\n                                serde_json::json!({\r\n                                    \"version\": version,\r\n                                    \"body\": update.body.clone().unwrap_or_default(),\r\n                                }),\r\n                            );\r\n                            eprintln!(\"[waggle] Update available: v{}\", version);\r\n                        }\r\n                        Ok(None) => {\r\n                            eprintln!(\"[waggle] App is up to date\");\r\n                        }\r\n                        Err(e) => {\r\n                            eprintln!(\"[waggle] Update check failed: {}\", e);\r\n                        }\r\n                    }\r\n                    Err(e) => {\r\n                        eprintln!(\"[waggle] Updater init failed: {}\", e);\r\n                    }\r\n                }\r\n            });\r\n\r\n            Ok(())\r\n        })\r\n        // Window management: close minimizes to tray instead of quitting\r\n        .on_window_event(|window, event| {\r\n            if let tauri::WindowEvent::CloseRequested { api, .. } = event {\r\n                api.prevent_close();\r\n                let _ = window.hide();\r\n            }\r\n        })\r\n        .build(tauri::generate_context!()).expect",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        ))\r\n        .manage(ServiceState::new(3333))\r\n        .invoke_handler(tauri::generate_handler![\r\n            service::ensure_service,\r\n            service::stop_service,\r\n            service::get_service_port,\r\n            show_notification,\r\n            commands::memory::recall_memory,\r\n            commands::memory::save_memory,\r\n            commands::memory::search_entities,\r\n            commands::memory::get_identity,\r\n            commands::wiki::get_wiki_pages,\r\n            commands::wiki::get_wiki_page,\r\n            commands::wiki::get_wiki_page_content,\r\n            commands::wiki::compile_wiki_section,\r\n            commands::agent::run_agent_query,\r\n            commands::onboarding::is_first_launch,\r\n            commands::onboarding::mark_first_launch_complete,\r\n            commands::onboarding::reset_first_launch,\r\n        ])\r\n        .setup(|app| {\r\n            tray::setup_tray(app.handle())?;\r\n\r\n            // Register global hotkey: Ctrl+Shift+W to toggle window visibility\r\n            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};\r\n            let app_handle = app.handle().clone();\r\n            app.handle().plugin(\r\n                tauri_plugin_global_shortcut::Builder::new()\r\n                    .with_handler(move |_app, _shortcut, event| {\r\n                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {\r\n                            if let Some(window) = app_handle.get_webview_window(\"main\") {\r\n                                if window.is_visible().unwrap_or(false) {\r\n                                    let _ = window.hide();\r\n                                } else {\r\n                                    let _ = window.show();\r\n                                    let _ = window.set_focus();\r\n                                }\r\n                            }\r\n                        }\r\n                    })\r\n                    .build(),\r\n            )?;\r\n\r\n            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyW);\r\n            // R7-005: a hotkey collision must not crash setup — log and continue.\r\n            if let Err(e) = app.global_shortcut().register(shortcut) {\r\n                eprintln!(\"[waggle] Failed to register Ctrl+Shift+W global shortcut: {}\", e);\r\n            }\r\n\r\n            // Auto-start the sidecar service before the webview loads so the\r\n            // React app finds it already healthy on localhost:3333.\r\n            let service_state = app.state::<ServiceState>();\r\n            let port = service_state.port;\r\n            match service::spawn_service_sync(port, &service_state.process) {\r\n                Ok(()) => eprintln!(\"[waggle] Sidecar spawn initiated on port {}\", port),\r\n                Err(e) => eprintln!(\"[waggle] Failed to auto-start sidecar: {}\", e),\r\n            }\r\n\r\n            // Start service watchdog\r\n            let app_handle_watchdog = app.handle().clone();\r\n            service::start_watchdog(app_handle_watchdog, port);\r\n\r\n            // 9D-7: Check for updates on startup (non-blocking)\r\n            let app_handle_update = app.handle().clone();\r\n            tauri::async_runtime::spawn(async move {\r\n                // Wait 5s for UI to load before checking\r\n                tokio::time::sleep(std::time::Duration::from_secs(5)).await;\r\n\r\n                match app_handle_update.updater() {\r\n                    Ok(updater) => match updater.check().await {\r\n                        Ok(Some(update)) => {\r\n                            let version = update.version.clone();\r\n                            let _ = app_handle_update.emit(\r\n                                \"waggle://update-available\",\r\n                                serde_json::json!({\r\n                                    \"version\": version,\r\n                                    \"body\": update.body.clone().unwrap_or_default(),\r\n                                }),\r\n                            );\r\n                            eprintln!(\"[waggle] Update available: v{}\", version);\r\n                        }\r\n                        Ok(None) => {\r\n                            eprintln!(\"[waggle] App is up to date\");\r\n                        }\r\n                        Err(e) => {\r\n                            eprintln!(\"[waggle] Update check failed: {}\", e);\r\n                        }\r\n                    }\r\n                    Err(e) => {\r\n                        eprintln!(\"[waggle] Updater init failed: {}\", e);\r\n                    }\r\n                }\r\n            });\r\n\r\n            Ok(())\r\n        })\r\n        // Window management: close minimizes to tray instead of quitting\r\n        .on_window_event(|window, event| {\r\n            if let tauri::WindowEvent::CloseRequested { api, .. } = event {\r\n                api.prevent_close();\r\n                let _ = window.hide();\r\n            }\r\n        }).build",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        ))\r\n        .manage(ServiceState::new(3333))\r\n        .invoke_handler(tauri::generate_handler![\r\n            service::ensure_service,\r\n            service::stop_service,\r\n            service::get_service_port,\r\n            show_notification,\r\n            commands::memory::recall_memory,\r\n            commands::memory::save_memory,\r\n            commands::memory::search_entities,\r\n            commands::memory::get_identity,\r\n            commands::wiki::get_wiki_pages,\r\n            commands::wiki::get_wiki_page,\r\n            commands::wiki::get_wiki_page_content,\r\n            commands::wiki::compile_wiki_section,\r\n            commands::agent::run_agent_query,\r\n            commands::onboarding::is_first_launch,\r\n            commands::onboarding::mark_first_launch_complete,\r\n            commands::onboarding::reset_first_launch,\r\n        ])\r\n        .setup(|app| {\r\n            tray::setup_tray(app.handle())?;\r\n\r\n            // Register global hotkey: Ctrl+Shift+W to toggle window visibility\r\n            use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};\r\n            let app_handle = app.handle().clone();\r\n            app.handle().plugin(\r\n                tauri_plugin_global_shortcut::Builder::new()\r\n                    .with_handler(move |_app, _shortcut, event| {\r\n                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {\r\n                            if let Some(window) = app_handle.get_webview_window(\"main\") {\r\n                                if window.is_visible().unwrap_or(false) {\r\n                                    let _ = window.hide();\r\n                                } else {\r\n                                    let _ = window.show();\r\n                                    let _ = window.set_focus();\r\n                                }\r\n                            }\r\n                        }\r\n                    })\r\n                    .build(),\r\n            )?;\r\n\r\n            let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyW);\r\n            // R7-005: a hotkey collision must not crash setup — log and continue.\r\n            if let Err(e) = app.global_shortcut().register(shortcut) {\r\n                eprintln!(\"[waggle] Failed to register Ctrl+Shift+W global shortcut: {}\", e);\r\n            }\r\n\r\n            // Auto-start the sidecar service before the webview loads so the\r\n            // React app finds it already healthy on localhost:3333.\r\n            let service_state = app.state::<ServiceState>();\r\n            let port = service_state.port;\r\n            match service::spawn_service_sync(port, &service_state.process) {\r\n                Ok(()) => eprintln!(\"[waggle] Sidecar spawn initiated on port {}\", port),\r\n                Err(e) => eprintln!(\"[waggle] Failed to auto-start sidecar: {}\", e),\r\n            }\r\n\r\n            // Start service watchdog\r\n            let app_handle_watchdog = app.handle().clone();\r\n            service::start_watchdog(app_handle_watchdog, port);\r\n\r\n            // 9D-7: Check for updates on startup (non-blocking)\r\n            let app_handle_update = app.handle().clone();\r\n            tauri::async_runtime::spawn(async move {\r\n                // Wait 5s for UI to load before checking\r\n                tokio::time::sleep(std::time::Duration::from_secs(5)).await;\r\n\r\n                match app_handle_update.updater() {\r\n                    Ok(updater) => match updater.check().await {\r\n                        Ok(Some(update)) => {\r\n                            let version = update.version.clone();\r\n                            let _ = app_handle_update.emit(\r\n                                \"waggle://update-available\",\r\n                                serde_json::json!({\r\n                                    \"version\": version,\r\n                                    \"body\": update.body.clone().unwrap_or_default(),\r\n                                }),\r\n                            );\r\n                            eprintln!(\"[waggle] Update available: v{}\", version);\r\n                        }\r\n                        Ok(None) => {\r\n                            eprintln!(\"[waggle] App is up to date\");\r\n                        }\r\n                        Err(e) => {\r\n                            eprintln!(\"[waggle] Update check failed: {}\", e);\r\n                        }\r\n                    }\r\n                    Err(e) => {\r\n                        eprintln!(\"[waggle] Updater init failed: {}\", e);\r\n                    }\r\n                }\r\n            });\r\n\r\n            Ok(())\r\n        }).on_window_event",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        ))\r\n        .manage(ServiceState::new(3333))\r\n        .invoke_handler(tauri::generate_handler![\r\n            service::ensure_service,\r\n            service::stop_service,\r\n            service::get_service_port,\r\n            show_notification,\r\n            commands::memory::recall_memory,\r\n            commands::memory::save_memory,\r\n            commands::memory::search_entities,\r\n            commands::memory::get_identity,\r\n            commands::wiki::get_wiki_pages,\r\n            commands::wiki::get_wiki_page,\r\n            commands::wiki::get_wiki_page_content,\r\n            commands::wiki::compile_wiki_section,\r\n            commands::agent::run_agent_query,\r\n            commands::onboarding::is_first_launch,\r\n            commands::onboarding::mark_first_launch_complete,\r\n            commands::onboarding::reset_first_launch,\r\n        ]).setup",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        ))\r\n        .manage(ServiceState::new(3333)).invoke_handler",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build())\r\n        .plugin(tauri_plugin_autostart::init(\r\n            tauri_plugin_autostart::MacosLauncher::LaunchAgent,\r\n            Some(vec![\"--minimized\"]),\r\n        )).manage",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init())\r\n        .plugin(tauri_plugin_updater::Builder::new().build()).plugin",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init())\r\n        .plugin(tauri_plugin_notification::init()).plugin",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init())\r\n        .plugin(tauri_plugin_shell::init()).plugin",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        }))\r\n        .plugin(tauri_plugin_dialog::init()).plugin",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default()\r\n        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {\r\n            if let Some(window) = app.get_webview_window(\"main\") {\r\n                let _ = window.show();\r\n                let _ = window.set_focus();\r\n            }\r\n        })).plugin",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default().plugin",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::Builder::default",
+          "lineNumber": 25
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_single_instance::init",
+          "lineNumber": 26
+        },
+        {
+          "caller": "run",
+          "callee": "app.get_webview_window",
+          "lineNumber": 27
+        },
+        {
+          "caller": "run",
+          "callee": "window.show",
+          "lineNumber": 28
+        },
+        {
+          "caller": "run",
+          "callee": "window.set_focus",
+          "lineNumber": 29
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_dialog::init",
+          "lineNumber": 32
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_shell::init",
+          "lineNumber": 33
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_notification::init",
+          "lineNumber": 34
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_updater::Builder::new().build",
+          "lineNumber": 35
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_updater::Builder::new",
+          "lineNumber": 35
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_autostart::init",
+          "lineNumber": 36
+        },
+        {
+          "caller": "run",
+          "callee": "Some",
+          "lineNumber": 38
+        },
+        {
+          "caller": "run",
+          "callee": "ServiceState::new",
+          "lineNumber": 40
+        },
+        {
+          "caller": "run",
+          "callee": "tray::setup_tray",
+          "lineNumber": 60
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle",
+          "lineNumber": 60
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle().clone",
+          "lineNumber": 64
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle",
+          "lineNumber": 64
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle().plugin",
+          "lineNumber": 65
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle",
+          "lineNumber": 65
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_global_shortcut::Builder::new()\r\n                    .with_handler(move |_app, _shortcut, event| {\r\n                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {\r\n                            if let Some(window) = app_handle.get_webview_window(\"main\") {\r\n                                if window.is_visible().unwrap_or(false) {\r\n                                    let _ = window.hide();\r\n                                } else {\r\n                                    let _ = window.show();\r\n                                    let _ = window.set_focus();\r\n                                }\r\n                            }\r\n                        }\r\n                    }).build",
+          "lineNumber": 66
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_global_shortcut::Builder::new().with_handler",
+          "lineNumber": 66
+        },
+        {
+          "caller": "run",
+          "callee": "tauri_plugin_global_shortcut::Builder::new",
+          "lineNumber": 66
+        },
+        {
+          "caller": "run",
+          "callee": "app_handle.get_webview_window",
+          "lineNumber": 69
+        },
+        {
+          "caller": "run",
+          "callee": "window.is_visible().unwrap_or",
+          "lineNumber": 70
+        },
+        {
+          "caller": "run",
+          "callee": "window.is_visible",
+          "lineNumber": 70
+        },
+        {
+          "caller": "run",
+          "callee": "window.hide",
+          "lineNumber": 71
+        },
+        {
+          "caller": "run",
+          "callee": "window.show",
+          "lineNumber": 73
+        },
+        {
+          "caller": "run",
+          "callee": "window.set_focus",
+          "lineNumber": 74
+        },
+        {
+          "caller": "run",
+          "callee": "Shortcut::new",
+          "lineNumber": 82
+        },
+        {
+          "caller": "run",
+          "callee": "Some",
+          "lineNumber": 82
+        },
+        {
+          "caller": "run",
+          "callee": "app.global_shortcut().register",
+          "lineNumber": 84
+        },
+        {
+          "caller": "run",
+          "callee": "app.global_shortcut",
+          "lineNumber": 84
+        },
+        {
+          "caller": "run",
+          "callee": "app.state::<ServiceState>",
+          "lineNumber": 90
+        },
+        {
+          "caller": "run",
+          "callee": "service::spawn_service_sync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle().clone",
+          "lineNumber": 98
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle",
+          "lineNumber": 98
+        },
+        {
+          "caller": "run",
+          "callee": "service::start_watchdog",
+          "lineNumber": 99
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle().clone",
+          "lineNumber": 102
+        },
+        {
+          "caller": "run",
+          "callee": "app.handle",
+          "lineNumber": 102
+        },
+        {
+          "caller": "run",
+          "callee": "tauri::async_runtime::spawn",
+          "lineNumber": 103
+        },
+        {
+          "caller": "run",
+          "callee": "tokio::time::sleep",
+          "lineNumber": 105
+        },
+        {
+          "caller": "run",
+          "callee": "std::time::Duration::from_secs",
+          "lineNumber": 105
+        },
+        {
+          "caller": "run",
+          "callee": "app_handle_update.updater",
+          "lineNumber": 107
+        },
+        {
+          "caller": "run",
+          "callee": "updater.check",
+          "lineNumber": 108
+        },
+        {
+          "caller": "run",
+          "callee": "update.version.clone",
+          "lineNumber": 110
+        },
+        {
+          "caller": "run",
+          "callee": "app_handle_update.emit",
+          "lineNumber": 111
+        },
+        {
+          "caller": "run",
+          "callee": "Ok",
+          "lineNumber": 133
+        },
+        {
+          "caller": "run",
+          "callee": "api.prevent_close",
+          "lineNumber": 138
+        },
+        {
+          "caller": "run",
+          "callee": "window.hide",
+          "lineNumber": 139
+        },
+        {
+          "caller": "run",
+          "callee": "app_handle.try_state::<ServiceState>",
+          "lineNumber": 147
+        },
+        {
+          "caller": "run",
+          "callee": "state.process.lock",
+          "lineNumber": 148
+        },
+        {
+          "caller": "run",
+          "callee": "proc.take",
+          "lineNumber": 149
+        },
+        {
+          "caller": "run",
+          "callee": "child.kill",
+          "lineNumber": 150
+        },
+        {
+          "caller": "run",
+          "callee": "child.wait",
+          "lineNumber": 151
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/src-tauri/src/service.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 258,
+      "nonEmptyLines": 222,
+      "functions": [
+        {
+          "name": "new",
+          "startLine": 12,
+          "endLine": 17,
+          "params": [
+            "port"
+          ]
+        },
+        {
+          "name": "resolve_node_path",
+          "startLine": 22,
+          "endLine": 58,
+          "params": []
+        },
+        {
+          "name": "build_service_command",
+          "startLine": 62,
+          "endLine": 130,
+          "params": [
+            "port"
+          ]
+        },
+        {
+          "name": "spawn_service_sync",
+          "startLine": 134,
+          "endLine": 150,
+          "params": [
+            "port",
+            "process"
+          ]
+        },
+        {
+          "name": "ensure_service",
+          "startLine": 153,
+          "endLine": 177,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "stop_service",
+          "startLine": 180,
+          "endLine": 187,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "get_service_port",
+          "startLine": 190,
+          "endLine": 192,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "start_watchdog",
+          "startLine": 194,
+          "endLine": 258,
+          "params": [
+            "app",
+            "port"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ServiceState",
+          "startLine": 6,
+          "endLine": 9,
+          "methods": [
+            "new"
+          ],
+          "properties": [
+            "process",
+            "port"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ServiceState",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "new",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "spawn_service_sync",
+          "line": 134,
+          "isDefault": false
+        },
+        {
+          "name": "ensure_service",
+          "line": 153,
+          "isDefault": false
+        },
+        {
+          "name": "stop_service",
+          "line": 180,
+          "isDefault": false
+        },
+        {
+          "name": "get_service_port",
+          "line": 190,
+          "isDefault": false
+        },
+        {
+          "name": "start_watchdog",
+          "line": 194,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "new",
+          "callee": "Mutex::new",
+          "lineNumber": 14
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "std::env::var",
+          "lineNumber": 24
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "std::env::current_exe()\r\n        .ok().and_then",
+          "lineNumber": 29
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "std::env::current_exe().ok",
+          "lineNumber": 29
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "std::env::current_exe",
+          "lineNumber": 29
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "p.parent().map",
+          "lineNumber": 31
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "p.parent",
+          "lineNumber": 31
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "d.to_path_buf",
+          "lineNumber": 31
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "dir.join(\"resources\").join",
+          "lineNumber": 35
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "dir.join",
+          "lineNumber": 35
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "dir.join(\"resources\").join",
+          "lineNumber": 37
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "dir.join",
+          "lineNumber": 37
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "bundled.exists",
+          "lineNumber": 39
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "bundled.to_string_lossy().to_string",
+          "lineNumber": 40
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "bundled.to_string_lossy",
+          "lineNumber": 40
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "std::path::Path::new(dev_resources).exists",
+          "lineNumber": 51
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "std::path::Path::new",
+          "lineNumber": 51
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "dev_resources.to_string",
+          "lineNumber": 52
+        },
+        {
+          "caller": "resolve_node_path",
+          "callee": "\"node\".to_string",
+          "lineNumber": 57
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "resolve_node_path",
+          "lineNumber": 63
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "std::env::current_exe()\r\n        .ok().and_then",
+          "lineNumber": 65
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "std::env::current_exe().ok",
+          "lineNumber": 65
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "std::env::current_exe",
+          "lineNumber": 65
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "p.parent().map",
+          "lineNumber": 67
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "p.parent",
+          "lineNumber": 67
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "d.to_path_buf",
+          "lineNumber": 67
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "std::env::current_dir().map_err",
+          "lineNumber": 70
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "std::env::current_dir",
+          "lineNumber": 70
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "e.to_string",
+          "lineNumber": 70
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?\r\n            .parent()\r\n            .ok_or(\"no grandparent\")?\r\n            .join(\"packages\")\r\n            .join(\"server\")\r\n            .join(\"src\")\r\n            .join(\"local\").join",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?\r\n            .parent()\r\n            .ok_or(\"no grandparent\")?\r\n            .join(\"packages\")\r\n            .join(\"server\")\r\n            .join(\"src\").join",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?\r\n            .parent()\r\n            .ok_or(\"no grandparent\")?\r\n            .join(\"packages\")\r\n            .join(\"server\").join",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?\r\n            .parent()\r\n            .ok_or(\"no grandparent\")?\r\n            .join(\"packages\").join",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?\r\n            .parent()\r\n            .ok_or(\"no grandparent\")?.join",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?\r\n            .parent().ok_or",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent()\r\n            .ok_or(\"no parent\")?.parent",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir\r\n            .parent().ok_or",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "app_dir.parent",
+          "lineNumber": 71
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "script.to_string_lossy().to_string",
+          "lineNumber": 81
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "script.to_string_lossy",
+          "lineNumber": 81
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "exe_dir\r\n            .as_ref()\r\n            .map(|d| d.join(\"resources\").join(\"service.js\").to_string_lossy().to_string()).unwrap_or_else",
+          "lineNumber": 83
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "exe_dir\r\n            .as_ref().map",
+          "lineNumber": 83
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "exe_dir.as_ref",
+          "lineNumber": 83
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "d.join(\"resources\").join(\"service.js\").to_string_lossy().to_string",
+          "lineNumber": 85
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "d.join(\"resources\").join(\"service.js\").to_string_lossy",
+          "lineNumber": 85
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "d.join(\"resources\").join",
+          "lineNumber": 85
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "d.join",
+          "lineNumber": 85
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "\"resources/service.js\".to_string",
+          "lineNumber": 86
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "Command::new",
+          "lineNumber": 90
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "c.arg(\"--import\").arg(\"tsx\").arg",
+          "lineNumber": 91
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "c.arg(\"--import\").arg",
+          "lineNumber": 91
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "c.arg",
+          "lineNumber": 91
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "Command::new",
+          "lineNumber": 94
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "c.arg",
+          "lineNumber": 95
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "cmd.env",
+          "lineNumber": 99
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "port.to_string",
+          "lineNumber": 99
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "cmd.env",
+          "lineNumber": 103
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "dir.join",
+          "lineNumber": 106
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "resources_dir.join",
+          "lineNumber": 107
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "cmd.env",
+          "lineNumber": 109
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "native_dir.to_string_lossy().as_ref",
+          "lineNumber": 109
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "native_dir.to_string_lossy",
+          "lineNumber": 109
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "native_dir.join",
+          "lineNumber": 112
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "native_dir.join",
+          "lineNumber": 114
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "native_dir.join",
+          "lineNumber": 116
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "vec_ext.exists",
+          "lineNumber": 118
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "cmd.env",
+          "lineNumber": 119
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "vec_ext.to_string_lossy().as_ref",
+          "lineNumber": 119
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "vec_ext.to_string_lossy",
+          "lineNumber": 119
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "native_dir.join",
+          "lineNumber": 122
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "ort_dir.exists",
+          "lineNumber": 123
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "cmd.env",
+          "lineNumber": 124
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "ort_dir.to_string_lossy().as_ref",
+          "lineNumber": 124
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "ort_dir.to_string_lossy",
+          "lineNumber": 124
+        },
+        {
+          "caller": "build_service_command",
+          "callee": "Ok",
+          "lineNumber": 129
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "process.lock().map_err",
+          "lineNumber": 136
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "process.lock",
+          "lineNumber": 136
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "e.to_string",
+          "lineNumber": 136
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "proc.is_some",
+          "lineNumber": 137
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "Ok",
+          "lineNumber": 138
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "build_service_command",
+          "lineNumber": 142
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "cmd\r\n        .spawn().map_err",
+          "lineNumber": 143
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "cmd.spawn",
+          "lineNumber": 143
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "process.lock().map_err",
+          "lineNumber": 147
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "process.lock",
+          "lineNumber": 147
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "e.to_string",
+          "lineNumber": 147
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "Some",
+          "lineNumber": 148
+        },
+        {
+          "caller": "spawn_service_sync",
+          "callee": "Ok",
+          "lineNumber": 149
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "reqwest::get",
+          "lineNumber": 157
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "resp.status().is_success",
+          "lineNumber": 158
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "resp.status",
+          "lineNumber": 158
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "Ok",
+          "lineNumber": 159
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "\"Service already running\".to_string",
+          "lineNumber": 159
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "spawn_service_sync",
+          "lineNumber": 164
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "tokio::time::sleep",
+          "lineNumber": 167
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "std::time::Duration::from_secs",
+          "lineNumber": 167
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "reqwest::get",
+          "lineNumber": 168
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "resp.status().is_success",
+          "lineNumber": 169
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "resp.status",
+          "lineNumber": 169
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "Ok",
+          "lineNumber": 170
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "\"Service started\".to_string",
+          "lineNumber": 170
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "Err",
+          "lineNumber": 176
+        },
+        {
+          "caller": "ensure_service",
+          "callee": "\"Service failed to start within 30 seconds\".to_string",
+          "lineNumber": 176
+        },
+        {
+          "caller": "stop_service",
+          "callee": "state.process.lock().map_err",
+          "lineNumber": 181
+        },
+        {
+          "caller": "stop_service",
+          "callee": "state.process.lock",
+          "lineNumber": 181
+        },
+        {
+          "caller": "stop_service",
+          "callee": "e.to_string",
+          "lineNumber": 181
+        },
+        {
+          "caller": "stop_service",
+          "callee": "proc.take",
+          "lineNumber": 182
+        },
+        {
+          "caller": "stop_service",
+          "callee": "child.kill",
+          "lineNumber": 183
+        },
+        {
+          "caller": "stop_service",
+          "callee": "child.wait",
+          "lineNumber": 184
+        },
+        {
+          "caller": "stop_service",
+          "callee": "Ok",
+          "lineNumber": 186
+        },
+        {
+          "caller": "stop_service",
+          "callee": "\"Service stopped\".to_string",
+          "lineNumber": 186
+        },
+        {
+          "caller": "get_service_port",
+          "callee": "Ok",
+          "lineNumber": 191
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "tauri::async_runtime::spawn",
+          "lineNumber": 195
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "Instant::now",
+          "lineNumber": 199
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "Duration::from_secs",
+          "lineNumber": 201
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "tokio::time::sleep",
+          "lineNumber": 204
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "Duration::from_secs",
+          "lineNumber": 204
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "tokio::time::sleep",
+          "lineNumber": 207
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "Duration::from_secs",
+          "lineNumber": 207
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "reqwest::get",
+          "lineNumber": 209
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "resp.status().is_success",
+          "lineNumber": 210
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "resp.status",
+          "lineNumber": 210
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "restart_window_start.elapsed",
+          "lineNumber": 216
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "Instant::now",
+          "lineNumber": 218
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "app.emit",
+          "lineNumber": 222
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "app.emit",
+          "lineNumber": 228
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "app.try_state::<ServiceState>",
+          "lineNumber": 234
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "state.process.lock",
+          "lineNumber": 236
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "proc.take",
+          "lineNumber": 237
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "child.kill",
+          "lineNumber": 238
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "child.wait",
+          "lineNumber": 239
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "spawn_service_sync",
+          "lineNumber": 243
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "app.emit",
+          "lineNumber": 248
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "tokio::time::sleep",
+          "lineNumber": 252
+        },
+        {
+          "caller": "start_watchdog",
+          "callee": "Duration::from_secs",
+          "lineNumber": 252
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 7,
+        "functionCount": 8,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "app/src-tauri/src/tray.rs",
+      "language": "rust",
+      "fileCategory": "code",
+      "totalLines": 85,
+      "nonEmptyLines": 79,
+      "functions": [
+        {
+          "name": "generate_tray_icon",
+          "startLine": 8,
+          "endLine": 29,
+          "params": []
+        },
+        {
+          "name": "setup_tray",
+          "startLine": 31,
+          "endLine": 85,
+          "params": [
+            "app"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "setup_tray",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "generate_tray_icon",
+          "callee": "(cx * cx + cy * cy).sqrt",
+          "lineNumber": 18
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id(\"show\", \"Open Waggle\").build",
+          "lineNumber": 32
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id",
+          "lineNumber": 32
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id(\"pause\", \"Pause Agents\").build",
+          "lineNumber": 33
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id",
+          "lineNumber": 33
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id(\"settings\", \"Settings\").build",
+          "lineNumber": 34
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id",
+          "lineNumber": 34
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id(\"about\", \"About Waggle\").build",
+          "lineNumber": 35
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id",
+          "lineNumber": 35
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id(\"quit\", \"Quit Waggle\").build",
+          "lineNumber": 36
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuItemBuilder::with_id",
+          "lineNumber": 36
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuBuilder::new(app)\r\n        .items(&[&show, &pause, &settings, &about, &quit]).build",
+          "lineNumber": 38
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuBuilder::new(app).items",
+          "lineNumber": 38
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "MenuBuilder::new",
+          "lineNumber": 38
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "generate_tray_icon",
+          "lineNumber": 42
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "Image::new_owned",
+          "lineNumber": 43
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new()\r\n        .icon(icon)\r\n        .menu(&menu)\r\n        .tooltip(\"Waggle Agent Service\")\r\n        .on_menu_event(|app, event| match event.id().as_ref() {\r\n            \"show\" => {\r\n                if let Some(window) = app.get_webview_window(\"main\") {\r\n                    let _ = window.show();\r\n                    let _ = window.set_focus();\r\n                }\r\n            }\r\n            \"pause\" => {\r\n                // Emit event to frontend\r\n                let _ = app.emit(\"waggle://pause-agents\", ());\r\n            }\r\n            \"settings\" => {\r\n                let _ = app.emit(\"waggle://navigate\", \"/settings\");\r\n            }\r\n            \"about\" => {\r\n                let _ = app.emit(\"waggle://navigate\", \"/about\");\r\n            }\r\n            \"quit\" => {\r\n                // Emit quit event — React handles cleanup then exits via Tauri API\r\n                let _ = app.emit(\"waggle://quit\", ());\r\n            }\r\n            _ => {}\r\n        })\r\n        .on_tray_icon_event(|tray, event| {\r\n            if let tauri::tray::TrayIconEvent::Click { .. } = event {\r\n                let app = tray.app_handle();\r\n                if let Some(window) = app.get_webview_window(\"main\") {\r\n                    let _ = window.show();\r\n                    let _ = window.set_focus();\r\n                }\r\n            }\r\n        }).build",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new()\r\n        .icon(icon)\r\n        .menu(&menu)\r\n        .tooltip(\"Waggle Agent Service\")\r\n        .on_menu_event(|app, event| match event.id().as_ref() {\r\n            \"show\" => {\r\n                if let Some(window) = app.get_webview_window(\"main\") {\r\n                    let _ = window.show();\r\n                    let _ = window.set_focus();\r\n                }\r\n            }\r\n            \"pause\" => {\r\n                // Emit event to frontend\r\n                let _ = app.emit(\"waggle://pause-agents\", ());\r\n            }\r\n            \"settings\" => {\r\n                let _ = app.emit(\"waggle://navigate\", \"/settings\");\r\n            }\r\n            \"about\" => {\r\n                let _ = app.emit(\"waggle://navigate\", \"/about\");\r\n            }\r\n            \"quit\" => {\r\n                // Emit quit event — React handles cleanup then exits via Tauri API\r\n                let _ = app.emit(\"waggle://quit\", ());\r\n            }\r\n            _ => {}\r\n        }).on_tray_icon_event",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new()\r\n        .icon(icon)\r\n        .menu(&menu)\r\n        .tooltip(\"Waggle Agent Service\").on_menu_event",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new()\r\n        .icon(icon)\r\n        .menu(&menu).tooltip",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new()\r\n        .icon(icon).menu",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new().icon",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "TrayIconBuilder::new",
+          "lineNumber": 45
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "event.id().as_ref",
+          "lineNumber": 49
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "event.id",
+          "lineNumber": 49
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "app.get_webview_window",
+          "lineNumber": 51
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "window.show",
+          "lineNumber": 52
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "window.set_focus",
+          "lineNumber": 53
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "app.emit",
+          "lineNumber": 58
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "app.emit",
+          "lineNumber": 61
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "app.emit",
+          "lineNumber": 64
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "app.emit",
+          "lineNumber": 68
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "tray.app_handle",
+          "lineNumber": 74
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "app.get_webview_window",
+          "lineNumber": 75
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "window.show",
+          "lineNumber": 76
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "window.set_focus",
+          "lineNumber": 77
+        },
+        {
+          "caller": "setup_tray",
+          "callee": "Ok",
+          "lineNumber": 84
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

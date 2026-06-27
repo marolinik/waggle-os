@@ -1,0 +1,23 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "apps/web/.env.example", "language": "config", "sizeLines": 21, "fileCategory": "config"},
+    {"path": "apps/web/components.json", "language": "json", "sizeLines": 20, "fileCategory": "config"},
+    {"path": "apps/web/index.html", "language": "html", "sizeLines": 21, "fileCategory": "markup"},
+    {"path": "apps/web/package.json", "language": "json", "sizeLines": 100, "fileCategory": "config"},
+    {"path": "apps/web/tsconfig.app.json", "language": "json", "sizeLines": 34, "fileCategory": "config"},
+    {"path": "apps/web/tsconfig.json", "language": "json", "sizeLines": 24, "fileCategory": "config"},
+    {"path": "apps/web/tsconfig.node.json", "language": "json", "sizeLines": 22, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "apps/web/.env.example": [],
+    "apps/web/components.json": [],
+    "apps/web/index.html": [],
+    "apps/web/package.json": [],
+    "apps/web/tsconfig.app.json": [],
+    "apps/web/tsconfig.json": [],
+    "apps/web/tsconfig.node.json": []
+  },
+  "batchImportData": {},
+  "neighborMap": {}
+}

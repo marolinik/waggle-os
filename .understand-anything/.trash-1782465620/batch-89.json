@@ -1,0 +1,114 @@
+{
+  "nodes": [
+    {
+      "id": "service:.dockerignore",
+      "type": "service",
+      "name": ".dockerignore",
+      "filePath": ".dockerignore",
+      "summary": "Docker build context exclusion file that prevents node_modules, git history, Tauri sources, sidecar, docs, and environment files from being sent to the Docker daemon during image builds, keeping build context minimal.",
+      "tags": ["containerization", "infrastructure", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "service:docker-compose.yml",
+      "type": "service",
+      "name": "docker-compose.yml",
+      "filePath": "docker-compose.yml",
+      "summary": "Local development Docker Compose configuration orchestrating five services — PostgreSQL, Redis, MinIO (object storage with bucket init), and LiteLLM — providing the full infrastructure stack for development without the Waggle app container itself.",
+      "tags": ["orchestration", "infrastructure", "deployment", "development"],
+      "complexity": "moderate",
+      "languageNotes": "LiteLLM service mounts litellm-config.yaml and exposes 13 provider API keys via environment passthrough, guarded by a test (tests/docker-compose-litellm-env.test.ts)."
+    },
+    {
+      "id": "service:docker-compose.production.yml",
+      "type": "service",
+      "name": "docker-compose.production.yml",
+      "filePath": "docker-compose.production.yml",
+      "summary": "Production Docker Compose configuration deploying the full Waggle Teams stack — the Waggle server (built from Dockerfile), PostgreSQL, Redis, and MinIO — with health-checked dependencies, persistent volumes, and required CORS_ORIGIN enforcement.",
+      "tags": ["orchestration", "infrastructure", "deployment"],
+      "complexity": "moderate",
+      "languageNotes": "The waggle service uses CORS_ORIGIN with a mandatory :? shell expansion that causes docker compose to fail-fast if the variable is unset, enforcing a hard production safety gate."
+    },
+    {
+      "id": "service:Dockerfile",
+      "type": "service",
+      "name": "Dockerfile",
+      "filePath": "Dockerfile",
+      "summary": "Three-stage Docker build producing a minimal Node.js 20 Alpine production image: a builder stage compiles all 27 workspace packages and the Vite frontend, a native-builder stage rebuilds native modules (better-sqlite3) with build tools, and the final stage assembles a hardened non-root runtime image exposing port 3333 with health checks and a /data persistence volume.",
+      "tags": ["containerization", "infrastructure", "deployment", "build-system"],
+      "complexity": "moderate",
+      "languageNotes": "Multi-stage approach separates dev-dependency-heavy TypeScript compilation, native module compilation (requiring python3/make/g++), and the lean runtime image — avoids shipping build tools and keeps the final layer small."
+    },
+    {
+      "id": "service:Dockerfile:builder",
+      "type": "service",
+      "name": "builder",
+      "filePath": "Dockerfile",
+      "summary": "First Docker build stage using node:20-alpine that installs all workspace dependencies and runs npm run build:all to compile TypeScript packages and the Vite web frontend.",
+      "tags": ["containerization", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "service:Dockerfile:native-builder",
+      "type": "service",
+      "name": "native-builder",
+      "filePath": "Dockerfile",
+      "summary": "Second Docker build stage that installs native build tools (python3, make, g++) and rebuilds better-sqlite3 native bindings for the Alpine Linux target.",
+      "tags": ["containerization", "build-system", "database"],
+      "complexity": "simple"
+    },
+    {
+      "id": "service:Dockerfile:node",
+      "type": "service",
+      "name": "node",
+      "filePath": "Dockerfile",
+      "summary": "Final production Docker stage that assembles the minimal runtime image by copying built artifacts from prior stages, running as a non-root waggle user on port 3333, with health check and /data volume for SQLite persistence.",
+      "tags": ["containerization", "deployment", "infrastructure"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "service:docker-compose.production.yml",
+      "target": "service:Dockerfile",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "service:Dockerfile",
+      "target": "service:Dockerfile:builder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "service:Dockerfile",
+      "target": "service:Dockerfile:native-builder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "service:Dockerfile",
+      "target": "service:Dockerfile:node",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "service:.dockerignore",
+      "target": "service:Dockerfile",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "service:docker-compose.yml",
+      "target": "service:Dockerfile",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

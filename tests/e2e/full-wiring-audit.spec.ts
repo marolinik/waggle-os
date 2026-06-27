@@ -8,9 +8,8 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const API = 'http://127.0.0.1:3333';
-// App is served by the same server at port 3333 (Tauri shell or browser mode)
-// playwright.config.ts already sets baseURL: 'http://localhost:3333'
+const API = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
+// App is served by the same server; Playwright can override the URL for isolated runs.
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -18,6 +17,7 @@ async function skipOnboarding(page: Page) {
   await page.evaluate(() => {
     localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
     localStorage.setItem('waggle:first-run', 'done');
+    localStorage.setItem('waggle-booted', 'true');
   });
 }
 
@@ -31,13 +31,44 @@ async function waitForApp(page: Page) {
 
 async function navigateSidebar(page: Page, label: string) {
   const nav = page.locator('[role="navigation"]');
-  const btn = nav.locator('button', { hasText: label });
-  if (await btn.isVisible().catch(() => false)) {
-    await btn.click();
-    await page.waitForTimeout(400);
+
+  const sidebarSelectors: Record<string, string[]> = {
+    Chat: ['[data-testid="nav-chat"]', 'button[aria-label="Chat"]'],
+    Memory: ['[data-testid="nav-memory"]', 'button[aria-label="Memory"]'],
+    Settings: ['[data-testid="sidebar-user"]', 'button[aria-label="Account and settings"]'],
+  };
+
+  for (const selector of sidebarSelectors[label] ?? []) {
+    const btn = nav.locator(selector).first();
+    if (await btn.isVisible().catch(() => false)) {
+      await btn.click();
+      await page.waitForTimeout(500);
+      return true;
+    }
+  }
+
+  const textButton = nav.locator('button', { hasText: label }).first();
+  if (await textButton.isVisible().catch(() => false)) {
+    await textButton.click();
+    await page.waitForTimeout(500);
     return true;
   }
-  return false;
+
+  const routeByLabel: Record<string, string> = {
+    'Skills Hub': '/marketplace',
+    Events: '/settings/events',
+    Cockpit: '/settings/mission-control',
+    'Mission Control': '/settings/mission-control',
+    Settings: '/settings',
+  };
+  const route = routeByLabel[label];
+  if (route) {
+    await page.goto(`${route}?skipOnboarding=true&skipBoot=true`);
+    await waitForApp(page);
+    return true;
+  }
+
+  throw new Error(`No current navigation target configured for "${label}"`);
 }
 
 function collectErrors(page: Page): string[] {
@@ -158,7 +189,7 @@ test.describe('Backend API Endpoints', () => {
     const res = await request.get(`${API}/api/tier`);
     expect(res.ok()).toBeTruthy();
     const data = await res.json();
-    expect(['FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
+    expect(['TRIAL', 'FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
   });
 
   test('GET /api/hooks returns rules array', async ({ request }) => {

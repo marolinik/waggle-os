@@ -9,6 +9,15 @@ import { test, expect } from '@playwright/test';
 
 const TEAM = 'http://127.0.0.1:3100';
 
+test.beforeEach(async ({ request }) => {
+  try {
+    const res = await request.get(`${TEAM}/health`, { timeout: 1_000 });
+    test.skip(!res.ok(), 'Optional team server is not running on 127.0.0.1:3100');
+  } catch {
+    test.skip(true, 'Optional team server is not running on 127.0.0.1:3100');
+  }
+});
+
 // ── 1. Server Health ──────────────────────────────────────────────────
 
 test.describe('1. Team Server Health', () => {

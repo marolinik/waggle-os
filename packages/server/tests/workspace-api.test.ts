@@ -130,7 +130,7 @@ describe('Workspace & Session API', () => {
     sessionId = body.id;
   });
 
-  it('creates a session without title (uses id as title)', async () => {
+  it('creates a session without title (keeps it untitled)', async () => {
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: `/api/workspaces/${workspaceId}/sessions`,
@@ -138,7 +138,7 @@ describe('Workspace & Session API', () => {
     });
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.body);
-    expect(body.title).toMatch(/^session-/);
+    expect(body.title).toBeNull();
   });
 
   it('lists sessions (shows created sessions)', async () => {
@@ -312,10 +312,10 @@ describe('Workspace & Session API', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body).toHaveProperty('entities');
-    expect(body).toHaveProperty('relations');
-    expect(Array.isArray(body.entities)).toBe(true);
-    expect(Array.isArray(body.relations)).toBe(true);
+    expect(body).toHaveProperty('nodes');
+    expect(body).toHaveProperty('edges');
+    expect(Array.isArray(body.nodes)).toBe(true);
+    expect(Array.isArray(body.edges)).toBe(true);
   });
 
   it('returns knowledge graph for workspace mind', async () => {
@@ -325,16 +325,17 @@ describe('Workspace & Session API', () => {
     });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
-    expect(body).toHaveProperty('entities');
-    expect(body).toHaveProperty('relations');
+    expect(body).toHaveProperty('nodes');
+    expect(body).toHaveProperty('edges');
   });
 
-  it('returns 404 for knowledge graph of non-existent workspace', async () => {
+  it('returns an empty graph for a non-existent workspace', async () => {
     const res = await injectWithAuth(server, {
       method: 'GET',
       url: '/api/memory/graph?workspace=nonexistent',
     });
-    expect(res.statusCode).toBe(404);
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ nodes: [], edges: [] });
   });
 
   // --- API Key Test Endpoint ---

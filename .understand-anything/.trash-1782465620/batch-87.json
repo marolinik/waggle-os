@@ -1,0 +1,85 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/weaver/src/consolidation.ts",
+      "type": "file",
+      "name": "consolidation.ts",
+      "filePath": "packages/weaver/src/consolidation.ts",
+      "summary": "Implements the MemoryWeaver class, which orchestrates memory consolidation operations including GOP (Group of Pictures) frame consolidation, importance-based decay and strengthening, daily summary creation, session archiving, entity-to-frame linking, content distillation, and project-level consolidation against the SQLite memory substrate.",
+      "tags": ["service", "memory", "consolidation", "singleton"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/weaver/src/consolidation.ts:MemoryWeaver",
+      "type": "class",
+      "name": "MemoryWeaver",
+      "filePath": "packages/weaver/src/consolidation.ts",
+      "lineRange": [9, 255],
+      "summary": "Core consolidation engine that manages the lifecycle of memory frames — consolidating GOP sequences into I-frames, decaying stale frames, strengthening frequently-accessed ones, linking related frames via knowledge entities, and distilling session/project content into summary frames.",
+      "tags": ["service", "memory", "consolidation", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/weaver/tests/consolidation-enhanced.test.ts",
+      "type": "file",
+      "name": "consolidation-enhanced.test.ts",
+      "filePath": "packages/weaver/tests/consolidation-enhanced.test.ts",
+      "summary": "Enhanced test suite for MemoryWeaver covering advanced consolidation scenarios such as edge cases, boundary conditions, and more complex multi-step memory lifecycle operations.",
+      "tags": ["test", "memory", "consolidation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/weaver/tests/consolidation.test.ts",
+      "type": "file",
+      "name": "consolidation.test.ts",
+      "filePath": "packages/weaver/tests/consolidation.test.ts",
+      "summary": "Primary test suite for MemoryWeaver verifying core consolidation behaviors including GOP consolidation, frame decay/strengthening, daily summary creation, session archiving, and entity-to-frame linking.",
+      "tags": ["test", "memory", "consolidation"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/weaver/src/consolidation.ts",
+      "target": "class:packages/weaver/src/consolidation.ts:MemoryWeaver",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/weaver/src/consolidation.ts",
+      "target": "class:packages/weaver/src/consolidation.ts:MemoryWeaver",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/weaver/tests/consolidation-enhanced.test.ts",
+      "target": "file:packages/weaver/src/consolidation.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/weaver/tests/consolidation.test.ts",
+      "target": "file:packages/weaver/src/consolidation.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/weaver/src/consolidation.ts",
+      "target": "file:packages/weaver/tests/consolidation-enhanced.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/weaver/src/consolidation.ts",
+      "target": "file:packages/weaver/tests/consolidation.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

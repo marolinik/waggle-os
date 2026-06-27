@@ -1,0 +1,42 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/launch/drafts/2026-05-10-day-0-linkedin-post.md",
+      "type": "document",
+      "name": "2026-05-10-day-0-linkedin-post.md",
+      "filePath": "docs/launch/drafts/2026-05-10-day-0-linkedin-post.md",
+      "summary": "Three draft versions of the Day-0 LinkedIn launch post for Waggle OS, ranging from sovereignty-led to founder-voice messaging, with a recommendation, pre-publish checklist, and post-publish action items for Marko.",
+      "tags": ["documentation", "marketing", "launch", "content-creation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/launch/drafts/2026-05-10-pavlukhin-evolveschema-arxiv-email.md",
+      "type": "document",
+      "name": "2026-05-10-pavlukhin-evolveschema-arxiv-email.md",
+      "filePath": "docs/launch/drafts/2026-05-10-pavlukhin-evolveschema-arxiv-email.md",
+      "summary": "Draft outreach email to Pavlukhin regarding the EVOLVESCHEMA arXiv submission, including subject line options, tone calibration notes, send mechanics, and reply-handling guidance for the Day-0 credibility campaign.",
+      "tags": ["documentation", "launch", "outreach", "academic"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md",
+      "type": "document",
+      "name": "2026-05-12-apps-www-deployment-readiness.md",
+      "filePath": "docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md",
+      "summary": "Day-0 deployment readiness plan for the apps/www Next.js landing site, covering a recommended 7-step Vercel deployment path with a 13-variable env checklist, alternative hosting options (Docker/Render, Cloudflare Pages, GitHub Pages), and a Day-0 readiness gate.",
+      "tags": ["documentation", "deployment", "infrastructure", "launch"],
+      "complexity": "complex",
+      "languageNotes": "References 13 specific environment variables including Stripe price IDs (pro_monthly, pro_annual, teams_monthly, teams_annual) and Clerk publishable key — valuable cross-reference for environment configuration."
+    },
+    {
+      "id": "document:docs/launch/drafts/2026-05-12-egzakta-legal-text-drafts.md",
+      "type": "document",
+      "name": "2026-05-12-egzakta-legal-text-drafts.md",
+      "filePath": "docs/launch/drafts/2026-05-12-egzakta-legal-text-drafts.md",
+      "summary": "Day-0 placeholder legal text drafts for Egzakta covering Privacy Policy, Terms of Service, Cookie Policy, and an EU AI Act Statement, with guidance on how to swap them into the www landing site before launch.",
+      "tags": ["documentation", "legal", "launch", "compliance"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": []
+}

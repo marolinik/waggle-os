@@ -1,0 +1,954 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/web/src/test/p1b-authgate-surfaces.test.tsx",
+      "type": "file",
+      "name": "p1b-authgate-surfaces.test.tsx",
+      "filePath": "apps/web/src/test/p1b-authgate-surfaces.test.tsx",
+      "summary": "Tests the Phase 1b authentication gate surfaces — verifies that the shell, briefing, settings, and chat surfaces correctly handle unauthenticated / error states and gate access until the connection settles.",
+      "tags": ["test", "authentication", "error-handling", "component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/p2-home-desktop.test.tsx",
+      "type": "file",
+      "name": "p2-home-desktop.test.tsx",
+      "filePath": "apps/web/src/test/p2-home-desktop.test.tsx",
+      "summary": "Tests Phase 2 Home Cockpit and Workspace Desktop screens, covering briefing rendering, deep-link navigation, and workspace feed hydration under various mock adapter states.",
+      "tags": ["test", "component", "home", "workspace"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/p3-memory-center-app.test.tsx",
+      "type": "file",
+      "name": "p3-memory-center-app.test.tsx",
+      "filePath": "apps/web/src/test/p3-memory-center-app.test.tsx",
+      "summary": "Tests the Memory Center App routes and deep-link navigation, verifying that routing resolves correctly and memory frame data renders after adapter hydration.",
+      "tags": ["test", "component", "memory", "routing"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/p3-two-mind-memory.test.tsx",
+      "type": "file",
+      "name": "p3-two-mind-memory.test.tsx",
+      "filePath": "apps/web/src/test/p3-two-mind-memory.test.tsx",
+      "summary": "Tests the two-mind memory isolation contract — verifies that memories from different workspace minds are not cross-contaminated when rendered in the memory tab.",
+      "tags": ["test", "memory", "isolation", "component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-a5-approval-card-risk.test.tsx",
+      "type": "file",
+      "name": "p7-a5-approval-card-risk.test.tsx",
+      "filePath": "apps/web/src/test/p7-a5-approval-card-risk.test.tsx",
+      "summary": "Unit tests for the approval card risk display logic, verifying risk labels and CSS class helpers from the risk-display utility for the A5 audit finding.",
+      "tags": ["test", "risk-display", "unit", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-a6-approval-gating.test.tsx",
+      "type": "file",
+      "name": "p7-a6-approval-gating.test.tsx",
+      "filePath": "apps/web/src/test/p7-a6-approval-gating.test.tsx",
+      "summary": "Tests the A6 approval gating logic — verifies the ApprovalModal correctly gates high-risk actions and that risk helpers classify gating scenarios accurately.",
+      "tags": ["test", "approval", "risk-display", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-a7-install-risk.test.tsx",
+      "type": "file",
+      "name": "p7-a7-install-risk.test.tsx",
+      "filePath": "apps/web/src/test/p7-a7-install-risk.test.tsx",
+      "summary": "Tests the A7 install risk classification — verifies that MarketplaceApp risk helpers and risk-display utilities correctly classify package install risk levels.",
+      "tags": ["test", "marketplace", "risk-display", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-b1-approvals-error.test.tsx",
+      "type": "file",
+      "name": "p7-b1-approvals-error.test.tsx",
+      "filePath": "apps/web/src/test/p7-b1-approvals-error.test.tsx",
+      "summary": "Tests the B1 error state of the ApprovalsApp — verifies that the component renders gracefully when the adapter returns errors or empty approval queues.",
+      "tags": ["test", "error-handling", "approvals", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-b4-files-error.test.tsx",
+      "type": "file",
+      "name": "p7-b4-files-error.test.tsx",
+      "filePath": "apps/web/src/test/p7-b4-files-error.test.tsx",
+      "summary": "Tests the B4 error state of the FilesApp — verifies error rendering when file listing fails or returns empty results from the adapter.",
+      "tags": ["test", "error-handling", "files", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-b5-error-threading.test.tsx",
+      "type": "file",
+      "name": "p7-b5-error-threading.test.tsx",
+      "filePath": "apps/web/src/test/p7-b5-error-threading.test.tsx",
+      "summary": "Tests the B5 error threading behavior — verifies that tooltip and UI primitive error boundaries thread errors correctly through nested component hierarchies.",
+      "tags": ["test", "error-handling", "component", "ui-primitives"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-issue17-trust-source.test.tsx",
+      "type": "file",
+      "name": "p7-issue17-trust-source.test.tsx",
+      "filePath": "apps/web/src/test/p7-issue17-trust-source.test.tsx",
+      "summary": "Tests issue #17 trust source display — verifies that trust source labels are rendered correctly in MarketplaceApp and ApprovalModal for the P7 audit divergence.",
+      "tags": ["test", "trust", "marketplace", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p7-issue8-action-risk.test.ts",
+      "type": "file",
+      "name": "p7-issue8-action-risk.test.ts",
+      "filePath": "apps/web/src/test/p7-issue8-action-risk.test.ts",
+      "summary": "Unit tests for issue #8 action risk classification — verifies the actionRisk helper correctly categorizes tool-call risk levels in the risk-display utility.",
+      "tags": ["test", "risk-display", "unit", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/phase3b-agent-center.test.tsx",
+      "type": "file",
+      "name": "phase3b-agent-center.test.tsx",
+      "filePath": "apps/web/src/test/phase3b-agent-center.test.tsx",
+      "summary": "Tests the Phase 3b Agent Center screen — verifies agent listing, status display, and navigation interactions via the AgentsApp component with mocked ServiceProvider.",
+      "tags": ["test", "agent", "component", "phase3"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/phase3b-automation-center.test.tsx",
+      "type": "file",
+      "name": "phase3b-automation-center.test.tsx",
+      "filePath": "apps/web/src/test/phase3b-automation-center.test.tsx",
+      "summary": "Tests the Phase 3b Automation Center screen — verifies automation listing, run/stop controls, and deep-link navigation via the AutomationCenterApp component.",
+      "tags": ["test", "automation", "component", "phase3"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/phase3b-skills-hub.test.tsx",
+      "type": "file",
+      "name": "phase3b-skills-hub.test.tsx",
+      "filePath": "apps/web/src/test/phase3b-skills-hub.test.tsx",
+      "summary": "Tests the Phase 3b Skills Hub screen — verifies skill listing, filtering, and rendering of installed vs available skills via the CapabilitiesApp component.",
+      "tags": ["test", "skills", "component", "phase3"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "type": "file",
+      "name": "phase3c-agent-builder.test.tsx",
+      "filePath": "apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "summary": "Tests the Phase 3c Agent Builder — verifies the multi-step agent creation stepper flow, form validation, and save interactions via AgentBuilder and AgentsApp components.",
+      "tags": ["test", "agent", "builder", "phase3"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/phase3c-automation-builder.test.tsx",
+      "type": "file",
+      "name": "phase3c-automation-builder.test.tsx",
+      "filePath": "apps/web/src/test/phase3c-automation-builder.test.tsx",
+      "summary": "Tests the Phase 3c Automation Builder — verifies trigger/action configuration, stepper navigation, and automation persistence via the AutomationBuilder component.",
+      "tags": ["test", "automation", "builder", "phase3"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/phase3c-skill-builder.test.tsx",
+      "type": "file",
+      "name": "phase3c-skill-builder.test.tsx",
+      "filePath": "apps/web/src/test/phase3c-skill-builder.test.tsx",
+      "summary": "Tests the Phase 3c Skill Builder — verifies skill identity form fields, I/O section configuration, and save/cancel flow via the SkillBuilder component.",
+      "tags": ["test", "skills", "builder", "phase3"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/phase4b-connector-hub.test.tsx",
+      "type": "file",
+      "name": "phase4b-connector-hub.test.tsx",
+      "filePath": "apps/web/src/test/phase4b-connector-hub.test.tsx",
+      "summary": "Tests the Phase 4b Connector Hub — verifies connector listing, credential reset detection, and revoke request building via the ConnectorsApp component.",
+      "tags": ["test", "connectors", "component", "phase4"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "type": "file",
+      "name": "phase4b-marketplace-extend.test.tsx",
+      "filePath": "apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "summary": "Tests the Phase 4b Marketplace Extend screen — verifies install/remove flows, tier-gating, skill catalog shelves, and install event emission via MarketplaceApp.",
+      "tags": ["test", "marketplace", "install", "phase4"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "type": "file",
+      "name": "phase4b-mcp-hub.test.tsx",
+      "filePath": "apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "summary": "Tests the Phase 4b MCP Hub — verifies MCP server listing, connection state badges, toggle controls, and event emission via the MCPHubApp component.",
+      "tags": ["test", "mcp", "component", "phase4"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/phase5b-backup.test.tsx",
+      "type": "file",
+      "name": "phase5b-backup.test.tsx",
+      "filePath": "apps/web/src/test/phase5b-backup.test.tsx",
+      "summary": "Tests the Phase 5b Backup app — verifies metadata status classification and backup UI rendering via the BackupApp component.",
+      "tags": ["test", "backup", "component", "phase5"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/phase5b-connectors.test.tsx",
+      "type": "file",
+      "name": "phase5b-connectors.test.tsx",
+      "filePath": "apps/web/src/test/phase5b-connectors.test.tsx",
+      "summary": "Tests the Phase 5b connector utility functions — verifies credential reset detection and revoke request building helpers from ConnectorsApp.",
+      "tags": ["test", "connectors", "utility", "phase5"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/phase5b-usechat.test.ts",
+      "type": "file",
+      "name": "phase5b-usechat.test.ts",
+      "filePath": "apps/web/src/test/phase5b-usechat.test.ts",
+      "summary": "Tests Phase 5b useChat guard logic — verifies that message state updaters protect against unguarded mutations using the Artifact and message types.",
+      "tags": ["test", "hook", "chat", "phase5"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/pr35-memory-trust-manage.test.tsx",
+      "type": "file",
+      "name": "pr35-memory-trust-manage.test.tsx",
+      "filePath": "apps/web/src/test/pr35-memory-trust-manage.test.tsx",
+      "summary": "Tests the PR35 MemoryTrustManage component — verifies freshness calculation, staleness classification, and the confirm/revoke trust action UI for memory frames.",
+      "tags": ["test", "memory", "trust", "component"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/pr35-memory-trust-why.test.tsx",
+      "type": "file",
+      "name": "pr35-memory-trust-why.test.tsx",
+      "filePath": "apps/web/src/test/pr35-memory-trust-why.test.tsx",
+      "summary": "Tests the PR35 MemoryTrustWhy component — verifies that provenance trace display renders source labels and confidence indicators for memory frames.",
+      "tags": ["test", "memory", "trust", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/pr35-memory-trust.test.tsx",
+      "type": "file",
+      "name": "pr35-memory-trust.test.tsx",
+      "filePath": "apps/web/src/test/pr35-memory-trust.test.tsx",
+      "summary": "Tests the PR35 MemoryTrust front-door component — verifies the memory trust entry point renders trust summary and navigation links correctly.",
+      "tags": ["test", "memory", "trust", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/pr4-agent-search.test.tsx",
+      "type": "file",
+      "name": "pr4-agent-search.test.tsx",
+      "filePath": "apps/web/src/test/pr4-agent-search.test.tsx",
+      "summary": "Tests the PR4 AgentSearchBox — verifies search input, keyboard submission, install target resolution, and search result events via the agent-search utility and InstallProvider.",
+      "tags": ["test", "search", "agent", "pr4"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/pr4-inline-capability.test.tsx",
+      "type": "file",
+      "name": "pr4-inline-capability.test.tsx",
+      "filePath": "apps/web/src/test/pr4-inline-capability.test.tsx",
+      "summary": "Tests the PR4 CapabilityRequestCard — verifies inline capability approval/rejection flow and install event emission within the chat message thread.",
+      "tags": ["test", "capability", "chat", "pr4"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/pr4-install-store.test.tsx",
+      "type": "file",
+      "name": "pr4-install-store.test.tsx",
+      "filePath": "apps/web/src/test/pr4-install-store.test.tsx",
+      "summary": "Tests the PR4 install store — comprehensive coverage of useInstallStore hydration, install/remove/toggle operations, tier-error detection, and error description helpers.",
+      "tags": ["test", "install-store", "marketplace", "pr4"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/warm-primitives.test.tsx",
+      "type": "file",
+      "name": "warm-primitives.test.tsx",
+      "filePath": "apps/web/src/test/warm-primitives.test.tsx",
+      "summary": "Tests the warm-Hive UI primitive components — verifies HexAvatar, SectionLabel, DotLive, ProvenanceLine, RunChip, InlineApprovalCard, and other Hive DS primitives render correctly.",
+      "tags": ["test", "design-system", "component", "warm-hive"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/workspace-actions-menu.test.tsx",
+      "type": "file",
+      "name": "workspace-actions-menu.test.tsx",
+      "filePath": "apps/web/src/test/workspace-actions-menu.test.tsx",
+      "summary": "Tests the WorkspaceActionsMenu — verifies rename, archive, restore, export, and delete actions render correctly and emit the expected workspace manipulation events.",
+      "tags": ["test", "workspace", "component", "actions"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/workspace-tasks-tab.test.tsx",
+      "type": "file",
+      "name": "workspace-tasks-tab.test.tsx",
+      "filePath": "apps/web/src/test/workspace-tasks-tab.test.tsx",
+      "summary": "Tests the workspace TasksTab component — verifies task list rendering, status badge display, and task creation/update interactions against the task type definitions.",
+      "tags": ["test", "workspace", "tasks", "component"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/test/p1b-authgate-surfaces.test.tsx",
+      "target": "file:apps/web/src/hooks/useRevalidateOnError.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p2-home-desktop.test.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p3-memory-center-app.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p3-memory-center-app.test.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p3-two-mind-memory.test.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p3-two-mind-memory.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-a5-approval-card-risk.test.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-a6-approval-gating.test.tsx",
+      "target": "file:apps/web/src/components/ui/approval-modal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-a6-approval-gating.test.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-a7-install-risk.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-a7-install-risk.test.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-b1-approvals-error.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/ApprovalsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-b1-approvals-error.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-b4-files-error.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-b4-files-error.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-b5-error-threading.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-issue17-trust-source.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-issue17-trust-source.test.tsx",
+      "target": "file:apps/web/src/components/ui/approval-modal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-issue17-trust-source.test.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p7-issue8-action-risk.test.ts",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-agent-center.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/AgentsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-agent-center.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-agent-center.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-agent-center.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-automation-center.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/AutomationCenterApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-automation-center.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-automation-center.test.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-automation-center.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-automation-center.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-skills-hub.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-skills-hub.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3b-skills-hub.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/agents/AgentBuilder.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/AgentsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-agent-builder.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-automation-builder.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/AutomationCenterApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-automation-builder.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/automations/AutomationBuilder.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-automation-builder.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-automation-builder.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-skill-builder.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-skill-builder.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/skills/SkillBuilder.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-skill-builder.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase3c-skill-builder.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-connector-hub.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-connector-hub.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-connector-hub.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "target": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/mcp/mcp-hub-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase5b-backup.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/BackupApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase5b-connectors.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/phase5b-usechat.test.ts",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr35-memory-trust-manage.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/MemoryTrustManage.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr35-memory-trust-manage.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr35-memory-trust-why.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/MemoryTrustWhy.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr35-memory-trust-why.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr35-memory-trust.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-agent-search.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/extend/AgentSearchBox.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-agent-search.test.tsx",
+      "target": "file:apps/web/src/lib/agent-search.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-agent-search.test.tsx",
+      "target": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-agent-search.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-inline-capability.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/CapabilityRequestCard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-inline-capability.test.tsx",
+      "target": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-inline-capability.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-install-store.test.tsx",
+      "target": "file:apps/web/src/lib/install-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-install-store.test.tsx",
+      "target": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/pr4-install-store.test.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/warm-primitives.test.tsx",
+      "target": "file:apps/web/src/components/os/warm/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/warm-primitives.test.tsx",
+      "target": "file:apps/web/src/components/ui/approval-modal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/workspace-actions-menu.test.tsx",
+      "target": "file:apps/web/src/components/os/WorkspaceActionsMenu.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/workspace-tasks-tab.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/workspace/TasksTab.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/workspace-tasks-tab.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/hooks/useRevalidateOnError.ts",
+      "target": "file:apps/web/src/test/p1b-authgate-surfaces.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/app-deeplink.ts",
+      "target": "file:apps/web/src/test/p2-home-desktop.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/risk-display.tsx",
+      "target": "file:apps/web/src/test/p7-a5-approval-card-risk.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/risk-display.tsx",
+      "target": "file:apps/web/src/test/p7-issue8-action-risk.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/test/phase4b-marketplace-extend.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/test/phase4b-connector-hub.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/test/phase4b-mcp-hub.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/BackupApp.tsx",
+      "target": "file:apps/web/src/test/phase5b-backup.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/memory/MemoryTrustManage.tsx",
+      "target": "file:apps/web/src/test/pr35-memory-trust-manage.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/memory/MemoryTrustWhy.tsx",
+      "target": "file:apps/web/src/test/pr35-memory-trust-why.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "file:apps/web/src/test/pr35-memory-trust.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/install-store.ts",
+      "target": "file:apps/web/src/test/pr4-install-store.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/WorkspaceActionsMenu.tsx",
+      "target": "file:apps/web/src/test/workspace-actions-menu.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/workspace/TasksTab.tsx",
+      "target": "file:apps/web/src/test/workspace-tasks-tab.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

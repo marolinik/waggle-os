@@ -1,0 +1,62 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/sdk/tests/wave-g-capability-surface.test.ts", "language": "typescript", "sizeLines": 124, "fileCategory": "code"},
+    {"path": "packages/sdk/tsconfig.json", "language": "json", "sizeLines": 21, "fileCategory": "config"},
+    {"path": "packages/sdk/vitest.config.ts", "language": "typescript", "sizeLines": 9, "fileCategory": "code"},
+    {"path": "packages/server/drizzle.config.ts", "language": "typescript", "sizeLines": 10, "fileCategory": "code"},
+    {"path": "packages/server/drizzle/0000_wild_glorian.sql", "language": "sql", "sizeLines": 228, "fileCategory": "data"},
+    {"path": "packages/server/drizzle/0001_redundant_sauron.sql", "language": "sql", "sizeLines": 44, "fileCategory": "data"},
+    {"path": "packages/server/src/benchmarks/aggregate.ts", "language": "typescript", "sizeLines": 432, "fileCategory": "code"},
+    {"path": "packages/server/src/kvark/index.ts", "language": "typescript", "sizeLines": 23, "fileCategory": "code"},
+    {"path": "packages/server/src/local/approval-grants.ts", "language": "typescript", "sizeLines": 211, "fileCategory": "code"},
+    {"path": "packages/server/src/services/agent-group-executor.ts", "language": "typescript", "sizeLines": 93, "fileCategory": "code"},
+    {"path": "packages/server/tests/benchmarks/aggregate.test.ts", "language": "typescript", "sizeLines": 311, "fileCategory": "code"},
+    {"path": "packages/server/tests/deployment.test.ts", "language": "typescript", "sizeLines": 95, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/agent-run.test.ts", "language": "typescript", "sizeLines": 70, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/connector-registry-integration.test.ts", "language": "typescript", "sizeLines": 129, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/connectors.test.ts", "language": "typescript", "sizeLines": 90, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/gepa-optimization.test.ts", "language": "typescript", "sizeLines": 196, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/marketplace-dev.test.ts", "language": "typescript", "sizeLines": 226, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/marketplace-security.test.ts", "language": "typescript", "sizeLines": 283, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/marketplace-sources.test.ts", "language": "typescript", "sizeLines": 459, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/marketplace-sync.test.ts", "language": "typescript", "sizeLines": 274, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/marketplace.test.ts", "language": "typescript", "sizeLines": 321, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/notifications.test.ts", "language": "typescript", "sizeLines": 41, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/onboarding-flag-shape.test.ts", "language": "typescript", "sizeLines": 43, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/persona-tool-filtering.test.ts", "language": "typescript", "sizeLines": 179, "fileCategory": "code"},
+    {"path": "packages/server/tests/local/phase5-agent-run-provider.test.ts", "language": "typescript", "sizeLines": 78, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/sdk/tests/wave-g-capability-surface.test.ts": ["packages/sdk/src/capability-packs/index.ts"],
+    "packages/sdk/tsconfig.json": [],
+    "packages/sdk/vitest.config.ts": [],
+    "packages/server/drizzle.config.ts": [],
+    "packages/server/drizzle/0000_wild_glorian.sql": [],
+    "packages/server/drizzle/0001_redundant_sauron.sql": [],
+    "packages/server/src/benchmarks/aggregate.ts": [],
+    "packages/server/src/kvark/index.ts": [],
+    "packages/server/src/local/approval-grants.ts": [],
+    "packages/server/src/services/agent-group-executor.ts": [],
+    "packages/server/tests/benchmarks/aggregate.test.ts": ["packages/server/src/benchmarks/aggregate.ts"],
+    "packages/server/tests/deployment.test.ts": [],
+    "packages/server/tests/local/agent-run.test.ts": [],
+    "packages/server/tests/local/connector-registry-integration.test.ts": [],
+    "packages/server/tests/local/connectors.test.ts": [],
+    "packages/server/tests/local/gepa-optimization.test.ts": [],
+    "packages/server/tests/local/marketplace-dev.test.ts": [],
+    "packages/server/tests/local/marketplace-security.test.ts": [],
+    "packages/server/tests/local/marketplace-sources.test.ts": [],
+    "packages/server/tests/local/marketplace-sync.test.ts": [],
+    "packages/server/tests/local/marketplace.test.ts": [],
+    "packages/server/tests/local/notifications.test.ts": [],
+    "packages/server/tests/local/onboarding-flag-shape.test.ts": [],
+    "packages/server/tests/local/persona-tool-filtering.test.ts": [],
+    "packages/server/tests/local/phase5-agent-run-provider.test.ts": []
+  },
+  "neighborMap": {
+    "packages/sdk/tests/wave-g-capability-surface.test.ts": [
+      {"path": "packages/sdk/src/capability-packs/index.ts", "batchIndex": 200, "symbols": ["getCapabilityPacksDir", "listCapabilityPacks", "getPackManifest"]}
+    ]
+  }
+}

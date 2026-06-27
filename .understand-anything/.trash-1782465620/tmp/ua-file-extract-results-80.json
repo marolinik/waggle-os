@@ -1,0 +1,269 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/agent/src/tool-launcher.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 330,
+      "nonEmptyLines": 310,
+      "functions": [
+        {
+          "name": "defaultSpawnDetached",
+          "startLine": 96,
+          "endLine": 116,
+          "params": [
+            "binary",
+            "args",
+            "options"
+          ]
+        },
+        {
+          "name": "defaultExecCapture",
+          "startLine": 118,
+          "endLine": 144,
+          "params": [
+            "binary",
+            "args",
+            "options"
+          ]
+        },
+        {
+          "name": "resolveDeps",
+          "startLine": 152,
+          "endLine": 158,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "launchTool",
+          "startLine": 207,
+          "endLine": 240,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "hookPackageFor",
+          "startLine": 277,
+          "endLine": 279,
+          "params": [
+            "id"
+          ]
+        },
+        {
+          "name": "runHookCommand",
+          "startLine": 291,
+          "endLine": 330,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HOOKS_COHORT",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "launchTool",
+          "line": 207,
+          "isDefault": false
+        },
+        {
+          "name": "hookPackageFor",
+          "line": 277,
+          "isDefault": false
+        },
+        {
+          "name": "runHookCommand",
+          "line": 291,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "defaultSpawnDetached",
+          "callee": "spawn",
+          "lineNumber": 102
+        },
+        {
+          "caller": "defaultSpawnDetached",
+          "callee": "child.unref",
+          "lineNumber": 108
+        },
+        {
+          "caller": "defaultSpawnDetached",
+          "callee": "String",
+          "lineNumber": 113
+        },
+        {
+          "caller": "defaultExecCapture",
+          "callee": "execFileAsync",
+          "lineNumber": 124
+        },
+        {
+          "caller": "defaultExecCapture",
+          "callee": "String",
+          "lineNumber": 138
+        },
+        {
+          "caller": "launchTool",
+          "callee": "LAUNCH_COHORT.includes",
+          "lineNumber": 208
+        },
+        {
+          "caller": "launchTool",
+          "callee": "resolveDeps",
+          "lineNumber": 224
+        },
+        {
+          "caller": "launchTool",
+          "callee": "deps.spawnDetached",
+          "lineNumber": 230
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "HOOKS_COHORT.includes",
+          "lineNumber": 294
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "hookPackageFor",
+          "lineNumber": 298
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "resolveDeps",
+          "lineNumber": 305
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "hookPackageFor",
+          "lineNumber": 306
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "args.push",
+          "lineNumber": 308
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "deps.execCapture",
+          "lineNumber": 310
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "hookPackageFor",
+          "lineNumber": 315
+        },
+        {
+          "caller": "runHookCommand",
+          "callee": "hookPackageFor",
+          "lineNumber": 325
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/phase4-hooks-cohort.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 141,
+      "nonEmptyLines": 130,
+      "functions": [
+        {
+          "name": "hookPackageHasBin",
+          "startLine": 35,
+          "endLine": 39,
+          "params": [
+            "id"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "hookPackageHasBin",
+          "callee": "join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "hookPackageHasBin",
+          "callee": "JSON.parse",
+          "lineNumber": 37
+        },
+        {
+          "caller": "hookPackageHasBin",
+          "callee": "readFileSync",
+          "lineNumber": 37
+        },
+        {
+          "caller": "hookPackageHasBin",
+          "callee": "Object.keys",
+          "lineNumber": 38
+        },
+        {
+          "caller": "execCapture",
+          "callee": "calls.push",
+          "lineNumber": 125
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/tool-launcher.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 302,
+      "nonEmptyLines": 279,
+      "functions": [
+        {
+          "name": "captureSpawn",
+          "startLine": 17,
+          "endLine": 32,
+          "params": []
+        },
+        {
+          "name": "captureExec",
+          "startLine": 34,
+          "endLine": 55,
+          "params": [
+            "result"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "spawnDetached",
+          "callee": "calls.push",
+          "lineNumber": 28
+        },
+        {
+          "caller": "execCapture",
+          "callee": "calls.push",
+          "lineNumber": 51
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

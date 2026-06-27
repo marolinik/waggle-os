@@ -41,6 +41,7 @@ import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } fro
 import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
+import { resolveUsableModel } from '../model-availability.js';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -48,6 +49,123 @@ export { isAmbiguousMessage, shouldSuggestSchedule } from './chat-helpers.js';
 export { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
+
+const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
+  'bash',
+  'read_file',
+  'search_files',
+  'search_content',
+  'write_file',
+  'edit_file',
+  'generate_docx',
+  'git_status',
+  'git_diff',
+  'git_log',
+  'git_branch',
+  'git_stash',
+  'git_pull',
+  'git_commit',
+  'git_push',
+  'git_pr',
+  'git_merge',
+  'get_identity',
+  'get_awareness',
+  'query_knowledge',
+  'add_task',
+  'correct_knowledge',
+  'list_skills',
+  'search_skills',
+  'suggest_skill',
+  'read_skill',
+  'acquire_capability',
+  'install_capability',
+  'create_skill',
+  'delete_skill',
+  'create_plan',
+  'add_plan_step',
+  'execute_step',
+  'show_plan',
+  'compose_workflow',
+  'orchestrate_workflow',
+  'spawn_agent',
+  'list_agents',
+  'get_agent_result',
+  'find_connector',
+  'list_connector_categories',
+  'read_other_workspace',
+  'list_workspace_files',
+  'read_other_workspace_file',
+]);
+
+export function isExplicitGatedToolRequest(message: string): boolean {
+  return /\b(write|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|cross-workspace|other workspace)\b/i.test(message)
+    || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message);
+}
+
+export function isExplicitMemoryRecallRequest(message: string): boolean {
+  return /\b(search|find|look up|recall|memories|saved memory|what do you know about me|what have you saved|what do you remember|do you remember|remember about)\b/i.test(message);
+}
+
+export function isExplicitMemorySaveRequest(message: string): boolean {
+  return /\b(remember this|remember that|remember:|save (this|that|it) (to|in) memory|store (this|that|it)|keep this in mind|make a note)\b/i.test(message);
+}
+
+export function isExplicitExternalResearchRequest(message: string): boolean {
+  return /https?:\/\//i.test(message)
+    || /\b(web|internet|online|current|latest|today|news|recent|source|sources|citation|cite|docs?|documentation|release|pricing|benchmark|research|investigate|look up|find out|dig into|study|survey|external)\b/i.test(message);
+}
+
+export function shouldNarrowToolsForConversationalTurn(
+  message: string,
+  autonomyLevel: AutonomyLevel,
+): boolean {
+  return autonomyLevel === 'normal' && !isExplicitGatedToolRequest(message);
+}
+
+export function filterGatedToolsForConversationalTurn<T extends { name: string }>(
+  tools: T[],
+  message: string,
+  autonomyLevel: AutonomyLevel,
+): T[] {
+  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return tools;
+  const allowMemorySearch = isExplicitMemoryRecallRequest(message);
+  const allowMemorySave = isExplicitMemorySaveRequest(message);
+  const allowExternalResearch = isExplicitExternalResearchRequest(message);
+  return tools.filter((tool) => {
+    if (CONVERSATIONAL_GATED_TOOL_NAMES.has(tool.name)) return false;
+    if (tool.name === 'search_memory' && !allowMemorySearch) return false;
+    if (tool.name === 'save_memory' && !allowMemorySave) return false;
+    if ((tool.name === 'web_search' || tool.name === 'web_fetch') && !allowExternalResearch) return false;
+    return true;
+  });
+}
+
+type PluginToolProvider = NonNullable<AgentLoopConfig['pluginTools']>;
+
+export function filterPluginToolsForConversationalTurn(
+  provider: PluginToolProvider,
+  message: string,
+  autonomyLevel: AutonomyLevel,
+  onWithheld?: (count: number) => void,
+): PluginToolProvider {
+  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
+
+  return {
+    getAllTools: () => {
+      const pluginTools = provider.getAllTools();
+      const filtered = filterGatedToolsForConversationalTurn(pluginTools, message, autonomyLevel);
+      if (filtered.length !== pluginTools.length) {
+        onWithheld?.(pluginTools.length - filtered.length);
+      }
+      return filtered;
+    },
+  };
+}
+
+function conversationalToolPolicyPrompt(message: string, autonomyLevel: AutonomyLevel): string {
+  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return '';
+  return `\n\n# Current Turn Tool Policy\nThis is a normal conversational turn. Some action, inspection, plugin, planning, and external research tools may be intentionally hidden until the user asks for a concrete action or lookup. Do not mention this policy. Do not infer or tell the user that a capability is missing because a tool is absent on this turn. If the user asks what Waggle can do, answer at the product level and offer one concrete next step.`;
+}
 
 // Read once at plugin registration — consistent for the lifetime of the server
 const AUTO_APPROVE = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
@@ -509,6 +627,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // can persist the raw user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
+    let activeSessionId = session ?? workspace ?? 'default';
+    let activeWorkspaceId = workspace ?? 'default';
+    let activeHistory: Array<{ role: string; content: string }> | undefined;
 
     try {
       const hasCustomRunner = !!server.agentRunner;
@@ -547,8 +668,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // ── Conversation history management (moved before LLM check so echo mode also persists) ──
-      const sessionId = session ?? workspace ?? 'default';
-      const effectiveWorkspace = workspace ?? 'default';
+      resolvedModel = await resolveUsableModel(server, resolvedModel);
+
+      const sessionId = activeSessionId;
+      const effectiveWorkspace = activeWorkspaceId;
 
       // Viewer RBAC moved above reply.hijack() — see review Critical #3 fix at top of handler.
 
@@ -560,6 +683,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         sessionHistories.set(sessionId, saved);
       }
       const history = sessionHistories.get(sessionId)!;
+      activeHistory = history;
 
       // Add user message to history and persist to disk
       history.push({ role: 'user', content: message });
@@ -604,7 +728,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       let litellmAvailable = hasCustomRunner; // trust injected runners
       if (!hasCustomRunner) {
         const llmStatus = server.agentState.llmProvider;
-        if (llmStatus.provider === 'anthropic-proxy' && llmStatus.health === 'healthy') {
+        if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama') && llmStatus.health === 'healthy') {
           // Built-in proxy with a valid API key — skip HTTP probe
           litellmAvailable = true;
         } else {
@@ -899,7 +1023,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // recalledContext again injected every recalled memory twice.
         const systemPrompt = hasCustomRunner
           ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled) + templateContext + (assembled ? '' : recalledContext);
+          : ambiguityPrefix
+            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled)
+            + templateContext
+            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel)
+            + (assembled ? '' : recalledContext);
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -1070,7 +1198,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Dynamic tool availability — run checkAvailability on each tool
         if (!hasCustomRunner) {
           effectiveTools = filterAvailableTools(effectiveTools);
+          const beforeNarrowing = effectiveTools.length;
+          effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
+          if (effectiveTools.length !== beforeNarrowing) {
+            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          }
         }
+        const pluginTools = hasCustomRunner
+          ? undefined
+          : filterPluginToolsForConversationalTurn(
+            server.agentState.pluginRuntimeManager,
+            agentMessage,
+            autonomyLevel,
+            (count) => log.info(`[chat] conversational turn: withheld ${count} deferred plugin tools until explicitly requested`),
+          );
 
         // Track tool execution times for duration reporting
         const toolStartTimes = new Map<string, number>();
@@ -1173,7 +1314,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           hooks: hasCustomRunner ? undefined : hookRegistry,
           capabilityRouter,
           governancePolicies,
-          pluginTools: server.agentState.pluginRuntimeManager,
+          pluginTools,
           signal: abortController.signal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
@@ -1704,6 +1845,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
       // Send clean error to user — don't leak raw recalled context (contains system prompt instructions)
       sendEvent('error', { message: errorMessage });
+
+      // Persist the assistant-side failure as a real conversation turn. The UI
+      // already shows the SSE error while the stream is live, but without this
+      // saved message a refresh or /api/history call loses the assistant outcome
+      // and the next turn lacks the failure context.
+      if (activeHistory && activeWorkspaceId && activeSessionId) {
+        const assistantError = `Generation failed: ${errorMessage}`;
+        try {
+          activeHistory.push({ role: 'assistant', content: assistantError });
+          persistMessage(server.localConfig.dataDir, activeWorkspaceId, activeSessionId, {
+            role: 'assistant',
+            content: assistantError,
+          });
+        } catch (persistErr) {
+          log.warn('[chat] assistant error persistence failed:', persistErr instanceof Error ? persistErr.message : String(persistErr));
+        }
+      }
 
       // #3 (launch-blocker): memory capture MUST NOT depend on generation
       // success. On the happy path the write-back at ~L1410 captures the

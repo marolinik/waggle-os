@@ -19,7 +19,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  attachConsoleCapture, gotoDesktop, openAppViaDock, setTheme, pressShortcut,
+  BASE, attachConsoleCapture, gotoDesktop, openAppViaDock, setTheme, pressShortcut,
   type ConsoleCapture,
 } from './_helpers';
 
@@ -133,7 +133,7 @@ test.describe('overlays', () => {
   test('spawn-agent', async ({ page }) => {
     const cap = attachConsoleCapture(page);
     await gotoDesktop(page);
-    const btn = page.locator('[data-testid="dock-spawn-agent"]');
+    const btn = page.locator('[data-testid="nav-spawn-agent"]');
     const nav = await btn.isVisible({ timeout: 1500 }).catch(() => false);
     if (nav) { await btn.click(); await page.waitForTimeout(900); }
     FLOW_EXPECT['spawn-agent'] = 'Spawn-agent dialog: a persona picker + model selector + confirm button.';
@@ -197,7 +197,7 @@ test.describe('flows', () => {
   // Onboarding wizard (forceWizard).
   test('flow:onboarding', async ({ page }) => {
     const cap = attachConsoleCapture(page);
-    await page.goto('http://127.0.0.1:3333/?forceWizard=true', { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/?forceWizard=true&skipBoot=true`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1500);
     FLOW_EXPECT['flow-onboarding'] =
       'Onboarding wizard: a welcome/setup step with a clear primary action to proceed.';

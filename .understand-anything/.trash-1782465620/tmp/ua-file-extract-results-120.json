@@ -1,0 +1,2447 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/briefs/2026-04-24-cc1-v6-section-5-2-clarification-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 161,
+      "nonEmptyLines": 114,
+      "sections": [
+        {
+          "heading": "CC-1 Brief — v6 §5.2 Quorum Clarification + Phase 2 N=400 Resume",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 Adjudication summary",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§1 v6 §5.2 amendment specification",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "§1.1 Current §5.2 text (v6 anchor `60d061e`)",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "§1.2 Amendment (insert clarification paragraph)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "§1.3 Deliverable",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "§1.4 Scope guards",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "§2 N=400 execution resume (same as prior Phase 2 brief with amendments)",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "§2.1 Amendments to original Phase 2 brief",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "§2.2 Budget adjustment",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "§3 Execution sequence (post-amendment commit)",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "§4 Halt ping format (amendment commit only)",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "§5 Halt ping format (N=400 completion)",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "§6 Task #29 trace",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "§7 Authorized by",
+          "level": 2,
+          "line": 157
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-24-cc1-vertex-batch-eligibility-probe-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 177,
+      "nonEmptyLines": 116,
+      "sections": [
+        {
+          "heading": "CC-1 Brief — Vertex AI Batch Prediction Eligibility Probe za `gemini-3.1-pro-preview`",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 Kontekst i scope guard",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Strict scope guards (non-negotiable)",
+          "level": 3,
+          "line": 19
+        },
+        {
+          "heading": "§1 Marko prerequisites (pre CC-1 izvršenja)",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "§1.1 Vertex AI API enable na GCP projektu",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "§1.2 Authentication setup",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "§2 Probe specifikacija",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "§2.1 Sample input",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "§2.2 Submission",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "§2.3 Monitoring",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "§2.4 Success criteria",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "§3 Deliverables",
+          "level": 2,
+          "line": 119
+        },
+        {
+          "heading": "§4 Halt ping format",
+          "level": 2,
+          "line": 133
+        },
+        {
+          "heading": "§5 Budget i halt criteria",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "§6 Rollback / cleanup",
+          "level": 2,
+          "line": 157
+        },
+        {
+          "heading": "§7 Task #29 trace update",
+          "level": 2,
+          "line": 163
+        },
+        {
+          "heading": "§8 Authorized by",
+          "level": 2,
+          "line": 173
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-25-cc1-apps-www-nextjs-port-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 518,
+      "nonEmptyLines": 419,
+      "sections": [
+        {
+          "heading": "CC-1 Brief — Apps/www Next.js Port + DS Retrofit + Production Bootstrap",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 Pre-flight context",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§1 Migration target — Next.js 14 App Router",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "§1.1 Stack target",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "§1.2 Folder structure target",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "§1.3 Per-component port plan",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "§1.4 Path mapping (asset references)",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "§2 DS retrofit — light/dark mode + Stage 4 tokens",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "§2.1 globals.css augmentation",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "§2.2 Theme toggle component",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "§2.3 Asset variant resolution",
+          "level": 3,
+          "line": 264
+        },
+        {
+          "heading": "§3 Bootstrap items — production infrastructure",
+          "level": 2,
+          "line": 279
+        },
+        {
+          "heading": "§3.1 API routes",
+          "level": 3,
+          "line": 281
+        },
+        {
+          "heading": "`/api/stripe/checkout` (POST)",
+          "level": 4,
+          "line": 283
+        },
+        {
+          "heading": "`/api/waitlist` (POST)",
+          "level": 4,
+          "line": 291
+        },
+        {
+          "heading": "`/api/analytics` (POST)",
+          "level": 4,
+          "line": 298
+        },
+        {
+          "heading": "§3.2 Cookie consent + GDPR",
+          "level": 3,
+          "line": 304
+        },
+        {
+          "heading": "§3.3 Legal pages",
+          "level": 3,
+          "line": 313
+        },
+        {
+          "heading": "§3.4 SEO + metadata",
+          "level": 3,
+          "line": 322
+        },
+        {
+          "heading": "§3.5 i18n scaffolding (English first)",
+          "level": 3,
+          "line": 377
+        },
+        {
+          "heading": "§3.6 Build + deploy",
+          "level": 3,
+          "line": 398
+        },
+        {
+          "heading": "§4 Wireframe v1.1 LOCKED gap analysis",
+          "level": 2,
+          "line": 431
+        },
+        {
+          "heading": "§5 Test migration",
+          "level": 2,
+          "line": 450
+        },
+        {
+          "heading": "§6 Sequential execution plan (12 commits suggested)",
+          "level": 2,
+          "line": 459
+        },
+        {
+          "heading": "§7 Halt criteria + budget",
+          "level": 2,
+          "line": 479
+        },
+        {
+          "heading": "§8 PM signals to watch",
+          "level": 2,
+          "line": 491
+        },
+        {
+          "heading": "§9 Authorized by",
+          "level": 2,
+          "line": 501
+        },
+        {
+          "heading": "§10 Companion deliverables (paralelno sa ovim brief-om)",
+          "level": 2,
+          "line": 511
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 28
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-25-launch-comms-templates.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 411,
+      "nonEmptyLines": 300,
+      "sections": [
+        {
+          "heading": "Launch Communication Templates — SOTA Claim Multi-Asset Suite",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Asset 1 — Technical Blog Post (publish on waggle-os.ai/blog or Medium)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Title options",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Outline (target 2,500-3,500 words)",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Voice notes",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "Asset 2 — LinkedIn Long-form (1,200-1,500 words)",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "Headline",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "Opening (founder voice)",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "Body (5-7 paragraphs)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "CTA",
+          "level": 3,
+          "line": 124
+        },
+        {
+          "heading": "Voice",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "Asset 3 — Twitter / X Thread (10-12 tweets)",
+          "level": 2,
+          "line": 138
+        },
+        {
+          "heading": "Tweet 1 (hook)",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "Tweet 2",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "Tweet 3",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "Tweet 4",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "Tweet 5",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Tweet 6",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "Tweet 7",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "Tweet 8",
+          "level": 3,
+          "line": 180
+        },
+        {
+          "heading": "Tweet 9",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "Tweet 10",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "Tweet 11 (close)",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "Tweet 12 (community)",
+          "level": 3,
+          "line": 206
+        },
+        {
+          "heading": "Asset 4 — hive-mind OSS Announcement (GitHub README + Release Notes)",
+          "level": 2,
+          "line": 215
+        },
+        {
+          "heading": "README.md (top section)",
+          "level": 3,
+          "line": 217
+        },
+        {
+          "heading": "Release notes (v0.1.0 — first public release)",
+          "level": 3,
+          "line": 260
+        },
+        {
+          "heading": "Asset 5 — Waitlist Email (subscriber broadcast)",
+          "level": 2,
+          "line": 298
+        },
+        {
+          "heading": "Subject line options",
+          "level": 3,
+          "line": 300
+        },
+        {
+          "heading": "Body",
+          "level": 3,
+          "line": 305
+        },
+        {
+          "heading": "Asset 6 — Press Kit One-Pager (PDF + web)",
+          "level": 2,
+          "line": 335
+        },
+        {
+          "heading": "Layout (1 page, two columns)",
+          "level": 3,
+          "line": 337
+        },
+        {
+          "heading": "Visual",
+          "level": 3,
+          "line": 359
+        },
+        {
+          "heading": "Pre-publish checklist",
+          "level": 2,
+          "line": 366
+        },
+        {
+          "heading": "Distribution sequence",
+          "level": 2,
+          "line": 379
+        },
+        {
+          "heading": "Risk register",
+          "level": 2,
+          "line": 405
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 36
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-25-mvp-shim-package-layouts.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 398,
+      "nonEmptyLines": 300,
+      "sections": [
+        {
+          "heading": "MVP Shim Package Layouts — 3 Targets, Architecture Only",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 Common foundation — `@hive-mind/shim-core`",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Folder structure",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "Public API surface",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Dependency footprint",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "§1 `@hive-mind/claude-code-hooks` — Anthropic Claude Code",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Pre-existing context (per research §03)",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "Folder structure",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "Hook event → hive-mind action mapping",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "Install command UX",
+          "level": 3,
+          "line": 128
+        },
+        {
+          "heading": "MEMORY.md split strategy (per research §5 recommendation)",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 3,
+          "line": 151
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 160
+        },
+        {
+          "heading": "§2 `@hive-mind/cursor-hooks` — Cursor IDE",
+          "level": 2,
+          "line": 168
+        },
+        {
+          "heading": "Pre-existing context (per WebSearch April 2026)",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "Folder structure",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "Hook event → hive-mind action mapping",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "Install command UX",
+          "level": 3,
+          "line": 210
+        },
+        {
+          "heading": "Marketplace listing strategy",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 3,
+          "line": 227
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 234
+        },
+        {
+          "heading": "§3 `@hive-mind/hermes-hooks` — Nous Research Hermes Agent",
+          "level": 2,
+          "line": 242
+        },
+        {
+          "heading": "Pre-existing context (per WebSearch April 2026)",
+          "level": 3,
+          "line": 244
+        },
+        {
+          "heading": "Folder structure",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "Language note",
+          "level": 3,
+          "line": 274
+        },
+        {
+          "heading": "Hook event → hive-mind action mapping",
+          "level": 3,
+          "line": 278
+        },
+        {
+          "heading": "MEMORY.md ↔ hive-mind bidirectional bridge",
+          "level": 3,
+          "line": 287
+        },
+        {
+          "heading": "Skill emergence integration",
+          "level": 3,
+          "line": 297
+        },
+        {
+          "heading": "Install command UX",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 3,
+          "line": 320
+        },
+        {
+          "heading": "Risks",
+          "level": 3,
+          "line": 328
+        },
+        {
+          "heading": "Strategic note — Hermes coalition opportunity",
+          "level": 3,
+          "line": 335
+        },
+        {
+          "heading": "§4 Cross-shim conventions",
+          "level": 2,
+          "line": 348
+        },
+        {
+          "heading": "Versioning",
+          "level": 3,
+          "line": 350
+        },
+        {
+          "heading": "Telemetry",
+          "level": 3,
+          "line": 355
+        },
+        {
+          "heading": "Config storage",
+          "level": 3,
+          "line": 359
+        },
+        {
+          "heading": "Logging",
+          "level": 3,
+          "line": 363
+        },
+        {
+          "heading": "Error handling",
+          "level": 3,
+          "line": 368
+        },
+        {
+          "heading": "§5 Implementation sequence (CC-1 dispatch order)",
+          "level": 2,
+          "line": 375
+        },
+        {
+          "heading": "§6 What this brief is NOT",
+          "level": 2,
+          "line": 388
+        },
+        {
+          "heading": "§7 Authorized by",
+          "level": 2,
+          "line": 396
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 41
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-25-universal-silent-capture-strategy.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 334,
+      "nonEmptyLines": 250,
+      "sections": [
+        {
+          "heading": "Universal Silent Capture Strategy — hive-mind + per-IDE shim portfolio",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 Executive thesis",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§1 6-target integration matrix (April 2026 state)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "§2 Naming decision",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Option A — Monorepo `hive-mind-clients` pod `marolinik/hive-mind-clients`",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Option B — Per-target standalone repos",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "Option C — Brand pivot to `kvark-mind` ili `mind-substrate`",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "§3 Repository structure (Option A)",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "§4 MVP scope — first 3 shims (mindshare-prioritized)",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "§5 Per-shim contract — what each shim does",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "5.1 Session start hook",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "5.2 User prompt submit hook",
+          "level": 3,
+          "line": 192
+        },
+        {
+          "heading": "5.3 Post-response / Stop hook",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "5.4 Session end / pre-compact hook",
+          "level": 3,
+          "line": 205
+        },
+        {
+          "heading": "§6 Single .mind file philosophy",
+          "level": 2,
+          "line": 213
+        },
+        {
+          "heading": "§7 Strategic launch coupling — hive-mind + Waggle + shims",
+          "level": 2,
+          "line": 223
+        },
+        {
+          "heading": "Scenario PASS (LoCoMo ≥ 91.6, Fisher p < 0.10)",
+          "level": 3,
+          "line": 229
+        },
+        {
+          "heading": "Scenario PARTIAL (LoCoMo 85-91, SOTA_IN_LOCAL_FIRST)",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "Scenario FAIL (LoCoMo < 85)",
+          "level": 3,
+          "line": 247
+        },
+        {
+          "heading": "§8 Commercial model preserved",
+          "level": 2,
+          "line": 257
+        },
+        {
+          "heading": "§9 SWOT — extended scope",
+          "level": 2,
+          "line": 267
+        },
+        {
+          "heading": "Strengths (delta vs original hive-mind alone)",
+          "level": 3,
+          "line": 269
+        },
+        {
+          "heading": "Weaknesses (new, introduced by extended scope)",
+          "level": 3,
+          "line": 274
+        },
+        {
+          "heading": "Opportunities (delta)",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Threats (delta)",
+          "level": 3,
+          "line": 284
+        },
+        {
+          "heading": "Mitigations",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "§10 Sequencing recommendation",
+          "level": 2,
+          "line": 296
+        },
+        {
+          "heading": "§11 Open questions for Marko",
+          "level": 2,
+          "line": 307
+        },
+        {
+          "heading": "§12 Authorized for next-step",
+          "level": 2,
+          "line": 318
+        },
+        {
+          "heading": "§13 Sources",
+          "level": 2,
+          "line": 329
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 30
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-harness-audit-tiered-fix-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 380,
+      "nonEmptyLines": 274,
+      "sections": [
+        {
+          "heading": "Harness Audit Tiered Fix Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TIER 1 — Pre-launch hardening (3-5 dana CC-1 work, $0 incremental, NOT launch-blocking)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Goal",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "Scope (5 deliverables)",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "T1.1 — Output normalization layer",
+          "level": 4,
+          "line": 20
+        },
+        {
+          "heading": "T1.2 — Per-model prompt profiles",
+          "level": 4,
+          "line": 48
+        },
+        {
+          "heading": "T1.3 — Failure taxonomy classifier",
+          "level": 4,
+          "line": 90
+        },
+        {
+          "heading": "T1.4 — Per-cell + per-model report generation",
+          "level": 4,
+          "line": 110
+        },
+        {
+          "heading": "T1.5 — Run artifact persistence + reproducibility",
+          "level": 4,
+          "line": 139
+        },
+        {
+          "heading": "Tier 1 effort + cost",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Tier 1 acceptance criteria",
+          "level": 3,
+          "line": 164
+        },
+        {
+          "heading": "TIER 2 — Sprint 12 post-launch re-pilot (2-4 nedelje)",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "Goal",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "Scope (6 deliverables)",
+          "level": 3,
+          "line": 180
+        },
+        {
+          "heading": "T2.1 — Per-model GEPA optimization",
+          "level": 4,
+          "line": 182
+        },
+        {
+          "heading": "T2.2 — Cross-model GEPA objective (alternative path)",
+          "level": 4,
+          "line": 190
+        },
+        {
+          "heading": "T2.3 — Robustness gates in evolution-gates.ts",
+          "level": 4,
+          "line": 199
+        },
+        {
+          "heading": "T2.4 — Holdout / golden / adversarial eval split",
+          "level": 4,
+          "line": 205
+        },
+        {
+          "heading": "T2.5 — Re-pilot N=20-30 with Tier 1 harness + Tier 2 GEPA outputs",
+          "level": 4,
+          "line": 218
+        },
+        {
+          "heading": "T2.6 — Full N=400 multiplier benchmark (only if T2.5 PASS)",
+          "level": 4,
+          "line": 231
+        },
+        {
+          "heading": "Tier 2 effort + cost",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "Tier 2 acceptance criteria",
+          "level": 3,
+          "line": 247
+        },
+        {
+          "heading": "TIER 3 — KVARK quarterly enterprise governance (multi-quarter, post-launch)",
+          "level": 2,
+          "line": 256
+        },
+        {
+          "heading": "Goal",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "Scope (7 deliverables — high-level only; detailed brief authored at KVARK roadmap entry)",
+          "level": 3,
+          "line": 262
+        },
+        {
+          "heading": "T3.1 — Security gates (prompt injection, data exfiltration, tool misuse, policy override)",
+          "level": 4,
+          "line": 264
+        },
+        {
+          "heading": "T3.2 — Tool-call trajectory evaluation (not just text output)",
+          "level": 4,
+          "line": 265
+        },
+        {
+          "heading": "T3.3 — Immutable policy layer (security/compliance/permission rules cannot be evolved)",
+          "level": 4,
+          "line": 266
+        },
+        {
+          "heading": "T3.4 — Deployment lifecycle (proposed → reviewed → staged → canary → production → rollback)",
+          "level": 4,
+          "line": 267
+        },
+        {
+          "heading": "T3.5 — Tenant isolation + EU AI Act Article 12 audit gates",
+          "level": 4,
+          "line": 268
+        },
+        {
+          "heading": "T3.6 — Human-readable diff + rationale UI for evolution candidates",
+          "level": 4,
+          "line": 269
+        },
+        {
+          "heading": "T3.7 — Production-grade research/staging/production mode separation",
+          "level": 4,
+          "line": 270
+        },
+        {
+          "heading": "Tier 3 effort + cost",
+          "level": 3,
+          "line": 272
+        },
+        {
+          "heading": "Tier 3 acceptance criteria",
+          "level": 3,
+          "line": 278
+        },
+        {
+          "heading": "CC-1 paste-ready brief (Tier 1 only)",
+          "level": 2,
+          "line": 284
+        },
+        {
+          "heading": "§Open questions for Marko",
+          "level": 2,
+          "line": 374
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 36
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-landing-copy-v3.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 319,
+      "nonEmptyLines": 211,
+      "sections": [
+        {
+          "heading": "Landing Copy v3 — Post Self-Judge Re-Eval",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Headline + sub options (pick one)",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Option A — sovereignty-first",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Option B — architecture-first",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Option C — proof-first (honest)",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "Option D — three-prong",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "§2 — Hero section (above the fold)",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Headline",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Sub-headline",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "Visual element",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Primary CTA",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "Secondary CTA",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "Tertiary trust strip",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "§3 — Three-claim section (\"Why Hive-Mind\")",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Claim 1 — Architectural separation",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "Claim 2 — Sovereign by default",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "Claim 3 — Honest results",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "§4 — Substrate vs retrieval (educational section)",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "Headline",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "Body (200-300 words)",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "Visual element",
+          "level": 3,
+          "line": 142
+        },
+        {
+          "heading": "Note on configuration patterns",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "§5 — Open source + community section",
+          "level": 2,
+          "line": 151
+        },
+        {
+          "heading": "Headline",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "Body (150-200 words)",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "CTAs",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "§6 — Use cases (three personas)",
+          "level": 2,
+          "line": 175
+        },
+        {
+          "heading": "Persona 1 — AI engineer building production agents",
+          "level": 3,
+          "line": 179
+        },
+        {
+          "heading": "Persona 2 — Engineer at a regulated company",
+          "level": 3,
+          "line": 187
+        },
+        {
+          "heading": "Persona 3 — Consultant or knowledge worker",
+          "level": 3,
+          "line": 195
+        },
+        {
+          "heading": "§7 — Pricing tiers (LOCKED 2026-04-18)",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "Solo — Free",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "Pro — $19/month",
+          "level": 3,
+          "line": 218
+        },
+        {
+          "heading": "Teams — $49/seat/month",
+          "level": 3,
+          "line": 228
+        },
+        {
+          "heading": "§8 — Technical credibility section (for technical buyers)",
+          "level": 2,
+          "line": 243
+        },
+        {
+          "heading": "Headline",
+          "level": 3,
+          "line": 245
+        },
+        {
+          "heading": "Body (100-150 words)",
+          "level": 3,
+          "line": 248
+        },
+        {
+          "heading": "Resources strip",
+          "level": 3,
+          "line": 254
+        },
+        {
+          "heading": "§9 — Trust signals strip (footer-adjacent)",
+          "level": 2,
+          "line": 263
+        },
+        {
+          "heading": "§10 — Final CTA section",
+          "level": 2,
+          "line": 277
+        },
+        {
+          "heading": "Headline",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Sub",
+          "level": 3,
+          "line": 282
+        },
+        {
+          "heading": "Two CTAs (equal weight)",
+          "level": 3,
+          "line": 285
+        },
+        {
+          "heading": "Tertiary",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "§11 — Open questions for Marko",
+          "level": 2,
+          "line": 295
+        },
+        {
+          "heading": "§12 — Implementation notes for CC-1",
+          "level": 2,
+          "line": 306
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 46
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-memory-sync-repair-cc2-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 267,
+      "nonEmptyLines": 202,
+      "sections": [
+        {
+          "heading": "Memory Sync Repair — CC-2 Paste-Ready Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Goal",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§2 — Step 1: Back-port hive-mind bug fixes u waggle-os (1-3h work)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "2.1 — Cherry-pick targets (binding)",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "2.2 — Bidirectional audit (waggle-os → hive-mind candidates)",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "2.3 — Step 1 acceptance criteria",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "§3 — Step 2: Port hive-mind tests u waggle-os (4-8h work)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "3.1 — Test files to port",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "3.2 — Test placement convention",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "3.3 — Run + classify",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "3.4 — Step 2 acceptance criteria",
+          "level": 3,
+          "line": 124
+        },
+        {
+          "heading": "§4 — Step 3: CI/CD sync workflow (3-5h work)",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "4.1 — Workflow A: `mind-parity-check`",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "4.2 — Workflow B: `mind-sync-pr`",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "4.3 — Step 3 acceptance criteria",
+          "level": 3,
+          "line": 219
+        },
+        {
+          "heading": "§5 — Halt-and-ping triggers (binding)",
+          "level": 2,
+          "line": 231
+        },
+        {
+          "heading": "§6 — Cost ceiling",
+          "level": 2,
+          "line": 241
+        },
+        {
+          "heading": "§7 — What NOT to do (hard rules)",
+          "level": 2,
+          "line": 250
+        },
+        {
+          "heading": "§8 — Cross-references",
+          "level": 2,
+          "line": 260
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-retrieval-v2-embeddings-audit-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 352,
+      "nonEmptyLines": 230,
+      "sections": [
+        {
+          "heading": "Retrieval V2 + Embeddings Audit Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Goal",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§2 — Current state audit (V1 implementation)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "2.1 — search.ts (HybridSearch RRF fusion)",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "2.2 — scoring.ts (relevance multiplier)",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "2.3 — entity-normalizer.ts",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "2.4 — embedding-provider.ts (provider chain + tier gating)",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "2.5 — Memory sync state for retrieval files",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "§3 — Five V2 directions (binding work scope)",
+          "level": 2,
+          "line": 150
+        },
+        {
+          "heading": "3.1 — Direction A: Embedding model upgrade",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "3.2 — Direction B: Hybrid scoring weight optimization",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "3.3 — Direction C: Temporal-aware retrieval",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "3.4 — Direction D: Learned reranker on top-K candidates",
+          "level": 3,
+          "line": 199
+        },
+        {
+          "heading": "3.5 — Direction E: Entity-aware retrieval + KG bridge",
+          "level": 3,
+          "line": 213
+        },
+        {
+          "heading": "§4 — Phasing (A → B → C, no Tier oznake)",
+          "level": 2,
+          "line": 229
+        },
+        {
+          "heading": "Phase A — Audit + baseline reproduction (1 week, ~$20-30)",
+          "level": 3,
+          "line": 231
+        },
+        {
+          "heading": "Phase B — Per-direction ablations (2-3 weeks, ~$100-200)",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "Phase C — Full N=400 V2 reproduction sa best combination (1 week, ~$30-50)",
+          "level": 3,
+          "line": 252
+        },
+        {
+          "heading": "§5 — Sequencing constraints",
+          "level": 2,
+          "line": 266
+        },
+        {
+          "heading": "§6 — Cost estimate",
+          "level": 2,
+          "line": 295
+        },
+        {
+          "heading": "§7 — Acceptance criteria (binding)",
+          "level": 2,
+          "line": 312
+        },
+        {
+          "heading": "§8 — Marko ratifications (resolved 2026-04-26)",
+          "level": 2,
+          "line": 326
+        },
+        {
+          "heading": "§9 — Cross-references",
+          "level": 2,
+          "line": 342
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-27-substrate-integrity-audit-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 182,
+      "nonEmptyLines": 120,
+      "sections": [
+        {
+          "heading": "Substrate Integrity Audit Brief (Korak 12, light scope)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Goal",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§2 — Light scope rationale (post 2026-04-27 Memory Sync Repair)",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "§3 — Four deliverables (light scope)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "3.1 — Manifest v6 reproducibility verification",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "3.2 — Audit chain SHA verification",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "3.3 — Trio judge ensemble κ recalibration spot-check",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "3.4 — V2 reproducibility check pre arxiv submission (lightweight)",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "§4 — Out-of-scope (what NOT in this audit)",
+          "level": 2,
+          "line": 113
+        },
+        {
+          "heading": "§5 — Acceptance criteria (binding)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "§6 — Sequencing",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "§7 — Executor assignment",
+          "level": 2,
+          "line": 155
+        },
+        {
+          "heading": "§8 — Open questions for Marko",
+          "level": 2,
+          "line": 165
+        },
+        {
+          "heading": "§9 — Cross-references",
+          "level": 2,
+          "line": 173
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-cc4-faza1-amendment-1.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 251,
+      "nonEmptyLines": 173,
+      "sections": [
+        {
+          "heading": "CC-2 Faza 1 — Amendment 1 (PM ratification of pre-flight asks)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Acknowledgment",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§2 — Ratifications (asks A-E)",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Ask A — H3 cell semantics disambiguation",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Ask B — Likert `trio_strict_pass` operationalization",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Ask C — canonical κ=0.7878 source citation",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Ask D — path correction `packages/core/` → `packages/agent/`",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Ask E — `feedback_config_inheritance_audit.md` reconstruction",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "§3 — Discovery resolutions",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "Discovery 3.1 — judge max_tokens reconciliation",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "Discovery 4.5 — substrate HEAD pin (race condition guard)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "§4 — Updated cost projection (post Option C ratification)",
+          "level": 2,
+          "line": 143
+        },
+        {
+          "heading": "§5 — Updated halt-and-PM checkpoints (3 mandatory + 1 new pre-NULL)",
+          "level": 2,
+          "line": 167
+        },
+        {
+          "heading": "§6 — Acceptance criteria update (post ratifications)",
+          "level": 2,
+          "line": 180
+        },
+        {
+          "heading": "§7 — Path forward (sequencing)",
+          "level": 2,
+          "line": 193
+        },
+        {
+          "heading": "§8 — Out-of-scope clarifications (post Amendment 1)",
+          "level": 2,
+          "line": 212
+        },
+        {
+          "heading": "§9 — Cross-references",
+          "level": 2,
+          "line": 236
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-cc4-faza1-amendment-2.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 171,
+      "nonEmptyLines": 114,
+      "sections": [
+        {
+          "heading": "CC-2 Faza 1 — Amendment 2 (Phase 4.5 retrieval-engagement signal incorporation)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Why this amendment exists",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§2 — The empirical signal (Phase 4.5 §\"Pilot retrieval engagement empirical signal\")",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "§3 — Fitness function update (binding)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "§4 — Mutation oracle prompt update (binding)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "§5 — Acceptance criteria update (Faza 1 → Faza 2 gate)",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "§6 — Forward to Phase 5 GEPA-evolved variant (out-of-Faza-1 scope, but recorded)",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "§7 — Cost projection (unchanged from Amendment 1)",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "§8 — Implementation order (binding)",
+          "level": 2,
+          "line": 144
+        },
+        {
+          "heading": "§9 — Cross-references",
+          "level": 2,
+          "line": 159
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-cc4-faza1-preflight-report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 238,
+      "nonEmptyLines": 163,
+      "sections": [
+        {
+          "heading": "CC-4 Faza 1 — Pre-Flight Report",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§1 — Repository topology resolved",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "§2 — Brief vs reality discrepancies (factual)",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "2.1 — Path error in brief §2 + §8",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "2.2 — Brief assumes `feedback_config_inheritance_audit.md` exists; it doesn't",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "2.3 — `.auto-memory/` directory does not exist",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "§3 — Pre-flight check results",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "3.1 — §6.1 Config inheritance audit: PARTIAL",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "3.2 — §6.2 Mixed-methodology baseline: READY",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "3.3 — §6.3 Scope verification (H3 ≥40 instances): **FAIL — AMBIGUOUS**",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "3.4 — §6.4 Cell semantic preservation: DESIGN READY",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "3.5 — §6.5 σ-aware acceptance documented: READY",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "3.6 — §6.6 Trio-strict primary: CONFIRMED",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "3.7 — §6.7 Cost super-linear projection: READY",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "3.8 — §6.8 Source data structure (agentic spot-check): PASS",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "§4 — Additional discoveries requiring PM ratification",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "4.1 — Metric ambiguity: \"trio-strict accuracy\" on Likert tasks",
+          "level": 3,
+          "line": 132
+        },
+        {
+          "heading": "4.2 — Canonical κ baseline (brief §4) source",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "4.3 — Path correction authorization",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "4.4 — feedback_config_inheritance_audit.md authorization",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "4.5 — Substrate freeze verification",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "§5 — Pre-flight check matrix summary",
+          "level": 2,
+          "line": 169
+        },
+        {
+          "heading": "§6 — Ratification asks (in order — A is critical path blocker)",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "§7 — Cost & wall-clock impact of ratifications",
+          "level": 2,
+          "line": 201
+        },
+        {
+          "heading": "§8 — Status post-ratification → next moves",
+          "level": 2,
+          "line": 210
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 225
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 27
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-cc4-gepa-tier2-evolution-faza1-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 265,
+      "nonEmptyLines": 180,
+      "sections": [
+        {
+          "heading": "CC-4 Brief — GEPA Tier 2 Prompt-Shapes Evolution (Faza 1 pilot)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Context (zašto smo ovde)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§2 — Scope LOCK (Faza 1)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "§3 — Methodology",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "3.1 — Fitness function",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "3.2 — NULL-baseline gate (binding)",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "3.3 — Mutation oracle",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "3.4 — Reproducibility",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "3.5 — Substrate dependency",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "§4 — Acceptance criteria (Faza 1 → Faza 2 gate)",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "§5 — Cost & halt",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "§6 — Pre-flight checks (binding, all 8 sub-rules from feedback memory)",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "6.1 — Config inheritance audit",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "6.2 — Mixed-methodology baseline",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "6.3 — Scope verification",
+          "level": 3,
+          "line": 141
+        },
+        {
+          "heading": "6.4 — Cell semantics prompt strictness preservation",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "6.5 — σ-aware acceptance range",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "6.6 — Mixed-methodology variant",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "6.7 — Cost super-linear input growth",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "6.8 — Source data structure",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "§7 — Halt-and-PM checkpoints",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "§8 — Deliverables",
+          "level": 2,
+          "line": 185
+        },
+        {
+          "heading": "§9 — Out-of-scope (Faza 1)",
+          "level": 2,
+          "line": 211
+        },
+        {
+          "heading": "§10 — Sequencing",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "§11 — Cross-references",
+          "level": 2,
+          "line": 247
+        },
+        {
+          "heading": "§12 — Open questions for Marko",
+          "level": 2,
+          "line": 260
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 26
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-claude-design-landing-setup.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 320,
+      "nonEmptyLines": 225,
+      "sections": [
+        {
+          "heading": "claude.ai/design Landing Generation Setup Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Setup approach",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§2 — Project name + description (paste-ready for claude.ai/design form)",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "§3 — Company blurb (paste-ready, ~95 words, replaces 2026-04-20 dual-axis blurb which is now stale)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "§4 — Visual direction notes (paste-ready for visual notes field)",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "§5 — Landing generation prompt (paste into main generation prompt field)",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "§6 — Asset inventory (manual upload, 15 files)",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "§7 — Manual execution steps for Marko",
+          "level": 2,
+          "line": 194
+        },
+        {
+          "heading": "§8 — What signals halt-and-PM during iteration",
+          "level": 2,
+          "line": 230
+        },
+        {
+          "heading": "§9 — Output integration to apps/www",
+          "level": 2,
+          "line": 245
+        },
+        {
+          "heading": "§10 — Sequencing post claude.ai/design landing setup",
+          "level": 2,
+          "line": 289
+        },
+        {
+          "heading": "§11 — Cross-references",
+          "level": 2,
+          "line": 303
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-claude-design-landing-v2-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 508,
+      "nonEmptyLines": 379,
+      "sections": [
+        {
+          "heading": "Waggle Landing — v2 Generation Prompt",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Why v2 exists",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "§2 — Paste-ready text for claude.ai/design \"Describe what you want to create...\" field",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "§3 — Manual execution steps for Marko",
+          "level": 2,
+          "line": 447
+        },
+        {
+          "heading": "§4 — Open items for v3 (NOT blocking v2 generation)",
+          "level": 2,
+          "line": 481
+        },
+        {
+          "heading": "§5 — Cross-references",
+          "level": 2,
+          "line": 493
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-claude-design-landing-v2.1-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 482,
+      "nonEmptyLines": 356,
+      "sections": [
+        {
+          "heading": "Waggle Landing — v2.1 Generation Prompt (revised)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Resolution log for v2.0 critique",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "§1 — Paste-ready text for claude.ai/design \"Describe what you want to create...\" field",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "§2 — Manual execution steps for Marko",
+          "level": 2,
+          "line": 404
+        },
+        {
+          "heading": "§3 — Marko-side resolutions tracked for v2.2 / v3",
+          "level": 2,
+          "line": 438
+        },
+        {
+          "heading": "§4 — Open items NOT blocking v2.1 generation",
+          "level": 2,
+          "line": 454
+        },
+        {
+          "heading": "§5 — Cross-references",
+          "level": 2,
+          "line": 465
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-claude-design-landing-v2.2-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 527,
+      "nonEmptyLines": 392,
+      "sections": [
+        {
+          "heading": "Waggle Landing — v2.2 Generation Prompt (revised after second critique pass)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Marko-side resolutions for v2.2",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "§1 — Resolution log for v2.1 critique",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "§2 — Paste-ready text for claude.ai/design \"Describe what you want to create...\" field",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "§3 — Manual execution steps for Marko",
+          "level": 2,
+          "line": 436
+        },
+        {
+          "heading": "§4 — Marko-side resolutions tracked for v2.3 / v3",
+          "level": 2,
+          "line": 479
+        },
+        {
+          "heading": "§5 — Open items NOT blocking v2.2 generation",
+          "level": 2,
+          "line": 499
+        },
+        {
+          "heading": "§6 — Cross-references",
+          "level": 2,
+          "line": 510
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-28-claude-design-landing-v2.3-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 513,
+      "nonEmptyLines": 382,
+      "sections": [
+        {
+          "heading": "Waggle Landing — v2.3 Generation Prompt (ship version)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Delta from v2.2 (concise diff)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§1 — Paste-ready text for claude.ai/design \"Describe what you want to create...\" field",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "§2 — Manual execution steps for Marko",
+          "level": 2,
+          "line": 430
+        },
+        {
+          "heading": "§3 — Marko override windows",
+          "level": 2,
+          "line": 480
+        },
+        {
+          "heading": "§4 — Cross-references",
+          "level": 2,
+          "line": 495
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    }
+  ]
+}

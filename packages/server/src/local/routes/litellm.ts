@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../lifecycle.js';
+import { listOllamaChatModelIds } from '../model-availability.js';
 
 export const litellmRoutes: FastifyPluginAsync = async (server) => {
   /**
@@ -41,17 +42,18 @@ export const litellmRoutes: FastifyPluginAsync = async (server) => {
    * Returns: { models: string[] }
    */
   server.get('/api/litellm/models', async () => {
+    const localModels = await listOllamaChatModelIds();
     try {
       const litellmUrl = server.localConfig.litellmUrl;
       const res = await fetch(`${litellmUrl}/models`);
       if (!res.ok) {
-        return { models: [] };
+        return { models: localModels };
       }
       const data = await res.json() as { data?: Array<{ id: string }> };
-      const models = (data.data ?? []).map((m) => m.id);
+      const models = [...new Set([...(data.data ?? []).map((m) => m.id), ...localModels])];
       return { models };
     } catch {
-      return { models: [] };
+      return { models: localModels };
     }
   });
 

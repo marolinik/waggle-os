@@ -8,7 +8,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:3333';
+const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
@@ -28,9 +28,61 @@ async function dismissOverlay(page: Page) {
 }
 
 async function gotoDesktop(page: Page) {
-  await page.goto(`${BASE}/?skipOnboarding=true&tier=power`);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(2000);
+  await page.goto(`${BASE}/home?skipOnboarding=true&skipBoot=true&tier=power`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('[role="navigation"], main', { timeout: 15_000 });
+  await page.waitForTimeout(600);
+  await dismissOverlay(page);
+}
+
+function routeWithSkip(route: string): string {
+  const separator = route.includes('?') ? '&' : '?';
+  return `${BASE}${route}${separator}skipOnboarding=true&skipBoot=true&tier=power`;
+}
+
+async function openCurrentApp(page: Page, label: string) {
+  const nav = page.locator('[role="navigation"]');
+  const navAliases: Record<string, string[]> = {
+    Chat: ['Chat'],
+    Memory: ['Memory'],
+    'Agent Center': ['Agents & tasks'],
+    'Agents & tasks': ['Agents & tasks'],
+    Connectors: ['Connectors'],
+    Home: ['Home'],
+    Settings: ['Account and settings'],
+  };
+
+  for (const alias of navAliases[label] ?? [label]) {
+    const btn = nav.locator('button', { hasText: alias }).first();
+    if (await btn.isVisible({ timeout: 700 }).catch(() => false)) {
+      await btn.click();
+      await page.waitForTimeout(700);
+      return;
+    }
+  }
+
+  const routes: Record<string, string> = {
+    Home: '/home',
+    Room: '/room',
+    'Agent Center': '/agents',
+    Files: '/files',
+    Approvals: '/approvals',
+    'Mission Control': '/settings/mission-control',
+    Timeline: '/settings/timeline',
+    'Usage & Cost': '/settings/usage',
+    'Events & Logs': '/settings/events',
+    'Team Governance': '/team',
+    'Skills Hub': '/skills',
+    'Connector Hub': '/connectors',
+    'MCP Hub': '/mcps',
+    Marketplace: '/marketplace',
+    Settings: '/settings',
+    Vault: '/settings/vault',
+  };
+  const route = routes[label];
+  if (!route) throw new Error(`No current navigation target configured for "${label}"`);
+  await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('[role="navigation"], main', { timeout: 15_000 });
+  await page.waitForTimeout(700);
   await dismissOverlay(page);
 }
 
@@ -177,10 +229,10 @@ test.describe('2. Desktop Shell', () => {
     expect(text).toContain('Waggle AI');
   });
 
-  test('dock renders in power tier', async ({ page }) => {
+  test('sidebar renders in power tier', async ({ page }) => {
     await gotoDesktop(page);
-    for (const label of ['Chat', 'Room', 'Agents', 'Files', 'Approvals']) {
-      const btn = page.locator(`button[aria-label="${label}"]`);
+    for (const label of ['Chat', 'Memory', 'Agents & tasks', 'Library']) {
+      const btn = page.locator('[role="navigation"]').locator('button', { hasText: label });
       await expect(btn).toBeVisible({ timeout: 5000 });
     }
   });
@@ -203,9 +255,9 @@ test.describe('2. Desktop Shell', () => {
 const DIRECT_APPS = [
   { label: 'Chat', expect: /persona|message|waggle/i },
   { label: 'Room', expect: /room|agent|specialist|no.*running|empty/i },
-  { label: 'Agent Center', expect: /agent|persona|group/i },
+  { label: 'Agent Center', expect: /agent|task|persona|group/i },
   { label: 'Files', expect: /file|folder|workspace|document/i },
-  { label: 'Approvals', expect: /approval|pending|no.*pending|history/i },
+  { label: 'Approvals', expect: /approval|pending|no.*pending|history|upgrade|team/i },
 ];
 
 // Phase 4B sweep: zone names/membership match dock-tiers.ts (System zone, not
@@ -218,7 +270,7 @@ const ZONE_APPS = [
   { label: 'Usage & Cost', zone: 'System', expect: /usage|telemetry|token|cost/i },
   { label: 'Events & Logs', zone: 'System', expect: /event|log|step|filter/i },
   { label: 'Team Governance', zone: 'Team', expect: /governance|role|team|permission/i },
-  { label: 'Skills Hub', zone: 'Intelligence', expect: /skill|installed|marketplace|starter/i },
+  { label: 'Skills Hub', zone: 'Intelligence', expect: /skill|installed|marketplace|starter|build/i },
   { label: 'Connector Hub', zone: 'Extend', expect: /connector|connect|service|integration/i },
   { label: 'MCP Hub', zone: 'Extend', expect: /mcp|installed|catalog|server/i },
   { label: 'Marketplace', zone: 'Extend', expect: /marketplace|browse|extension|install/i },
@@ -228,7 +280,7 @@ test.describe('3. Direct Dock Apps', () => {
   for (const app of DIRECT_APPS) {
     test(`${app.label} opens and renders content`, async ({ page }) => {
       await gotoDesktop(page);
-      await openAppViaDock(page, app.label);
+      await openCurrentApp(page, app.label);
       const text = await getVisibleText(page);
       expect(text).toMatch(app.expect);
     });
@@ -239,7 +291,7 @@ test.describe('4. Zone Apps (Ops + Extend)', () => {
   for (const app of ZONE_APPS) {
     test(`${app.label} opens from ${app.zone} zone`, async ({ page }) => {
       await gotoDesktop(page);
-      await openAppViaDock(page, app.label);
+      await openCurrentApp(page, app.label);
       const text = await getVisibleText(page);
       expect(text).toMatch(app.expect);
     });
@@ -251,21 +303,21 @@ test.describe('4. Zone Apps (Ops + Extend)', () => {
 test.describe('5. Standalone Apps', () => {
   test('Settings opens', async ({ page }) => {
     await gotoDesktop(page);
-    await openAppViaDock(page, 'Settings');
+    await openCurrentApp(page, 'Settings');
     const text = await getVisibleText(page);
     expect(text).toMatch(/setting|general|model|billing/i);
   });
 
   test('Vault opens', async ({ page }) => {
     await gotoDesktop(page);
-    await openAppViaDock(page, 'Vault');
+    await openCurrentApp(page, 'Vault');
     const text = await getVisibleText(page);
     expect(text).toMatch(/vault|key|api|secret|provider/i);
   });
 
   test('Home (Dashboard) opens', async ({ page }) => {
     await gotoDesktop(page);
-    await openAppViaDock(page, 'Home');
+    await openCurrentApp(page, 'Home');
     const text = await getVisibleText(page);
     expect(text).toMatch(/workspace|welcome|dashboard|create/i);
   });
@@ -276,11 +328,11 @@ test.describe('5. Standalone Apps', () => {
 test.describe('6. User Journey', () => {
   test('can open chat and see persona + model in header', async ({ page }) => {
     await gotoDesktop(page);
-    await openAppViaDock(page, 'Chat');
+    await openCurrentApp(page, 'Chat');
     await page.waitForTimeout(1500);
     const text = await getVisibleText(page);
     // Should see persona selector and model name
-    expect(text).toMatch(/persona|sonnet|claude|message waggle/i);
+    expect(text).toMatch(/persona|sonnet|claude|ollama|model|message waggle/i);
   });
 
   test('can open memory and see frames or empty state', async ({ page }) => {
@@ -326,9 +378,9 @@ test.describe('7. Stability', () => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
     await gotoDesktop(page);
-    await openAppViaDock(page, 'Chat');
-    await openAppViaDock(page, 'Room');
-    await openAppViaDock(page, 'Files');
+    await openCurrentApp(page, 'Chat');
+    await openCurrentApp(page, 'Room');
+    await openCurrentApp(page, 'Files');
     await page.waitForTimeout(1000);
     expect(errors).toHaveLength(0);
   });

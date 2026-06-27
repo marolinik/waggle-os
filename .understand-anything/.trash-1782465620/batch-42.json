@@ -1,0 +1,765 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/connectors/obsidian-connector.ts",
+      "type": "file",
+      "name": "obsidian-connector.ts",
+      "filePath": "packages/agent/src/connectors/obsidian-connector.ts",
+      "summary": "Implements the ObsidianConnector class that provides local-filesystem-based access to Obsidian vaults, supporting note search, read, create, update, and folder listing with path-traversal protection.",
+      "tags": ["connector", "service", "knowledge-management", "filesystem"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/obsidian-connector.ts:ObsidianConnector",
+      "type": "class",
+      "name": "ObsidianConnector",
+      "filePath": "packages/agent/src/connectors/obsidian-connector.ts",
+      "lineRange": [15, 345],
+      "summary": "Connector class for Obsidian vaults that resolves vault paths safely and provides CRUD operations on markdown notes via the local filesystem.",
+      "tags": ["connector", "knowledge-management", "filesystem", "service"],
+      "complexity": "complex",
+      "languageNotes": "Uses synchronous fs methods (readFileSync, readdirSync) appropriate for a desktop sidecar context; includes resolveSafe() for path-traversal defense."
+    },
+    {
+      "id": "file:packages/agent/src/connectors/onedrive-connector.ts",
+      "type": "file",
+      "name": "onedrive-connector.ts",
+      "filePath": "packages/agent/src/connectors/onedrive-connector.ts",
+      "summary": "Implements the OneDriveConnector class providing OAuth-authenticated access to Microsoft OneDrive for listing, searching, downloading, and uploading files via the Microsoft Graph API.",
+      "tags": ["connector", "service", "microsoft", "cloud-storage"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/onedrive-connector.ts:OneDriveConnector",
+      "type": "class",
+      "name": "OneDriveConnector",
+      "filePath": "packages/agent/src/connectors/onedrive-connector.ts",
+      "lineRange": [12, 211],
+      "summary": "Connector class for Microsoft OneDrive that authenticates via OAuth token from Vault and wraps the Graph API to list, search, download, and upload files.",
+      "tags": ["connector", "microsoft", "cloud-storage", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/connectors/onenote-connector.ts",
+      "type": "file",
+      "name": "onenote-connector.ts",
+      "filePath": "packages/agent/src/connectors/onenote-connector.ts",
+      "summary": "Implements the OneNoteConnector class providing OAuth-authenticated access to Microsoft OneNote via the Graph API, supporting section listing, page listing, page retrieval, and full-text page search.",
+      "tags": ["connector", "service", "microsoft", "note-taking"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/onenote-connector.ts:OneNoteConnector",
+      "type": "class",
+      "name": "OneNoteConnector",
+      "filePath": "packages/agent/src/connectors/onenote-connector.ts",
+      "lineRange": [20, 292],
+      "summary": "Connector class for Microsoft OneNote that authenticates via OAuth token from Vault and uses the Graph API to list sections/pages, retrieve page HTML content, and search across pages.",
+      "tags": ["connector", "microsoft", "note-taking", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/connectors/outlook-connector.ts",
+      "type": "file",
+      "name": "outlook-connector.ts",
+      "filePath": "packages/agent/src/connectors/outlook-connector.ts",
+      "summary": "Implements the OutlookConnector class providing OAuth-authenticated access to Microsoft Outlook via the Graph API, supporting calendar event creation, email sending, and email search.",
+      "tags": ["connector", "service", "microsoft", "email"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/outlook-connector.ts:OutlookConnector",
+      "type": "class",
+      "name": "OutlookConnector",
+      "filePath": "packages/agent/src/connectors/outlook-connector.ts",
+      "lineRange": [12, 263],
+      "summary": "Connector class for Microsoft Outlook that authenticates via OAuth token from Vault and wraps the Graph API to create calendar events, send emails, and search mailbox contents.",
+      "tags": ["connector", "microsoft", "email", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/connectors/pipedrive-connector.ts",
+      "type": "file",
+      "name": "pipedrive-connector.ts",
+      "filePath": "packages/agent/src/connectors/pipedrive-connector.ts",
+      "summary": "Implements the PipedriveConnector class providing API-key-authenticated access to the Pipedrive CRM, supporting deal, contact, and activity listing, creation, and search via the Pipedrive REST API.",
+      "tags": ["connector", "service", "crm", "sales"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/pipedrive-connector.ts:PipedriveConnector",
+      "type": "class",
+      "name": "PipedriveConnector",
+      "filePath": "packages/agent/src/connectors/pipedrive-connector.ts",
+      "lineRange": [12, 201],
+      "summary": "Connector class for Pipedrive CRM that authenticates via API token from Vault and wraps REST API calls for deals, contacts, and activities with GET and POST helpers.",
+      "tags": ["connector", "crm", "sales", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/connectors/postgres-connector.ts",
+      "type": "file",
+      "name": "postgres-connector.ts",
+      "filePath": "packages/agent/src/connectors/postgres-connector.ts",
+      "summary": "Implements the PostgresConnector class providing secure access to PostgreSQL databases, supporting read-only queries, write executes, table listing, and schema description with SQL statement allowlist enforcement.",
+      "tags": ["connector", "service", "database", "sql"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/postgres-connector.ts:PostgresConnector",
+      "type": "class",
+      "name": "PostgresConnector",
+      "filePath": "packages/agent/src/connectors/postgres-connector.ts",
+      "lineRange": [28, 287],
+      "summary": "Connector class for PostgreSQL that lazily loads the pg module, connects via connection string from Vault, and enforces SQL statement-type allowlists to prevent unauthorized DDL/DML operations.",
+      "tags": ["connector", "database", "sql", "service"],
+      "complexity": "complex",
+      "languageNotes": "Uses dynamic import() of 'pg' at connect-time so it can be optional in non-DB environments; enforces a hardcoded allowlist of normalized SQL prefixes (SELECT/WITH/SHOW/SET vs INSERT/UPDATE/DELETE) to limit the blast radius of runQuery vs runExecute."
+    },
+    {
+      "id": "file:packages/agent/src/connectors/salesforce-connector.ts",
+      "type": "file",
+      "name": "salesforce-connector.ts",
+      "filePath": "packages/agent/src/connectors/salesforce-connector.ts",
+      "summary": "Implements the SalesforceConnector class providing OAuth-authenticated access to Salesforce via the REST API, supporting SOQL queries, object listing, and CRM record CRUD operations.",
+      "tags": ["connector", "service", "crm", "salesforce"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/salesforce-connector.ts:SalesforceConnector",
+      "type": "class",
+      "name": "SalesforceConnector",
+      "filePath": "packages/agent/src/connectors/salesforce-connector.ts",
+      "lineRange": [13, 248],
+      "summary": "Connector class for Salesforce CRM that authenticates via OAuth token and instance URL from Vault, then wraps the Salesforce REST API for SOQL queries and CRUD operations on sObjects.",
+      "tags": ["connector", "crm", "salesforce", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/connectors/slack-connector.ts",
+      "type": "file",
+      "name": "slack-connector.ts",
+      "filePath": "packages/agent/src/connectors/slack-connector.ts",
+      "summary": "Implements the SlackConnector class providing token-authenticated access to Slack, supporting channel listing, message history retrieval, and message posting via the Slack Web API.",
+      "tags": ["connector", "service", "communication", "messaging"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/slack-connector.ts:SlackConnector",
+      "type": "class",
+      "name": "SlackConnector",
+      "filePath": "packages/agent/src/connectors/slack-connector.ts",
+      "lineRange": [12, 162],
+      "summary": "Connector class for Slack that authenticates via bot token from Vault and wraps the Slack Web API to list channels, fetch message history, and post messages.",
+      "tags": ["connector", "communication", "messaging", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/connectors/trello-connector.ts",
+      "type": "file",
+      "name": "trello-connector.ts",
+      "filePath": "packages/agent/src/connectors/trello-connector.ts",
+      "summary": "Implements the TrelloConnector class providing API-key/token-authenticated access to Trello, supporting board and card management including listing, creating, updating, and searching cards across boards.",
+      "tags": ["connector", "service", "project-management", "kanban"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/connectors/trello-connector.ts:TrelloConnector",
+      "type": "class",
+      "name": "TrelloConnector",
+      "filePath": "packages/agent/src/connectors/trello-connector.ts",
+      "lineRange": [12, 270],
+      "summary": "Connector class for Trello that authenticates with API key and token from Vault and wraps the Trello REST API to manage boards, lists, and cards with GET/POST/PUT helpers.",
+      "tags": ["connector", "project-management", "kanban", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors-communication.test.ts",
+      "type": "file",
+      "name": "connectors-communication.test.ts",
+      "filePath": "packages/agent/tests/connectors-communication.test.ts",
+      "summary": "Unit test file for communication connectors (Discord) verifying basic connect, healthCheck, and message operations using a mocked Vault and fetch.",
+      "tags": ["test", "connector", "communication", "unit-test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/connectors-composio.test.ts",
+      "type": "file",
+      "name": "connectors-composio.test.ts",
+      "filePath": "packages/agent/tests/connectors/connectors-composio.test.ts",
+      "summary": "Unit test suite for the ComposioConnector verifying authentication, tool listing, and dynamic tool execution using mocked Vault and API responses.",
+      "tags": ["test", "connector", "composio", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "type": "file",
+      "name": "connectors-crm-data.test.ts",
+      "filePath": "packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "summary": "Comprehensive unit test suite covering CRM and data connectors (Airtable, Bitbucket, Dropbox, GitLab, HubSpot, Pipedrive, Postgres, Salesforce) with mocked Vault and fetch to verify CRUD operations and queries.",
+      "tags": ["test", "connector", "crm", "database", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/connectors-google.test.ts",
+      "type": "file",
+      "name": "connectors-google.test.ts",
+      "filePath": "packages/agent/tests/connectors/connectors-google.test.ts",
+      "summary": "Unit test suite for Google connectors (Docs, Drive, Gmail, Sheets) verifying OAuth token handling, API interactions, and data retrieval operations using mocked Vault and fetch.",
+      "tags": ["test", "connector", "google", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/connectors-knowledge.test.ts",
+      "type": "file",
+      "name": "connectors-knowledge.test.ts",
+      "filePath": "packages/agent/tests/connectors/connectors-knowledge.test.ts",
+      "summary": "Unit test suite for knowledge-base connectors (Confluence, Notion, Obsidian) verifying authentication, note/page operations, and search functionality using mocked Vault and fs/fetch.",
+      "tags": ["test", "connector", "knowledge-management", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "type": "file",
+      "name": "connectors-microsoft.test.ts",
+      "filePath": "packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "summary": "Comprehensive unit test suite for Microsoft connectors (MS Teams, OneDrive, OneNote, Outlook) verifying OAuth token handling, Graph API interactions, and messaging/file/calendar operations.",
+      "tags": ["test", "connector", "microsoft", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/connectors-pm.test.ts",
+      "type": "file",
+      "name": "connectors-pm.test.ts",
+      "filePath": "packages/agent/tests/connectors/connectors-pm.test.ts",
+      "summary": "Unit test suite for project management connectors (Asana, Linear, Monday, Trello) verifying task and board management operations with mocked Vault and API responses.",
+      "tags": ["test", "connector", "project-management", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/discord-connector.test.ts",
+      "type": "file",
+      "name": "discord-connector.test.ts",
+      "filePath": "packages/agent/tests/connectors/discord-connector.test.ts",
+      "summary": "Unit tests for the DiscordConnector verifying bot token authentication, health check, channel listing, message history retrieval, and message sending with mocked fetch.",
+      "tags": ["test", "connector", "communication", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/email-connector.test.ts",
+      "type": "file",
+      "name": "email-connector.test.ts",
+      "filePath": "packages/agent/tests/connectors/email-connector.test.ts",
+      "summary": "Unit tests for the EmailConnector verifying IMAP/SMTP credential handling, connection behavior, and email send/read operations using mocked Vault.",
+      "tags": ["test", "connector", "email", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/gcal-connector.test.ts",
+      "type": "file",
+      "name": "gcal-connector.test.ts",
+      "filePath": "packages/agent/tests/connectors/gcal-connector.test.ts",
+      "summary": "Unit tests for the GoogleCalendarConnector verifying OAuth token handling, health checks, event listing, event creation, and upcoming-events queries with mocked fetch.",
+      "tags": ["test", "connector", "google", "calendar", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/github-connector.test.ts",
+      "type": "file",
+      "name": "github-connector.test.ts",
+      "filePath": "packages/agent/tests/connectors/github-connector.test.ts",
+      "summary": "Unit tests for the GitHubConnector verifying personal-access-token authentication, repository listing, issue operations, and PR listing with mocked fetch.",
+      "tags": ["test", "connector", "github", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/jira-connector.test.ts",
+      "type": "file",
+      "name": "jira-connector.test.ts",
+      "filePath": "packages/agent/tests/connectors/jira-connector.test.ts",
+      "summary": "Unit tests for the JiraConnector verifying basic-auth credential handling, issue search via JQL, issue creation, and status transitions with mocked fetch.",
+      "tags": ["test", "connector", "jira", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connectors/slack-connector.test.ts",
+      "type": "file",
+      "name": "slack-connector.test.ts",
+      "filePath": "packages/agent/tests/connectors/slack-connector.test.ts",
+      "summary": "Unit tests for the SlackConnector verifying bot-token authentication, channel listing, message history retrieval, and message posting with mocked fetch.",
+      "tags": ["test", "connector", "messaging", "unit-test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/connectors/obsidian-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onedrive-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onenote-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/outlook-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/pipedrive-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/postgres-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/salesforce-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/slack-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/trello-connector.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors-communication.test.ts",
+      "target": "file:packages/agent/src/connectors/discord-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-composio.test.ts",
+      "target": "file:packages/agent/src/connectors/composio-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/airtable-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/bitbucket-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/dropbox-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/gitlab-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/hubspot-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/pipedrive-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/postgres-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "target": "file:packages/agent/src/connectors/salesforce-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-google.test.ts",
+      "target": "file:packages/agent/src/connectors/gdocs-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-google.test.ts",
+      "target": "file:packages/agent/src/connectors/gdrive-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-google.test.ts",
+      "target": "file:packages/agent/src/connectors/gmail-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-google.test.ts",
+      "target": "file:packages/agent/src/connectors/gsheets-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-knowledge.test.ts",
+      "target": "file:packages/agent/src/connectors/confluence-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-knowledge.test.ts",
+      "target": "file:packages/agent/src/connectors/notion-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-knowledge.test.ts",
+      "target": "file:packages/agent/src/connectors/obsidian-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "target": "file:packages/agent/src/connectors/ms-teams-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "target": "file:packages/agent/src/connectors/onedrive-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "target": "file:packages/agent/src/connectors/onenote-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "target": "file:packages/agent/src/connectors/outlook-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-pm.test.ts",
+      "target": "file:packages/agent/src/connectors/asana-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-pm.test.ts",
+      "target": "file:packages/agent/src/connectors/linear-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-pm.test.ts",
+      "target": "file:packages/agent/src/connectors/monday-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/connectors-pm.test.ts",
+      "target": "file:packages/agent/src/connectors/trello-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/discord-connector.test.ts",
+      "target": "file:packages/agent/src/connectors/discord-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/email-connector.test.ts",
+      "target": "file:packages/agent/src/connectors/email-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/gcal-connector.test.ts",
+      "target": "file:packages/agent/src/connectors/gcal-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/github-connector.test.ts",
+      "target": "file:packages/agent/src/connectors/github-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/jira-connector.test.ts",
+      "target": "file:packages/agent/src/connectors/jira-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connectors/slack-connector.test.ts",
+      "target": "file:packages/agent/src/connectors/slack-connector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connectors/obsidian-connector.ts",
+      "target": "class:packages/agent/src/connectors/obsidian-connector.ts:ObsidianConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/obsidian-connector.ts",
+      "target": "class:packages/agent/src/connectors/obsidian-connector.ts:ObsidianConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onedrive-connector.ts",
+      "target": "class:packages/agent/src/connectors/onedrive-connector.ts:OneDriveConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onedrive-connector.ts",
+      "target": "class:packages/agent/src/connectors/onedrive-connector.ts:OneDriveConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onenote-connector.ts",
+      "target": "class:packages/agent/src/connectors/onenote-connector.ts:OneNoteConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onenote-connector.ts",
+      "target": "class:packages/agent/src/connectors/onenote-connector.ts:OneNoteConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/outlook-connector.ts",
+      "target": "class:packages/agent/src/connectors/outlook-connector.ts:OutlookConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/outlook-connector.ts",
+      "target": "class:packages/agent/src/connectors/outlook-connector.ts:OutlookConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/pipedrive-connector.ts",
+      "target": "class:packages/agent/src/connectors/pipedrive-connector.ts:PipedriveConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/pipedrive-connector.ts",
+      "target": "class:packages/agent/src/connectors/pipedrive-connector.ts:PipedriveConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/postgres-connector.ts",
+      "target": "class:packages/agent/src/connectors/postgres-connector.ts:PostgresConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/postgres-connector.ts",
+      "target": "class:packages/agent/src/connectors/postgres-connector.ts:PostgresConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/salesforce-connector.ts",
+      "target": "class:packages/agent/src/connectors/salesforce-connector.ts:SalesforceConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/salesforce-connector.ts",
+      "target": "class:packages/agent/src/connectors/salesforce-connector.ts:SalesforceConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/slack-connector.ts",
+      "target": "class:packages/agent/src/connectors/slack-connector.ts:SlackConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/slack-connector.ts",
+      "target": "class:packages/agent/src/connectors/slack-connector.ts:SlackConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/trello-connector.ts",
+      "target": "class:packages/agent/src/connectors/trello-connector.ts:TrelloConnector",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connectors/trello-connector.ts",
+      "target": "class:packages/agent/src/connectors/trello-connector.ts:TrelloConnector",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connectors/obsidian-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-knowledge.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onedrive-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/onenote-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/outlook-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-microsoft.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/pipedrive-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/postgres-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/salesforce-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-crm-data.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/slack-connector.ts",
+      "target": "file:packages/agent/tests/connectors/slack-connector.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connectors/trello-connector.ts",
+      "target": "file:packages/agent/tests/connectors/connectors-pm.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

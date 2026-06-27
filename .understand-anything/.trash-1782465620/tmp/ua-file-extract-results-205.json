@@ -1,0 +1,2604 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 24,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "tests/e2e/full-product-audit.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 335,
+      "nonEmptyLines": 293,
+      "functions": [
+        {
+          "name": "dismissOverlay",
+          "startLine": 15,
+          "endLine": 28,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "gotoDesktop",
+          "startLine": 30,
+          "endLine": 35,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "openAppViaDock",
+          "startLine": 37,
+          "endLine": 66,
+          "params": [
+            "page",
+            "label"
+          ]
+        },
+        {
+          "name": "getVisibleText",
+          "startLine": 68,
+          "endLine": 70,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 17
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 18
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible",
+          "lineNumber": 18
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 19
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 20
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.isVisible",
+          "lineNumber": 20
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.click",
+          "lineNumber": 21
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 22
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.mouse.click",
+          "lineNumber": 25
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 26
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.goto",
+          "lineNumber": 31
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForLoadState",
+          "lineNumber": 32
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 33
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "dismissOverlay",
+          "lineNumber": 34
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.locator",
+          "lineNumber": 39
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "directBtn.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 40
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "directBtn.isVisible",
+          "lineNumber": 40
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "directBtn.click",
+          "lineNumber": 41
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 42
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.locator",
+          "lineNumber": 47
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "zoneBtn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 48
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "zoneBtn.isVisible",
+          "lineNumber": 48
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "zoneBtn.click",
+          "lineNumber": 49
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 50
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.locator",
+          "lineNumber": 52
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "tray.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 53
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "tray.isVisible",
+          "lineNumber": 53
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "tray.locator",
+          "lineNumber": 54
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "childBtn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 55
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "childBtn.isVisible",
+          "lineNumber": 55
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "childBtn.click",
+          "lineNumber": 56
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 57
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.mouse.click",
+          "lineNumber": 62
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 63
+        },
+        {
+          "caller": "getVisibleText",
+          "callee": "page.locator('body').innerText",
+          "lineNumber": 69
+        },
+        {
+          "caller": "getVisibleText",
+          "callee": "page.locator",
+          "lineNumber": 69
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/full-wiring-audit.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 633,
+      "nonEmptyLines": 551,
+      "functions": [
+        {
+          "name": "skipOnboarding",
+          "startLine": 17,
+          "endLine": 23,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "waitForApp",
+          "startLine": 25,
+          "endLine": 31,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "navigateSidebar",
+          "startLine": 33,
+          "endLine": 73,
+          "params": [
+            "page",
+            "label"
+          ]
+        },
+        {
+          "name": "collectErrors",
+          "startLine": 75,
+          "endLine": 82,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate",
+          "lineNumber": 18
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 19
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 19
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 20
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 21
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\r\n    '.waggle-app-shell, .waggle-sidebar, [role=\"navigation\"], [class*=\"onboarding\"]',\r\n    { timeout: 15_000 },\r\n  ).catch",
+          "lineNumber": 26
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 26
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 30
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "page.locator",
+          "lineNumber": 34
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "nav.locator(selector).first",
+          "lineNumber": 43
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "nav.locator",
+          "lineNumber": 43
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "btn.isVisible().catch",
+          "lineNumber": 44
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "btn.isVisible",
+          "lineNumber": 44
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "btn.click",
+          "lineNumber": 45
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 46
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "nav.locator('button', { hasText: label }).first",
+          "lineNumber": 51
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "nav.locator",
+          "lineNumber": 51
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "textButton.isVisible().catch",
+          "lineNumber": 52
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "textButton.isVisible",
+          "lineNumber": 52
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "textButton.click",
+          "lineNumber": 53
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 54
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "page.goto",
+          "lineNumber": 67
+        },
+        {
+          "caller": "navigateSidebar",
+          "callee": "waitForApp",
+          "lineNumber": 68
+        },
+        {
+          "caller": "collectErrors",
+          "callee": "page.on",
+          "lineNumber": 77
+        },
+        {
+          "caller": "collectErrors",
+          "callee": "msg.type",
+          "lineNumber": 78
+        },
+        {
+          "caller": "collectErrors",
+          "callee": "errors.push",
+          "lineNumber": 78
+        },
+        {
+          "caller": "collectErrors",
+          "callee": "msg.text",
+          "lineNumber": 78
+        },
+        {
+          "caller": "collectErrors",
+          "callee": "page.on",
+          "lineNumber": 80
+        },
+        {
+          "caller": "collectErrors",
+          "callee": "errors.push",
+          "lineNumber": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/light-mode-polish.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 140,
+      "nonEmptyLines": 127,
+      "functions": [
+        {
+          "name": "seedLightModeFreshBoot",
+          "startLine": 26,
+          "endLine": 37,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "relativeLuminance",
+          "startLine": 44,
+          "endLine": 50,
+          "params": [
+            "rgb"
+          ]
+        },
+        {
+          "name": "contrast",
+          "startLine": 52,
+          "endLine": 57,
+          "params": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedLightModeFreshBoot",
+          "callee": "page.addInitScript",
+          "lineNumber": 29
+        },
+        {
+          "caller": "seedLightModeFreshBoot",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 31
+        },
+        {
+          "caller": "seedLightModeFreshBoot",
+          "callee": "window.localStorage.removeItem",
+          "lineNumber": 32
+        },
+        {
+          "caller": "relativeLuminance",
+          "callee": "rgb.match",
+          "lineNumber": 45
+        },
+        {
+          "caller": "relativeLuminance",
+          "callee": "[match[1], match[2], match[3]].map",
+          "lineNumber": 47
+        },
+        {
+          "caller": "relativeLuminance",
+          "callee": "parseInt",
+          "lineNumber": 47
+        },
+        {
+          "caller": "lin",
+          "callee": "Math.pow",
+          "lineNumber": 48
+        },
+        {
+          "caller": "relativeLuminance",
+          "callee": "lin",
+          "lineNumber": 49
+        },
+        {
+          "caller": "relativeLuminance",
+          "callee": "lin",
+          "lineNumber": 49
+        },
+        {
+          "caller": "relativeLuminance",
+          "callee": "lin",
+          "lineNumber": 49
+        },
+        {
+          "caller": "contrast",
+          "callee": "relativeLuminance",
+          "lineNumber": 53
+        },
+        {
+          "caller": "contrast",
+          "callee": "relativeLuminance",
+          "lineNumber": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/live-chat-flow.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 89,
+      "functions": [
+        {
+          "name": "dismissOverlay",
+          "startLine": 13,
+          "endLine": 26,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "gotoDesktop",
+          "startLine": 28,
+          "endLine": 33,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 15
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 16
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible",
+          "lineNumber": 16
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 17
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "btn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 18
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "btn.isVisible",
+          "lineNumber": 18
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "btn.click",
+          "lineNumber": 19
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 20
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.mouse.click",
+          "lineNumber": 23
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 24
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.goto",
+          "lineNumber": 29
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForLoadState",
+          "lineNumber": 30
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 31
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "dismissOverlay",
+          "lineNumber": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/phase-ab-verification.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 261,
+      "nonEmptyLines": 225,
+      "functions": [
+        {
+          "name": "gotoDesktop",
+          "startLine": 24,
+          "endLine": 30,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "dismissOverlay",
+          "startLine": 32,
+          "endLine": 45,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "openAppViaDock",
+          "startLine": 49,
+          "endLine": 54,
+          "params": [
+            "page",
+            "label"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.goto",
+          "lineNumber": 25
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForLoadState",
+          "lineNumber": 26
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 27
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "dismissOverlay",
+          "lineNumber": 29
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 34
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 35
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible",
+          "lineNumber": 35
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 36
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 37
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.isVisible",
+          "lineNumber": 37
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.click",
+          "lineNumber": 38
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 39
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.mouse.click",
+          "lineNumber": 42
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 43
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.locator",
+          "lineNumber": 50
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "btn.waitFor",
+          "lineNumber": 51
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "btn.click",
+          "lineNumber": 52
+        },
+        {
+          "caller": "openAppViaDock",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 53
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/phase8-visual.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 381,
+      "nonEmptyLines": 328,
+      "functions": [
+        {
+          "name": "waitForApp",
+          "startLine": 37,
+          "endLine": 43,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "isOnboarding",
+          "startLine": 46,
+          "endLine": 52,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "skipOnboarding",
+          "startLine": 58,
+          "endLine": 78,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "navigateTo",
+          "startLine": 84,
+          "endLine": 113,
+          "params": [
+            "page",
+            "viewName"
+          ]
+        },
+        {
+          "name": "setTheme",
+          "startLine": 119,
+          "endLine": 144,
+          "params": [
+            "page",
+            "target"
+          ]
+        },
+        {
+          "name": "stableScreenshot",
+          "startLine": 150,
+          "endLine": 173,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\r\n    '.waggle-app-shell, .waggle-sidebar, [role=\"navigation\"], [class*=\"onboarding\"]',\r\n    { timeout: 15_000 },\r\n  ).catch",
+          "lineNumber": 38
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 38
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 42
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 48
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "overlay.isVisible().catch",
+          "lineNumber": 49
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "overlay.isVisible",
+          "lineNumber": 49
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator('text=Welcome to Waggle').or",
+          "lineNumber": 50
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 50
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 50
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "text.isVisible().catch",
+          "lineNumber": 51
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "text.isVisible",
+          "lineNumber": 51
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.request.patch('http://127.0.0.1:3333/api/settings', {\r\n    data: { onboardingCompleted: true },\r\n    headers: { 'Content-Type': 'application/json' },\r\n  }).catch",
+          "lineNumber": 60
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.request.patch",
+          "lineNumber": 60
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.addInitScript",
+          "lineNumber": 66
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 67
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 67
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 68
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate(() => {\r\n    try {\r\n      localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));\r\n      localStorage.setItem('waggle:first-run', 'done');\r\n    } catch { /* ignore */ }\r\n  }).catch",
+          "lineNumber": 72
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate",
+          "lineNumber": 72
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 74
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 74
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 75
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 86
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "overlay.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 87
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "overlay.isVisible",
+          "lineNumber": 87
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator('button').filter({ hasText: /skip|dismiss|close|later/i }).first",
+          "lineNumber": 89
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator('button').filter",
+          "lineNumber": 89
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 89
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "skipBtn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 90
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "skipBtn.isVisible",
+          "lineNumber": 90
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "skipBtn.click().catch",
+          "lineNumber": 91
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "skipBtn.click",
+          "lineNumber": 91
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 92
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.keyboard.press",
+          "lineNumber": 95
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 96
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 100
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 103
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "expandBtn.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 104
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "expandBtn.isVisible",
+          "lineNumber": 104
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "expandBtn.click",
+          "lineNumber": 105
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 106
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "sidebar.locator('button', { hasText: viewName }).first",
+          "lineNumber": 109
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "sidebar.locator",
+          "lineNumber": 109
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.waitFor",
+          "lineNumber": 110
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.click",
+          "lineNumber": 111
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 112
+        },
+        {
+          "caller": "setTheme",
+          "callee": "page.locator",
+          "lineNumber": 121
+        },
+        {
+          "caller": "setTheme",
+          "callee": "expandBtn.isVisible().catch",
+          "lineNumber": 122
+        },
+        {
+          "caller": "setTheme",
+          "callee": "expandBtn.isVisible",
+          "lineNumber": 122
+        },
+        {
+          "caller": "setTheme",
+          "callee": "expandBtn.click",
+          "lineNumber": 123
+        },
+        {
+          "caller": "setTheme",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 124
+        },
+        {
+          "caller": "setTheme",
+          "callee": "page.locator",
+          "lineNumber": 127
+        },
+        {
+          "caller": "getCurrentTheme",
+          "callee": "page.locator('html').getAttribute",
+          "lineNumber": 131
+        },
+        {
+          "caller": "getCurrentTheme",
+          "callee": "page.locator",
+          "lineNumber": 131
+        },
+        {
+          "caller": "getCurrentTheme",
+          "callee": "page.locator('html').getAttribute",
+          "lineNumber": 132
+        },
+        {
+          "caller": "getCurrentTheme",
+          "callee": "page.locator",
+          "lineNumber": 132
+        },
+        {
+          "caller": "getCurrentTheme",
+          "callee": "cls.includes",
+          "lineNumber": 133
+        },
+        {
+          "caller": "setTheme",
+          "callee": "getCurrentTheme",
+          "lineNumber": 136
+        },
+        {
+          "caller": "setTheme",
+          "callee": "sidebar.locator",
+          "lineNumber": 138
+        },
+        {
+          "caller": "setTheme",
+          "callee": "toggle.isVisible().catch",
+          "lineNumber": 139
+        },
+        {
+          "caller": "setTheme",
+          "callee": "toggle.isVisible",
+          "lineNumber": 139
+        },
+        {
+          "caller": "setTheme",
+          "callee": "toggle.click",
+          "lineNumber": 140
+        },
+        {
+          "caller": "setTheme",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 141
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "page.evaluate",
+          "lineNumber": 152
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "document.querySelectorAll(sel).forEach",
+          "lineNumber": 162
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "document.querySelectorAll",
+          "lineNumber": 162
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "page.waitForLoadState('networkidle').catch",
+          "lineNumber": 169
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "page.waitForLoadState",
+          "lineNumber": 169
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 170
+        },
+        {
+          "caller": "stableScreenshot",
+          "callee": "page.screenshot",
+          "lineNumber": 172
+        },
+        {
+          "caller": "getThemeSignal",
+          "callee": "page.locator('html').getAttribute",
+          "lineNumber": 364
+        },
+        {
+          "caller": "getThemeSignal",
+          "callee": "page.locator",
+          "lineNumber": 364
+        },
+        {
+          "caller": "getThemeSignal",
+          "callee": "page.locator('html').getAttribute",
+          "lineNumber": 365
+        },
+        {
+          "caller": "getThemeSignal",
+          "callee": "page.locator",
+          "lineNumber": 365
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/polish-verification.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 256,
+      "nonEmptyLines": 222,
+      "functions": [
+        {
+          "name": "skipOnboarding",
+          "startLine": 17,
+          "endLine": 26,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "setTier",
+          "startLine": 28,
+          "endLine": 35,
+          "params": [
+            "tier"
+          ]
+        },
+        {
+          "name": "waitForApp",
+          "startLine": 37,
+          "endLine": 42,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.request.patch(`${API}/api/settings`, {\n    data: { onboardingCompleted: true },\n    headers: { 'Content-Type': 'application/json' },\n  }).catch",
+          "lineNumber": 18
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.request.patch",
+          "lineNumber": 18
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.addInitScript",
+          "lineNumber": 22
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 23
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 23
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 24
+        },
+        {
+          "caller": "setTier",
+          "callee": "fetch",
+          "lineNumber": 29
+        },
+        {
+          "caller": "setTier",
+          "callee": "JSON.stringify",
+          "lineNumber": 32
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\n    '.waggle-app-shell, .waggle-sidebar, [role=\"navigation\"], [class*=\"onboarding\"]',\n    { timeout: 15_000 },\n  ).catch",
+          "lineNumber": 38
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 38
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/power-user-stress.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 486,
+      "nonEmptyLines": 404,
+      "functions": [
+        {
+          "name": "dismissOverlay",
+          "startLine": 12,
+          "endLine": 25,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "gotoDesktop",
+          "startLine": 27,
+          "endLine": 32,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "dispatch",
+          "startLine": 34,
+          "endLine": 41,
+          "params": [
+            "page",
+            "key",
+            "opts"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 14
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible({ timeout: 1000 }).catch",
+          "lineNumber": 15
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible",
+          "lineNumber": 15
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 16
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "btn.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 17
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "btn.isVisible",
+          "lineNumber": 17
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "btn.click",
+          "lineNumber": 18
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 19
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.mouse.click",
+          "lineNumber": 22
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 23
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.goto",
+          "lineNumber": 28
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForLoadState",
+          "lineNumber": 29
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 30
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "dismissOverlay",
+          "lineNumber": 31
+        },
+        {
+          "caller": "dispatch",
+          "callee": "page.evaluate",
+          "lineNumber": 35
+        },
+        {
+          "caller": "dispatch",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 36
+        },
+        {
+          "caller": "dispatch",
+          "callee": "key.toUpperCase",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/room-parallel-agents.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 193,
+      "nonEmptyLines": 169,
+      "functions": [
+        {
+          "name": "installSseMock",
+          "startLine": 50,
+          "endLine": 120,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "dismissOverlay",
+          "startLine": 122,
+          "endLine": 134,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "openRoom",
+          "startLine": 136,
+          "endLine": 143,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "installSseMock",
+          "callee": "page.route",
+          "lineNumber": 53
+        },
+        {
+          "caller": "installSseMock",
+          "callee": "route.fulfill",
+          "lineNumber": 54
+        },
+        {
+          "caller": "installSseMock",
+          "callee": "JSON.stringify",
+          "lineNumber": 57
+        },
+        {
+          "caller": "installSseMock",
+          "callee": "page.addInitScript",
+          "lineNumber": 64
+        },
+        {
+          "caller": "constructor",
+          "callee": "win.__p6MockSources.push",
+          "lineNumber": 84
+        },
+        {
+          "caller": "constructor",
+          "callee": "setTimeout",
+          "lineNumber": 87
+        },
+        {
+          "caller": "constructor",
+          "callee": "JSON.stringify",
+          "lineNumber": 90
+        },
+        {
+          "caller": "constructor",
+          "callee": "l",
+          "lineNumber": 92
+        },
+        {
+          "caller": "addEventListener",
+          "callee": "(this.listeners[type] ??= []).push",
+          "lineNumber": 97
+        },
+        {
+          "caller": "removeEventListener",
+          "callee": "(this.listeners[type] ?? []).filter",
+          "lineNumber": 101
+        },
+        {
+          "caller": "__reemit",
+          "callee": "JSON.stringify",
+          "lineNumber": 109
+        },
+        {
+          "caller": "__reemit",
+          "callee": "l",
+          "lineNumber": 110
+        },
+        {
+          "caller": "installSseMock",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 117
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator('.fixed.backdrop-blur-sm').first",
+          "lineNumber": 124
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 124
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible({ timeout: 500 }).catch",
+          "lineNumber": 125
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "overlay.isVisible",
+          "lineNumber": 125
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator('button:has-text(\"Start Working\")').first",
+          "lineNumber": 126
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.locator",
+          "lineNumber": 126
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.isVisible({ timeout: 400 }).catch",
+          "lineNumber": 127
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.isVisible",
+          "lineNumber": 127
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "startBtn.click",
+          "lineNumber": 128
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.mouse.click",
+          "lineNumber": 130
+        },
+        {
+          "caller": "dismissOverlay",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 132
+        },
+        {
+          "caller": "openRoom",
+          "callee": "page.locator",
+          "lineNumber": 139
+        },
+        {
+          "caller": "openRoom",
+          "callee": "roomBtn.waitFor",
+          "lineNumber": 140
+        },
+        {
+          "caller": "openRoom",
+          "callee": "roomBtn.click",
+          "lineNumber": 141
+        },
+        {
+          "caller": "openRoom",
+          "callee": "expect(page.locator('[data-testid=\"room-root\"]')).toBeVisible",
+          "lineNumber": 142
+        },
+        {
+          "caller": "openRoom",
+          "callee": "expect",
+          "lineNumber": 142
+        },
+        {
+          "caller": "openRoom",
+          "callee": "page.locator",
+          "lineNumber": 142
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/spawn-agent-flow.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 133,
+      "nonEmptyLines": 122,
+      "functions": [
+        {
+          "name": "gotoDesktop",
+          "startLine": 24,
+          "endLine": 29,
+          "params": [
+            "page",
+            "url"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.addInitScript",
+          "lineNumber": 25
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "localStorage.setItem",
+          "lineNumber": 26
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.goto",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/team-server.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 130,
+      "nonEmptyLines": 108,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/user-behavior.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1075,
+      "nonEmptyLines": 936,
+      "functions": [
+        {
+          "name": "waitForApp",
+          "startLine": 35,
+          "endLine": 41,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "skipOnboarding",
+          "startLine": 43,
+          "endLine": 48,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "setPersona",
+          "startLine": 50,
+          "endLine": 55,
+          "params": [
+            "page",
+            "personaId"
+          ]
+        },
+        {
+          "name": "simulateMemorySave",
+          "startLine": 57,
+          "endLine": 61,
+          "params": [
+            "request",
+            "content",
+            "workspace"
+          ]
+        },
+        {
+          "name": "searchMemory",
+          "startLine": 63,
+          "endLine": 65,
+          "params": [
+            "request",
+            "query",
+            "workspace",
+            "limit"
+          ]
+        },
+        {
+          "name": "countMemories",
+          "startLine": 67,
+          "endLine": 72,
+          "params": [
+            "request",
+            "workspace"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\r\n    '.waggle-app-shell, [role=\"navigation\"], [class*=\"onboarding\"]',\r\n    { timeout: 15_000 },\r\n  ).catch",
+          "lineNumber": 36
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 36
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 40
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate",
+          "lineNumber": 44
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 45
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 45
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 46
+        },
+        {
+          "caller": "setPersona",
+          "callee": "page.evaluate",
+          "lineNumber": 51
+        },
+        {
+          "caller": "setPersona",
+          "callee": "localStorage.setItem",
+          "lineNumber": 52
+        },
+        {
+          "caller": "setPersona",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 53
+        },
+        {
+          "caller": "simulateMemorySave",
+          "callee": "request.post",
+          "lineNumber": 58
+        },
+        {
+          "caller": "searchMemory",
+          "callee": "request.get",
+          "lineNumber": 64
+        },
+        {
+          "caller": "searchMemory",
+          "callee": "encodeURIComponent",
+          "lineNumber": 64
+        },
+        {
+          "caller": "searchMemory",
+          "callee": "encodeURIComponent",
+          "lineNumber": 64
+        },
+        {
+          "caller": "countMemories",
+          "callee": "request.get",
+          "lineNumber": 68
+        },
+        {
+          "caller": "countMemories",
+          "callee": "res.ok",
+          "lineNumber": 69
+        },
+        {
+          "caller": "countMemories",
+          "callee": "res.json",
+          "lineNumber": 70
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/user-journeys.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 595,
+      "nonEmptyLines": 496,
+      "functions": [
+        {
+          "name": "pressCtrlShiftDigit",
+          "startLine": 27,
+          "endLine": 39,
+          "params": [
+            "page",
+            "digit"
+          ]
+        },
+        {
+          "name": "skipOnboarding",
+          "startLine": 42,
+          "endLine": 47,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "waitForApp",
+          "startLine": 48,
+          "endLine": 59,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "isOnboarding",
+          "startLine": 62,
+          "endLine": 69,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "handleOnboarding",
+          "startLine": 73,
+          "endLine": 78,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "pressCtrlShiftDigit",
+          "callee": "page.evaluate",
+          "lineNumber": 28
+        },
+        {
+          "caller": "pressCtrlShiftDigit",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 29
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate",
+          "lineNumber": 43
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 44
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 44
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 45
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\r\n    '.waggle-app-shell, .waggle-sidebar, [role=\"navigation\"], [class*=\"onboarding\"]',\r\n    { timeout: 15_000 },\r\n  ).catch",
+          "lineNumber": 51
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 51
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 58
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 64
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "onboardingOverlay.isVisible().catch",
+          "lineNumber": 65
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "onboardingOverlay.isVisible",
+          "lineNumber": 65
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator('text=Welcome').or(page.locator('text=Get Started')).or",
+          "lineNumber": 67
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator('text=Welcome').or",
+          "lineNumber": 67
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 67
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 67
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "page.locator",
+          "lineNumber": 67
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "wizardText.isVisible().catch",
+          "lineNumber": 68
+        },
+        {
+          "caller": "isOnboarding",
+          "callee": "wizardText.isVisible",
+          "lineNumber": 68
+        },
+        {
+          "caller": "handleOnboarding",
+          "callee": "isOnboarding",
+          "lineNumber": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/waggle-complete.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1114,
+      "nonEmptyLines": 998,
+      "functions": [
+        {
+          "name": "waitForApp",
+          "startLine": 36,
+          "endLine": 42,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "skipOnboarding",
+          "startLine": 44,
+          "endLine": 48,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "dismissLoginBriefing",
+          "startLine": 50,
+          "endLine": 56,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "navigateTo",
+          "startLine": 58,
+          "endLine": 73,
+          "params": [
+            "page",
+            "view"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\r\n    '.waggle-app-shell, .waggle-sidebar, [role=\"navigation\"], [class*=\"onboarding\"]',\r\n    { timeout: 15_000 },\r\n  ).catch",
+          "lineNumber": 37
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 37
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 41
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate",
+          "lineNumber": 45
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 46
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 46
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "page.locator",
+          "lineNumber": 51
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "startBtn.isVisible({ timeout: 3_000 }).catch",
+          "lineNumber": 52
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "startBtn.isVisible",
+          "lineNumber": 52
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "startBtn.click",
+          "lineNumber": 53
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 54
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 60
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "dockBtn.isVisible().catch",
+          "lineNumber": 61
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "dockBtn.isVisible",
+          "lineNumber": 61
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "dockBtn.click",
+          "lineNumber": 62
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 63
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 67
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "sidebar.locator",
+          "lineNumber": 68
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.isVisible().catch",
+          "lineNumber": 69
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.isVisible",
+          "lineNumber": 69
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.click",
+          "lineNumber": 70
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 71
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/hive-950-token-guard.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 108,
+      "nonEmptyLines": 96,
+      "functions": [
+        {
+          "name": "asRepoPath",
+          "startLine": 34,
+          "endLine": 36,
+          "params": [
+            "absolute"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "asRepoPath",
+          "callee": "relative(REPO_ROOT, absolute).replace",
+          "lineNumber": 35
+        },
+        {
+          "caller": "asRepoPath",
+          "callee": "relative",
+          "lineNumber": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/login-flow.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 46,
+      "nonEmptyLines": 37,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/oss-subtree-split.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 146,
+      "nonEmptyLines": 131,
+      "callGraph": [
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "readdirSync(PACKAGES_DIR)\r\n      .filter((name) => name.startsWith('hive-mind-'))\r\n      .filter",
+          "lineNumber": 120
+        },
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "readdirSync(PACKAGES_DIR)\r\n      .filter",
+          "lineNumber": 120
+        },
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "readdirSync",
+          "lineNumber": 120
+        },
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "name.startsWith",
+          "lineNumber": 121
+        },
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "statSync(join(PACKAGES_DIR, name)).isDirectory",
+          "lineNumber": 122
+        },
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "statSync",
+          "lineNumber": 122
+        },
+        {
+          "caller": "listHiveMindPackages",
+          "callee": "join",
+          "lineNumber": 122
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/placeholder-audit.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 77,
+      "nonEmptyLines": 71,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/sidecar/skill-loader.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 120,
+      "nonEmptyLines": 103,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/vision/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 75,
+      "nonEmptyLines": 63,
+      "sections": [
+        {
+          "heading": "Vision-Based E2E Harness",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Two phases",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "1. Capture — `capture.spec.ts`",
+          "level": 3,
+          "line": 16
+        },
+        {
+          "heading": "2. Judge — `scripts/vision-judge-workflow.mjs` (run via the Workflow tool)",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Rubric (per surface)",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "Caveats",
+          "level": 2,
+          "line": 72
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "tests/visual/r2-uat-mega.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 219,
+      "nonEmptyLines": 196,
+      "functions": [
+        {
+          "name": "setupPage",
+          "startLine": 7,
+          "endLine": 15,
+          "params": [
+            "page",
+            "theme"
+          ]
+        },
+        {
+          "name": "clickNavView",
+          "startLine": 17,
+          "endLine": 29,
+          "params": [
+            "page",
+            "viewName"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "setupPage",
+          "callee": "page.goto",
+          "lineNumber": 8
+        },
+        {
+          "caller": "setupPage",
+          "callee": "page.evaluate",
+          "lineNumber": 9
+        },
+        {
+          "caller": "setupPage",
+          "callee": "localStorage.setItem",
+          "lineNumber": 10
+        },
+        {
+          "caller": "setupPage",
+          "callee": "JSON.stringify",
+          "lineNumber": 10
+        },
+        {
+          "caller": "setupPage",
+          "callee": "localStorage.setItem",
+          "lineNumber": 11
+        },
+        {
+          "caller": "setupPage",
+          "callee": "page.goto",
+          "lineNumber": 13
+        },
+        {
+          "caller": "setupPage",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 14
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "page.locator('button').all",
+          "lineNumber": 18
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "page.locator",
+          "lineNumber": 18
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "(await btn.textContent().catch(() => '')).trim",
+          "lineNumber": 20
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "btn.textContent().catch",
+          "lineNumber": 20
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "btn.textContent",
+          "lineNumber": 20
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "btn.getAttribute('aria-label').catch",
+          "lineNumber": 21
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "btn.getAttribute",
+          "lineNumber": 21
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "t.toLowerCase",
+          "lineNumber": 22
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "viewName.toLowerCase",
+          "lineNumber": 22
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "a.toLowerCase().includes",
+          "lineNumber": 22
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "a.toLowerCase",
+          "lineNumber": 22
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "viewName.toLowerCase",
+          "lineNumber": 22
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "btn.click",
+          "lineNumber": 23
+        },
+        {
+          "caller": "clickNavView",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/visual/views.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 84,
+      "functions": [
+        {
+          "name": "waitForAppReady",
+          "startLine": 28,
+          "endLine": 37,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "navigateToView",
+          "startLine": 40,
+          "endLine": 49,
+          "params": [
+            "page",
+            "navIndex"
+          ]
+        },
+        {
+          "name": "setTheme",
+          "startLine": 52,
+          "endLine": 60,
+          "params": [
+            "page",
+            "mode"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "waitForAppReady",
+          "callee": "import",
+          "lineNumber": 28
+        },
+        {
+          "caller": "waitForAppReady",
+          "callee": "page.waitForSelector('[data-testid=\"app-shell\"], .app-shell, main', {\r\n    timeout: 10_000,\r\n  }).catch",
+          "lineNumber": 30
+        },
+        {
+          "caller": "waitForAppReady",
+          "callee": "page.waitForSelector",
+          "lineNumber": 30
+        },
+        {
+          "caller": "waitForAppReady",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 36
+        },
+        {
+          "caller": "navigateToView",
+          "callee": "import",
+          "lineNumber": 40
+        },
+        {
+          "caller": "navigateToView",
+          "callee": "page.locator",
+          "lineNumber": 42
+        },
+        {
+          "caller": "navigateToView",
+          "callee": "navButtons.count",
+          "lineNumber": 43
+        },
+        {
+          "caller": "navigateToView",
+          "callee": "navButtons.nth(navIndex).click",
+          "lineNumber": 46
+        },
+        {
+          "caller": "navigateToView",
+          "callee": "navButtons.nth",
+          "lineNumber": 46
+        },
+        {
+          "caller": "navigateToView",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 47
+        },
+        {
+          "caller": "setTheme",
+          "callee": "import",
+          "lineNumber": 52
+        },
+        {
+          "caller": "setTheme",
+          "callee": "page.evaluate",
+          "lineNumber": 53
+        },
+        {
+          "caller": "setTheme",
+          "callee": "document.documentElement.classList.remove",
+          "lineNumber": 54
+        },
+        {
+          "caller": "setTheme",
+          "callee": "document.documentElement.classList.add",
+          "lineNumber": 55
+        },
+        {
+          "caller": "setTheme",
+          "callee": "document.documentElement.setAttribute",
+          "lineNumber": 57
+        },
+        {
+          "caller": "setTheme",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "vitest.setup.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 79,
+      "nonEmptyLines": 72,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "Waggle_Competitive_Intelligence_Full_Landscape_March_2026.docx",
+      "language": "docx",
+      "fileCategory": "code",
+      "totalLines": 151,
+      "nonEmptyLines": 151,
+      "metrics": {}
+    }
+  ]
+}

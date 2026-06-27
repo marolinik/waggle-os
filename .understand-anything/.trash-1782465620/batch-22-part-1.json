@@ -1,0 +1,639 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/agent-comms-tools.ts",
+      "type": "file",
+      "name": "agent-comms-tools.ts",
+      "filePath": "packages/agent/src/agent-comms-tools.ts",
+      "summary": "Creates the agent communication tool set that wraps AgentMessageBus, exposing send, receive, and list operations as LLM-callable tools for inter-agent messaging within a workspace session.",
+      "tags": ["utility", "service", "event-handler", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/agent-comms-tools.ts:createAgentCommsTools",
+      "type": "function",
+      "name": "createAgentCommsTools",
+      "filePath": "packages/agent/src/agent-comms-tools.ts",
+      "lineRange": [8, 80],
+      "summary": "Factory that builds the agent communication tool definitions (send_message, receive_messages, list_messages) backed by an AgentMessageBus instance.",
+      "tags": ["factory", "service", "event-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/agent-loop.ts",
+      "type": "file",
+      "name": "agent-loop.ts",
+      "filePath": "packages/agent/src/agent-loop.ts",
+      "summary": "Core agent execution loop that drives multi-turn LLM interactions, manages tool call dispatch, streaming, retry logic, loop guard, and completion gate firing for both solo and retrieval agent modes.",
+      "tags": ["service", "middleware", "entry-point"],
+      "complexity": "complex",
+      "languageNotes": "Exports 19 symbols including type aliases and runtime functions; acts as the central orchestration spine that most test files exercise directly."
+    },
+    {
+      "id": "function:packages/agent/src/agent-loop.ts:runAgentLoop",
+      "type": "function",
+      "name": "runAgentLoop",
+      "filePath": "packages/agent/src/agent-loop.ts",
+      "lineRange": [143, 479],
+      "summary": "The main internal loop function that handles per-turn LLM calls, tool execution, streaming token callbacks, retry states, and loop gate checks across multiple iterations.",
+      "tags": ["service", "middleware", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/agent-message-bus.ts",
+      "type": "file",
+      "name": "agent-message-bus.ts",
+      "filePath": "packages/agent/src/agent-message-bus.ts",
+      "summary": "Implements AgentMessageBus, a queue-based in-process message bus enabling structured inter-agent communication with TTL-based expiry, peek, and cleanup operations.",
+      "tags": ["service", "event-handler", "singleton"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/agent/src/agent-message-bus.ts:AgentMessageBus",
+      "type": "class",
+      "name": "AgentMessageBus",
+      "filePath": "packages/agent/src/agent-message-bus.ts",
+      "lineRange": [23, 101],
+      "summary": "Queue-based message bus for sending, receiving, peeking, and cleaning up messages between agents; uses per-target-agent queues with timestamp-based TTL filtering.",
+      "tags": ["service", "event-handler", "singleton"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/audit-tools.ts",
+      "type": "file",
+      "name": "audit-tools.ts",
+      "filePath": "packages/agent/src/audit-tools.ts",
+      "summary": "Exposes an agent-facing audit log search tool that reads JSONL audit files from the workspace .waggle directory and returns filtered, searchable audit entries.",
+      "tags": ["utility", "service", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/browser-tools.ts",
+      "type": "file",
+      "name": "browser-tools.ts",
+      "filePath": "packages/agent/src/browser-tools.ts",
+      "summary": "Provides Playwright-backed browser automation tools (navigate, screenshot, click, fill, evaluate, DOM snapshot) lazily instantiated with a managed singleton browser context.",
+      "tags": ["service", "utility", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/browser-tools.ts:createBrowserTools",
+      "type": "function",
+      "name": "createBrowserTools",
+      "filePath": "packages/agent/src/browser-tools.ts",
+      "lineRange": [145, 380],
+      "summary": "Factory that creates all browser automation tool definitions, each invoking ensureBrowser and delegating to Playwright page APIs.",
+      "tags": ["factory", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/builtin-harnesses.ts",
+      "type": "file",
+      "name": "builtin-harnesses.ts",
+      "filePath": "packages/agent/src/builtin-harnesses.ts",
+      "summary": "Defines built-in multi-phase workflow harnesses (research-verify, code-review-fix, document-draft) with trigger pattern matching and quality gate predicates for the harness execution system.",
+      "tags": ["service", "validation", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/capability-router.ts",
+      "type": "file",
+      "name": "capability-router.ts",
+      "filePath": "packages/agent/src/capability-router.ts",
+      "summary": "Implements CapabilityRouter that resolves a natural language query to ranked capability routes across tools, connectors, skills, marketplace plugins, MCP servers, and agent personas.",
+      "tags": ["service", "middleware", "factory"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/capability-router.ts:CapabilityRouter",
+      "type": "class",
+      "name": "CapabilityRouter",
+      "filePath": "packages/agent/src/capability-router.ts",
+      "lineRange": [51, 186],
+      "summary": "Resolves a query string to an ordered list of CapabilityRoute objects spanning tools, connectors, skills, plugins, MCP servers, and personas with scored confidence.",
+      "tags": ["service", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/cli-tools.ts",
+      "type": "file",
+      "name": "cli-tools.ts",
+      "filePath": "packages/agent/src/cli-tools.ts",
+      "summary": "Creates CLI execution tools with allowlist enforcement, probing installed CLI programs, and executing commands via execFile with stdout/stderr capture and audit logging.",
+      "tags": ["utility", "service", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/combined-retrieval.ts",
+      "type": "file",
+      "name": "combined-retrieval.ts",
+      "filePath": "packages/agent/src/combined-retrieval.ts",
+      "summary": "Implements CombinedRetrieval that merges workspace memory search, personal memory search, and optional KVARK enterprise search with conflict detection and coverage-based routing.",
+      "tags": ["service", "utility", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/combined-retrieval.ts:CombinedRetrieval",
+      "type": "class",
+      "name": "CombinedRetrieval",
+      "filePath": "packages/agent/src/combined-retrieval.ts",
+      "lineRange": [207, 306],
+      "summary": "Unified search interface that fans out to workspace memory, personal memory, and KVARK, detects conflicts between result sets, and returns merged ranked results.",
+      "tags": ["service", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/commands/command-registry.ts",
+      "type": "file",
+      "name": "command-registry.ts",
+      "filePath": "packages/agent/src/commands/command-registry.ts",
+      "summary": "Implements CommandRegistry for slash-command parsing, alias resolution, search, and execution, plus the AGENT_LOOP_REROUTE_PREFIX sentinel constant.",
+      "tags": ["service", "middleware", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/agent/src/commands/command-registry.ts:CommandRegistry",
+      "type": "class",
+      "name": "CommandRegistry",
+      "filePath": "packages/agent/src/commands/command-registry.ts",
+      "lineRange": [38, 121],
+      "summary": "Registry for slash commands supporting registration with alias deduplication, fuzzy search, and execute dispatching with argument parsing.",
+      "tags": ["service", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/commands/marketplace-commands.ts",
+      "type": "file",
+      "name": "marketplace-commands.ts",
+      "filePath": "packages/agent/src/commands/marketplace-commands.ts",
+      "summary": "Registers the /marketplace slash command with sub-commands for search, install, packs, installed listing, and sync against the sidecar marketplace API.",
+      "tags": ["api-handler", "service", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/commands/workflow-commands.ts",
+      "type": "file",
+      "name": "workflow-commands.ts",
+      "filePath": "packages/agent/src/commands/workflow-commands.ts",
+      "summary": "Registers 22 built-in workflow slash commands (/catchup, /now, /research, /draft, /plan, /spawn, /skills, /status, /memory, /workflow, /export, /import, and more) into the CommandRegistry.",
+      "tags": ["api-handler", "service", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/confirmation.ts",
+      "type": "file",
+      "name": "confirmation.ts",
+      "filePath": "packages/agent/src/confirmation.ts",
+      "summary": "Provides tool-use confirmation logic including risk classification, approval class derivation, autonomy-aware gating, and a ConfirmationGate class for interactive or auto-approve flows.",
+      "tags": ["validation", "middleware", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/confirmation.ts:ConfirmationGate",
+      "type": "class",
+      "name": "ConfirmationGate",
+      "filePath": "packages/agent/src/confirmation.ts",
+      "lineRange": [297, 315],
+      "summary": "Gate wrapper that decides whether a tool call needs confirmation, auto-approves from an allowset, or invokes a prompt callback.",
+      "tags": ["validation", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/connector-registry.ts",
+      "type": "file",
+      "name": "connector-registry.ts",
+      "filePath": "packages/agent/src/connector-registry.ts",
+      "summary": "Manages registered connector instances with ConnectorRegistry, providing credential-aware connection checking, health checks, and dynamic tool generation for connected services.",
+      "tags": ["service", "factory", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/agent/src/connector-registry.ts:ConnectorRegistry",
+      "type": "class",
+      "name": "ConnectorRegistry",
+      "filePath": "packages/agent/src/connector-registry.ts",
+      "lineRange": [17, 121],
+      "summary": "Registry of connector instances that gates tool generation on vault credential presence, performs health checks, and logs tool invocations via audit logger.",
+      "tags": ["service", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/connector-search.ts",
+      "type": "file",
+      "name": "connector-search.ts",
+      "filePath": "packages/agent/src/connector-search.ts",
+      "summary": "Creates MCP connector catalog search tools with TF-IDF-style keyword scoring, stemming, synonym expansion, and category listing for natural-language connector discovery.",
+      "tags": ["service", "utility", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/contradiction-detector.ts",
+      "type": "file",
+      "name": "contradiction-detector.ts",
+      "filePath": "packages/agent/src/contradiction-detector.ts",
+      "summary": "Detects semantic contradictions between new memory content and existing frames using keyword overlap, sentiment polarity analysis, and decision statement pattern matching.",
+      "tags": ["utility", "validation", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/cost-tracker.ts",
+      "type": "file",
+      "name": "cost-tracker.ts",
+      "filePath": "packages/agent/src/cost-tracker.ts",
+      "summary": "Tracks per-model token usage and estimated costs with daily budget enforcement, a BudgetExceededError sentinel, and per-workspace cost aggregation.",
+      "tags": ["utility", "service", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/agent/src/cost-tracker.ts:CostTracker",
+      "type": "class",
+      "name": "CostTracker",
+      "filePath": "packages/agent/src/cost-tracker.ts",
+      "lineRange": [45, 143],
+      "summary": "Stateful cost tracker recording LLM usage entries by model, computing estimated costs from a pricing table, enforcing daily budgets, and generating formatted summaries.",
+      "tags": ["utility", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/cron-tools.ts",
+      "type": "file",
+      "name": "cron-tools.ts",
+      "filePath": "packages/agent/src/cron-tools.ts",
+      "summary": "Creates agent-facing cron scheduling tools (create, list, delete, trigger) that call the sidecar /api/cron/* endpoints with cron expression validation.",
+      "tags": ["service", "utility", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/cross-workspace-tools.ts",
+      "type": "file",
+      "name": "cross-workspace-tools.ts",
+      "filePath": "packages/agent/src/cross-workspace-tools.ts",
+      "summary": "Provides read-only cross-workspace tools (read_other_workspace, list_workspaces, list_workspace_files, read_workspace_file) with first-use approval prompts for inter-workspace memory and file access.",
+      "tags": ["service", "utility", "validation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/custom-personas.ts",
+      "type": "file",
+      "name": "custom-personas.ts",
+      "filePath": "packages/agent/src/custom-personas.ts",
+      "summary": "Loads, saves, and deletes user-defined persona JSON files from the workspace data directory, extending the built-in PERSONAS array.",
+      "tags": ["utility", "service", "data-model"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/custom-workflows.ts",
+      "type": "file",
+      "name": "custom-workflows.ts",
+      "filePath": "packages/agent/src/custom-workflows.ts",
+      "summary": "Persists user-defined workflows as JSON files and provides load/save/delete/list operations to combine them with built-in workflow templates.",
+      "tags": ["utility", "service", "data-model"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/agent-comms-tools.ts",
+      "target": "file:packages/agent/src/agent-message-bus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-comms-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-comms-tools.ts",
+      "target": "file:packages/agent/src/agent-message-bus.ts",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/agent-comms-tools.ts",
+      "target": "function:packages/agent/src/agent-comms-tools.ts:createAgentCommsTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/agent-comms-tools.ts",
+      "target": "function:packages/agent/src/agent-comms-tools.ts:createAgentCommsTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/capability-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/loop-gates.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/loop-guard.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/retry-policy.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/sse-parser.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/tool-executor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/trace-recorder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/turn-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "function:packages/agent/src/agent-loop.ts:runAgentLoop",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "function:packages/agent/src/agent-loop.ts:runAgentLoop",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/agent-message-bus.ts",
+      "target": "class:packages/agent/src/agent-message-bus.ts:AgentMessageBus",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/agent-message-bus.ts",
+      "target": "class:packages/agent/src/agent-message-bus.ts:AgentMessageBus",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/audit-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/browser-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/browser-tools.ts",
+      "target": "function:packages/agent/src/browser-tools.ts:createBrowserTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/browser-tools.ts",
+      "target": "function:packages/agent/src/browser-tools.ts:createBrowserTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/builtin-harnesses.ts",
+      "target": "file:packages/agent/src/workflow-harness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/capability-router.ts",
+      "target": "class:packages/agent/src/capability-router.ts:CapabilityRouter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/capability-router.ts",
+      "target": "class:packages/agent/src/capability-router.ts:CapabilityRouter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/cli-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "file:packages/agent/src/kvark-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "file:packages/agent/src/turn-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "class:packages/agent/src/combined-retrieval.ts:CombinedRetrieval",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "class:packages/agent/src/combined-retrieval.ts:CombinedRetrieval",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/commands/command-registry.ts",
+      "target": "class:packages/agent/src/commands/command-registry.ts:CommandRegistry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/commands/command-registry.ts",
+      "target": "class:packages/agent/src/commands/command-registry.ts:CommandRegistry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/commands/marketplace-commands.ts",
+      "target": "file:packages/agent/src/commands/command-registry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/commands/workflow-commands.ts",
+      "target": "file:packages/agent/src/commands/command-registry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/confirmation.ts",
+      "target": "file:packages/agent/src/trust-model.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/confirmation.ts",
+      "target": "class:packages/agent/src/confirmation.ts:ConfirmationGate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/confirmation.ts",
+      "target": "class:packages/agent/src/confirmation.ts:ConfirmationGate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connector-registry.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connector-registry.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/connector-registry.ts",
+      "target": "class:packages/agent/src/connector-registry.ts:ConnectorRegistry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/connector-registry.ts",
+      "target": "class:packages/agent/src/connector-registry.ts:ConnectorRegistry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/connector-search.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/cost-tracker.ts",
+      "target": "class:packages/agent/src/cost-tracker.ts:CostTracker",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/cost-tracker.ts",
+      "target": "class:packages/agent/src/cost-tracker.ts:CostTracker",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/cron-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/cross-workspace-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/custom-personas.ts",
+      "target": "file:packages/agent/src/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/custom-workflows.ts",
+      "target": "file:packages/agent/src/subagent-orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

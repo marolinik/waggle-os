@@ -1,0 +1,907 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/core/src/compliance/interaction-store.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 208,
+      "nonEmptyLines": 181,
+      "classes": [
+        {
+          "name": "InteractionStore",
+          "startLine": 11,
+          "endLine": 208,
+          "methods": [
+            "constructor",
+            "record",
+            "getByWorkspace",
+            "getByDateRange",
+            "count",
+            "getOldestTimestamp",
+            "getFirstRunAt",
+            "getModelInventory",
+            "getOversightLog",
+            "getOversightCounts",
+            "getRecent",
+            "rowToInteraction"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "InteractionStore",
+          "line": 11,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "record",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 24
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare(`\r\n      INSERT INTO ai_interactions (\r\n        workspace_id, session_id, model, provider,\r\n        input_tokens, output_tokens, cost_usd,\r\n        tools_called, human_action, risk_context, imported_from, persona,\r\n        input_text, output_text\r\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 29
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare",
+          "lineNumber": 29
+        },
+        {
+          "caller": "record",
+          "callee": "JSON.stringify",
+          "lineNumber": 44
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare('SELECT * FROM ai_interactions WHERE id = ?').get",
+          "lineNumber": 53
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare",
+          "lineNumber": 53
+        },
+        {
+          "caller": "record",
+          "callee": "this.rowToInteraction",
+          "lineNumber": 54
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "/^\\d{4}-\\d{2}-\\d{2}/.test",
+          "lineNumber": 59
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "/^\\d{4}-\\d{2}-\\d{2}/.test",
+          "lineNumber": 60
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 62
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "params.push",
+          "lineNumber": 66
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "params.push",
+          "lineNumber": 67
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "(raw.prepare(sql).all(...params) as Record<string, unknown>[]).map",
+          "lineNumber": 70
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "raw.prepare(sql).all",
+          "lineNumber": 70
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "raw.prepare",
+          "lineNumber": 70
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "this.rowToInteraction",
+          "lineNumber": 70
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "/^\\d{4}-\\d{2}-\\d{2}/.test",
+          "lineNumber": 75
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "/^\\d{4}-\\d{2}-\\d{2}/.test",
+          "lineNumber": 76
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 78
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "params.push",
+          "lineNumber": 82
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "(raw.prepare(sql).all(...params) as Record<string, unknown>[]).map",
+          "lineNumber": 85
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "raw.prepare(sql).all",
+          "lineNumber": 85
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "raw.prepare",
+          "lineNumber": 85
+        },
+        {
+          "caller": "getByDateRange",
+          "callee": "this.rowToInteraction",
+          "lineNumber": 85
+        },
+        {
+          "caller": "count",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 90
+        },
+        {
+          "caller": "count",
+          "callee": "raw.prepare('SELECT COUNT(*) as cnt FROM ai_interactions WHERE workspace_id = ?').get",
+          "lineNumber": 92
+        },
+        {
+          "caller": "count",
+          "callee": "raw.prepare",
+          "lineNumber": 92
+        },
+        {
+          "caller": "count",
+          "callee": "raw.prepare('SELECT COUNT(*) as cnt FROM ai_interactions').get",
+          "lineNumber": 95
+        },
+        {
+          "caller": "count",
+          "callee": "raw.prepare",
+          "lineNumber": 95
+        },
+        {
+          "caller": "getOldestTimestamp",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 101
+        },
+        {
+          "caller": "getOldestTimestamp",
+          "callee": "raw.prepare('SELECT MIN(timestamp) as oldest FROM ai_interactions').get",
+          "lineNumber": 102
+        },
+        {
+          "caller": "getOldestTimestamp",
+          "callee": "raw.prepare",
+          "lineNumber": 102
+        },
+        {
+          "caller": "getFirstRunAt",
+          "callee": "this.db.getFirstRunAt",
+          "lineNumber": 112
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 117
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "params.push",
+          "lineNumber": 128
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "params.push",
+          "lineNumber": 129
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "params.push",
+          "lineNumber": 130
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "(raw.prepare(sql).all(...params) as Record<string, unknown>[]).map",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "raw.prepare(sql).all",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getModelInventory",
+          "callee": "raw.prepare",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 145
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "params.push",
+          "lineNumber": 149
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "params.push",
+          "lineNumber": 150
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "params.push",
+          "lineNumber": 151
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "(raw.prepare(sql).all(...params) as Record<string, unknown>[]).map",
+          "lineNumber": 154
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "raw.prepare(sql).all",
+          "lineNumber": 154
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "raw.prepare",
+          "lineNumber": 154
+        },
+        {
+          "caller": "getOversightLog",
+          "callee": "JSON.parse",
+          "lineNumber": 157
+        },
+        {
+          "caller": "getOversightCounts",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 164
+        },
+        {
+          "caller": "getOversightCounts",
+          "callee": "params.push",
+          "lineNumber": 167
+        },
+        {
+          "caller": "getOversightCounts",
+          "callee": "raw.prepare(sql).all",
+          "lineNumber": 170
+        },
+        {
+          "caller": "getOversightCounts",
+          "callee": "raw.prepare",
+          "lineNumber": 170
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 183
+        },
+        {
+          "caller": "getRecent",
+          "callee": "(raw.prepare('SELECT * FROM ai_interactions ORDER BY id DESC LIMIT ?').all(limit) as Record<string, unknown>[])\r\n      .map",
+          "lineNumber": 184
+        },
+        {
+          "caller": "getRecent",
+          "callee": "raw.prepare('SELECT * FROM ai_interactions ORDER BY id DESC LIMIT ?').all",
+          "lineNumber": 184
+        },
+        {
+          "caller": "getRecent",
+          "callee": "raw.prepare",
+          "lineNumber": 184
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.rowToInteraction",
+          "lineNumber": 185
+        },
+        {
+          "caller": "rowToInteraction",
+          "callee": "JSON.parse",
+          "lineNumber": 199
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/compliance/report-generator.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 104,
+      "nonEmptyLines": 92,
+      "classes": [
+        {
+          "name": "ReportGenerator",
+          "startLine": 29,
+          "endLine": 104,
+          "methods": [
+            "constructor",
+            "generate"
+          ],
+          "properties": [
+            "interactions",
+            "harvest",
+            "getWorkspaceRisk",
+            "getWorkspaceName",
+            "getWorkspaceRiskClassifiedAt"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ReportGenerator",
+          "line": 29,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "generate",
+          "callee": "checker.check",
+          "lineNumber": 47
+        },
+        {
+          "caller": "generate",
+          "callee": "new Date().toISOString",
+          "lineNumber": 52
+        },
+        {
+          "caller": "generate",
+          "callee": "this.getWorkspaceName",
+          "lineNumber": 58
+        },
+        {
+          "caller": "generate",
+          "callee": "this.getWorkspaceRisk",
+          "lineNumber": 59
+        },
+        {
+          "caller": "generate",
+          "callee": "this.getWorkspaceRiskClassifiedAt",
+          "lineNumber": 60
+        },
+        {
+          "caller": "generate",
+          "callee": "this.interactions.getModelInventory",
+          "lineNumber": 71
+        },
+        {
+          "caller": "generate",
+          "callee": "this.interactions.getOversightLog",
+          "lineNumber": 78
+        },
+        {
+          "caller": "generate",
+          "callee": "this.harvest.getAll",
+          "lineNumber": 85
+        },
+        {
+          "caller": "generate",
+          "callee": "sources.map",
+          "lineNumber": 86
+        },
+        {
+          "caller": "generate",
+          "callee": "this.interactions.getByDateRange",
+          "lineNumber": 96
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/compliance/status-checker.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 175,
+      "nonEmptyLines": 151,
+      "classes": [
+        {
+          "name": "ComplianceStatusChecker",
+          "startLine": 17,
+          "endLine": 175,
+          "methods": [
+            "constructor",
+            "check",
+            "checkArt12",
+            "checkArt14",
+            "checkArt19",
+            "checkArt26",
+            "checkArt50"
+          ],
+          "properties": [
+            "store"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ComplianceStatusChecker",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "check",
+          "callee": "this.checkArt12",
+          "lineNumber": 26
+        },
+        {
+          "caller": "check",
+          "callee": "this.checkArt14",
+          "lineNumber": 27
+        },
+        {
+          "caller": "check",
+          "callee": "this.checkArt19",
+          "lineNumber": 28
+        },
+        {
+          "caller": "check",
+          "callee": "this.checkArt26",
+          "lineNumber": 29
+        },
+        {
+          "caller": "check",
+          "callee": "this.checkArt50",
+          "lineNumber": 30
+        },
+        {
+          "caller": "check",
+          "callee": "statuses.includes",
+          "lineNumber": 33
+        },
+        {
+          "caller": "check",
+          "callee": "statuses.includes",
+          "lineNumber": 34
+        },
+        {
+          "caller": "checkArt12",
+          "callee": "this.store.count",
+          "lineNumber": 49
+        },
+        {
+          "caller": "checkArt12",
+          "callee": "this.store.getFirstRunAt",
+          "lineNumber": 53
+        },
+        {
+          "caller": "checkArt12",
+          "callee": "Date.now",
+          "lineNumber": 55
+        },
+        {
+          "caller": "checkArt12",
+          "callee": "new Date(firstRun).getTime",
+          "lineNumber": 55
+        },
+        {
+          "caller": "checkArt14",
+          "callee": "this.store.getOversightCounts",
+          "lineNumber": 76
+        },
+        {
+          "caller": "checkArt14",
+          "callee": "Math.round",
+          "lineNumber": 88
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "this.store.getOldestTimestamp",
+          "lineNumber": 101
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "now.getTime",
+          "lineNumber": 114
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "oldestDate.getTime",
+          "lineNumber": 114
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "Math.floor",
+          "lineNumber": 115
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "this.store.getFirstRunAt",
+          "lineNumber": 127
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "now.getTime",
+          "lineNumber": 128
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "new Date(firstRun).getTime",
+          "lineNumber": 128
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "oldest.split",
+          "lineNumber": 137
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "oldest.split",
+          "lineNumber": 138
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "(new Date(firstRun ?? now).getMonth() + 7).toString().padStart",
+          "lineNumber": 138
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "(new Date(firstRun ?? now).getMonth() + 7).toString",
+          "lineNumber": 138
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "new Date(firstRun ?? now).getMonth",
+          "lineNumber": 138
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "oldest.split",
+          "lineNumber": 139
+        },
+        {
+          "caller": "checkArt19",
+          "callee": "Math.floor",
+          "lineNumber": 139
+        },
+        {
+          "caller": "checkArt50",
+          "callee": "this.store.getModelInventory",
+          "lineNumber": 164
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/compliance/template-store.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 242,
+      "nonEmptyLines": 222,
+      "classes": [
+        {
+          "name": "ComplianceTemplateStore",
+          "startLine": 60,
+          "endLine": 242,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "create",
+            "getById",
+            "list",
+            "update",
+            "delete",
+            "mergeSections",
+            "normalizeSections",
+            "seedKvarkTemplateIfMissing",
+            "rowToTemplate"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "KVARK_TEMPLATE_NAME",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "ComplianceTemplateStore",
+          "line": 60,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 65
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 69
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='compliance_templates'\",\r\n    ).get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 70
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(CREATE_TABLE_SQL).run",
+          "lineNumber": 74
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 74
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(CREATE_INDEX_SQL).run",
+          "lineNumber": 75
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 75
+        },
+        {
+          "caller": "create",
+          "callee": "input.name.trim",
+          "lineNumber": 79
+        },
+        {
+          "caller": "create",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 82
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(`\r\n      INSERT INTO compliance_templates (\r\n        name, description, sections_json, risk_classification, org_name, footer_text\r\n      ) VALUES (?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 83
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 83
+        },
+        {
+          "caller": "create",
+          "callee": "JSON.stringify",
+          "lineNumber": 90
+        },
+        {
+          "caller": "create",
+          "callee": "this.normalizeSections",
+          "lineNumber": 90
+        },
+        {
+          "caller": "create",
+          "callee": "this.getById",
+          "lineNumber": 95
+        },
+        {
+          "caller": "create",
+          "callee": "Number",
+          "lineNumber": 95
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 99
+        },
+        {
+          "caller": "getById",
+          "callee": "raw.prepare('SELECT * FROM compliance_templates WHERE id = ?').get",
+          "lineNumber": 100
+        },
+        {
+          "caller": "getById",
+          "callee": "raw.prepare",
+          "lineNumber": 100
+        },
+        {
+          "caller": "getById",
+          "callee": "this.rowToTemplate",
+          "lineNumber": 103
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 107
+        },
+        {
+          "caller": "list",
+          "callee": "(\r\n      raw\r\n        .prepare('SELECT * FROM compliance_templates ORDER BY updated_at DESC')\r\n        .all() as Record<string, unknown>[]\r\n    ).map",
+          "lineNumber": 108
+        },
+        {
+          "caller": "list",
+          "callee": "raw\r\n        .prepare('SELECT * FROM compliance_templates ORDER BY updated_at DESC')\r\n        .all",
+          "lineNumber": 109
+        },
+        {
+          "caller": "list",
+          "callee": "raw\r\n        .prepare",
+          "lineNumber": 109
+        },
+        {
+          "caller": "list",
+          "callee": "this.rowToTemplate",
+          "lineNumber": 112
+        },
+        {
+          "caller": "update",
+          "callee": "this.getById",
+          "lineNumber": 116
+        },
+        {
+          "caller": "update",
+          "callee": "patch.name.trim",
+          "lineNumber": 121
+        },
+        {
+          "caller": "update",
+          "callee": "this.normalizeSections",
+          "lineNumber": 123
+        },
+        {
+          "caller": "update",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 131
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare(`\r\n      UPDATE compliance_templates SET\r\n        name = ?,\r\n        description = ?,\r\n        sections_json = ?,\r\n        risk_classification = ?,\r\n        org_name = ?,\r\n        footer_text = ?,\r\n        updated_at = datetime('now')\r\n      WHERE id = ?\r\n    `).run",
+          "lineNumber": 132
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare",
+          "lineNumber": 132
+        },
+        {
+          "caller": "update",
+          "callee": "JSON.stringify",
+          "lineNumber": 145
+        },
+        {
+          "caller": "update",
+          "callee": "this.getById",
+          "lineNumber": 151
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 156
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare('DELETE FROM compliance_templates WHERE id = ?').run",
+          "lineNumber": 157
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare",
+          "lineNumber": 157
+        },
+        {
+          "caller": "seedKvarkTemplateIfMissing",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 202
+        },
+        {
+          "caller": "seedKvarkTemplateIfMissing",
+          "callee": "raw.prepare(\r\n      'SELECT id FROM compliance_templates WHERE name = ? LIMIT 1',\r\n    ).get",
+          "lineNumber": 203
+        },
+        {
+          "caller": "seedKvarkTemplateIfMissing",
+          "callee": "raw.prepare",
+          "lineNumber": 203
+        },
+        {
+          "caller": "seedKvarkTemplateIfMissing",
+          "callee": "this.create",
+          "lineNumber": 207
+        },
+        {
+          "caller": "rowToTemplate",
+          "callee": "this.normalizeSections",
+          "lineNumber": 226
+        },
+        {
+          "caller": "rowToTemplate",
+          "callee": "JSON.parse",
+          "lineNumber": 226
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/compliance/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 201,
+      "nonEmptyLines": 179,
+      "exports": [
+        {
+          "name": "TEMPLATE_RISK_MAP",
+          "line": 181,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/compliance/template-store.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 254,
+      "nonEmptyLines": 224,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

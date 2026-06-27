@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/decisions/2026-04-30-wave-1-memory-install-cleanup-LOCKED.md",
+      "type": "document",
+      "name": "2026-04-30-wave-1-memory-install-cleanup-LOCKED.md",
+      "filePath": "docs/decisions/2026-04-30-wave-1-memory-install-cleanup-LOCKED.md",
+      "summary": "Locked decision record capturing the Wave 1 memory-install cleanup plan, covering hive-mind-cli postinstall script fixes, mcp-health-check structural patch, install acceptance criteria, memory probe end-to-end test, and Wave 2 cursor-hooks gating strategy post Phase 5 §0 pass.",
+      "tags": ["documentation", "decision-record", "memory", "infrastructure", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-05-01-pass-7-block-c-close.md",
+      "type": "document",
+      "name": "2026-05-01-pass-7-block-c-close.md",
+      "filePath": "docs/decisions/2026-05-01-pass-7-block-c-close.md",
+      "summary": "Locked decision record for Pass 7 and Block C closure of the Track A apps/web pre-launch sprint, documenting what was ratified for launch versus what was deferred to the Day-2 backlog and the resulting pre-launch sprint consequences.",
+      "tags": ["documentation", "decision-record", "pre-launch", "development"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/decisions/2026-05-02-landing-v32-surgical-edits.md",
+      "type": "document",
+      "name": "2026-05-02-landing-v32-surgical-edits.md",
+      "filePath": "docs/decisions/2026-05-02-landing-v32-surgical-edits.md",
+      "summary": "Locked decision record for Landing page v3.2 capturing 10 ratified surgical copy edits (3 P0, 5 P1, 2 P2 priority) against the Claude Design commit 019dd47b, documenting the pivot history and pre-launch sprint consequences.",
+      "tags": ["documentation", "decision-record", "landing-page", "marketing", "pre-launch"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-05-02-track-e-arxiv-7-decisions.md",
+      "type": "document",
+      "name": "2026-05-02-track-e-arxiv-7-decisions.md",
+      "filePath": "docs/decisions/2026-05-02-track-e-arxiv-7-decisions.md",
+      "summary": "Locked decision record ratifying seven key decisions for the Track E arXiv research paper skeleton, covering title, co-author roster, endorsement path, multiplier disclosure, GEPA scope framing, and forward references used to kick off the paper drafting phase.",
+      "tags": ["documentation", "decision-record", "research", "arxiv", "academic"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-05-02-track-h-hermes-canonical-integration.md",
+      "type": "document",
+      "name": "2026-05-02-track-h-hermes-canonical-integration.md",
+      "filePath": "docs/decisions/2026-05-02-track-h-hermes-canonical-integration.md",
+      "summary": "Locked decision record for Track H canonical integration of Hermes Agent Intel into competitive positioning docs, ratifying 6 surgical edits covering header naming, agent profile, positioning matrix, SWOT threats, bottom line, and sources sections.",
+      "tags": ["documentation", "decision-record", "competitive-analysis", "marketing", "development"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": []
+}

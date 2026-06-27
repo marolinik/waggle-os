@@ -1,0 +1,1267 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/ux-refactor/2D-BUILD-PLAN.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 335,
+      "nonEmptyLines": 279,
+      "sections": [
+        {
+          "heading": "Phase 2D — Onboarding Chain · Build Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. CURRENT vs TARGET",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Current OnboardingWizard (8 steps, `apps/web/src/components/os/overlays/OnboardingWizard.tsx`)",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "Target — PRD §12.12 5-step chain (S12–S17)",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "Explicit gate ratifications (verbatim, from `deltas/open-questions.md`)",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "2. B8 — Identity seed (\"capture who-you-are + greet by name\")",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "What already exists",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "The GAP to close (B8)",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "3. C33 — Import → review (the EXACT existing contract to reuse)",
+          "level": 2,
+          "line": 128
+        },
+        {
+          "heading": "Existing harvest preview/commit contract (Phase 2B.3 — DO NOT rebuild)",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "The GAP the wizard must close",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "4. S17 — Workspace creation: exists vs 2D adds",
+          "level": 2,
+          "line": 185
+        },
+        {
+          "heading": "Exists",
+          "level": 3,
+          "line": 187
+        },
+        {
+          "heading": "What 2D adds (minimal, onboarding-scoped)",
+          "level": 3,
+          "line": 200
+        },
+        {
+          "heading": "5. WHAT ALREADY EXISTS (do-not-rebuild) vs NET-NEW",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "Do-not-rebuild (verified present)",
+          "level": 3,
+          "line": 219
+        },
+        {
+          "heading": "Net-new in 2D",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "6. Minimal sub-phase build plan (each independently tsc + test verifiable)",
+          "level": 2,
+          "line": 255
+        },
+        {
+          "heading": "2D.1 — Backend + shared + adapter (no UI)",
+          "level": 3,
+          "line": 261
+        },
+        {
+          "heading": "2D.2 — Frontend (the chain)",
+          "level": 3,
+          "line": 290
+        },
+        {
+          "heading": "Largest single risk",
+          "level": 3,
+          "line": 326
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 21
+      }
+    },
+    {
+      "path": "docs/ux-refactor/IMPLEMENTATION-PLAN.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 538,
+      "nonEmptyLines": 475,
+      "sections": [
+        {
+          "heading": "Waggle OS UX Refactor — Master Implementation Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Executive summary, locked decisions, and the 8 non-negotiable product rules",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Executive summary",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "Locked decisions (founder, via PRD)",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "The 8 non-negotiable product rules (condensed handoff §\"Non-negotiable product rules\"; PRD §6)",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "2. Current state in one paragraph (from the inventories)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "3. Phase table (Phase 0..6)",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Phase 0 — Architecture alignment & IA freeze",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "Phase 1 — Core runtime: Home Cockpit, Workspace Desktop, Command Center (Ctrl+K)",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "Phase 2 — Work layer: Memory Center, Artifact Center, Onboarding, Workspace Creation",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "Phase 3 — Intelligence layer: Agents, Skills, Automations (+ builders)",
+          "level": 3,
+          "line": 234
+        },
+        {
+          "heading": "Phase 4 — Extend layer: Connectors, MCPs, Marketplace, Install Audit",
+          "level": 3,
+          "line": 278
+        },
+        {
+          "heading": "Phase 5 — Team intelligence: Team Workspace, RBAC, Sharing, Audit views",
+          "level": 3,
+          "line": 327
+        },
+        {
+          "heading": "Phase 6 — Hardening: states, a11y, approval/audit consistency, performance, dogfood",
+          "level": 3,
+          "line": 360
+        },
+        {
+          "heading": "4. Critical path / dependency notes",
+          "level": 2,
+          "line": 393
+        },
+        {
+          "heading": "5. Net-new backend endpoint master list (summary)",
+          "level": 2,
+          "line": 425
+        },
+        {
+          "heading": "6. Risk register",
+          "level": 2,
+          "line": 453
+        },
+        {
+          "heading": "7. Founder sign-off gate (open questions to answer before each phase)",
+          "level": 2,
+          "line": 479
+        },
+        {
+          "heading": "Before Phase 0/1 (the spine) — `[BLOCKS P1]` — ✅ ALL RATIFIED 2026-06-09 (founder)",
+          "level": 3,
+          "line": 484
+        },
+        {
+          "heading": "Before Phase 2 (work + onboarding) — `[BLOCKS P2]`",
+          "level": 3,
+          "line": 493
+        },
+        {
+          "heading": "Before Phase 3 / 4 / 5 (not P1/P2-blocking, but ratify before the owning screen)",
+          "level": 3,
+          "line": 502
+        },
+        {
+          "heading": "8. Definition of Done checklist (PRD §26)",
+          "level": 2,
+          "line": 514
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/ux-refactor/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 121,
+      "nonEmptyLines": 98,
+      "sections": [
+        {
+          "heading": "Waggle OS UX Refactor — Analysis & Plan Index",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Executive summary (one paragraph)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Locked decisions (do not relitigate)",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Recommended reading order",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Inventories — current state (`_inventory/`)",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "Deltas — what the refactor adds/changes (`deltas/`)",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Gap cards — per-screen build specs (`gap-cards/`)",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "How this set was assembled",
+          "level": 2,
+          "line": 112
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/ux-refactor/_phase1-contract.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 197,
+      "nonEmptyLines": 170,
+      "sections": [
+        {
+          "heading": "UX-Refactor Phase 1 — Shared CONTRACT (binding)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. New shared types — `packages/shared/src/types.ts`",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "2. New FE view-model types — `apps/web/src/lib/types.ts`",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "S01 — Home Cockpit",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "S02 — Workspace Desktop",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "3. New adapter methods — `apps/web/src/lib/adapter.ts`",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "Binding notes for the route + FE leaves",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "4. Files touched this run (scope lock)",
+          "level": 2,
+          "line": 189
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/ux-refactor/appshell-conversion-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 290,
+      "nonEmptyLines": 221,
+      "sections": [
+        {
+          "heading": "AppShell Conversion Plan — Phase 0 Spine Freeze (D1-b)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Canonical route map",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "1.1 Frozen route groups (brief) → all 28 AppIds + dispositions",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "1.2 Overlays — disposition: overlay-stays-overlay, mounted ONCE in AppShell",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "1.3 Left-nav zone → route entry points",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "2. Navigation contract — URL is the single source of truth",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "2.1 The contract",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "2.2 Existing navigation surfaces — retarget table",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "2.3 The `waggle:open-app` shim (D1 condition 2)",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "3. Window-manager retirement inventory (D1 condition 3)",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "3.1 Code that DIES (no z-order code ships — brief §6.5)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "3.2 What SURVIVES (transitional shim)",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "3.3 `waggle-window-state-v1` migration → clear",
+          "level": 3,
+          "line": 141
+        },
+        {
+          "heading": "4. Chat-as-widget design (D1 condition 4)",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "4.1 Current semantics being mapped",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "4.2 Target",
+          "level": 3,
+          "line": 160
+        },
+        {
+          "heading": "4.3 D1-c lite (detached chat) — **NOT NEEDED**",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "5. Zero-rewrite mounting plan (D1 condition 1)",
+          "level": 2,
+          "line": 175
+        },
+        {
+          "heading": "5.1 Mechanism: route wrappers re-host Desktop's prop plumbing",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "5.2 The ONE sanctioned component edit",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "5.3 Exclusions — divergences that are PHASE work, not conversion work",
+          "level": 3,
+          "line": 202
+        },
+        {
+          "heading": "6. Transition sequencing",
+          "level": 2,
+          "line": 213
+        },
+        {
+          "heading": "7. Launch-cut screen inventory lock (audit §3, frozen)",
+          "level": 2,
+          "line": 227
+        },
+        {
+          "heading": "8. Acceptance checks (conversion done = ALL pass)",
+          "level": 2,
+          "line": 257
+        },
+        {
+          "heading": "9. Deviations & flagged calls",
+          "level": 2,
+          "line": 272
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 25
+      }
+    },
+    {
+      "path": "docs/ux-refactor/oss-sync-finding-2026-06-12.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 72,
+      "nonEmptyLines": 56,
+      "sections": [
+        {
+          "heading": "OSS Sync — Drift Analysis & Finding (2026-06-12)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What was checked",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "The substrate changes this session — why none need porting",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "c33da1e (content_hash boot fix) — also not needed",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "Net",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "⚠️ Tooling/doc inaccuracies found (real, worth fixing)",
+          "level": 2,
+          "line": 57
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p1a-residuals.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 52,
+      "nonEmptyLines": 41,
+      "sections": [
+        {
+          "heading": "P1a Conversion — Review Residuals (2026-06-10)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "LOW findings (unverified — triage in P7 Hardening)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Refuted at review (no action — recorded so they are not re-found)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Known follow-ups owned elsewhere",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Live-smoke findings (2026-06-10, vite:8080 + branch sidecar:3501 via SIDECAR_TARGET proxy)",
+          "level": 2,
+          "line": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p1b-auth-gate-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 129,
+      "nonEmptyLines": 93,
+      "sections": [
+        {
+          "heading": "P1b — D3 Structural Auth Gate: Conversion Plan v2 (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. The problem, precisely",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Design contract",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1.1 Adapter core (Stage A)",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "1.2 Boot-path surfaces (Stage B)",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "1.3 Explicit non-goals (ledger, don't build)",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "1.4 SSE channels — discovered defect, server-side, OUT of P1b scope (flagged to founder)",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "2. Execution stages",
+          "level": 2,
+          "line": 100
+        },
+        {
+          "heading": "3. Decision-log note (append to open-questions.md under D3, one block)",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "4. Acceptance checks",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "5. Rollback",
+          "level": 2,
+          "line": 127
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p1b-plan-review-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 46,
+      "nonEmptyLines": 41,
+      "sections": [
+        {
+          "heading": "P1b Plan — Adversarial Review Record (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Confirmed (folded into plan v2)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "LOW (verified clean / advisory — no plan change beyond what v2 already carries)",
+          "level": 2,
+          "line": 34
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p1b-residuals.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 62,
+      "nonEmptyLines": 47,
+      "sections": [
+        {
+          "heading": "P1b Auth Gate — Review Residuals (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "LOW findings fixed alongside (in 54ec629)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "LOW residuals — ledgered, not fixed (P7 / by-design)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Live-smoke scope notes",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Live-smoke RESULTS (2026-06-11, vite:8080 + branch sidecar:3501 via SIDECAR_TARGET; browser base = localhost:8080)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "P1b-SSE follow-up (founder-ratified 2026-06-11) — review residuals",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "P1b-SSE live-smoke RESULTS (2026-06-11)",
+          "level": 2,
+          "line": 57
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p2-verification-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 103,
+      "nonEmptyLines": 84,
+      "sections": [
+        {
+          "heading": "P2 — Verification Record: Home Cockpit + Workspace Desktop vs Brief v2.1 (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verdict",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Fixed in P2 (this phase)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Met (verified with file:line evidence — highlights)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Residuals — ledgered, NOT fixed in P2",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Acceptance check 8 — wizard onFinish seeding (LIVE-RUN, first ever)",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Gates at close",
+          "level": 2,
+          "line": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p3-memory-center-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 120,
+      "nonEmptyLines": 105,
+      "sections": [
+        {
+          "heading": "P3 — D2 Two-Mind Memory Center (plan, 2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verified current state",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Design",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Tests",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Sequencing",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Out of scope",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "Live-run findings (2026-06-11 smoke against real data)",
+          "level": 2,
+          "line": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p3-review-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 57,
+      "nonEmptyLines": 47,
+      "sections": [
+        {
+          "heading": "P3 — D2 Two-Mind Memory Center: adversarial review record (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The HIGH (confirmed independently by 5 of 6 dimensions)",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Other confirmed findings → dispositions",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Refuted (11) — examples",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "Behavior change vs the pre-review build (review happened before anything was committed)",
+          "level": 2,
+          "line": 53
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p4-launch-integrity-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 124,
+      "nonEmptyLines": 102,
+      "sections": [
+        {
+          "heading": "P4 — Launch integrity: D11 + D12 + clean-install onboarding (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "D11 — dataDir split-brain closed",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "D12 — the bundle is generated, never tracked",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Clean-install onboarding skip — CONFIRMED, fixed",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "FREE→Upgrade e2e re-run",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Review — 5-dimension adversarial workflow (run split across a session-limit reset)",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Gates",
+          "level": 2,
+          "line": 121
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p5-review-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 28,
+      "nonEmptyLines": 20,
+      "sections": [
+        {
+          "heading": "P5/D4 — Adversarial Review Record",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Tally",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Refuted (correctly dismissed, 0/3)",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Gate (post-fix)",
+          "level": 2,
+          "line": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p5-skill-governance-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 111,
+      "nonEmptyLines": 89,
+      "sections": [
+        {
+          "heading": "P5 — D4 Skill-Write Governance · Build Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What D4 ratified (four bindings)",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Recon — current seams (verified 2026-06-12)",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Decisions",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "DEC-1 — Audit `action` for delete (the one real fork)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "DEC-2 — Shared service location",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "DEC-3 — Provenance frontmatter",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "Build order (TDD, commit per step)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Status — implementation COMPLETE (2026-06-12)",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "Out of scope (ledgered)",
+          "level": 2,
+          "line": 107
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p7-d15-scope.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 384,
+      "nonEmptyLines": 332,
+      "sections": [
+        {
+          "heading": "P7 — D15 Launch Integrity · Scope (per-screen state grid + approval/audit taxonomy)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "HALF 1 — Per-Screen State Grid (brief rule 10)",
+          "level": 1,
+          "line": 24
+        },
+        {
+          "heading": "State grid (all 30 screens)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Gaps to close — prioritized (rank = user-facing severity)",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "P0 — launch-blocking (missing ERROR on a core/trust/activity surface)",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "P1 — launch-blocking-adjacent (settings/secrets surfaces where error→empty hides failure)",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "P2 — nice-to-have (missing/partial states that don't mask a failure as success)",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "HALF 2 — Approval / Audit Taxonomy Consolidation (brief rule 7)",
+          "level": 1,
+          "line": 143
+        },
+        {
+          "heading": "The fragmentation (five backend taxonomies, three FE surfaces)",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "Canonical target vocabulary (what P7 converges on)",
+          "level": 2,
+          "line": 165
+        },
+        {
+          "heading": "Divergence table (issue | files | severity)",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "D4(ii) — the specific card↔modal alignment work",
+          "level": 2,
+          "line": 209
+        },
+        {
+          "heading": "PRIORITIZED P7 BUILD ORDER",
+          "level": 1,
+          "line": 244
+        },
+        {
+          "heading": "STATUS — Track B DONE, Track A DONE (2026-06-12)",
+          "level": 2,
+          "line": 255
+        },
+        {
+          "heading": "LAUNCH-BLOCKING (must ship for P7 to close D15)",
+          "level": 2,
+          "line": 287
+        },
+        {
+          "heading": "NICE-TO-HAVE (P2 — do if time; not gating D15 closure)",
+          "level": 2,
+          "line": 350
+        },
+        {
+          "heading": "OUT OF SCOPE / POST-LAUNCH LEDGER",
+          "level": 1,
+          "line": 365
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p7-p5-live-smoke-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 63,
+      "nonEmptyLines": 51,
+      "sections": [
+        {
+          "heading": "P5 + P7 — Live Browser Smoke Record (2026-06-12)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verdict: PASS (core goal met)",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "What was verified",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "P5/D4iv provenance badge — verified END-TO-END in the browser",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Residual (NOT verified live — unit-covered)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Environment notes (for the next smoke)",
+          "level": 2,
+          "line": 57
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p7-track-a-review-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 42,
+      "nonEmptyLines": 32,
+      "sections": [
+        {
+          "heading": "P7/D15 Track A — Adversarial Review Record",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Tally",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Folded in (refuted HIGH, but a cheap real hardening)",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "Refuted (4)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Gate (post-fix)",
+          "level": 2,
+          "line": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/ux-refactor/p7-track-b-review-record.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 45,
+      "nonEmptyLines": 34,
+      "sections": [
+        {
+          "heading": "P7/D15 Track B — Adversarial Review Record",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Tally",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Refuted (9, all 0–1/3)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Gate (post-fix)",
+          "level": 2,
+          "line": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    }
+  ]
+}

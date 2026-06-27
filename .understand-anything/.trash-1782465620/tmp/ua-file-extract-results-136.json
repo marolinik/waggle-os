@@ -1,0 +1,1492 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/plans/M-13-NOTION-DECISION-2026-04-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 125,
+      "nonEmptyLines": 92,
+      "sections": [
+        {
+          "heading": "M-13 — Notion Structured Export Decision Memo",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The four questions",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Q1 — Auth surface",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "Q2 — Parent-page UX",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "Q3 — Update vs. insert on re-run",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Q4 — Markdown → Notion blocks converter",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "Proposed v1 scope if all four land as recommended",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "What to do next session",
+          "level": 2,
+          "line": 115
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/MEMORY-SOTA-PROPOSAL-2026-06-10.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 207,
+      "nonEmptyLines": 173,
+      "sections": [
+        {
+          "heading": "Memory SOTA Proposal — 2026-06-10",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. THE RE-BASELINE — we were chasing a phantom (read this first)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Corrected LoCoMo landscape (GPT-4.1-mini protocol)",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "1. What the failure data says (1,540 judged answers × 2 arms, mined)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Open-domain (34 fails / 96)",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "Temporal (71 fails / 321) — ~60% prompt-side, ~40% substrate",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Multi-hop (71 fails) — dominant cluster: partial enumeration on cross-session",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Single-hop (95 fails) — fine-grained detail lost by distillation (gold: \"painting",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "Substrate map findings (production-relevant)",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "2. The proposal — four waves, each gated by a full-N z-tested re-run",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "WAVE 1 — Answer-policy fixes (prompt-only, zero substrate risk, ~1 day)",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "WAVE 2 — Profile cards + episodic hygiene (write-time substrate, local LLM)",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "WAVE 3 — Retrieval lanes (query-time; mostly wiring existing code)",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "WAVE 4 — Bi-temporal substrate + production parity (architecture; product-first)",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "3. Projected end-state (honest ranges, ±noise)",
+          "level": 2,
+          "line": 171
+        },
+        {
+          "heading": "4. Anti-goals (lessons paid for)",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "5. Verification protocol",
+          "level": 2,
+          "line": 197
+        },
+        {
+          "heading": "6. Decision requested",
+          "level": 2,
+          "line": 204
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/plans/MOCK-STUB-AUDIT-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 154,
+      "nonEmptyLines": 113,
+      "sections": [
+        {
+          "heading": "MOCK / STUB / PLACEHOLDER Audit — 2026-04-19 (L-17)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Category A — Safe (design markers, not gaps)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Category B — Marked-demo connectors (Marko-aware)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Category C — Genuine TODOs (feature gaps)",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "C1. `packages/server/src/ws/gateway.ts:91` — Clerk JWT fallback",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "C2. `packages/core/src/compliance/report-generator.ts:52` — classification date",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "C3. `packages/server/src/local/routes/fleet.ts:32` — per-session tokens",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "C4. `apps/web/src/components/os/apps/CapabilitiesApp.tsx:352` — marketplace dupes",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "C5. `apps/web/src/hooks/useMemory.ts:54` — missing PATCH endpoint",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "Category D — Cleanup shipped this commit",
+          "level": 2,
+          "line": 121
+        },
+        {
+          "heading": "D1. Dead `MOCK_FILES` export (fixed)",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 133
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/plans/OPEN-TASKS-2026-05-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 214,
+      "nonEmptyLines": 152,
+      "sections": [
+        {
+          "heading": "Open Tasks — Master List (2026-05-20)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Engineering — Actionable now (no blocker)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "✅ E-14 — `hive-mind` v0.3.0 promotion (SHIPPED 2026-05-21)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "2. Engineering — Verification needed (no code, but needs binary)",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "3. Engineering — Deferred multi-session arcs",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "4. Marko — External actions (engineering-blocking)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "5. Marko-gated engineering — runs after Marko's actions",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "6. Multi-week campaigns — **reconciled 2026-05-21**",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "7. Strategic decisions pending (Marko)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "8. Test infrastructure (30 failures — runs services to verify)",
+          "level": 2,
+          "line": 144
+        },
+        {
+          "heading": "9. Closed during May 2026 backlog sweep (this session)",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "10. Recommended next moves (PM-grade pick list)",
+          "level": 2,
+          "line": 194
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/plans/OPEN-WORK-SUMMARY-2026-05-26.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 170,
+      "nonEmptyLines": 122,
+      "sections": [
+        {
+          "heading": "Open-Work Summary — 2026-05-26",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR — the critical path",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. AI-OS arc — substantially shipped, asymmetric capture",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "2. Engineering — actionable in-session (no external blocker)",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "3. Engineering — verification only (needs binary)",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "4. Marko external actions (real launch blockers)",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "5. Marko-gated engineering — runs after M-actions",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "6. Multi-week eval campaigns — almost all closed",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "7. Strategic decisions pending (Marko)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "8. Deferred post-launch arcs",
+          "level": 2,
+          "line": 125
+        },
+        {
+          "heading": "9. Test infrastructure",
+          "level": 2,
+          "line": 141
+        },
+        {
+          "heading": "10. Recommended next moves (PM-grade pick list)",
+          "level": 2,
+          "line": 147
+        },
+        {
+          "heading": "What's NOT on this list (intentional)",
+          "level": 2,
+          "line": 159
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/plans/OPUS-4-6-ROUTE-AUDIT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 127,
+      "nonEmptyLines": 104,
+      "sections": [
+        {
+          "heading": "Opus 4.6 dated-snapshot route audit",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why this file exists",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Caller map (as of 2026-04-21 commit `6cf7554`)",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Trigger condition",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Fix shape (if triggered)",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Non-actions (per PM policy)",
+          "level": 2,
+          "line": 113
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/plans/OS-PRODUCTION-AUDIT-2026-05-13.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 74,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "OS UI/UX Production Readiness Audit — 2026-05-13",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Tier model (CONFIRMED — no rename)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "25 OS apps registered in Desktop.tsx",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Backend routes (verified)",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Bugs found in Phase 2 audit",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "B1: Audit tab silently empty",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "B2: Marketplace install 403 on FREE tier with no upgrade affordance",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "B3: SkillPack starter-pack catalog shape mismatch",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "Phase 3 — SHIPPED `c2f45ca`",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "Phase 4 — SHIPPED `1bcbeef`",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "Phase 5 — SHIPPED (this commit)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "Production-readiness state at end of sprint",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "Tests + checks",
+          "level": 2,
+          "line": 71
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/plans/OSS-DRIFT-TRIAGE-2026-06-11.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 104,
+      "nonEmptyLines": 93,
+      "sections": [
+        {
+          "heading": "OSS Drift Triage — waggle-os ↔ marolinik/hive-mind (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verdict matrix (45 files)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "PACKAGING-ONLY — no action (19)",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "MONO-AHEAD — mirror is stale, fixed by next re-split (6)",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "REVERSE-PORT — OSS has real functionality the monorepo lacks",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "D-items — founder GO 2026-06-11 (\"do all 3\"), ALL PORTED same session",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "Forward-port queue (mono → OSS, next re-split)",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "Execution record",
+          "level": 2,
+          "line": 56
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/PDF-AUDIT-2026-04-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 107,
+      "nonEmptyLines": 90,
+      "sections": [
+        {
+          "heading": "PDF Triage Audit — 2026-04-20 (M-33..48 status close-out)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Method",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Findings — full P-item disposition",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "Recommendation",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Why the gap: PDF triage doc rot",
+          "level": 2,
+          "line": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/plans/PDF-DEFERRED-DECISIONS-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 253,
+      "nonEmptyLines": 190,
+      "sections": [
+        {
+          "heading": "PDF Deferred — Product Decision Briefs",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "P4 · Permissions / Mutation Gates confusing — merge with 3-level tool approval?",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "P6 · Room — verify 2 parallel agents visualization actually works",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "P10 · Bee-style persona icons (dark + light)",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "P14 · Virtual storage path truncated + Local browser only shows drive D (need C: too)",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "P15 · Create Template modal overlaps Dashboard — \"can't drag\"",
+          "level": 2,
+          "line": 139
+        },
+        {
+          "heading": "P16 · Files app only shows Virtual storage — need local create + explorer-style browse",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "P17 · App-wide tooltip pass — 20+ files of badges need hover tooltips",
+          "level": 2,
+          "line": 206
+        },
+        {
+          "heading": "Summary — what the next session ships after you decide",
+          "level": 2,
+          "line": 238
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/plans/PDF-E2E-ISSUES-2026-04-17.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 54,
+      "sections": [
+        {
+          "heading": "E2E PDF Issues — 2026-04-17",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Legend",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Items",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "UI / Dock / Status",
+          "level": 3,
+          "line": 15
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "docs/plans/PILLAR2-MEMORY-LONGMEMEVAL-PLAN-2026-05-22.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 63,
+      "nonEmptyLines": 53,
+      "sections": [
+        {
+          "heading": "Pillar 2 — Memory SOTA (LongMemEval) — plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why LongMemEval (upgrade from the C-1 LoCoMo run)",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Reusable infra (LoCoMo harness — `D:/Projects/hive-mind-test/scripts/locomo/`)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Adaptation specifics (the real work vs LoCoMo)",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Two subject-model lanes (mirror Pillar 1)",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Dataset VERIFIED (2026-05-22)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Execution steps",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Budget",
+          "level": 2,
+          "line": 61
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/PLAN-2026-04-19-TO-DO.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 94,
+      "nonEmptyLines": 72,
+      "sections": [
+        {
+          "heading": "Remaining Work Plan — 2026-04-19 (rev 2026-04-20 S2)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Sprint: TO DO — ship before benchmarks",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Shipped 2026-04-19 (S4) and 2026-04-20 (S1)",
+          "level": 3,
+          "line": 20
+        },
+        {
+          "heading": "Open — Marko's execution order (S2+)",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "After Benchmarks (H-42/43/44 gate)",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "v2 — deferred",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "Not on any list (still open from prior scope)",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Cadence",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Residual this session chain",
+          "level": 2,
+          "line": 84
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/plans/POLISH-SPRINT-2026-04-18.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 100,
+      "nonEmptyLines": 74,
+      "sections": [
+        {
+          "heading": "Polish Sprint — 2026-04-18 → launch-ready",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Non-coding items still on Marko",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Phase A — Quick Wins (this session, ~5h)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Phase B — Core bugs + light mode finish (~1d)",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Phase C — OW-6 PersonaSwitcher two-tier (0.5d)",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Phase D — Feature polish (~10d)",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "Phase E — Infra polish (~6d)",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Phase F — Content polish (~1d)",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Critical path after polish",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "Rollback safety",
+          "level": 2,
+          "line": 96
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/plans/SPRINT-10-CLOSEOUT-2026-04-22.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 173,
+      "nonEmptyLines": 129,
+      "sections": [
+        {
+          "heading": "Sprint 10 Close-Out — Task 2.2 + Judge-Methodology Validation",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Headline result",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Interpretation band (brief §pre-registered)",
+          "level": 3,
+          "line": 20
+        },
+        {
+          "heading": "2. Per-vendor match rate vs PM",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "3. Per-pair Cohen's κ (inter-vendor agreement)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "4. Per-category Fleiss' κ breakdown",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "5. Per-F-mode Fleiss' κ breakdown",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "6. Disagreement log",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "Disagreement rationale detail",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "7. GO/NO-GO signal for Sprint 11 LoCoMo SOTA",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "8. Sprint 10 scorecard",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "9. Cost accounting",
+          "level": 2,
+          "line": 120
+        },
+        {
+          "heading": "10. Anti-pattern #4 compliance check",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "10b. Task 1.1 stability matrix — Stage 2 primary config LOCKED",
+          "level": 2,
+          "line": 141
+        },
+        {
+          "heading": "11. Ready-state for Sprint 11",
+          "level": 2,
+          "line": 160
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/plans/STAGE-2-PREP-BACKLOG.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 89,
+      "nonEmptyLines": 63,
+      "sections": [
+        {
+          "heading": "Stage 2 Prep Backlog",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Qwen3.6 thinking-mode stability matrix (pre LoCoMo full run)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Why this matters for Stage 2",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Acceptance pattern — systematic stability matrix",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Deliverables",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "Budget ceiling",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "Dependencies",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "Estimated effort",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "Not-in-scope (parked / deferred)",
+          "level": 3,
+          "line": 85
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/plans/UX-NORTHSTAR-2026-06-13.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 117,
+      "nonEmptyLines": 97,
+      "sections": [
+        {
+          "heading": "UX North Star — Competitive Position + Refactor Plan (2026-06-13)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Competitive teardown (what each does best, what Waggle takes)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Claude Cowork (Anthropic)",
+          "level": 3,
+          "line": 12
+        },
+        {
+          "heading": "Claude Code (Anthropic)",
+          "level": 3,
+          "line": 20
+        },
+        {
+          "heading": "Codex (OpenAI)",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "OpenClaw / Hermes agent",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "2. Waggle's structural advantages (the moat to amplify)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "3. Gap map (verified against code 2026-06-13)",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "4. Plan",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "Phase A — Workspace manipulation, end-to-end (P0, this session)",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Phase B — Mental model + away-loop deepening (P1, next)",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "Phase C — Delight/proactive (P2, later)",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "5. Shipped this session (2026-06-13 S2)",
+          "level": 2,
+          "line": 95
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/plans/W4-PRODUCTION-PORT-PLAN-2026-06-11.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 161,
+      "nonEmptyLines": 138,
+      "sections": [
+        {
+          "heading": "W4 — Production Parity Port Plan (2026-06-11)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Headline findings",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "1. Gap matrix (impact × ease order)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "2. Render order (port as a pure `buildContext`-style renderer in hive-mind-core)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "3. Production bugs to fix in-line (NOT build on top of)",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "4. Non-negotiable constraints (every new lane)",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "5. Phases (≤5 files each, commit + verify per phase)",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "6. Open decisions for Marko",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "7. Status log",
+          "level": 2,
+          "line": 113
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/plans/WIKI-V2-AUDIT-2026-04-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 196,
+      "nonEmptyLines": 155,
+      "sections": [
+        {
+          "heading": "Wiki v2 Audit — 2026-04-20 (M-11..14)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Sub-item disposition",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Detailed evidence",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "M-11 — Incremental recompilation",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "M-12 — Obsidian adapter",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "M-13 — Notion structured export",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "M-14 — Health dashboard polish",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "Recommended execution order",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "Why this order",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "Decision needed",
+          "level": 2,
+          "line": 188
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/plans/monorepo-migration-progress.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 446,
+      "nonEmptyLines": 327,
+      "sections": [
+        {
+          "heading": "Monorepo Migration Progress Log",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§2.1 — Pre-migration safety (COMPLETE 2026-04-30)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Task completion",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "B3 reachability audit detail (input for §2.2 Task B4)",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Branch + tag snapshot pre-§2.2",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "waggle-os (`https://github.com/marolinik/waggle-os.git`)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "hive-mind (`https://github.com/marolinik/hive-mind.git`)",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "hive-mind-clients (`https://github.com/marolinik/hive-mind-clients-archive.git`)",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Cross-stream context (active 2026-04-30, NOT in §2.2 merge plan per PM ratification)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "§2.2 — 4-stream consolidation (COMPLETE 2026-04-30)",
+          "level": 2,
+          "line": 93
+        },
+        {
+          "heading": "Plan revision (during execution)",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "Merge commit list",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "Acceptance verification (per brief §2.2 acceptance criterion)",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "Conflict resolution summary",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "Test + tsc verification",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "Cost spend",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "Branch state snapshot post-§2.2",
+          "level": 3,
+          "line": 151
+        },
+        {
+          "heading": "§2.3 — File migration + Plan A AMENDMENT (COMPLETE 2026-04-30)",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "Commit list (12 commits chained on top of `6087d2b` §2.2 close)",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "File move log per package",
+          "level": 3,
+          "line": 195
+        },
+        {
+          "heading": "Import path sweep summary",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "tsc status per package",
+          "level": 3,
+          "line": 255
+        },
+        {
+          "heading": "Test count delta",
+          "level": 3,
+          "line": 272
+        },
+        {
+          "heading": "Cumulative spend reconciliation",
+          "level": 3,
+          "line": 288
+        },
+        {
+          "heading": "Plan A AMENDMENT note",
+          "level": 3,
+          "line": 299
+        },
+        {
+          "heading": "Final branch state snapshot post-§2.3",
+          "level": 3,
+          "line": 305
+        },
+        {
+          "heading": "§2.4 — Wave 1 cleanup execution (COMPLETE 2026-04-30)",
+          "level": 2,
+          "line": 316
+        },
+        {
+          "heading": "Deliverables",
+          "level": 3,
+          "line": 320
+        },
+        {
+          "heading": "tsc status (post-§2.4)",
+          "level": 3,
+          "line": 332
+        },
+        {
+          "heading": "Acceptance per `feedback_memory_install_dead_simple`",
+          "level": 3,
+          "line": 338
+        },
+        {
+          "heading": "Cumulative cost reconciliation",
+          "level": 3,
+          "line": 348
+        },
+        {
+          "heading": "Branch state snapshot post-§2.4",
+          "level": 3,
+          "line": 362
+        },
+        {
+          "heading": "§2.5 + §2.6 + §2.7 — Closing trio (COMPLETE 2026-04-30)",
+          "level": 2,
+          "line": 373
+        },
+        {
+          "heading": "§2.5 Apache 2.0 + CONTRIBUTING.md (Tasks B16-B19)",
+          "level": 3,
+          "line": 377
+        },
+        {
+          "heading": "§2.6 OSS subtree split prep (Tasks B20-B22)",
+          "level": 3,
+          "line": 386
+        },
+        {
+          "heading": "§2.7 Tests + import paths + smoke + final acceptance (Tasks B23-B27)",
+          "level": 3,
+          "line": 392
+        },
+        {
+          "heading": "CC-discovered runtime fixes during smoke (no scope creep)",
+          "level": 3,
+          "line": 400
+        },
+        {
+          "heading": "Cumulative cost reconciliation (final)",
+          "level": 3,
+          "line": 411
+        },
+        {
+          "heading": "Final branch state snapshot",
+          "level": 3,
+          "line": 424
+        },
+        {
+          "heading": "PHASE 5 SESIJA B — COMPLETE 2026-04-30",
+          "level": 2,
+          "line": 435
+        },
+        {
+          "heading": "Audit-trail anchors",
+          "level": 2,
+          "line": 441
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 41
+      }
+    }
+  ]
+}

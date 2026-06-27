@@ -1,0 +1,18 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/.evolution-hypothesis-2026-04-14T08-04-57/01-evolved-prompt.json", "language": "json", "sizeLines": 19, "fileCategory": "config"},
+    {"path": "docs/.evolution-hypothesis-2026-04-14T08-04-57/02a-arm-a-outputs.json", "language": "json", "sizeLines": 41, "fileCategory": "config"},
+    {"path": "docs/.evolution-hypothesis-2026-04-14T08-04-57/02b-arm-b-outputs.json", "language": "json", "sizeLines": 41, "fileCategory": "config"},
+    {"path": "docs/.evolution-hypothesis-2026-04-14T08-04-57/02c-arm-c-outputs.json", "language": "json", "sizeLines": 41, "fileCategory": "config"},
+    {"path": "docs/.evolution-hypothesis-2026-04-14T08-04-57/03-judge-scores.json", "language": "json", "sizeLines": 1113, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "docs/.evolution-hypothesis-2026-04-14T08-04-57/01-evolved-prompt.json": [],
+    "docs/.evolution-hypothesis-2026-04-14T08-04-57/02a-arm-a-outputs.json": [],
+    "docs/.evolution-hypothesis-2026-04-14T08-04-57/02b-arm-b-outputs.json": [],
+    "docs/.evolution-hypothesis-2026-04-14T08-04-57/02c-arm-c-outputs.json": [],
+    "docs/.evolution-hypothesis-2026-04-14T08-04-57/03-judge-scores.json": []
+  },
+  "neighborMap": {}
+}

@@ -1,11 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { WaggleConfig } from '@waggle/core';
 import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities, getEffectiveTier, trialDaysRemaining } from '@waggle/shared';
 import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
+import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 
 const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
 
@@ -23,6 +24,11 @@ function coerceDefaultAutonomy(parsed: Record<string, unknown>): AutonomyLevel {
 function maskApiKey(key: string): string {
   if (!key || key.length < 8) return '****';
   return key.slice(0, 7) + '...' + key.slice(-4);
+}
+
+function applyRuntimeTier(server: FastifyInstance, tier: Tier): void {
+  server.localConfig.tier = tier;
+  server.sessionManager?.setMaxSessions(maxWorkspaceSessionsForTier(tier));
 }
 
 export const settingsRoutes: FastifyPluginAsync = async (server) => {
@@ -385,6 +391,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     raw.tier = parsed;
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
+    applyRuntimeTier(server, parsed);
 
     return { tier: parsed, capabilities: getCapabilities(parsed), updated: true };
   });
@@ -425,6 +432,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     raw.tier = 'TRIAL';
     raw.trialStartedAt = now;
     fs.writeFileSync(configPath, JSON.stringify(raw, null, 2), 'utf-8');
+    applyRuntimeTier(server, 'TRIAL');
 
     return {
       tier: 'TRIAL' as Tier,

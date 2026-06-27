@@ -1,0 +1,965 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/server/tests/local/chat-governance.test.ts",
+      "type": "file",
+      "name": "chat-governance.test.ts",
+      "filePath": "packages/server/tests/local/chat-governance.test.ts",
+      "summary": "Unit tests for the chat governance route, verifying that permission checks (getGovernancePermissions) correctly gate regulated content and enforce tier-based access controls.",
+      "tags": ["test", "api-handler", "security", "chat"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/chat-helpers.test.ts",
+      "type": "file",
+      "name": "chat-helpers.test.ts",
+      "filePath": "packages/server/tests/local/chat-helpers.test.ts",
+      "summary": "Comprehensive tests for chat helper utilities including context window management, schedule suggestion detection, ambiguity prompting, and tool-use description formatting.",
+      "tags": ["test", "utility", "chat", "context-management"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/tests/local/chat-persistence.test.ts",
+      "type": "file",
+      "name": "chat-persistence.test.ts",
+      "filePath": "packages/server/tests/local/chat-persistence.test.ts",
+      "summary": "Tests for chat message persistence (persistMessage and loadSessionMessages), verifying SQLite-backed session storage correctness and message ordering.",
+      "tags": ["test", "persistence", "chat", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/compliance-templates.test.ts",
+      "type": "file",
+      "name": "compliance-templates.test.ts",
+      "filePath": "packages/server/tests/local/compliance-templates.test.ts",
+      "summary": "Integration tests for compliance template routes via the full local server, verifying template retrieval and rendering against the compliance reporting module.",
+      "tags": ["test", "api-handler", "compliance", "integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/connectors-phase4.test.ts",
+      "type": "file",
+      "name": "connectors-phase4.test.ts",
+      "filePath": "packages/server/tests/local/connectors-phase4.test.ts",
+      "summary": "Phase-4 connector route tests that verify tier-based connector capacity enforcement (connectorCapExceeded) and CRUD operations on connector registrations.",
+      "tags": ["test", "api-handler", "connectors", "tier-enforcement"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/cost.test.ts",
+      "type": "file",
+      "name": "cost.test.ts",
+      "filePath": "packages/server/tests/local/cost.test.ts",
+      "summary": "Integration tests for cost-tracking API routes, verifying that LLM usage cost records are properly persisted and retrieved from the local server.",
+      "tags": ["test", "api-handler", "cost-tracking", "integration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/cron-error-handling.test.ts",
+      "type": "file",
+      "name": "cron-error-handling.test.ts",
+      "filePath": "packages/server/tests/local/cron-error-handling.test.ts",
+      "summary": "Tests for the LocalScheduler cron execution engine, specifically verifying consecutive failure capping (MAX_CONSECUTIVE_FAILURES) and error recovery behavior.",
+      "tags": ["test", "service", "cron", "error-handling"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/custom-workflows.test.ts",
+      "type": "file",
+      "name": "custom-workflows.test.ts",
+      "filePath": "packages/server/tests/local/custom-workflows.test.ts",
+      "summary": "Tests for custom workflow route handlers, verifying creation, listing, and execution of user-defined agent workflows stored in the local server.",
+      "tags": ["test", "api-handler", "workflows", "agent"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/extend.test.ts",
+      "type": "file",
+      "name": "extend.test.ts",
+      "filePath": "packages/server/tests/local/extend.test.ts",
+      "summary": "Tests for the Extend and Marketplace route handlers, verifying skill/connector install audit tracking and tier-gated extension management.",
+      "tags": ["test", "api-handler", "marketplace", "tier-enforcement"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/feedback-routes.test.ts",
+      "type": "file",
+      "name": "feedback-routes.test.ts",
+      "filePath": "packages/server/tests/local/feedback-routes.test.ts",
+      "summary": "Tests for the feedback route handler, verifying user feedback submission storage and retrieval with proper validation.",
+      "tags": ["test", "api-handler", "feedback"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/files-indexer.test.ts",
+      "type": "file",
+      "name": "files-indexer.test.ts",
+      "filePath": "packages/server/tests/local/files-indexer.test.ts",
+      "summary": "Integration tests for the file indexer functionality, verifying that uploaded files are correctly indexed into the FrameStore for memory search.",
+      "tags": ["test", "integration", "file-storage", "memory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/files.test.ts",
+      "type": "file",
+      "name": "files.test.ts",
+      "filePath": "packages/server/tests/local/files.test.ts",
+      "summary": "Comprehensive integration tests for the file storage routes covering upload, download, listing, deletion, and directory constraints enforced by STANDARD_DIRS and MAX_UPLOAD_SIZE.",
+      "tags": ["test", "api-handler", "file-storage", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/tests/local/fleet.test.ts",
+      "type": "file",
+      "name": "fleet.test.ts",
+      "filePath": "packages/server/tests/local/fleet.test.ts",
+      "summary": "Tests for the fleet route handler, verifying multi-workspace session management via WorkspaceSessionManager and fleet status endpoints.",
+      "tags": ["test", "api-handler", "workspace", "session-management"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/harvest-cache.test.ts",
+      "type": "file",
+      "name": "harvest-cache.test.ts",
+      "filePath": "packages/server/tests/local/harvest-cache.test.ts",
+      "summary": "Unit tests for harvest cache utilities (writeHarvestCache, readHarvestCache) verifying cache hit/miss behavior and cache invalidation.",
+      "tags": ["test", "utility", "harvest", "cache"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/harvest-classify.test.ts",
+      "type": "file",
+      "name": "harvest-classify.test.ts",
+      "filePath": "packages/server/tests/local/harvest-classify.test.ts",
+      "summary": "Tests for harvest classification logic (importItemTypeToMemoryKind, harvestConfidence), verifying correct mapping of import item types to memory frame kinds.",
+      "tags": ["test", "utility", "harvest", "classification"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/harvest-identity-defenses.test.ts",
+      "type": "file",
+      "name": "harvest-identity-defenses.test.ts",
+      "filePath": "packages/server/tests/local/harvest-identity-defenses.test.ts",
+      "summary": "Security-focused tests for the harvest route, verifying input sanitization defenses including XML injection (escapeXml) and malformed suggestion shape rejection.",
+      "tags": ["test", "security", "harvest", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/harvest-identity.test.ts",
+      "type": "file",
+      "name": "harvest-identity.test.ts",
+      "filePath": "packages/server/tests/local/harvest-identity.test.ts",
+      "summary": "Integration tests for harvest identity extraction, verifying that personal facts from ingested content are correctly stored in the identity layer.",
+      "tags": ["test", "integration", "harvest", "identity"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/harvest-runs.test.ts",
+      "type": "file",
+      "name": "harvest-runs.test.ts",
+      "filePath": "packages/server/tests/local/harvest-runs.test.ts",
+      "summary": "Integration tests for the harvest pipeline run tracking, verifying that ingestion job records are created, updated, and queryable via the server API.",
+      "tags": ["test", "integration", "harvest", "pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/home.test.ts",
+      "type": "file",
+      "name": "home.test.ts",
+      "filePath": "packages/server/tests/local/home.test.ts",
+      "summary": "Tests for home dashboard routes including priority-ranked workspace card display (applyPriorityRanking), personalized greeting generation, and memory-center integration.",
+      "tags": ["test", "api-handler", "home-dashboard", "workspace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/identity.test.ts",
+      "type": "file",
+      "name": "identity.test.ts",
+      "filePath": "packages/server/tests/local/identity.test.ts",
+      "summary": "Tests for the identity route handler, verifying CRUD operations on personal identity facts stored in the memory substrate.",
+      "tags": ["test", "api-handler", "identity", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/import.test.ts",
+      "type": "file",
+      "name": "import.test.ts",
+      "filePath": "packages/server/tests/local/import.test.ts",
+      "summary": "Integration tests for the memory import route, verifying that bulk-imported frames from external conversations are correctly ingested and deduped.",
+      "tags": ["test", "integration", "import", "memory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/knowledge-graph-projection.test.ts",
+      "type": "file",
+      "name": "knowledge-graph-projection.test.ts",
+      "filePath": "packages/server/tests/local/knowledge-graph-projection.test.ts",
+      "summary": "Tests for the knowledge graph route handler, verifying entity projection queries and relationship traversal in the KnowledgeGraph substrate.",
+      "tags": ["test", "api-handler", "knowledge-graph", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/mcp-config.test.ts",
+      "type": "file",
+      "name": "mcp-config.test.ts",
+      "filePath": "packages/server/tests/local/mcp-config.test.ts",
+      "summary": "Unit tests for MCP configuration management (loadMcpConfig, saveMcpServerEntry, validateMcpEntry, removeMcpServerEntry), verifying JSON file persistence and validation.",
+      "tags": ["test", "utility", "mcp", "configuration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/mcps.test.ts",
+      "type": "file",
+      "name": "mcps.test.ts",
+      "filePath": "packages/server/tests/local/mcps.test.ts",
+      "summary": "Comprehensive tests for MCP server management routes covering stdio process spawning, install/uninstall from marketplace, injection-defense against malicious MCP names, and runtime config population.",
+      "tags": ["test", "api-handler", "mcp", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/tests/local/memory-center.test.ts",
+      "type": "file",
+      "name": "memory-center.test.ts",
+      "filePath": "packages/server/tests/local/memory-center.test.ts",
+      "summary": "Comprehensive tests for the memory center route (memoryCenterRoutes, normalizeToMemory, sanitizeFrameContent), covering creation, listing, updating, deletion, and workspace-scoping of memory frames.",
+      "tags": ["test", "api-handler", "memory", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/tests/local/memory-lane-cron.test.ts",
+      "type": "file",
+      "name": "memory-lane-cron.test.ts",
+      "filePath": "packages/server/tests/local/memory-lane-cron.test.ts",
+      "summary": "Tests for the memory lane cron job (runMemoryLaneExtraction), verifying that grouped memory summaries are generated from FrameStore contents via a mocked LLM.",
+      "tags": ["test", "service", "memory", "cron"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/memory-stats-isolation.test.ts",
+      "type": "file",
+      "name": "memory-stats-isolation.test.ts",
+      "filePath": "packages/server/tests/local/memory-stats-isolation.test.ts",
+      "summary": "Tests verifying that memory statistics endpoints only return counts scoped to the requesting workspace, enforcing the mind-isolation contract across multiple seeded workspaces.",
+      "tags": ["test", "api-handler", "memory", "isolation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/monthly-assessment.test.ts",
+      "type": "file",
+      "name": "monthly-assessment.test.ts",
+      "filePath": "packages/server/tests/local/monthly-assessment.test.ts",
+      "summary": "Tests for monthly assessment generation (generateMonthlyAssessment, saveAssessmentToMind), verifying LLM-backed personal reflections are persisted correctly.",
+      "tags": ["test", "service", "memory", "assessment"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/network-auth.test.ts",
+      "type": "file",
+      "name": "network-auth.test.ts",
+      "filePath": "packages/server/tests/local/network-auth.test.ts",
+      "summary": "Security tests for network-level authentication including CORS origin validation, host-header allow-listing, loopback bind detection, rate limiting, and local-origin guards.",
+      "tags": ["test", "security", "middleware", "cors"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/oauth-callback-escaping.test.ts",
+      "type": "file",
+      "name": "oauth-callback-escaping.test.ts",
+      "filePath": "packages/server/tests/local/oauth-callback-escaping.test.ts",
+      "summary": "Security tests for the OAuth callback route, verifying that redirect URLs are properly escaped to prevent open-redirect and injection attacks.",
+      "tags": ["test", "security", "oauth", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/onboarding-status.test.ts",
+      "type": "file",
+      "name": "onboarding-status.test.ts",
+      "filePath": "packages/server/tests/local/onboarding-status.test.ts",
+      "summary": "Tests for the onboarding route handler, verifying step completion tracking and the status endpoint that drives the frontend onboarding wizard.",
+      "tags": ["test", "api-handler", "onboarding"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/p5-skill-governance.test.ts",
+      "type": "file",
+      "name": "p5-skill-governance.test.ts",
+      "filePath": "packages/server/tests/local/p5-skill-governance.test.ts",
+      "summary": "Phase-5 tests for skill governance routes, verifying that skill installation, approval workflows, and provenance tracking (agent·review badge) are enforced correctly.",
+      "tags": ["test", "api-handler", "skills", "governance"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/personas-routes.test.ts",
+      "type": "file",
+      "name": "personas-routes.test.ts",
+      "filePath": "packages/server/tests/local/personas-routes.test.ts",
+      "summary": "Tests for the personas route handler, verifying CRUD operations for custom agent persona definitions stored on the local server.",
+      "tags": ["test", "api-handler", "personas", "agent"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/local/phase2-traversal-backup.test.ts",
+      "type": "file",
+      "name": "phase2-traversal-backup.test.ts",
+      "filePath": "packages/server/tests/local/phase2-traversal-backup.test.ts",
+      "summary": "Security-focused tests for the backup route (backupRoutes), verifying path-traversal defenses by constructing crafted backup archives with relative path components.",
+      "tags": ["test", "security", "backup", "path-traversal"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/local/phase2-traversal-chat.test.ts",
+      "type": "file",
+      "name": "phase2-traversal-chat.test.ts",
+      "filePath": "packages/server/tests/local/phase2-traversal-chat.test.ts",
+      "summary": "Security-focused integration tests for the chat persistence route, verifying path-traversal and injection defenses in session message storage and loading.",
+      "tags": ["test", "security", "chat", "path-traversal"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/server/tests/local/chat-governance.test.ts",
+      "target": "file:packages/server/src/local/routes/chat-governance.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/chat-helpers.test.ts",
+      "target": "file:packages/server/src/local/routes/chat-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/chat-helpers.test.ts",
+      "target": "file:packages/server/src/local/routes/chat-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/chat-persistence.test.ts",
+      "target": "file:packages/server/src/local/routes/chat-persistence.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/compliance-templates.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/compliance-templates.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/connectors-phase4.test.ts",
+      "target": "file:packages/server/src/local/routes/connectors.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/cost.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/cost.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/cron-error-handling.test.ts",
+      "target": "file:packages/server/src/local/cron.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/custom-workflows.test.ts",
+      "target": "file:packages/server/src/local/routes/workflows.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/extend.test.ts",
+      "target": "file:packages/server/src/local/routes/extend.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/extend.test.ts",
+      "target": "file:packages/server/src/local/routes/marketplace.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/feedback-routes.test.ts",
+      "target": "file:packages/server/src/local/routes/feedback.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/files-indexer.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/files-indexer.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/files.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/files.test.ts",
+      "target": "file:packages/server/src/local/storage/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/files.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/fleet.test.ts",
+      "target": "file:packages/server/src/local/routes/fleet.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/fleet.test.ts",
+      "target": "file:packages/server/src/local/workspace-sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-cache.test.ts",
+      "target": "file:packages/server/src/local/routes/harvest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-classify.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-classify.test.ts",
+      "target": "file:packages/server/src/local/routes/harvest-classify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-classify.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-identity-defenses.test.ts",
+      "target": "file:packages/server/src/local/routes/harvest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-identity.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-identity.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-runs.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/harvest-runs.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/home.test.ts",
+      "target": "file:packages/server/src/local/routes/home.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/home.test.ts",
+      "target": "file:packages/server/src/local/routes/memory-center.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/home.test.ts",
+      "target": "file:packages/server/src/local/routes/workspace-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/identity.test.ts",
+      "target": "file:packages/server/src/local/routes/identity.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/import.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/import.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/knowledge-graph-projection.test.ts",
+      "target": "file:packages/server/src/local/routes/knowledge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/mcp-config.test.ts",
+      "target": "file:packages/server/src/local/mcp-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/mcps.test.ts",
+      "target": "file:packages/server/src/local/mcp-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/mcps.test.ts",
+      "target": "file:packages/server/src/local/routes/mcps.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/memory-center.test.ts",
+      "target": "file:packages/server/src/local/routes/memory-center.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/memory-center.test.ts",
+      "target": "file:packages/server/src/local/routes/memory.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/memory-lane-cron.test.ts",
+      "target": "file:packages/server/src/local/memory-lane-cron.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/memory-stats-isolation.test.ts",
+      "target": "file:packages/server/src/local/routes/memory.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/monthly-assessment.test.ts",
+      "target": "file:packages/server/src/local/monthly-assessment.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/network-auth.test.ts",
+      "target": "file:packages/server/src/local/cors-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/network-auth.test.ts",
+      "target": "file:packages/server/src/local/net-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/network-auth.test.ts",
+      "target": "file:packages/server/src/local/origin-guard.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/network-auth.test.ts",
+      "target": "file:packages/server/src/local/routes/browse.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/network-auth.test.ts",
+      "target": "file:packages/server/src/local/security-middleware.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/oauth-callback-escaping.test.ts",
+      "target": "file:packages/server/src/local/routes/oauth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/onboarding-status.test.ts",
+      "target": "file:packages/server/src/local/routes/onboarding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/p5-skill-governance.test.ts",
+      "target": "file:packages/server/src/local/routes/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/personas-routes.test.ts",
+      "target": "file:packages/server/src/local/routes/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/phase2-traversal-backup.test.ts",
+      "target": "file:packages/server/src/local/routes/backup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/phase2-traversal-chat.test.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/phase2-traversal-chat.test.ts",
+      "target": "file:packages/server/src/local/routes/chat-persistence.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/local/phase2-traversal-chat.test.ts",
+      "target": "file:packages/server/tests/test-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/chat-governance.ts",
+      "target": "file:packages/server/tests/local/chat-governance.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/chat-context.ts",
+      "target": "file:packages/server/tests/local/chat-helpers.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/chat-helpers.ts",
+      "target": "file:packages/server/tests/local/chat-helpers.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/chat-persistence.ts",
+      "target": "file:packages/server/tests/local/chat-persistence.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/tests/local/compliance-templates.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/connectors.ts",
+      "target": "file:packages/server/tests/local/connectors-phase4.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/cron.ts",
+      "target": "file:packages/server/tests/local/cron-error-handling.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workflows.ts",
+      "target": "file:packages/server/tests/local/custom-workflows.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/extend.ts",
+      "target": "file:packages/server/tests/local/extend.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/marketplace.ts",
+      "target": "file:packages/server/tests/local/extend.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/feedback.ts",
+      "target": "file:packages/server/tests/local/feedback-routes.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/harvest.ts",
+      "target": "file:packages/server/tests/local/harvest-cache.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/harvest-classify.ts",
+      "target": "file:packages/server/tests/local/harvest-classify.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/harvest.ts",
+      "target": "file:packages/server/tests/local/harvest-identity-defenses.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/tests/local/harvest-identity.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/tests/local/harvest-runs.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/home.ts",
+      "target": "file:packages/server/tests/local/home.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/identity.ts",
+      "target": "file:packages/server/tests/local/identity.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/tests/local/import.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/knowledge.ts",
+      "target": "file:packages/server/tests/local/knowledge-graph-projection.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/mcp-config.ts",
+      "target": "file:packages/server/tests/local/mcp-config.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/mcps.ts",
+      "target": "file:packages/server/tests/local/mcps.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/memory-center.ts",
+      "target": "file:packages/server/tests/local/memory-center.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/memory-lane-cron.ts",
+      "target": "file:packages/server/tests/local/memory-lane-cron.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/memory.ts",
+      "target": "file:packages/server/tests/local/memory-stats-isolation.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/monthly-assessment.ts",
+      "target": "file:packages/server/tests/local/monthly-assessment.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/cors-config.ts",
+      "target": "file:packages/server/tests/local/network-auth.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/security-middleware.ts",
+      "target": "file:packages/server/tests/local/network-auth.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/oauth.ts",
+      "target": "file:packages/server/tests/local/oauth-callback-escaping.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/onboarding.ts",
+      "target": "file:packages/server/tests/local/onboarding-status.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/skills.ts",
+      "target": "file:packages/server/tests/local/p5-skill-governance.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/personas.ts",
+      "target": "file:packages/server/tests/local/personas-routes.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/backup.ts",
+      "target": "file:packages/server/tests/local/phase2-traversal-backup.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/local/routes/chat-persistence.ts",
+      "target": "file:packages/server/tests/local/phase2-traversal-chat.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

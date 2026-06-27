@@ -1,0 +1,1063 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/cognify.ts",
+      "type": "file",
+      "name": "cognify.ts",
+      "filePath": "packages/agent/src/cognify.ts",
+      "summary": "Implements the CognifyPipeline class that processes conversation turns into structured memory frames, extracts entities, builds knowledge-graph relations, indexes for semantic search, and links related frames.",
+      "tags": ["memory", "knowledge-graph", "entity-extraction", "service", "pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/cognify.ts:CognifyPipeline",
+      "type": "class",
+      "name": "CognifyPipeline",
+      "filePath": "packages/agent/src/cognify.ts",
+      "lineRange": [31, 258],
+      "summary": "Core memory ingestion pipeline that converts raw conversation content into persistent memory frames, entity nodes, co-occurrence relations, and semantic search index entries.",
+      "tags": ["memory", "pipeline", "knowledge-graph", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/content-constants.ts",
+      "type": "file",
+      "name": "content-constants.ts",
+      "filePath": "packages/agent/src/content-constants.ts",
+      "summary": "Exports shared numeric constants for content length limits used throughout the memory recall and display pipeline (min length, dedup slice, snippet lengths, etc.).",
+      "tags": ["configuration", "constants", "utility", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/context-loader.ts",
+      "type": "file",
+      "name": "context-loader.ts",
+      "filePath": "packages/agent/src/context-loader.ts",
+      "summary": "Provides three exported functions — fetchRecentFrames, loadRecentContext, loadRecentContextFrames — that query SQLite memory frames, awareness state, top entities, and personal preferences to assemble context for the agent system prompt.",
+      "tags": ["memory", "context", "service", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/context-loader.ts:fetchRecentFrames",
+      "type": "function",
+      "name": "fetchRecentFrames",
+      "filePath": "packages/agent/src/context-loader.ts",
+      "lineRange": [77, 101],
+      "summary": "Queries memory_frames from a SQLite database ordered by importance tier, optionally filtered by workspace or session.",
+      "tags": ["memory", "database", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/context-loader.ts:loadRecentContext",
+      "type": "function",
+      "name": "loadRecentContext",
+      "filePath": "packages/agent/src/context-loader.ts",
+      "lineRange": [108, 187],
+      "summary": "Assembles a text-based context block from recent frames, awareness state, top knowledge entities, and user preferences, scanning for injection before returning.",
+      "tags": ["memory", "context", "security", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/context-loader.ts:loadRecentContextFrames",
+      "type": "function",
+      "name": "loadRecentContextFrames",
+      "filePath": "packages/agent/src/context-loader.ts",
+      "lineRange": [196, 261],
+      "summary": "Returns structured ContextFrame objects (with frame metadata) for use by the prompt assembler, including awareness items, top entities, and preference frames.",
+      "tags": ["memory", "context", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/correction-detector.ts",
+      "type": "file",
+      "name": "correction-detector.ts",
+      "filePath": "packages/agent/src/correction-detector.ts",
+      "summary": "Detects user correction patterns in conversation messages using regex matching, classifies durability (session vs permanent), and extracts structured correction signals from message history.",
+      "tags": ["correction-detection", "utility", "nlp", "signal-processing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/correction-detector.ts:detectCorrection",
+      "type": "function",
+      "name": "detectCorrection",
+      "filePath": "packages/agent/src/correction-detector.ts",
+      "lineRange": [95, 132],
+      "summary": "Analyzes a user message against a previous assistant message to detect if the user is correcting the agent, returning a structured CorrectionSignal with confidence and durability.",
+      "tags": ["correction-detection", "nlp", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/correction-detector.ts:detectCorrectionsInHistory",
+      "type": "function",
+      "name": "detectCorrectionsInHistory",
+      "filePath": "packages/agent/src/correction-detector.ts",
+      "lineRange": [181, 199],
+      "summary": "Scans a full message history array for correction patterns by calling detectCorrection on each user/assistant pair.",
+      "tags": ["correction-detection", "nlp", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/entity-extractor.ts",
+      "type": "file",
+      "name": "entity-extractor.ts",
+      "filePath": "packages/agent/src/entity-extractor.ts",
+      "summary": "Extracts named entities (people, orgs, projects, tech terms) from text using regex patterns and optional LLM enhancement, and identifies semantic relations between co-occurring entities.",
+      "tags": ["entity-extraction", "nlp", "utility", "knowledge-graph"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/entity-extractor.ts:extractEntities",
+      "type": "function",
+      "name": "extractEntities",
+      "filePath": "packages/agent/src/entity-extractor.ts",
+      "lineRange": [78, 110],
+      "summary": "Extracts known tech terms and proper nouns from text using a dictionary lookup and regex proper-noun pattern, classifying each into entity types.",
+      "tags": ["entity-extraction", "nlp", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/entity-extractor.ts:extractEntitiesWithLLM",
+      "type": "function",
+      "name": "extractEntitiesWithLLM",
+      "filePath": "packages/agent/src/entity-extractor.ts",
+      "lineRange": [134, 162],
+      "summary": "Enhances entity extraction by calling an LLM with the text, merging LLM-identified entities with regex-derived ones and normalizing confidence scores.",
+      "tags": ["entity-extraction", "nlp", "llm-integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/entity-extractor.ts:extractRelations",
+      "type": "function",
+      "name": "extractRelations",
+      "filePath": "packages/agent/src/entity-extractor.ts",
+      "lineRange": [182, 200],
+      "summary": "Scans text for relational patterns between known entity names, building a list of source-relation-target triples for the knowledge graph.",
+      "tags": ["knowledge-graph", "nlp", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/improvement-detector.ts",
+      "type": "file",
+      "name": "improvement-detector.ts",
+      "filePath": "packages/agent/src/improvement-detector.ts",
+      "summary": "Records agent improvement signals (capability gaps, corrections, workflow patterns) to an ImprovementSignalStore and formats them into actionable awareness summaries for the system prompt.",
+      "tags": ["self-improvement", "signal-processing", "utility", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/improvement-detector.ts:buildAwarenessSummary",
+      "type": "function",
+      "name": "buildAwarenessSummary",
+      "filePath": "packages/agent/src/improvement-detector.ts",
+      "lineRange": [127, 157],
+      "summary": "Aggregates actionable improvement signals from the store into a structured summary with separate capability-gap, correction, and workflow-pattern sections.",
+      "tags": ["self-improvement", "utility", "signal-processing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/improvement-detector.ts:formatAwarenessPrompt",
+      "type": "function",
+      "name": "formatAwarenessPrompt",
+      "filePath": "packages/agent/src/improvement-detector.ts",
+      "lineRange": [163, 193],
+      "summary": "Renders an AwarenessSummary into a Markdown text block suitable for injection into the agent system prompt.",
+      "tags": ["self-improvement", "prompt-engineering", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/improvement-wiring.ts",
+      "type": "file",
+      "name": "improvement-wiring.ts",
+      "filePath": "packages/agent/src/improvement-wiring.ts",
+      "summary": "Wires together improvement signal detection at the interaction boundary, calling correction-detector and task-shape utilities to record capability gaps, corrections, and workflow patterns after each agent turn.",
+      "tags": ["self-improvement", "agent-runtime", "middleware", "signal-processing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/improvement-wiring.ts:processInteractionForImprovement",
+      "type": "function",
+      "name": "processInteractionForImprovement",
+      "filePath": "packages/agent/src/improvement-wiring.ts",
+      "lineRange": [97, 126],
+      "summary": "Main entry point that processes a completed user/agent interaction, detecting corrections, capability gaps, and workflow patterns and persisting them as improvement signals.",
+      "tags": ["self-improvement", "agent-runtime", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/injection-scanner.ts",
+      "type": "file",
+      "name": "injection-scanner.ts",
+      "filePath": "packages/agent/src/injection-scanner.ts",
+      "summary": "Re-exports scanForInjection and ScanResult from the hive-mind-core security module, providing prompt-injection detection to the agent package.",
+      "tags": ["security", "utility", "barrel"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/memory-linker.ts",
+      "type": "file",
+      "name": "memory-linker.ts",
+      "filePath": "packages/agent/src/memory-linker.ts",
+      "summary": "Provides the MemoryLinker class that performs similarity search against the vector store to find memory frames semantically related to a given content string, filtered by a score threshold.",
+      "tags": ["memory", "vector-search", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/agent/src/memory-linker.ts:MemoryLinker",
+      "type": "class",
+      "name": "MemoryLinker",
+      "filePath": "packages/agent/src/memory-linker.ts",
+      "lineRange": [9, 28],
+      "summary": "Wraps the HybridSearch instance to find semantically related memory frames above a configurable similarity threshold.",
+      "tags": ["memory", "vector-search", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/memory-sign-gate.ts",
+      "type": "file",
+      "name": "memory-sign-gate.ts",
+      "filePath": "packages/agent/src/memory-sign-gate.ts",
+      "summary": "Guards memory writes by detecting self-incapacity assertions (statements like 'I cannot', 'I don't have access') that should not be persisted as facts in the memory store.",
+      "tags": ["memory", "validation", "security", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/model-tier.ts",
+      "type": "file",
+      "name": "model-tier.ts",
+      "filePath": "packages/agent/src/model-tier.ts",
+      "summary": "Exports a single tierForModel function that maps a model identifier string to one of three compute tiers (lite, standard, premium) based on model name prefix patterns.",
+      "tags": ["utility", "model-routing", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/orchestrator.ts",
+      "type": "file",
+      "name": "orchestrator.ts",
+      "filePath": "packages/agent/src/orchestrator.ts",
+      "summary": "Central agent orchestration class that owns the memory substrate (frames, sessions, search, knowledge), builds system prompts with persona and memory context, performs multi-lane recall, auto-saves from exchanges, and manages team sync.",
+      "tags": ["orchestrator", "agent-runtime", "memory", "service"],
+      "complexity": "complex",
+      "languageNotes": "Uses section-level caching (_sectionCache) to avoid recomputing stable parts of the system prompt across turns, a performance optimization for the 879-line core class."
+    },
+    {
+      "id": "class:packages/agent/src/orchestrator.ts:Orchestrator",
+      "type": "class",
+      "name": "Orchestrator",
+      "filePath": "packages/agent/src/orchestrator.ts",
+      "lineRange": [115, 879],
+      "summary": "The core agent coordinator: owns memory layers, performs multi-lane recall with reranking, builds assembled system prompts, auto-saves conversation patterns, and dispatches tool execution.",
+      "tags": ["orchestrator", "agent-runtime", "memory", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/pattern-write-back.ts",
+      "type": "file",
+      "name": "pattern-write-back.ts",
+      "filePath": "packages/agent/src/pattern-write-back.ts",
+      "summary": "Implements runPatternWriteBack which automatically persists meaningful patterns from user/assistant exchanges (preferences, decisions, corrections, research findings, structured insights) into memory frames.",
+      "tags": ["memory", "pattern-matching", "agent-runtime", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/pattern-write-back.ts:runPatternWriteBack",
+      "type": "function",
+      "name": "runPatternWriteBack",
+      "filePath": "packages/agent/src/pattern-write-back.ts",
+      "lineRange": [134, 377],
+      "summary": "Scans a completed user/assistant exchange for preference statements, decisions, corrections, research findings, and key-point summaries, persisting each as a memory frame via the CognifyPipeline.",
+      "tags": ["memory", "pattern-matching", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-assembler.ts",
+      "type": "file",
+      "name": "prompt-assembler.ts",
+      "filePath": "packages/agent/src/prompt-assembler.ts",
+      "summary": "Implements PromptAssembler which assembles a structured system prompt from identity, persona, memory frames, awareness context, active work, preferences, and recalled frames, selecting a prompt scaffold based on tier and task shape.",
+      "tags": ["prompt-engineering", "agent-runtime", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/prompt-assembler.ts:PromptAssembler",
+      "type": "class",
+      "name": "PromptAssembler",
+      "filePath": "packages/agent/src/prompt-assembler.ts",
+      "lineRange": [319, 467],
+      "summary": "Assembles a fully structured system prompt from modular sections: persona, memory frames, active work, preferences, recalled frames, and a task-shaped scaffold.",
+      "tags": ["prompt-engineering", "agent-runtime", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/self-awareness.ts",
+      "type": "file",
+      "name": "self-awareness.ts",
+      "filePath": "packages/agent/src/self-awareness.ts",
+      "summary": "Exports buildSelfAwareness which generates a detailed capabilities block for the system prompt, describing available tools, skills, memory access, and behavioral boundaries based on current agent configuration.",
+      "tags": ["prompt-engineering", "agent-runtime", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/self-awareness.ts:buildSelfAwareness",
+      "type": "function",
+      "name": "buildSelfAwareness",
+      "filePath": "packages/agent/src/self-awareness.ts",
+      "lineRange": [14, 107],
+      "summary": "Builds the self-awareness section of the system prompt, enumerating tool capabilities, skills, memory access, and operating constraints based on the AgentCapabilities parameter.",
+      "tags": ["prompt-engineering", "agent-runtime", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/task-shape.ts",
+      "type": "file",
+      "name": "task-shape.ts",
+      "filePath": "packages/agent/src/task-shape.ts",
+      "summary": "Provides detectTaskShape which classifies incoming user messages into structured task shapes (research, coding, writing, analysis, compound, etc.) by pattern-matching keywords and phrases.",
+      "tags": ["nlp", "task-classification", "utility", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/task-shape.ts:detectTaskShape",
+      "type": "function",
+      "name": "detectTaskShape",
+      "filePath": "packages/agent/src/task-shape.ts",
+      "lineRange": [144, 225],
+      "summary": "Scores a user message against pattern sets to detect its task shape(s), computing confidence, urgency, complexity, and phase decomposition for compound tasks.",
+      "tags": ["task-classification", "nlp", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/cognify-linking.test.ts",
+      "type": "file",
+      "name": "cognify-linking.test.ts",
+      "filePath": "packages/agent/tests/cognify-linking.test.ts",
+      "summary": "Unit tests for CognifyPipeline's memory linking behavior, verifying that cognified frames are connected to semantically related existing frames via the MemoryLinker.",
+      "tags": ["test", "memory", "unit-test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/cognify.test.ts",
+      "type": "file",
+      "name": "cognify.test.ts",
+      "filePath": "packages/agent/tests/cognify.test.ts",
+      "summary": "Unit tests for the CognifyPipeline class covering frame creation, entity extraction, and session management behaviors.",
+      "tags": ["test", "memory", "unit-test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/correction-detector.test.ts",
+      "type": "file",
+      "name": "correction-detector.test.ts",
+      "filePath": "packages/agent/tests/correction-detector.test.ts",
+      "summary": "Comprehensive unit tests for the correction-detector module, covering all durability classifications, confidence scoring, and history-scan behaviors.",
+      "tags": ["test", "unit-test", "correction-detection"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/entity-extractor.test.ts",
+      "type": "file",
+      "name": "entity-extractor.test.ts",
+      "filePath": "packages/agent/tests/entity-extractor.test.ts",
+      "summary": "Minimal unit tests for extractEntities verifying correct entity classification from sample text.",
+      "tags": ["test", "unit-test", "entity-extraction"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "type": "file",
+      "name": "prompt-assembler-eval.ts",
+      "filePath": "packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "summary": "End-to-end evaluation harness for the prompt assembler that runs scenarios against real Anthropic/OpenRouter LLMs, judges outputs with LLMJudge, and renders a Markdown comparison report of baseline vs assembled-prompt conditions.",
+      "tags": ["eval", "test", "prompt-engineering", "llm-integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "type": "file",
+      "name": "prompt-assembler-v5-eval.ts",
+      "filePath": "packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "summary": "Extended v5 evaluation harness for the PromptAssembler that adds richer scenario coverage, multi-model support, and more detailed LLM-judged metrics for the assembled prompt quality.",
+      "tags": ["eval", "test", "prompt-engineering", "llm-integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/scenarios-prompt-assembler-v5.ts",
+      "type": "file",
+      "name": "scenarios-prompt-assembler-v5.ts",
+      "filePath": "packages/agent/tests/eval/scenarios-prompt-assembler-v5.ts",
+      "summary": "Scenario definitions for the v5 prompt-assembler evaluation, providing extended test cases with richer memory priming conversations and expected output criteria.",
+      "tags": ["eval", "test", "data"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/scenarios-prompt-assembler.ts",
+      "type": "file",
+      "name": "scenarios-prompt-assembler.ts",
+      "filePath": "packages/agent/tests/eval/scenarios-prompt-assembler.ts",
+      "summary": "Base scenario definitions for the prompt-assembler evaluation harness, describing priming conversations, user queries, and expected agent behaviors for each test case.",
+      "tags": ["eval", "test", "data"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/improvement-detector.test.ts",
+      "type": "file",
+      "name": "improvement-detector.test.ts",
+      "filePath": "packages/agent/tests/improvement-detector.test.ts",
+      "summary": "Unit tests for the improvement-detector module, verifying signal recording, awareness summary generation, and formatting for all three signal types.",
+      "tags": ["test", "unit-test", "self-improvement"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "class:packages/agent/src/cognify.ts:CognifyPipeline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "class:packages/agent/src/cognify.ts:CognifyPipeline",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "file:packages/agent/src/entity-extractor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "file:packages/agent/src/memory-linker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "file:packages/agent/src/turn-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "function:packages/agent/src/context-loader.ts:fetchRecentFrames",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "function:packages/agent/src/context-loader.ts:loadRecentContext",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "function:packages/agent/src/context-loader.ts:loadRecentContextFrames",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "function:packages/agent/src/context-loader.ts:fetchRecentFrames",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "function:packages/agent/src/context-loader.ts:loadRecentContext",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "function:packages/agent/src/context-loader.ts:loadRecentContextFrames",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "file:packages/agent/src/content-constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/context-loader.ts",
+      "target": "file:packages/agent/src/injection-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/correction-detector.ts",
+      "target": "function:packages/agent/src/correction-detector.ts:detectCorrection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/correction-detector.ts",
+      "target": "function:packages/agent/src/correction-detector.ts:detectCorrectionsInHistory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/correction-detector.ts",
+      "target": "function:packages/agent/src/correction-detector.ts:detectCorrection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/correction-detector.ts",
+      "target": "function:packages/agent/src/correction-detector.ts:detectCorrectionsInHistory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "function:packages/agent/src/entity-extractor.ts:extractEntities",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "function:packages/agent/src/entity-extractor.ts:extractEntitiesWithLLM",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "function:packages/agent/src/entity-extractor.ts:extractRelations",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "function:packages/agent/src/entity-extractor.ts:extractEntities",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "function:packages/agent/src/entity-extractor.ts:extractEntitiesWithLLM",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "function:packages/agent/src/entity-extractor.ts:extractRelations",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/improvement-detector.ts",
+      "target": "function:packages/agent/src/improvement-detector.ts:buildAwarenessSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/improvement-detector.ts",
+      "target": "function:packages/agent/src/improvement-detector.ts:formatAwarenessPrompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/improvement-detector.ts",
+      "target": "function:packages/agent/src/improvement-detector.ts:buildAwarenessSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/improvement-detector.ts",
+      "target": "function:packages/agent/src/improvement-detector.ts:formatAwarenessPrompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/improvement-detector.ts",
+      "target": "file:packages/agent/src/correction-detector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/improvement-wiring.ts",
+      "target": "function:packages/agent/src/improvement-wiring.ts:processInteractionForImprovement",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/improvement-wiring.ts",
+      "target": "function:packages/agent/src/improvement-wiring.ts:processInteractionForImprovement",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/improvement-wiring.ts",
+      "target": "file:packages/agent/src/correction-detector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/improvement-wiring.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/memory-linker.ts",
+      "target": "class:packages/agent/src/memory-linker.ts:MemoryLinker",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/memory-linker.ts",
+      "target": "class:packages/agent/src/memory-linker.ts:MemoryLinker",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "class:packages/agent/src/orchestrator.ts:Orchestrator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "class:packages/agent/src/orchestrator.ts:Orchestrator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/cognify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/content-constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/context-loader.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/improvement-detector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/injection-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/model-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/pattern-write-back.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/prompt-assembler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/self-awareness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/src/turn-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/pattern-write-back.ts",
+      "target": "function:packages/agent/src/pattern-write-back.ts:runPatternWriteBack",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/pattern-write-back.ts",
+      "target": "function:packages/agent/src/pattern-write-back.ts:runPatternWriteBack",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/pattern-write-back.ts",
+      "target": "file:packages/agent/src/cognify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/pattern-write-back.ts",
+      "target": "file:packages/agent/src/content-constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/pattern-write-back.ts",
+      "target": "file:packages/agent/src/memory-sign-gate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "class:packages/agent/src/prompt-assembler.ts:PromptAssembler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "class:packages/agent/src/prompt-assembler.ts:PromptAssembler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "file:packages/agent/src/model-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "file:packages/agent/src/orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "file:packages/agent/src/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "file:packages/agent/src/turn-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/self-awareness.ts",
+      "target": "function:packages/agent/src/self-awareness.ts:buildSelfAwareness",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/self-awareness.ts",
+      "target": "function:packages/agent/src/self-awareness.ts:buildSelfAwareness",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/self-awareness.ts",
+      "target": "file:packages/agent/src/improvement-detector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/task-shape.ts",
+      "target": "function:packages/agent/src/task-shape.ts:detectTaskShape",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/task-shape.ts",
+      "target": "function:packages/agent/src/task-shape.ts:detectTaskShape",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/cognify-linking.test.ts",
+      "target": "file:packages/agent/src/cognify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/cognify-linking.test.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/helpers/mock-embedder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "file:packages/agent/tests/cognify-linking.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/cognify.test.ts",
+      "target": "file:packages/agent/src/cognify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/cognify.test.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/helpers/mock-embedder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/cognify.ts",
+      "target": "file:packages/agent/tests/cognify.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/correction-detector.test.ts",
+      "target": "file:packages/agent/src/correction-detector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/correction-detector.ts",
+      "target": "file:packages/agent/tests/correction-detector.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/entity-extractor.test.ts",
+      "target": "file:packages/agent/src/entity-extractor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/entity-extractor.ts",
+      "target": "file:packages/agent/tests/entity-extractor.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "target": "file:packages/agent/src/model-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "target": "file:packages/agent/src/orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "target": "file:packages/agent/tests/eval/scenarios-prompt-assembler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "target": "file:packages/agent/src/model-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "target": "file:packages/agent/src/orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "target": "file:packages/agent/src/prompt-assembler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "target": "file:packages/agent/tests/eval/scenarios-prompt-assembler-v5.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/scenarios-prompt-assembler-v5.ts",
+      "target": "file:packages/agent/tests/eval/scenarios-prompt-assembler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/scenarios-prompt-assembler.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/improvement-detector.test.ts",
+      "target": "file:packages/agent/src/improvement-detector.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/improvement-detector.ts",
+      "target": "file:packages/agent/tests/improvement-detector.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/tests/eval/prompt-assembler-eval.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/orchestrator.ts",
+      "target": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/prompt-assembler.ts",
+      "target": "file:packages/agent/tests/eval/prompt-assembler-v5-eval.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

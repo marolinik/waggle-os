@@ -1,0 +1,715 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/specs/PROMPT-ASSEMBLER-V4.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 639,
+      "nonEmptyLines": 492,
+      "sections": [
+        {
+          "heading": "Waggle OS — PromptAssembler implementation brief (v4)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Context",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "2. Goal and measurable target",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "3. Non-goals — do NOT touch",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "4. Approach",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "5. Files to create",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "6. Files to modify",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "7. Type contracts",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "7.1 Feature flag — confirmed pattern",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "7.2 model-tier.ts",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "7.3 prompt-assembler.ts",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "8. Algorithm",
+          "level": 2,
+          "line": 178
+        },
+        {
+          "heading": "9. Scaffold matrix — using existing TaskShape taxonomy",
+          "level": 2,
+          "line": 202
+        },
+        {
+          "heading": "10. Task-shape classification — use the existing classifier",
+          "level": 2,
+          "line": 222
+        },
+        {
+          "heading": "11. The eval — priming, test, judge",
+          "level": 2,
+          "line": 241
+        },
+        {
+          "heading": "11.1 Per-scenario flow",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "11.2 Model access — LiteLLM configuration",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "11.3 Outputs Claude Code must produce",
+          "level": 3,
+          "line": 329
+        },
+        {
+          "heading": "11.4 EVAL-RESULTS.md structure",
+          "level": 3,
+          "line": 335
+        },
+        {
+          "heading": "11.5 The test → run → report loop",
+          "level": 3,
+          "line": 392
+        },
+        {
+          "heading": "12. Unit tests (must pass before eval)",
+          "level": 2,
+          "line": 406
+        },
+        {
+          "heading": "12.1 prompt-assembler.test.ts",
+          "level": 3,
+          "line": 408
+        },
+        {
+          "heading": "12.2 model-tier.test.ts",
+          "level": 3,
+          "line": 425
+        },
+        {
+          "heading": "12.3 Orchestrator integration",
+          "level": 3,
+          "line": 438
+        },
+        {
+          "heading": "12.4 Feature-flag snapshot",
+          "level": 3,
+          "line": 443
+        },
+        {
+          "heading": "13. The 6 scenarios (priming + test)",
+          "level": 2,
+          "line": 451
+        },
+        {
+          "heading": "Scenario 1 — Analysis/Decide, Serbian",
+          "level": 3,
+          "line": 455
+        },
+        {
+          "heading": "Scenario 2 — Compare, English",
+          "level": 3,
+          "line": 474
+        },
+        {
+          "heading": "Scenario 3 — Plan-execute, English",
+          "level": 3,
+          "line": 493
+        },
+        {
+          "heading": "Scenario 4 — Research, English",
+          "level": 3,
+          "line": 512
+        },
+        {
+          "heading": "Scenario 5 — Research, Serbian",
+          "level": 3,
+          "line": 531
+        },
+        {
+          "heading": "Scenario 6 — Draft, English",
+          "level": 3,
+          "line": 550
+        },
+        {
+          "heading": "14. Acceptance criteria",
+          "level": 2,
+          "line": 571
+        },
+        {
+          "heading": "15. Risks and mitigations",
+          "level": 2,
+          "line": 590
+        },
+        {
+          "heading": "16. Rollback",
+          "level": 2,
+          "line": 603
+        },
+        {
+          "heading": "17. Implementation order",
+          "level": 2,
+          "line": 609
+        },
+        {
+          "heading": "18. Don't",
+          "level": 2,
+          "line": 627
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 37
+      }
+    },
+    {
+      "path": "docs/specs/WIKI-COMPILER-SPEC.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1687,
+      "nonEmptyLines": 1368,
+      "sections": [
+        {
+          "heading": "Wiki Compiler: Waggle x Karpathy Synthesis Engine",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Executive Summary",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "2. Strategic Context",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "2.1 Why This Matters for Waggle",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "2.2 Why This Matters for KVARK",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "2.3 Marketing Hook",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "3. Competitive Landscape (April 2026)",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Gap Analysis",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "GBrain: Closest Competitor",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "4. Architecture",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "4.1 Layer Model",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "4.2 Wiki Compiler Core",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "4.3 Page Types",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "4.4 Page Format",
+          "level": 3,
+          "line": 214
+        },
+        {
+          "heading": "4.5 Compilation Modes",
+          "level": 3,
+          "line": 260
+        },
+        {
+          "heading": "4.6 Wiki Schema (Governance)",
+          "level": 3,
+          "line": 293
+        },
+        {
+          "heading": "5. Universal Source Pipeline — The Full Second Brain",
+          "level": 2,
+          "line": 326
+        },
+        {
+          "heading": "5.1 The Gap",
+          "level": 3,
+          "line": 328
+        },
+        {
+          "heading": "5.2 Source Adapter Architecture",
+          "level": 3,
+          "line": 339
+        },
+        {
+          "heading": "5.3 Source Adapters — Full Catalog",
+          "level": 3,
+          "line": 366
+        },
+        {
+          "heading": "5.4 Ingest Flow",
+          "level": 3,
+          "line": 411
+        },
+        {
+          "heading": "5.5 Smart Ingest: LLM-Assisted Entity Extraction",
+          "level": 3,
+          "line": 436
+        },
+        {
+          "heading": "5.6 Obsidian Vault Import (Killer Onramp)",
+          "level": 3,
+          "line": 451
+        },
+        {
+          "heading": "5.7 The Full Second Brain Vision",
+          "level": 3,
+          "line": 473
+        },
+        {
+          "heading": "5.8 Source Priority for Implementation",
+          "level": 3,
+          "line": 537
+        },
+        {
+          "heading": "5.9 Auto-Ingest via MCP Connectors — Zero-Effort Second Brain",
+          "level": 3,
+          "line": 551
+        },
+        {
+          "heading": "5A. EU AI Act Compliance Layer — The Second Brain as Audit Trail",
+          "level": 2,
+          "line": 635
+        },
+        {
+          "heading": "5A.1 The Insight",
+          "level": 3,
+          "line": 637
+        },
+        {
+          "heading": "5A.2 Article-by-Article Mapping",
+          "level": 3,
+          "line": 654
+        },
+        {
+          "heading": "5A.3 Compliance Wiki Pages (Auto-Generated)",
+          "level": 3,
+          "line": 665
+        },
+        {
+          "heading": "5A.4 The Compliance Export",
+          "level": 3,
+          "line": 679
+        },
+        {
+          "heading": "5A.5 The KVARK Enterprise Pitch",
+          "level": 3,
+          "line": 702
+        },
+        {
+          "heading": "5A.6 Compliance as a Feature, Not a Tax",
+          "level": 3,
+          "line": 720
+        },
+        {
+          "heading": "5B. Privacy Architecture — Local-First, User-Controlled",
+          "level": 2,
+          "line": 737
+        },
+        {
+          "heading": "5B.1 Core Principle",
+          "level": 3,
+          "line": 739
+        },
+        {
+          "heading": "5B.2 Privacy Tiers",
+          "level": 3,
+          "line": 749
+        },
+        {
+          "heading": "5B.3 Privacy Controls",
+          "level": 3,
+          "line": 757
+        },
+        {
+          "heading": "5B.4 Right to Forget",
+          "level": 3,
+          "line": 804
+        },
+        {
+          "heading": "5B.5 Data Portability",
+          "level": 3,
+          "line": 820
+        },
+        {
+          "heading": "5B.6 GDPR Compliance Mapping",
+          "level": 3,
+          "line": 831
+        },
+        {
+          "heading": "5B.7 Zero-Telemetry Pledge (Open-Source Product)",
+          "level": 3,
+          "line": 844
+        },
+        {
+          "heading": "5C. Complete Source Coverage + Custom Adapters",
+          "level": 2,
+          "line": 858
+        },
+        {
+          "heading": "5C.1 Full AI System Harvest Coverage",
+          "level": 3,
+          "line": 860
+        },
+        {
+          "heading": "5C.2 Microsoft Stack — Full Coverage",
+          "level": 3,
+          "line": 902
+        },
+        {
+          "heading": "5C.3 Manual Source Input",
+          "level": 3,
+          "line": 928
+        },
+        {
+          "heading": "5C.4 Custom Adapters — Extensible by Design",
+          "level": 3,
+          "line": 974
+        },
+        {
+          "heading": "5C.5 Custom Automations",
+          "level": 3,
+          "line": 1030
+        },
+        {
+          "heading": "5C.6 UX — Killer Easy Setup",
+          "level": 3,
+          "line": 1072
+        },
+        {
+          "heading": "6. Dual-Track Delivery Plan",
+          "level": 2,
+          "line": 1139
+        },
+        {
+          "heading": "Track A: Waggle Feature (packages/wiki-compiler)",
+          "level": 3,
+          "line": 1141
+        },
+        {
+          "heading": "Track B: Open-Source Product (hive-mind-mcp)",
+          "level": 3,
+          "line": 1167
+        },
+        {
+          "heading": "7. Revised Execution Plan (post-evaluation, April 13)",
+          "level": 2,
+          "line": 1277
+        },
+        {
+          "heading": "v1 — BUILD (3-4 sessions)",
+          "level": 3,
+          "line": 1284
+        },
+        {
+          "heading": "v1 — TEST (the real validation)",
+          "level": 3,
+          "line": 1312
+        },
+        {
+          "heading": "v2 — SCALE (post-test, estimated 4-6 sessions)",
+          "level": 3,
+          "line": 1373
+        },
+        {
+          "heading": "8. Technical Decisions",
+          "level": 2,
+          "line": 1411
+        },
+        {
+          "heading": "7.1 LLM for Compilation",
+          "level": 3,
+          "line": 1413
+        },
+        {
+          "heading": "7.2 Compilation Cost Model",
+          "level": 3,
+          "line": 1428
+        },
+        {
+          "heading": "7.3 Citation Chain",
+          "level": 3,
+          "line": 1443
+        },
+        {
+          "heading": "7.4 Wikilink Format",
+          "level": 3,
+          "line": 1457
+        },
+        {
+          "heading": "7.5 Storage Location",
+          "level": 3,
+          "line": 1466
+        },
+        {
+          "heading": "9. Differentiation Matrix",
+          "level": 2,
+          "line": 1495
+        },
+        {
+          "heading": "vs. Karpathy's LLM Wiki",
+          "level": 3,
+          "line": 1497
+        },
+        {
+          "heading": "vs. GBrain",
+          "level": 3,
+          "line": 1511
+        },
+        {
+          "heading": "vs. Mem0 / Zep / Hindsight",
+          "level": 3,
+          "line": 1526
+        },
+        {
+          "heading": "10. Open-Source Launch Strategy",
+          "level": 2,
+          "line": 1545
+        },
+        {
+          "heading": "9.1 Naming",
+          "level": 3,
+          "line": 1547
+        },
+        {
+          "heading": "9.2 Positioning",
+          "level": 3,
+          "line": 1559
+        },
+        {
+          "heading": "9.3 Launch Sequence",
+          "level": 3,
+          "line": 1578
+        },
+        {
+          "heading": "9.4 Funnel to Waggle / KVARK",
+          "level": 3,
+          "line": 1598
+        },
+        {
+          "heading": "11. Risk Register",
+          "level": 2,
+          "line": 1613
+        },
+        {
+          "heading": "12. Success Metrics",
+          "level": 2,
+          "line": 1627
+        },
+        {
+          "heading": "Open-Source (hive-mind)",
+          "level": 3,
+          "line": 1629
+        },
+        {
+          "heading": "Waggle Feature",
+          "level": 3,
+          "line": 1635
+        },
+        {
+          "heading": "KVARK Pipeline",
+          "level": 3,
+          "line": 1640
+        },
+        {
+          "heading": "13. Open Questions",
+          "level": 2,
+          "line": 1647
+        },
+        {
+          "heading": "References",
+          "level": 2,
+          "line": 1672
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 77
+      }
+    },
+    {
+      "path": "docs/specs/agent-backend-gaps.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 161,
+      "nonEmptyLines": 112,
+      "sections": [
+        {
+          "heading": "Agent System — Backend Gaps Spec",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Status: ✅ Complete (all endpoints implemented 2026-03-26)",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Date: 2026-03-26",
+          "level": 2,
+          "line": 4
+        },
+        {
+          "heading": "1. Summary",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "2. Frontend ↔ Backend Route Mapping",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "2.1 Personas (Agents) — `/api/personas`",
+          "level": 3,
+          "line": 16
+        },
+        {
+          "heading": "2.2 Agent Groups — `/api/agent-groups`",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "2.3 Jobs — `/api/jobs`",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "3. Required Backend Work",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "3.1 `PATCH /api/personas/:id` (Local Server)",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "3.2 `POST /api/personas/generate` (Local Server)",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "3.3 `PATCH /api/agent-groups/:id` (Team Server)",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "3.4 `DELETE /api/agent-groups/:id` (Team Server)",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "3.5 `POST /api/jobs/:id/cancel` (Team Server)",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "3.6 Workspace ↔ Agent Group Assignment",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "4. Frontend ↔ Backend Reconciliation: Personas vs Agents",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "5. Data Flow: Group on Workspace",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "6. Priority Order",
+          "level": 2,
+          "line": 155
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    }
+  ]
+}

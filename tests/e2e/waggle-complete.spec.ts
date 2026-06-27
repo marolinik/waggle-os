@@ -23,7 +23,7 @@
 
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
-const API = 'http://127.0.0.1:3333';
+const API = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 // ── Minimal response shapes (API JSON is untyped at the boundary) ──────────
 interface ConnectorShape { id?: string; name?: string }
@@ -43,7 +43,13 @@ async function waitForApp(page: Page) {
 
 async function skipOnboarding(page: Page) {
   await page.evaluate(() => {
-    localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
+    localStorage.setItem('waggle-booted', 'true');
+    localStorage.setItem('waggle:onboarding', JSON.stringify({
+      completed: true,
+      step: 7,
+      tier: 'power',
+      tooltipsDismissed: true,
+    }));
   });
 }
 
@@ -69,6 +75,21 @@ async function navigateTo(page: Page, view: string) {
   if (await btn.isVisible().catch(() => false)) {
     await btn.click();
     await page.waitForTimeout(400);
+    return;
+  }
+
+  const routes: Record<string, string> = {
+    Chat: '/chat',
+    Memory: '/memory',
+    Settings: '/settings',
+    Cockpit: '/home',
+  };
+  const route = routes[view];
+  if (route) {
+    await page.goto(`${route}?skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('[role="navigation"], main', { timeout: 10_000 }).catch(() => {});
   }
 }
 
@@ -890,7 +911,7 @@ test.describe('14. UI Journey Tests', () => {
   // this harness), so the entire UI suite silently skipped. Probe the real
   // :3333 baseURL the webServer actually serves.
   test.beforeEach(async ({ request, baseURL }, testInfo) => {
-    const root = baseURL ?? 'http://127.0.0.1:3333';
+    const root = baseURL ?? process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
     try {
       const res = await request.get(`${root}/`, { timeout: 5_000 });
       const ct = res.headers()['content-type'] ?? '';

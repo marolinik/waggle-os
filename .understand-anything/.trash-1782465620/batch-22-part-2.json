@@ -1,0 +1,234 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/document-tools.ts",
+      "type": "file",
+      "name": "document-tools.ts",
+      "filePath": "packages/agent/src/document-tools.ts",
+      "summary": "Provides rich document creation tools including Markdown-to-DOCX conversion, meeting notes generation, status reports, and technical specs, using the docx library with inline formatting support.",
+      "tags": ["utility", "service", "serialization"],
+      "complexity": "complex",
+      "languageNotes": "Implements a full Markdown parser (headings, lists, tables, code blocks, horizontal rules) and a DOCX block renderer without relying on any Markdown library."
+    },
+    {
+      "id": "function:packages/agent/src/document-tools.ts:createDocumentTools",
+      "type": "function",
+      "name": "createDocumentTools",
+      "filePath": "packages/agent/src/document-tools.ts",
+      "lineRange": [314, 626],
+      "summary": "Factory that creates all document creation tool definitions (create_document, meeting_notes, status_report, technical_spec) backed by the Markdown parser and DOCX renderer.",
+      "tags": ["factory", "utility", "serialization"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/evolution-deploy.ts",
+      "type": "file",
+      "name": "evolution-deploy.ts",
+      "filePath": "packages/agent/src/evolution-deploy.ts",
+      "summary": "Handles deployment of evolved system prompts as named persona overrides, writing the evolved prompt to disk and hot-reloading into the active persona registry.",
+      "tags": ["service", "middleware", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/feedback-handler.ts",
+      "type": "file",
+      "name": "feedback-handler.ts",
+      "filePath": "packages/agent/src/feedback-handler.ts",
+      "summary": "Lightweight feedback handler that buffers positive/negative feedback signals for the current agent session without any external imports.",
+      "tags": ["utility", "service", "event-handler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/git-tools.ts",
+      "type": "file",
+      "name": "git-tools.ts",
+      "filePath": "packages/agent/src/git-tools.ts",
+      "summary": "Creates agent-facing Git operation tools (status, diff, log, commit, checkout, push, branch) with safe allowlist enforcement and audit logging using execFile.",
+      "tags": ["utility", "service", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/harness-trace-bridge.ts",
+      "type": "file",
+      "name": "harness-trace-bridge.ts",
+      "filePath": "packages/agent/src/harness-trace-bridge.ts",
+      "summary": "Bridges the workflow harness execution system with the trace recorder, wiring harness phase transitions and quality gate outcomes into structured trace events.",
+      "tags": ["middleware", "service", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/hook-loader.ts",
+      "type": "file",
+      "name": "hook-loader.ts",
+      "filePath": "packages/agent/src/hook-loader.ts",
+      "summary": "Loads external hook modules from disk and registers them with the hooks system, enabling plugin-defined lifecycle hooks for the agent loop.",
+      "tags": ["utility", "service", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/hooks.ts",
+      "type": "file",
+      "name": "hooks.ts",
+      "filePath": "packages/agent/src/hooks.ts",
+      "summary": "Defines the agent lifecycle hook system (pre-tool, post-tool, on-complete, on-error) with a registration API and ordered invocation for extending agent behavior.",
+      "tags": ["middleware", "service", "event-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/insights-tools.ts",
+      "type": "file",
+      "name": "insights-tools.ts",
+      "filePath": "packages/agent/src/insights-tools.ts",
+      "summary": "Creates workspace insights tools that surface usage patterns, skill adoption metrics, and activity summaries from the sidecar analytics endpoints.",
+      "tags": ["utility", "service", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/kvark-tools.ts",
+      "type": "file",
+      "name": "kvark-tools.ts",
+      "filePath": "packages/agent/src/kvark-tools.ts",
+      "summary": "Provides KVARK enterprise search and document query tools (kvark_search, kvark_ask_document) gated to TEAMS/ENTERPRISE tier, routing requests to the KVARK license-validated API.",
+      "tags": ["api-handler", "service", "validation"],
+      "complexity": "complex",
+      "languageNotes": "Tier-gated — tools are only registered when the workspace tier is TEAMS or ENTERPRISE; uses the license.waggle-os.ai validation endpoint."
+    },
+    {
+      "id": "file:packages/agent/src/loop-gates.ts",
+      "type": "file",
+      "name": "loop-gates.ts",
+      "filePath": "packages/agent/src/loop-gates.ts",
+      "summary": "Implements loop gate state management including the completion gate (maybeFireCompletionGate) that triggers skill distillation and verification gate checks at agent loop turn boundaries.",
+      "tags": ["middleware", "service", "validation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/document-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/document-tools.ts",
+      "target": "function:packages/agent/src/document-tools.ts:createDocumentTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/document-tools.ts",
+      "target": "function:packages/agent/src/document-tools.ts:createDocumentTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-deploy.ts",
+      "target": "file:packages/agent/src/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/git-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/harness-trace-bridge.ts",
+      "target": "file:packages/agent/src/trace-recorder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/harness-trace-bridge.ts",
+      "target": "file:packages/agent/src/workflow-harness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/hook-loader.ts",
+      "target": "file:packages/agent/src/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/insights-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/kvark-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/loop-gates.ts",
+      "target": "file:packages/agent/src/skill-distillation.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/loop-gates.ts",
+      "target": "file:packages/agent/src/turn-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/loop-gates.ts",
+      "target": "file:packages/agent/src/verification-gate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/src/loop-gates.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "file:packages/agent/src/kvark-tools.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/agent/src/commands/marketplace-commands.ts",
+      "target": "class:packages/agent/src/commands/command-registry.ts:CommandRegistry",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/commands/workflow-commands.ts",
+      "target": "class:packages/agent/src/commands/command-registry.ts:CommandRegistry",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/hook-loader.ts",
+      "target": "file:packages/agent/src/hooks.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

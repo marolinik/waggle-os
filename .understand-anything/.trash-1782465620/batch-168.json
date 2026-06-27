@@ -1,0 +1,64 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/hive-mind-hooks-codex/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/hive-mind-hooks-codex/README.md",
+      "summary": "Documentation for the @waggle/hive-mind-hooks-codex package, describing installation, uninstall, verify commands, full lifecycle capture fidelity (SessionStart, UserPromptSubmit, Stop, PreCompact), and the fail-open hook architecture that wires OpenAI Codex events into hive-mind frames.",
+      "tags": ["documentation", "installation", "infrastructure", "ai-integration", "hook"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-codex/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/hive-mind-hooks-codex/package.json",
+      "summary": "Package manifest for @waggle/hive-mind-hooks-codex v0.1.0, an OpenAI Codex silent-capture shim that routes conversation episodes into hive-mind frames; defines the codex-hooks CLI binary, four hook entrypoint exports, build/test scripts, and dependencies on hive-mind-hooks-core and hive-mind-shim-core.",
+      "tags": ["configuration", "package-manifest", "build-system", "cli"],
+      "complexity": "moderate",
+      "languageNotes": "Uses ESM (type=module) with TypeScript project references to @waggle/hive-mind-hooks-core and @waggle/hive-mind-shim-core, following the monorepo's composite build pattern."
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-codex/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/hive-mind-hooks-codex/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the hive-mind-hooks-codex package, extending the monorepo base config with composite build output to dist/, and declaring project references to hive-mind-hooks-core and hive-mind-shim-core.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-codex/tsconfig.test.json",
+      "type": "config",
+      "name": "tsconfig.test.json",
+      "filePath": "packages/hive-mind-hooks-codex/tsconfig.test.json",
+      "summary": "TypeScript configuration for test files in hive-mind-hooks-codex, extending the base config with noEmit and no composite/declaration output, covering both src and tests directories for type-checking without emitting build artifacts.",
+      "tags": ["configuration", "typescript", "test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/hive-mind-hooks-codex/README.md",
+      "target": "config:packages/hive-mind-hooks-codex/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/hive-mind-hooks-codex/tsconfig.json",
+      "target": "config:packages/hive-mind-hooks-codex/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/hive-mind-hooks-codex/tsconfig.test.json",
+      "target": "config:packages/hive-mind-hooks-codex/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

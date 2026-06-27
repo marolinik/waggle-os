@@ -1,0 +1,1882 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/decisions/2026-04-27-memory-sync-repair-CLOSED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 501,
+      "nonEmptyLines": 393,
+      "sections": [
+        {
+          "heading": "Memory Sync Repair — CLOSED (consolidated closure memo)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — One-paragraph TL;DR",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "§2 — Aggregate timeline + commit chain",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "§3 — Substrate parity verification — three lenses",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "3.1 — Empirical (Steps 1 + 2)",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "3.2 — Structural (Step 3.1 — `mind-parity-check.yml`)",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "3.3 — Procedural (Step 3.2 — `sync-mind.yml`)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "§4 — Lessons learned (durable patterns)",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "4.1 — Skip-if-committed: \"CI exercises committed reality, not regenerated upstream\"",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "4.2 — db.test.ts split pattern: handling intentional API divergence",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "4.3 — Bidirectional discovery method",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "4.4 — Suffix-port pattern preserves bidirectional signal",
+          "level": 3,
+          "line": 194
+        },
+        {
+          "heading": "4.5 — Empirical 2-week trajectory finding",
+          "level": 3,
+          "line": 208
+        },
+        {
+          "heading": "4.6 — Parallel-session strategy validated",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "§5 — Runbook for ongoing maintenance",
+          "level": 2,
+          "line": 240
+        },
+        {
+          "heading": "5.1 — Adding an entry to `.parity-allowlist`",
+          "level": 3,
+          "line": 242
+        },
+        {
+          "heading": "5.2 — Removing an entry from `.parity-allowlist`",
+          "level": 3,
+          "line": 263
+        },
+        {
+          "heading": "5.3 — Handling a bidirectional bug fix",
+          "level": 3,
+          "line": 273
+        },
+        {
+          "heading": "5.4 — Adding a new \"stays in waggle-os only\" file",
+          "level": 3,
+          "line": 292
+        },
+        {
+          "heading": "5.5 — `HIVE_MIND_SYNC_TOKEN` setup",
+          "level": 3,
+          "line": 305
+        },
+        {
+          "heading": "5.6 — Local-dev parity check",
+          "level": 3,
+          "line": 323
+        },
+        {
+          "heading": "5.7 — Rollback procedure",
+          "level": 3,
+          "line": 337
+        },
+        {
+          "heading": "§6 — Forward pointers",
+          "level": 2,
+          "line": 358
+        },
+        {
+          "heading": "6.1 — Sibling hive-mind workflow (next item, AUTHORIZED by PM)",
+          "level": 3,
+          "line": 360
+        },
+        {
+          "heading": "6.2 — Future scope considerations",
+          "level": 3,
+          "line": 389
+        },
+        {
+          "heading": "§7 — Cross-references (full audit trail)",
+          "level": 2,
+          "line": 409
+        },
+        {
+          "heading": "Step memos",
+          "level": 3,
+          "line": 411
+        },
+        {
+          "heading": "Brief",
+          "level": 3,
+          "line": 417
+        },
+        {
+          "heading": "EXTRACTION map",
+          "level": 3,
+          "line": 420
+        },
+        {
+          "heading": "Pilot context (parallel work)",
+          "level": 3,
+          "line": 423
+        },
+        {
+          "heading": "waggle-os commits (5)",
+          "level": 3,
+          "line": 427
+        },
+        {
+          "heading": "Files added/modified",
+          "level": 3,
+          "line": 434
+        },
+        {
+          "heading": "§8 — Marko-side action items (deferred, non-blocking)",
+          "level": 2,
+          "line": 448
+        },
+        {
+          "heading": "§9 — Status",
+          "level": 2,
+          "line": 486
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-27-phase-2-acceptance-gate-PASS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 240,
+      "nonEmptyLines": 183,
+      "sections": [
+        {
+          "heading": "Phase 2 Acceptance Gate — Results",
+          "level": 1,
+          "line": 15
+        },
+        {
+          "heading": "Per-criterion results",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Criterion 1 — `tsc --noEmit` strict clean on `packages/agent/` + `benchmarks/harness/`",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Criterion 2 — Test suites green (315/315 baseline)",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "Criterion 3 — Substrate-no-regression smoke (DUAL METHODOLOGY)",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "(a) Trio-strict reproduction smoke",
+          "level": 4,
+          "line": 61
+        },
+        {
+          "heading": "(b) Self-judge reproduction smoke",
+          "level": 4,
+          "line": 74
+        },
+        {
+          "heading": "(c) Methodology bias delta",
+          "level": 4,
+          "line": 87
+        },
+        {
+          "heading": "v6 accuracy rule citation (the key D3 finding)",
+          "level": 4,
+          "line": 97
+        },
+        {
+          "heading": "σ-aware 95 % CI derivation",
+          "level": 4,
+          "line": 119
+        },
+        {
+          "heading": "Criterion 4 — `cells.ts` scaffold deletion grep",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Criterion 5 — Pilot wrapper consumes `runAgentLoop`",
+          "level": 3,
+          "line": 160
+        },
+        {
+          "heading": "Phase 2 commit chain",
+          "level": 2,
+          "line": 172
+        },
+        {
+          "heading": "Brief-authoring failure tally for this sprint (sprint-level audit)",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 198
+        },
+        {
+          "heading": "Cumulative cost",
+          "level": 2,
+          "line": 215
+        },
+        {
+          "heading": "Phase 3 authorization",
+          "level": 2,
+          "line": 228
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-27-phase-2-gate-d3-rule-inspection.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 170,
+      "nonEmptyLines": 121,
+      "sections": [
+        {
+          "heading": "Phase 2 Acceptance Gate — D3 Rule Inspection",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "v6 accuracy rule (exact, from source)",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "v6 N=400 oracle data verifies the rule",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Re-aggregation of my N=20 with v6 substring-match rule",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Statistical sample variance correction (was missing from PM acceptance criterion)",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "Same-rule sample comparison (qualitative)",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "Self-judge methodology bias delta — re-checked",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "Verdict",
+          "level": 2,
+          "line": 125
+        },
+        {
+          "heading": "PM ratification asks",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "Cumulative cost so far",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 156
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-27-phase-3-acceptance-gate-pre-run-halt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 253,
+      "nonEmptyLines": 169,
+      "sections": [
+        {
+          "heading": "Phase 3 Acceptance Gate — Pre-Run Halt-and-Ping",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Pre-flight status",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Scope-discovery item #1 — Cost analysis: $4 halt is 3-7× below realistic estimate",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Why per-step cost is NOT constant",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Real per-step cost (recomputed from pricing tables)",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Why ContextManager helps but doesn't fully resolve",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Three concrete options for PM ratification",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "Scope-discovery item #2 — \"Identical final answer\" criterion needs relaxation for real LLMs",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "The problem",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "Where strict identical-output IS testable",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "Proposed relaxation for the real-LLM gate",
+          "level": 3,
+          "line": 127
+        },
+        {
+          "heading": "Scope-discovery item #3 — Synthetic 50-step task needs concrete spec",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "Brief spec (what's there)",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "What's missing",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "Proposed concrete design",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "Scope-discovery item #4 — ContextManager config is unspecified",
+          "level": 2,
+          "line": 184
+        },
+        {
+          "heading": "Scope-discovery item #5 — Self-judge cross-model methodology",
+          "level": 2,
+          "line": 206
+        },
+        {
+          "heading": "Proposed go-forward (pending PM ratification)",
+          "level": 2,
+          "line": 223
+        },
+        {
+          "heading": "Halt-and-ping ask (binding)",
+          "level": 2,
+          "line": 239
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-27-phase-3-acceptance-gate-results.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 224,
+      "nonEmptyLines": 151,
+      "sections": [
+        {
+          "heading": "Phase 3 Acceptance Gate — Results",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Per-criterion results",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "(1) All 3 models complete long-task without uncaught errors",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "(2) Crash-resume Likert ≤ 0.30 from continuous baseline",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "(3) Compressed Likert ≤ 0.30 from continuous baseline",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "(4) Compress events fire ≥1 per model with 4K budget at 30 steps",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "Root-cause diagnosis",
+          "level": 4,
+          "line": 81
+        },
+        {
+          "heading": "What this means for cost",
+          "level": 4,
+          "line": 99
+        },
+        {
+          "heading": "Phase 4 fix recommendations (in order of impact)",
+          "level": 4,
+          "line": 103
+        },
+        {
+          "heading": "(5) Self-judge accuracy ≥ 70% on continuous baseline final answers",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "(6) No infinite compression loops, no checkpoint corruption, no data loss",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "(7) tsc strict clean",
+          "level": 3,
+          "line": 127
+        },
+        {
+          "heading": "(8) All 5720+ unit tests still pass",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "Cost + wall summary",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "What this gate validated vs what it didn't",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "Validated",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "Did NOT validate",
+          "level": 3,
+          "line": 164
+        },
+        {
+          "heading": "H6 verdict: **INCONCLUSIVE**",
+          "level": 2,
+          "line": 172
+        },
+        {
+          "heading": "PM ratification asks",
+          "level": 2,
+          "line": 191
+        },
+        {
+          "heading": "Key signals carried forward",
+          "level": 2,
+          "line": 212
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-agent-fix-sprint-closure.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 251,
+      "nonEmptyLines": 166,
+      "sections": [
+        {
+          "heading": "Agent Fix Sprint — Closure Memo",
+          "level": 1,
+          "line": 15
+        },
+        {
+          "heading": "1. TL;DR",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "2. Sprint timeline",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "3. Test coverage growth",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "4. Cost summary",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "5. Tier 1 / Tier 2 categorization across analytical phases",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "Phase 4.3 — judge rationale categorization (failure modes from 2026-04-26 pilot)",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "Phase 4.4 — skills audit (159 SKILL.md + 8 TS source files)",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "Phase 4.5 — tools audit (22 tool TS source files + multi-step retrieval contract)",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "6. Sprint 12 cleanup backlog handoff",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "7. Cross-references",
+          "level": 2,
+          "line": 163
+        },
+        {
+          "heading": "8. Open items at sprint closure",
+          "level": 2,
+          "line": 180
+        },
+        {
+          "heading": "9. Lessons learned — patterns for future sprint authoring",
+          "level": 2,
+          "line": 192
+        },
+        {
+          "heading": "Pattern 1: pre-execution rule clarification beats post-execution re-run",
+          "level": 3,
+          "line": 196
+        },
+        {
+          "heading": "Pattern 2: pre-Phase-5 mechanistic categorization is net-positive",
+          "level": 3,
+          "line": 204
+        },
+        {
+          "heading": "Pattern 3: cross-stream signal cascade enables real-time empirical-signal integration",
+          "level": 3,
+          "line": 212
+        },
+        {
+          "heading": "Pattern 4: halt-and-PM checkpoint discipline ROI",
+          "level": 3,
+          "line": 222
+        },
+        {
+          "heading": "Pattern 5: single-commit-per-work-item under Option A discipline scales",
+          "level": 3,
+          "line": 235
+        },
+        {
+          "heading": "Closure",
+          "level": 2,
+          "line": 243
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-gepa-faza1-launch.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 323,
+      "nonEmptyLines": 229,
+      "sections": [
+        {
+          "heading": "Faza 1 Launch Decision — LOCK",
+          "level": 1,
+          "line": 26
+        },
+        {
+          "heading": "§A — Inherited Pre-flight Rules (binding for entire Faza 1)",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "A.1 — Config inheritance audit (brief §6.1 verbatim)",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "A.2 — Mixed-methodology baseline (brief §6.2 verbatim)",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "A.3 — Scope verification (brief §6.3 verbatim)",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "A.4 — Cell semantics prompt strictness preservation (brief §6.4 verbatim)",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "A.5 — σ-aware acceptance range (brief §6.5 verbatim)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "A.6 — Mixed-methodology variant (brief §6.6 verbatim)",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "A.7 — Cost super-linear input growth (brief §6.7 verbatim)",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "A.8 — Source data structure (brief §6.8 verbatim)",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "A.9 — Phase 4.5 retrieval-engagement signal (Amendment 2 binding addition)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "A.10 — Pre-phase-boundary cost re-projection (Amendment 3 binding rule)",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "A.14 — NULL-baseline shape-override bug fix (Amendment 6 binding)",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "A.12 — F-saturated-baseline rule (Amendment 5 — PAUSED per Amendment 6)",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "A.13 — Judge metric parallel-report binding rule (Amendment 5)",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "A.11 — JSON-mode retry texture-audit binding rule (Amendment 4)",
+          "level": 3,
+          "line": 172
+        },
+        {
+          "heading": "§B — Manifest v7 audit chain (SHA pins at LOCK time)",
+          "level": 2,
+          "line": 189
+        },
+        {
+          "heading": "§C — Substrate anchor + isolated worktree (Discovery 4.5)",
+          "level": 2,
+          "line": 219
+        },
+        {
+          "heading": "§D — Cost discipline (per brief §5 + Amendment 1 §4 + Amendment 3 cap raise)",
+          "level": 2,
+          "line": 231
+        },
+        {
+          "heading": "§E — 4 mandatory halt-and-PM checkpoints (per Amendment 1 §5)",
+          "level": 2,
+          "line": 252
+        },
+        {
+          "heading": "§F — Faza 1 acceptance criteria (binding — 4 must-hold conditions + 1 false-positive guard)",
+          "level": 2,
+          "line": 265
+        },
+        {
+          "heading": "§G — Operational sequencing (Faza 1 task ordering)",
+          "level": 2,
+          "line": 287
+        },
+        {
+          "heading": "§H — LOCK semantics + amendment policy",
+          "level": 2,
+          "line": 311
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-phase-4-3-pre-run-halt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 215,
+      "nonEmptyLines": 155,
+      "sections": [
+        {
+          "heading": "Phase 4.3 Re-Score Validation — Pre-Run Halt-and-Ping",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "What the brief assumes vs. what the pilot actually is",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Brief assumptions",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Pilot actuality (verified from `pilot-summary.json` + 12 cell JSONL files)",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "Where the \"FAIL\" comes from",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Why the brief's methodology can't directly run",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Proposed scope adjustment (Option D)",
+          "level": 2,
+          "line": 100
+        },
+        {
+          "heading": "1. Phase 1.1 normalize delta",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "2. Phase 4.1 gold-free classifier subset",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "3. Per-judge rationale evidence",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "4. Aggregate per-cell + per-task",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "What this DOESN'T tell us",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "What this DOES tell us",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Alternative: extend `fromPilotRecord` adapter",
+          "level": 2,
+          "line": 155
+        },
+        {
+          "heading": "PM ratification asks",
+          "level": 2,
+          "line": 186
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 204
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-phase-4-3-rescore-delta-report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 172,
+      "nonEmptyLines": 119,
+      "sections": [
+        {
+          "heading": "Phase 4.3 Re-Score Validation — Delta Report",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Methodology recap",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "Aggregate distribution",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "Per-hypothesis breakdown",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Per-task breakdown",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "Per-cell findings",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Sample rationales (illustrative)",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "Interpretation: why is Tier 1 so low?",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "Strategic implications",
+          "level": 2,
+          "line": 119
+        },
+        {
+          "heading": "What this means for Phase 5 mini re-pilot",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "Concrete recommendations (in priority order)",
+          "level": 3,
+          "line": 127
+        },
+        {
+          "heading": "What the data does NOT tell us",
+          "level": 3,
+          "line": 141
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "PM ratification asks",
+          "level": 2,
+          "line": 164
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-phase-4-4-skills-audit-results.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 190,
+      "nonEmptyLines": 134,
+      "sections": [
+        {
+          "heading": "Phase 4.4 Skills Audit Sweep — Results",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Methodology",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "TS source layer findings",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "`skill-tools.ts` (41 KB, 8 tools defined)",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "`skill-frontmatter.ts` (5.8 KB)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "`skill-recommender.ts` (9.5 KB)",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "`skill-creator.ts` — generator template",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "Skill-content layer findings",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "Hand-sampled (6 files)",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "Systematic scan (159 files, 6 regex patterns)",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "Tier classification",
+          "level": 2,
+          "line": 124
+        },
+        {
+          "heading": "Tier 0 (model-portable, no action needed)",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "Tier 1 (description/body rewrite would help — **defer to Sprint 12**)",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "Tier 2 (real coverage gap — GEPA territory, defer to CC-2 work)",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "NEW (not in original Phase 4.4 brief): skill-engagement gap",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "Strategic implications",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "Phase 5 NULL-baseline impact",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "Sprint 12 cleanup recommendation",
+          "level": 3,
+          "line": 151
+        },
+        {
+          "heading": "Out-of-scope for this audit",
+          "level": 3,
+          "line": 161
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 168
+        },
+        {
+          "heading": "PM ratification asks",
+          "level": 2,
+          "line": 182
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-phase-4-5-tools-audit-results.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 204,
+      "nonEmptyLines": 144,
+      "sections": [
+        {
+          "heading": "Phase 4.5 Tools Audit Sweep — Results",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Methodology",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "Findings",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "TS source layer (function-calling tools)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Multi-step retrieval contract (the actual pilot tool surface)",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Pilot retrieval engagement empirical signal",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "Tier classification (final)",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "Tier 0 (no action needed)",
+          "level": 3,
+          "line": 151
+        },
+        {
+          "heading": "Tier 1 (description rewrite — already covered by Phase 4.4)",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "Tier 2 (behavioral gap — defer to CC-2 GEPA work)",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "Strategic implications",
+          "level": 2,
+          "line": 166
+        },
+        {
+          "heading": "Phase 5 NULL-baseline impact",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "Sprint 12 cleanup",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "Audit chain",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "PM ratification asks",
+          "level": 2,
+          "line": 196
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-28-test-coverage-gap-report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 190,
+      "nonEmptyLines": 149,
+      "sections": [
+        {
+          "heading": "Test Coverage Gap Report",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "1. Methodology",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "2. Per-package summary",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "3. Module-by-module gap list",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "P1 — critical path (correction pass applied)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "P2 — supporting (top 25 by LoC)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "P3 — barrel / type-only",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "4. Recommended Sprint 12 additions",
+          "level": 2,
+          "line": 133
+        },
+        {
+          "heading": "5. Out-of-scope notes",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "6. Audit chain",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "7. PM ratification asks",
+          "level": 2,
+          "line": 181
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-29-gepa-faza1-results.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 251,
+      "nonEmptyLines": 182,
+      "sections": [
+        {
+          "heading": "Faza 1 Results Decision Memo — GEPA Tier 2 Prompt-Shapes Evolution",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "§A — Faza 1 acceptance summary",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "§B — Per-candidate Phase 5 authorization",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "B.1 — claude::gen1-v1 — AUTHORIZED",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "B.2 — qwen-thinking::gen1-v1 — AUTHORIZED + Phase 4.5 mechanism CONFIRMED",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "B.3 — gpt::gen1-v2 — WITHHELD pending N=16 re-validation",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "§C — Methodological findings",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "C.1 — Robust validation: claude + qwen-thinking cross-family generalization",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "C.2 — Phase 4.5 mechanism out-of-distribution validated",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "C.3 — gpt selection bias exposed by held-out (methodology working as designed)",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "C.4 — qwen-non-thinking retrieval-quality decoupling (NEW category, scoped)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "C.5 — generic-simple necessary-but-not-sufficient retrieval (scoped)",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "C.6 — Cell-semantic substrate preserved across all evolution",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "§D — Calibration evolution narrative (Amendments 7-11)",
+          "level": 2,
+          "line": 119
+        },
+        {
+          "heading": "§E — Faza 2 expansion authorization scope",
+          "level": 2,
+          "line": 136
+        },
+        {
+          "heading": "E.1 — AUTHORIZED for Phase 5 GEPA-evolved variant deployment",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "E.2 — WITHHELD pending Faza 2 re-validation",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "E.3 — NOT EVALUATED in Faza 1",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "E.4 — Faza 2 brief authoring scope",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "§F — Cost summary",
+          "level": 2,
+          "line": 162
+        },
+        {
+          "heading": "§G — Cross-references — manifest v7 11-SHA chain + audit artifacts",
+          "level": 2,
+          "line": 181
+        },
+        {
+          "heading": "G.1 — Manifest v7 SHA chain",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "G.2 — Faza 1 audit chain artifacts",
+          "level": 3,
+          "line": 199
+        },
+        {
+          "heading": "G.3 — Eval JSONLs (135 evals total)",
+          "level": 3,
+          "line": 217
+        },
+        {
+          "heading": "§H — Phase 5 brief authoring authorization",
+          "level": 2,
+          "line": 227
+        },
+        {
+          "heading": "§I — Faza 1 CLOSED",
+          "level": 2,
+          "line": 241
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 26
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-29-phase-5-brief-LOCKED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 97,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Phase 5 Deployment Brief Ratification",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Decision",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§2 — Cost ceiling LOCKED",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "§3 — Wall-clock LOCKED (projection NOT trigger)",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "§4 — CC handoff readiness",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "§5 — Halt-and-PM authority",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "§6 — Audit trail anchors",
+          "level": 2,
+          "line": 86
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-29-phase-5-scope-LOCKED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 69,
+      "nonEmptyLines": 43,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Phase 5 Deployment Scope",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Decision",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§2 — Rationale (sazeto)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "§3 — Strategic implications",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "§4 — Phase 5 brief delivery commitments (PM-side)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "§5 — Audit trail anchors",
+          "level": 2,
+          "line": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-30-branch-architecture-opcija-c.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 107,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Branch Architecture (Phase 5 Baseline) + Opcija C Ratifikacija",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Discovery (Marko 2026-04-30 morning kickoff)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§2 — Decision",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "§3 — Trade-off acknowledgment (Opcija C consequences)",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "§4 — Hindsight lessons + future binding",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "§4.1 — SHA verifikaciona disciplina",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "§4.2 — Integration sprint policy",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "§4.3 — Dangling commit hygiene",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "§5 — Integration sprint deferred to post-Phase-5 production-stable",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "§6 — Audit trail anchors",
+          "level": 2,
+          "line": 95
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-30-phase-5-1-5-pm-signoff-canary-authorize.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 120,
+      "nonEmptyLines": 81,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Phase 5 §1-§5 PM Signoff + Canary Kick-Off Authorization",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Decision",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§2 — CC implementation evidence (commit chain)",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "§3 — PM signoff scope (what verified, what trusted)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "§3.1 — PM independently verified",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "§3.2 — PM trusted via CC self-report (cannot independently verify)",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "§3.3 — Hygiene gaps acknowledged (non-blocking)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "§4 — Canary kick-off authorization (per Phase 5 brief §7.3)",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "§5 — PM observation cadence + halt-and-PM authority",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "§6 — Cross-stream parallel work post-canary kick-off",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "§7 — Audit trail anchors",
+          "level": 2,
+          "line": 108
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 80,
+      "nonEmptyLines": 51,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Phase 5 Cost Cap Amendment (per brief §4.4)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Decision",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§2 — Why amend, not pivot to Opcija A or C",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "§3 — Distinction: production vs research cost discipline",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "§4 — Phase 5 brief §5.4 update",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "§5 — CC continuation authorization",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "§6 — Audit trail anchors",
+          "level": 2,
+          "line": 68
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-30-pre-launch-sprint-consolidation-LOCKED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 157,
+      "nonEmptyLines": 106,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Pre-Launch Sprint Consolidation",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Strateški reset (zašto)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "§2 — Dva proizvoda, ne tri (Interpretacija A repo arhitektura)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "§3 — 9 paralelnih track-ova pre launch (Days 1-12)",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "§4 — Day 0 launch deliverables",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "§5 — Post-launch 12-week sequencing (per benchmark portfolio brief §5)",
+          "level": 2,
+          "line": 100
+        },
+        {
+          "heading": "§6 — Šta je preserved iz Phase 5 work (ne baceno)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "§7 — Marko-side queue (ratifikacije + paralelni rad)",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "§8 — Audit trail anchors",
+          "level": 2,
+          "line": 146
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/decisions/2026-04-30-wave-1-5-brief-queued-behind-live-test.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 73,
+      "nonEmptyLines": 48,
+      "sections": [
+        {
+          "heading": "LOCKED — Wave 1.5 Memory Architecture Fix Brief — QUEUED iza Live Test sesije",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Odluka",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Razlog",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Šta NE radimo dok ne završimo live test",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Šta radi paralelno (ne blokirano live testom)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Live test sesija — operativni format (PM predlog)",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Audit trail anchors",
+          "level": 2,
+          "line": 63
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    }
+  ]
+}

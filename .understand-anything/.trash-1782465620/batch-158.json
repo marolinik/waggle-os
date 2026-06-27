@@ -1,0 +1,95 @@
+{
+  "nodes": [
+    {
+      "id": "document:judging/round2/judge-1-novice.md",
+      "type": "document",
+      "name": "judge-1-novice.md",
+      "filePath": "judging/round2/judge-1-novice.md",
+      "summary": "Round 2 UX judging report from the perspective of a complete novice persona, scoring five criteria (first-session clarity, 'it knows me' feeling, visible agent growth, desire to return, absence of friction) with per-criterion reasoning and concrete complaints.",
+      "tags": ["documentation", "ux-evaluation", "judging", "user-research"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:judging/round2/judge-2-casual-professional.md",
+      "type": "document",
+      "name": "judge-2-casual-professional.md",
+      "filePath": "judging/round2/judge-2-casual-professional.md",
+      "summary": "Round 2 UX judging report from the casual non-technical professional persona, providing detailed per-criterion scores and reasoning across five UX dimensions with numbered actionable complaints and a bottom-line verdict.",
+      "tags": ["documentation", "ux-evaluation", "judging", "user-research"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/round2/judge-3-power-user.md",
+      "type": "document",
+      "name": "judge-3-power-user.md",
+      "filePath": "judging/round2/judge-3-power-user.md",
+      "summary": "Round 2 UX judging report from a non-developer power user (ops lead) persona, scoring five UX criteria with concrete complaints and a balanced 'what earned the points' section.",
+      "tags": ["documentation", "ux-evaluation", "judging", "user-research"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:judging/round2/judge-4-junior-developer.md",
+      "type": "document",
+      "name": "judge-4-junior-developer.md",
+      "filePath": "judging/round2/judge-4-junior-developer.md",
+      "summary": "Round 2 UX judging report from the junior developer persona, evaluating five UX criteria with per-criterion reasoning, numbered complaints, and a bottom-line verdict.",
+      "tags": ["documentation", "ux-evaluation", "judging", "user-research"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:judging/round2/judge-5-senior-skeptic.md",
+      "type": "document",
+      "name": "judge-5-senior-skeptic.md",
+      "filePath": "judging/round2/judge-5-senior-skeptic.md",
+      "summary": "Round 2 UX judging report from a senior engineer / professional skeptic persona, applying the most critical lens across five criteria with detailed actionable complaints and a bottom-line verdict.",
+      "tags": ["documentation", "ux-evaluation", "judging", "user-research"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/round2/verifier-report.md",
+      "type": "document",
+      "name": "verifier-report.md",
+      "filePath": "judging/round2/verifier-report.md",
+      "summary": "Round 2 adversarial verifier report covering commits 72fedf7 and 0ffd938, performing scope tracing of every code hunk against judge complaints, confirming security posture of renderChatMarkdown, and issuing a PASS verdict with non-blocking findings.",
+      "tags": ["documentation", "verification", "code-review", "quality-assurance"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:judging/round2/verifier-report.md",
+      "target": "document:judging/round2/judge-1-novice.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round2/verifier-report.md",
+      "target": "document:judging/round2/judge-2-casual-professional.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round2/verifier-report.md",
+      "target": "document:judging/round2/judge-3-power-user.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round2/verifier-report.md",
+      "target": "document:judging/round2/judge-4-junior-developer.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round2/verifier-report.md",
+      "target": "document:judging/round2/judge-5-senior-skeptic.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

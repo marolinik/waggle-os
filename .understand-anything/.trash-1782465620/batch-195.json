@@ -1,0 +1,422 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr5-20260617/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr5-20260617/REPORT.md",
+      "summary": "Live smoke test report for Warm-Hive PR5 (Settings/Onboarding redesign), verifying 5 gates including Settings Models reskin, 6-step onboarding, and clean-vault blocking with invalid-key honesty — all passed at commit 80e44a16.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "warm-hive"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr6a-20260618/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr6a-20260618/REPORT.md",
+      "summary": "Live smoke test report for Warm-Hive PR6a (first of 3-way split covering Benchmarks and Platform screens), recording build method, adversarial review results, live sidecar smoke pass, and honored design decisions.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "warm-hive"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr6b-20260618/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr6b-20260618/REPORT.md",
+      "summary": "Live smoke test report for Warm-Hive PR6b (bulk reskin-in-place PR covering Launcher, Storage, Power, Evolution, and Profile screens), documenting six no-fabrication traps defused and zero console errors confirmed across all surfaces.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "warm-hive"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr6c-20260618/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr6c-20260618/REPORT.md",
+      "summary": "Live smoke test report for Warm-Hive PR6c (All-workspaces shelf and Habit streak screens), confirming adversarial review passed with zero HIGH/MEDIUM findings and zero console errors on real sidecar.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "warm-hive"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr7a-20260624/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr7a-20260624/REPORT.md",
+      "summary": "Live smoke test report for PR7a (Stripe Billing redesign), documenting verification of Billing screen, UpgradeModal, and Stripe integration, plus a caught Tailwind-v4 glow regression fixed before merge.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "billing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr7b-20260624/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr7b-20260624/REPORT.md",
+      "summary": "Live smoke test report for PR7b (optional Clerk Auth, screen 13), verifying accountless B1 shell, optional Clerk B2 with themed SignIn/SignUp, the CRITICAL invalid-key boot crash fix, and honesty/no-fabrication contract across both auth states.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "authentication"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr8-20260624/REPORT.md",
+      "type": "document",
+      "name": "REPORT.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr8-20260624/REPORT.md",
+      "summary": "Live smoke test report for PR8 (apps/www landing page reskin), confirming warm-Hive identity rendered on all landing surfaces with zero console errors and honest stats maintained per the no-fabrication contract.",
+      "tags": ["documentation", "smoke-test", "quality-assurance", "warm-hive"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/reference/api.md",
+      "type": "document",
+      "name": "api.md",
+      "filePath": "docs/reference/api.md",
+      "summary": "Comprehensive API reference covering all 27 endpoint groups in the Waggle OS Fastify sidecar, including Chat, Workspaces, Sessions, Memory, Agent, Vault, Skills, Personas, Cron, Tasks, Fleet, and SSE Streaming endpoints.",
+      "tags": ["documentation", "api-schema", "reference", "sidecar"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/reference/commands.md",
+      "type": "document",
+      "name": "commands.md",
+      "filePath": "docs/reference/commands.md",
+      "summary": "Reference documentation for Waggle OS slash commands (/catchup, /research, /draft, /decide, /spawn, /memory, /plan, /marketplace), with detailed examples, command parsing rules, and instructions for adding custom commands.",
+      "tags": ["documentation", "reference", "commands", "agent"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/sessions/2026-05-01-S1-handoff.md",
+      "type": "document",
+      "name": "2026-05-01-S1-handoff.md",
+      "filePath": "docs/sessions/2026-05-01-S1-handoff.md",
+      "summary": "Session handoff document for 2026-05-01 S1, summarizing 11 commits shipped including premium harness and evolution subsystem changes, with open work categorized as P0 ship blockers, P1 PM tasks, P2 Day-2 backlog, and P3 deferred items.",
+      "tags": ["documentation", "session-handoff", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/strategy/2026-05-02-methodology-doc-FINAL.md",
+      "type": "document",
+      "name": "2026-05-02-methodology-doc-FINAL.md",
+      "filePath": "docs/strategy/2026-05-02-methodology-doc-FINAL.md",
+      "summary": "Final methodology document describing the Waggle memory evaluation protocol: LoCoMo benchmark procedures, trio-strict judge ensemble methodology, self-judge bias quantification (+27.35pp gap), GEPA cross-family validation, and reproducibility instructions.",
+      "tags": ["documentation", "strategy", "benchmark", "research"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/strategy/2026-05-05-current-state-master.md",
+      "type": "document",
+      "name": "2026-05-05-current-state-master.md",
+      "filePath": "docs/strategy/2026-05-05-current-state-master.md",
+      "summary": "Master current-state document (bilingual Serbian/English) covering launch readiness, all shipped and in-flight work, Day 0 sequencing, 12-week post-launch roadmap, KVARK enterprise prep, risk mitigations, and Marko's action queue as of 2026-05-05.",
+      "tags": ["documentation", "strategy", "roadmap", "launch"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/superpowers/plans/2026-05-29-prod-readiness-phase1-network-auth.md",
+      "type": "document",
+      "name": "2026-05-29-prod-readiness-phase1-network-auth.md",
+      "filePath": "docs/superpowers/plans/2026-05-29-prod-readiness-phase1-network-auth.md",
+      "summary": "Implementation plan for Phase 1 production readiness covering network exposure and auth boundary hardening: 8 tasks including same-origin guard, loopback binding, CORS exact-match, bearer token leak prevention in /health, and host-header allowlist.",
+      "tags": ["documentation", "security", "production-readiness", "network-auth"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:docs/test-plans/COMBINED-EFFECT-TEST-PLAN.docx",
+      "type": "file",
+      "name": "COMBINED-EFFECT-TEST-PLAN.docx",
+      "filePath": "docs/test-plans/COMBINED-EFFECT-TEST-PLAN.docx",
+      "summary": "Binary Word document containing the combined-effect test plan for the Waggle memory and GEPA systems, generated by the accompanying generate-combined-plan.mjs script.",
+      "tags": ["documentation", "test", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:docs/test-plans/generate-combined-plan.mjs",
+      "type": "file",
+      "name": "generate-combined-plan.mjs",
+      "filePath": "docs/test-plans/generate-combined-plan.mjs",
+      "summary": "Node.js ESM script that programmatically generates the COMBINED-EFFECT-TEST-PLAN.docx using the docx library, building 11 structured sections covering the combined Waggle memory and GEPA evaluation protocol with tables, bullet lists, and formatted paragraphs.",
+      "tags": ["script", "test", "document-generation", "benchmark"],
+      "complexity": "complex",
+      "languageNotes": "Uses the docx npm library to construct Word documents programmatically without a template; section builder functions compose document children arrays."
+    },
+    {
+      "id": "file:docs/test-plans/generate-gepa-plan.mjs",
+      "type": "file",
+      "name": "generate-gepa-plan.mjs",
+      "filePath": "docs/test-plans/generate-gepa-plan.mjs",
+      "summary": "Node.js ESM script generating the GEPA-EVOLUTION-TEST-PLAN.docx using the docx library, with 14 content-section builders covering GEPA evolution evaluation methodology, scoring tables, risk matrices, and success criteria.",
+      "tags": ["script", "test", "document-generation", "benchmark"],
+      "complexity": "complex",
+      "languageNotes": "Largest script in the batch at 1502 lines; uses rich text (richPara, richBullet) with inline bold/normal run mixing, and makeTable abstraction handling column widths via convertInchesToTwip."
+    },
+    {
+      "id": "file:docs/test-plans/generate-memory-plan.mjs",
+      "type": "file",
+      "name": "generate-memory-plan.mjs",
+      "filePath": "docs/test-plans/generate-memory-plan.mjs",
+      "summary": "Node.js ESM script generating the MEMORY-HARVEST-TEST-PLAN.docx with a `main` entry point orchestrating 10 named section-builder functions covering the memory harvest test protocol, judge configuration, statistical methods, and appendices.",
+      "tags": ["script", "test", "document-generation", "benchmark"],
+      "complexity": "complex",
+      "languageNotes": "Follows a canonical entry-point pattern: all section builders are named descriptively (section4_testProtocol), and main() calls them in sequence before writing via Packer.toBuffer."
+    },
+    {
+      "id": "file:docs/test-plans/GEPA-EVOLUTION-TEST-PLAN.docx",
+      "type": "file",
+      "name": "GEPA-EVOLUTION-TEST-PLAN.docx",
+      "filePath": "docs/test-plans/GEPA-EVOLUTION-TEST-PLAN.docx",
+      "summary": "Binary Word document containing the GEPA evolution test plan generated by generate-gepa-plan.mjs, covering the evaluation methodology for the Waggle agent evolution system.",
+      "tags": ["documentation", "test", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:docs/test-plans/MEMORY-HARVEST-TEST-PLAN.docx",
+      "type": "file",
+      "name": "MEMORY-HARVEST-TEST-PLAN.docx",
+      "filePath": "docs/test-plans/MEMORY-HARVEST-TEST-PLAN.docx",
+      "summary": "Binary Word document containing the memory-harvest test plan generated by generate-memory-plan.mjs, covering the evaluation protocol for Waggle's memory substrate and harvest pipeline.",
+      "tags": ["documentation", "test", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/ux-refactor/gap-cards/S20-automation-builder.md",
+      "type": "document",
+      "name": "S20-automation-builder.md",
+      "filePath": "docs/ux-refactor/gap-cards/S20-automation-builder.md",
+      "summary": "UX refactor gap card for screen S20 (Automation Builder), detailing required states from the PRD, current repo state, frontend and backend work items, shared types needed, dependencies, L-effort estimate, and open questions.",
+      "tags": ["documentation", "ux-refactor", "feature-spec", "gap-analysis"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/ux-refactor/gap-cards/S21-marketplace-extend.md",
+      "type": "document",
+      "name": "S21-marketplace-extend.md",
+      "filePath": "docs/ux-refactor/gap-cards/S21-marketplace-extend.md",
+      "summary": "UX refactor gap card for screen S21 (Marketplace/Extend), specifying required tab/section states, backend endpoint work per PRD §16.9, shared type definitions needed, screen dependencies, M-effort estimate, and open questions.",
+      "tags": ["documentation", "ux-refactor", "feature-spec", "marketplace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/ASSET_MANIFEST.json",
+      "type": "config",
+      "name": "ASSET_MANIFEST.json",
+      "filePath": "docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/ASSET_MANIFEST.json",
+      "summary": "JSON manifest cataloguing all assets in the Waggle OS UX Refactor Master Handoff Package, providing structured metadata for the design handoff assets delivered to the implementation team.",
+      "tags": ["configuration", "documentation", "ux-refactor", "handoff"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/README.md",
+      "summary": "README for the Waggle OS Handoff Asset Manifest package, describing the contents and organization of the UX refactor design handoff assets.",
+      "tags": ["documentation", "ux-refactor", "handoff"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:docs/waggle-os-features-and-comparison.html",
+      "type": "file",
+      "name": "waggle-os-features-and-comparison.html",
+      "filePath": "docs/waggle-os-features-and-comparison.html",
+      "summary": "Standalone HTML document presenting a feature comparison table for Waggle OS tiers and competitor products, likely used as a sales or internal reference artifact.",
+      "tags": ["documentation", "markup", "marketing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:docs/waggle-os-mental-model.html",
+      "type": "file",
+      "name": "waggle-os-mental-model.html",
+      "filePath": "docs/waggle-os-mental-model.html",
+      "summary": "Standalone HTML document explaining the Waggle OS mental model for users or stakeholders, covering how memory, workspaces, agents, and skills relate to each other.",
+      "tags": ["documentation", "markup", "user-education"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:docs/test-plans/generate-combined-plan.mjs:titlePage",
+      "type": "function",
+      "name": "titlePage",
+      "filePath": "docs/test-plans/generate-combined-plan.mjs",
+      "lineRange": [155, 225],
+      "summary": "Builds the title page section of the combined test plan docx, assembling heading, date, author, and spacing paragraphs into the document children array.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:docs/test-plans/generate-combined-plan.mjs:section3",
+      "type": "function",
+      "name": "section3",
+      "filePath": "docs/test-plans/generate-combined-plan.mjs",
+      "lineRange": [299, 379],
+      "summary": "Builds section 3 of the combined test plan, constructing test conditions table using headerCell/cell/altRow helpers and narrative paragraphs describing the evaluation conditions.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:docs/test-plans/generate-combined-plan.mjs:section6",
+      "type": "function",
+      "name": "section6",
+      "filePath": "docs/test-plans/generate-combined-plan.mjs",
+      "lineRange": [431, 477],
+      "summary": "Builds section 6 of the combined test plan covering metrics data as a formatted table plus associated bullet narrative for evaluation measurement methodology.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:docs/test-plans/generate-combined-plan.mjs:section11",
+      "type": "function",
+      "name": "section11",
+      "filePath": "docs/test-plans/generate-combined-plan.mjs",
+      "lineRange": [659, 716],
+      "summary": "Builds section 11 of the combined test plan covering timeline data as a table plus risk/mitigation subsections with bullet lists.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:docs/test-plans/generate-gepa-plan.mjs:makeTable",
+      "type": "function",
+      "name": "makeTable",
+      "filePath": "docs/test-plans/generate-gepa-plan.mjs",
+      "lineRange": [189, 279],
+      "summary": "Core table-construction helper for the GEPA plan generator, creating docx Table elements with configurable column widths, alternating row shading, and header row bold formatting.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:docs/test-plans/generate-gepa-plan.mjs:buildSection5",
+      "type": "function",
+      "name": "buildSection5",
+      "filePath": "docs/test-plans/generate-gepa-plan.mjs",
+      "lineRange": [613, 721],
+      "summary": "Builds section 5 of the GEPA test plan (the largest section at 109 lines), constructing the detailed test case table with conditions, metrics, and expected outcome data.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:docs/test-plans/generate-gepa-plan.mjs:buildSection14",
+      "type": "function",
+      "name": "buildSection14",
+      "filePath": "docs/test-plans/generate-gepa-plan.mjs",
+      "lineRange": [1283, 1400],
+      "summary": "Builds section 14 of the GEPA test plan (appendix/timeline section at 118 lines), constructing the final milestone table and rollout narrative.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:docs/test-plans/generate-memory-plan.mjs:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "docs/test-plans/generate-memory-plan.mjs",
+      "lineRange": [834, 901],
+      "summary": "Entry point for the memory plan generator that orchestrates all 10 section builders, assembles the complete document, packs it via Packer.toBuffer, and writes the MEMORY-HARVEST-TEST-PLAN.docx output file.",
+      "tags": ["entry-point", "document-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:docs/test-plans/generate-memory-plan.mjs:section4_testProtocol",
+      "type": "function",
+      "name": "section4_testProtocol",
+      "filePath": "docs/test-plans/generate-memory-plan.mjs",
+      "lineRange": [300, 546],
+      "summary": "Largest section builder (247 lines) covering the full memory-harvest test protocol: 6 sub-sections with numbered procedures, condition tables, harvest configuration matrices, and agent behavior specifications.",
+      "tags": ["utility", "document-generation"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:docs/test-plans/generate-combined-plan.mjs",
+      "target": "function:docs/test-plans/generate-combined-plan.mjs:titlePage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-combined-plan.mjs",
+      "target": "function:docs/test-plans/generate-combined-plan.mjs:section3",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-combined-plan.mjs",
+      "target": "function:docs/test-plans/generate-combined-plan.mjs:section6",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-combined-plan.mjs",
+      "target": "function:docs/test-plans/generate-combined-plan.mjs:section11",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-gepa-plan.mjs",
+      "target": "function:docs/test-plans/generate-gepa-plan.mjs:makeTable",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-gepa-plan.mjs",
+      "target": "function:docs/test-plans/generate-gepa-plan.mjs:buildSection5",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-gepa-plan.mjs",
+      "target": "function:docs/test-plans/generate-gepa-plan.mjs:buildSection14",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-memory-plan.mjs",
+      "target": "function:docs/test-plans/generate-memory-plan.mjs:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-memory-plan.mjs",
+      "target": "function:docs/test-plans/generate-memory-plan.mjs:section4_testProtocol",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:docs/test-plans/generate-combined-plan.mjs",
+      "target": "file:docs/test-plans/COMBINED-EFFECT-TEST-PLAN.docx",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:docs/test-plans/generate-gepa-plan.mjs",
+      "target": "file:docs/test-plans/GEPA-EVOLUTION-TEST-PLAN.docx",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:docs/test-plans/generate-memory-plan.mjs",
+      "target": "file:docs/test-plans/MEMORY-HARVEST-TEST-PLAN.docx",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/ASSET_MANIFEST.json",
+      "target": "document:docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/README.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/ux-refactor/gap-cards/S20-automation-builder.md",
+      "target": "document:docs/ux-refactor/gap-cards/S21-marketplace-extend.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

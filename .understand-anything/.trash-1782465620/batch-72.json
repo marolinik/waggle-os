@@ -1,0 +1,180 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "type": "file",
+      "name": "install-core.ts",
+      "filePath": "packages/hive-mind-hooks-core/src/install-core.ts",
+      "summary": "Core install/uninstall primitives for the hive-mind hooks system, providing backup-before-write, pointer read/write, and full restore-from-backup logic for reversible hook installation into AI tool config files.",
+      "tags": ["utility", "installation", "service", "file-management"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "type": "file",
+      "name": "paths-core.ts",
+      "filePath": "packages/hive-mind-hooks-core/src/paths-core.ts",
+      "summary": "Path computation utilities for hive-mind hook installation, deriving backup paths, hook script paths, hook command strings, and normalizing CLI paths across platforms.",
+      "tags": ["utility", "path-resolution", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-core/tests/install-core.test.ts",
+      "type": "file",
+      "name": "install-core.test.ts",
+      "filePath": "packages/hive-mind-hooks-core/tests/install-core.test.ts",
+      "summary": "Unit tests for install-core primitives, covering backup creation, pointer read/write, type-guard validation, and full restore-from-backup lifecycle including byte-identical and modified file scenarios.",
+      "tags": ["test", "installation", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-core/tests/paths-core.test.ts",
+      "type": "file",
+      "name": "paths-core.test.ts",
+      "filePath": "packages/hive-mind-hooks-core/tests/paths-core.test.ts",
+      "summary": "Unit tests for paths-core utilities, verifying backup path formatting, hook command generation, CLI path normalization, and hook directory resolution.",
+      "tags": ["test", "path-resolution", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-core/src/install-core.ts:restoreFromBackup",
+      "type": "function",
+      "name": "restoreFromBackup",
+      "filePath": "packages/hive-mind-hooks-core/src/install-core.ts",
+      "lineRange": [130, 190],
+      "summary": "Restores a config file to its pre-hook state by reading the install pointer, verifying backup bytes match, re-writing the original content, and cleaning up the backup and pointer files.",
+      "tags": ["utility", "installation", "file-management"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-core/src/install-core.ts:readPointer",
+      "type": "function",
+      "name": "readPointer",
+      "filePath": "packages/hive-mind-hooks-core/src/install-core.ts",
+      "lineRange": [89, 107],
+      "summary": "Reads and validates a JSON install pointer file from disk, returning a typed InstallPointer or null if absent/invalid.",
+      "tags": ["utility", "installation", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-core/src/install-core.ts:backupByteIdentical",
+      "type": "function",
+      "name": "backupByteIdentical",
+      "filePath": "packages/hive-mind-hooks-core/src/install-core.ts",
+      "lineRange": [60, 71],
+      "summary": "Creates a byte-identical backup copy of a config file at a timestamped backup path before hook injection, skipping if the original does not exist.",
+      "tags": ["utility", "file-management", "installation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-core/src/paths-core.ts:normalizeCliPath",
+      "type": "function",
+      "name": "normalizeCliPath",
+      "filePath": "packages/hive-mind-hooks-core/src/paths-core.ts",
+      "lineRange": [47, 57],
+      "summary": "Normalizes a CLI binary path by trimming whitespace and stripping surrounding quotes, used to sanitize user-provided or auto-detected CLI paths before embedding in hook commands.",
+      "tags": ["utility", "path-resolution", "validation"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/install-core.ts:restoreFromBackup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/install-core.ts:restoreFromBackup",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/install-core.ts:readPointer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/install-core.ts:readPointer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/install-core.ts:backupByteIdentical",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/install-core.ts:backupByteIdentical",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/paths-core.ts:normalizeCliPath",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "target": "function:packages/hive-mind-hooks-core/src/paths-core.ts:normalizeCliPath",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/tests/install-core.test.ts",
+      "target": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/tests/install-core.test.ts",
+      "target": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/tests/install-core.test.ts",
+      "target": "file:packages/hive-mind-hooks-core/src/install-core.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/tests/paths-core.test.ts",
+      "target": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-core/tests/paths-core.test.ts",
+      "target": "file:packages/hive-mind-hooks-core/src/paths-core.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

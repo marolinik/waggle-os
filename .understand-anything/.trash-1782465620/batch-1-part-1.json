@@ -1,0 +1,623 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/tests/agent-intelligence.test.ts",
+      "type": "file",
+      "name": "agent-intelligence.test.ts",
+      "filePath": "packages/agent/tests/agent-intelligence.test.ts",
+      "summary": "Test suite exercising agent intelligence behaviours including tool utilization tracking and chat route ambiguity detection.",
+      "tags": ["test", "agent", "intelligence"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/db/migrate.ts",
+      "type": "file",
+      "name": "migrate.ts",
+      "filePath": "packages/server/src/db/migrate.ts",
+      "summary": "CLI entry point that opens the server database connection and runs all pending SQLite migrations.",
+      "tags": ["entry-point", "database", "migration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/agents-store.ts",
+      "type": "file",
+      "name": "agents-store.ts",
+      "filePath": "packages/server/src/local/agents-store.ts",
+      "summary": "File-backed CRUD store for agent definitions persisted as JSON on disk, supporting add, get, patch, and delete operations.",
+      "tags": ["service", "data-model", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/agents-store.ts:readAgents",
+      "type": "function",
+      "name": "readAgents",
+      "filePath": "packages/server/src/local/agents-store.ts",
+      "lineRange": [65, 76],
+      "summary": "Reads and parses the agents JSON file from the data directory, returning an empty array if not yet present.",
+      "tags": ["utility", "data-model"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/server/src/local/agents-store.ts:addAgent",
+      "type": "function",
+      "name": "addAgent",
+      "filePath": "packages/server/src/local/agents-store.ts",
+      "lineRange": [101, 112],
+      "summary": "Creates a new agent entry with a generated UUID and timestamps, persisting it to the agents JSON store.",
+      "tags": ["utility", "data-model"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/server/src/local/agents-store.ts:patchAgent",
+      "type": "function",
+      "name": "patchAgent",
+      "filePath": "packages/server/src/local/agents-store.ts",
+      "lineRange": [121, 140],
+      "summary": "Applies a partial update to an existing agent by ID, updating the updatedAt timestamp and writing back atomically.",
+      "tags": ["utility", "data-model"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/cors-config.ts",
+      "type": "file",
+      "name": "cors-config.ts",
+      "filePath": "packages/server/src/local/cors-config.ts",
+      "summary": "Defines allowed CORS origins for the local Fastify server and exports origin-validation helpers used by route handlers.",
+      "tags": ["configuration", "middleware", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/cron.ts",
+      "type": "file",
+      "name": "cron.ts",
+      "filePath": "packages/server/src/local/cron.ts",
+      "summary": "Implements the LocalScheduler class that ticks at an interval, executing due cron jobs and tracking consecutive failures up to a configurable maximum before disabling a job.",
+      "tags": ["service", "scheduler", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/server/src/local/cron.ts:LocalScheduler",
+      "type": "class",
+      "name": "LocalScheduler",
+      "filePath": "packages/server/src/local/cron.ts",
+      "lineRange": [44, 168],
+      "summary": "Interval-based cron scheduler that maintains failure counts and disables runaway jobs after reaching MAX_CONSECUTIVE_FAILURES.",
+      "tags": ["service", "scheduler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/data-erase-helpers.ts",
+      "type": "file",
+      "name": "data-erase-helpers.ts",
+      "filePath": "packages/server/src/local/data-erase-helpers.ts",
+      "summary": "Provides the core data-wipe helpers including confirmation validation, safe-directory assertion, marker file management, and recursive filesystem removal with an audit receipt.",
+      "tags": ["utility", "security", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/data-erase-helpers.ts:performWipe",
+      "type": "function",
+      "name": "performWipe",
+      "filePath": "packages/server/src/local/data-erase-helpers.ts",
+      "lineRange": [241, 311],
+      "summary": "Executes a full recursive deletion of the data directory, skipping protected entries and producing a structured wipe report.",
+      "tags": ["utility", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/data-erase-helpers.ts:assertDataDirIsSafeToWipe",
+      "type": "function",
+      "name": "assertDataDirIsSafeToWipe",
+      "filePath": "packages/server/src/local/data-erase-helpers.ts",
+      "lineRange": [179, 208],
+      "summary": "Guards against accidental deletion of root or home directories by resolving and checking multiple safety conditions before allowing a wipe.",
+      "tags": ["validation", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/server/src/local/index.ts",
+      "summary": "Main Fastify server factory for the local sidecar — registers all ~80 route plugins, decorates the server with memory, vault, connectors, and scheduling infrastructure, and seeds initial data on first run.",
+      "tags": ["entry-point", "api-handler", "service"],
+      "complexity": "complex",
+      "languageNotes": "Single 2574-line buildLocalServer function wires every route plugin, middleware, and background job. Changing routing order or plugin registration here has server-wide impact."
+    },
+    {
+      "id": "function:packages/server/src/local/index.ts:buildLocalServer",
+      "type": "function",
+      "name": "buildLocalServer",
+      "filePath": "packages/server/src/local/index.ts",
+      "lineRange": [302, 2574],
+      "summary": "Constructs and fully configures the Fastify local sidecar instance: registers plugins, seeds data, sets up memory substrate, wires connectors, and attaches all route handlers.",
+      "tags": ["entry-point", "service", "factory"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/lifecycle.ts",
+      "type": "file",
+      "name": "lifecycle.ts",
+      "filePath": "packages/server/src/local/lifecycle.ts",
+      "summary": "Manages LiteLLM process lifecycle: spawning, monitoring health, graceful shutdown, and re-start on crash for the local LLM proxy.",
+      "tags": ["service", "lifecycle", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/llm-key-probe.ts",
+      "type": "file",
+      "name": "llm-key-probe.ts",
+      "filePath": "packages/server/src/local/llm-key-probe.ts",
+      "summary": "Probes LLM provider API keys by sending minimal test requests to verify their validity before exposing them to the rest of the system.",
+      "tags": ["utility", "validation", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/logger.ts",
+      "type": "file",
+      "name": "logger.ts",
+      "filePath": "packages/server/src/local/logger.ts",
+      "summary": "Creates and exports the Pino logger instance used throughout the local server sidecar for structured logging.",
+      "tags": ["utility", "singleton", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/mcp-config.ts",
+      "type": "file",
+      "name": "mcp-config.ts",
+      "filePath": "packages/server/src/local/mcp-config.ts",
+      "summary": "Reads and writes the MCP (Model Context Protocol) server configuration from disk, seeding defaults and validating entries.",
+      "tags": ["configuration", "service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/memory-lane-cron.ts",
+      "type": "file",
+      "name": "memory-lane-cron.ts",
+      "filePath": "packages/server/src/local/memory-lane-cron.ts",
+      "summary": "Scheduled cron job that periodically surfaces memory-lane highlights by querying the memory substrate and emitting notification events.",
+      "tags": ["service", "scheduler", "event-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/model-availability.ts",
+      "type": "file",
+      "name": "model-availability.ts",
+      "filePath": "packages/server/src/local/model-availability.ts",
+      "summary": "Checks which LLM models are available given the user's configured API keys and LiteLLM connection, returning an availability map used by routes.",
+      "tags": ["service", "utility", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/monthly-assessment.ts",
+      "type": "file",
+      "name": "monthly-assessment.ts",
+      "filePath": "packages/server/src/local/monthly-assessment.ts",
+      "summary": "Generates a monthly AI-driven self-assessment of workspace activity by querying the memory substrate and invoking an LLM to produce structured insights.",
+      "tags": ["service", "event-handler", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/net-config.ts",
+      "type": "file",
+      "name": "net-config.ts",
+      "filePath": "packages/server/src/local/net-config.ts",
+      "summary": "Resolves the server bind host from environment variables and exports network configuration constants used by security middleware and the service startup.",
+      "tags": ["configuration", "utility", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/offline-manager.ts",
+      "type": "file",
+      "name": "offline-manager.ts",
+      "filePath": "packages/server/src/local/offline-manager.ts",
+      "summary": "Tracks and broadcasts the server's online/offline state, polling network connectivity and emitting SSE events to connected clients.",
+      "tags": ["service", "event-handler", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/origin-guard.ts",
+      "type": "file",
+      "name": "origin-guard.ts",
+      "filePath": "packages/server/src/local/origin-guard.ts",
+      "summary": "Fastify preHandler that rejects requests from untrusted origins, providing a secondary CORS enforcement layer for sensitive endpoints.",
+      "tags": ["middleware", "security", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/persona-tool-filter.ts",
+      "type": "file",
+      "name": "persona-tool-filter.ts",
+      "filePath": "packages/server/src/local/persona-tool-filter.ts",
+      "summary": "Filters the available tool set down to only those permitted for the active agent persona, enforcing allowlists and denylists at the server layer.",
+      "tags": ["middleware", "utility", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/proactive-handlers.ts",
+      "type": "file",
+      "name": "proactive-handlers.ts",
+      "filePath": "packages/server/src/local/proactive-handlers.ts",
+      "summary": "Contains handlers for proactive server-side behaviours such as scheduling suggestions and follow-up prompts that are injected into the chat flow without user initiation.",
+      "tags": ["service", "event-handler", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/agent-groups.ts",
+      "type": "file",
+      "name": "agent-groups.ts",
+      "filePath": "packages/server/src/local/routes/agent-groups.ts",
+      "summary": "Fastify route plugin exposing CRUD endpoints for agent group management, used for organizing agents into logical collections within a workspace.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/agent-run.ts",
+      "type": "file",
+      "name": "agent-run.ts",
+      "filePath": "packages/server/src/local/routes/agent-run.ts",
+      "summary": "Route plugin that handles initiating and streaming agent execution runs, bridging HTTP requests to the agent loop and surfacing status updates via SSE.",
+      "tags": ["api-handler", "service", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/agent-search.ts",
+      "type": "file",
+      "name": "agent-search.ts",
+      "filePath": "packages/server/src/local/routes/agent-search.ts",
+      "summary": "Route plugin providing semantic search over agents, enabling discovery of relevant agents by capability or description using vector search.",
+      "tags": ["api-handler", "service", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/agent.ts",
+      "type": "file",
+      "name": "agent.ts",
+      "filePath": "packages/server/src/local/routes/agent.ts",
+      "summary": "Route plugin exposing single-agent read endpoints and model-availability checks for the active agent context.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/agents.ts",
+      "type": "file",
+      "name": "agents.ts",
+      "filePath": "packages/server/src/local/routes/agents.ts",
+      "summary": "Route plugin providing full CRUD REST endpoints for agent definitions, delegating persistence to the agents-store and enforcing input validation.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/anthropic-proxy.ts",
+      "type": "file",
+      "name": "anthropic-proxy.ts",
+      "filePath": "packages/server/src/local/routes/anthropic-proxy.ts",
+      "summary": "Transparent reverse-proxy route that forwards authenticated requests to the Anthropic API, injecting CORS headers and stripping internal credentials.",
+      "tags": ["api-handler", "middleware", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/approval.ts",
+      "type": "file",
+      "name": "approval.ts",
+      "filePath": "packages/server/src/local/routes/approval.ts",
+      "summary": "Route plugin that handles human-in-the-loop approval requests, allowing users to approve or reject pending agent actions before execution proceeds.",
+      "tags": ["api-handler", "event-handler", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/artifact-index.ts",
+      "type": "file",
+      "name": "artifact-index.ts",
+      "filePath": "packages/server/src/local/routes/artifact-index.ts",
+      "summary": "SQLite-backed index for workspace artifacts, providing fast lookup by type, workspace, and content hash with creation and deletion helpers.",
+      "tags": ["service", "data-model", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/artifacts.ts",
+      "type": "file",
+      "name": "artifacts.ts",
+      "filePath": "packages/server/src/local/routes/artifacts.ts",
+      "summary": "Route plugin exposing artifact CRUD endpoints with workspace-scoped access, federated search, and event emission on create/delete.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/automations.ts",
+      "type": "file",
+      "name": "automations.ts",
+      "filePath": "packages/server/src/local/routes/automations.ts",
+      "summary": "Route plugin for managing user-defined automation rules and scheduled AI tasks, with full CRUD and enable/disable toggle endpoints.",
+      "tags": ["api-handler", "service", "scheduler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/backup.ts",
+      "type": "file",
+      "name": "backup.ts",
+      "filePath": "packages/server/src/local/routes/backup.ts",
+      "summary": "Route plugin providing streaming workspace backup and restore endpoints, producing and consuming tar archives of the data directory.",
+      "tags": ["api-handler", "service", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/browse-helpers.ts",
+      "type": "file",
+      "name": "browse-helpers.ts",
+      "filePath": "packages/server/src/local/routes/browse-helpers.ts",
+      "summary": "Shared utility functions for the browse route: URL sanitization, content-type sniffing, and response body size limiting.",
+      "tags": ["utility", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/browse.ts",
+      "type": "file",
+      "name": "browse.ts",
+      "filePath": "packages/server/src/local/routes/browse.ts",
+      "summary": "Route plugin that proxies outbound HTTP fetch requests on behalf of the agent, enforcing origin guard and content-type constraints.",
+      "tags": ["api-handler", "middleware", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/browser-ext.ts",
+      "type": "file",
+      "name": "browser-ext.ts",
+      "filePath": "packages/server/src/local/routes/browser-ext.ts",
+      "summary": "Minimal route plugin for browser extension integration, exposing a lightweight ping/handshake endpoint used by the Waggle browser extension.",
+      "tags": ["api-handler", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/capabilities.ts",
+      "type": "file",
+      "name": "capabilities.ts",
+      "filePath": "packages/server/src/local/routes/capabilities.ts",
+      "summary": "Route plugin managing installable capability definitions (skills, connectors, MCPs), exposing endpoints for listing, installing, and uninstalling capabilities with trust tracking.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/chat-context.ts",
+      "type": "file",
+      "name": "chat-context.ts",
+      "filePath": "packages/server/src/local/routes/chat-context.ts",
+      "summary": "Route plugin providing workspace chat context endpoints: retrieval of recent messages and workspace state summary consumed by the chat and memory routes.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/tests/agent-intelligence.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-intelligence.test.ts",
+      "target": "file:packages/server/src/local/routes/chat.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-intelligence.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/src/db/migrate.ts",
+      "target": "file:packages/server/src/db/connection.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/db/migrate.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/cron.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/monthly-assessment.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/agent.ts",
+      "target": "file:packages/server/src/local/model-availability.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/agents.ts",
+      "target": "file:packages/server/src/local/agents-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/agents.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/anthropic-proxy.ts",
+      "target": "file:packages/server/src/local/cors-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/artifacts.ts",
+      "target": "file:packages/server/src/local/routes/artifact-index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/artifacts.ts",
+      "target": "file:packages/server/src/local/routes/events.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/artifacts.ts",
+      "target": "file:packages/server/src/local/routes/memory-center.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/artifacts.ts",
+      "target": "file:packages/server/src/local/routes/tasks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/artifacts.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/automations.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/browse.ts",
+      "target": "file:packages/server/src/local/origin-guard.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/browse.ts",
+      "target": "file:packages/server/src/local/routes/browse-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/agents-store.ts",
+      "target": "function:packages/server/src/local/agents-store.ts:readAgents",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/agents-store.ts",
+      "target": "function:packages/server/src/local/agents-store.ts:addAgent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/agents-store.ts",
+      "target": "function:packages/server/src/local/agents-store.ts:patchAgent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/agents-store.ts",
+      "target": "function:packages/server/src/local/agents-store.ts:readAgents",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/agents-store.ts",
+      "target": "function:packages/server/src/local/agents-store.ts:addAgent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/agents-store.ts",
+      "target": "function:packages/server/src/local/agents-store.ts:patchAgent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/cron.ts",
+      "target": "class:packages/server/src/local/cron.ts:LocalScheduler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/cron.ts",
+      "target": "class:packages/server/src/local/cron.ts:LocalScheduler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/data-erase-helpers.ts",
+      "target": "function:packages/server/src/local/data-erase-helpers.ts:performWipe",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/data-erase-helpers.ts",
+      "target": "function:packages/server/src/local/data-erase-helpers.ts:assertDataDirIsSafeToWipe",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/data-erase-helpers.ts",
+      "target": "function:packages/server/src/local/data-erase-helpers.ts:performWipe",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/data-erase-helpers.ts",
+      "target": "function:packages/server/src/local/data-erase-helpers.ts:assertDataDirIsSafeToWipe",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "function:packages/server/src/local/index.ts:buildLocalServer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "function:packages/server/src/local/index.ts:buildLocalServer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

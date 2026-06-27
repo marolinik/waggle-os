@@ -1,0 +1,290 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/design_handoff_waggle_app/DESIGN_POV.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 90,
+      "nonEmptyLines": 69,
+      "sections": [
+        {
+          "heading": "DESIGN_POV.md — strategic notes from the design pass",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Memory you can trust  ·  **BUILT — see `memory-trust.html`**",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "2. The cold-start inversion",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "3. Voice & lexicon (commit to the metaphor — carefully)",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "4. Who pays for inference?",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "5. The morning briefing as a *ritual*",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "How to use this",
+          "level": 3,
+          "line": 84
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/design_handoff_waggle_app/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 333,
+      "nonEmptyLines": 278,
+      "sections": [
+        {
+          "heading": "Handoff: Waggle — App + Landing Refactor (the \"warm Hive\" concept)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Overview",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "2. About the design files (READ THIS FIRST)",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "3. Fidelity",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "4. Information architecture (the spine)",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "5. The screens (what's in this bundle)",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "6. Global patterns (apply everywhere)",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "7. Design tokens (source of truth: `styles/waggle.css`)",
+          "level": 2,
+          "line": 157
+        },
+        {
+          "heading": "Colors — Dark (default)",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Colors — Light (`[data-theme=\"light\"]`)",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "Accent — Honey (the one accent)",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "Semantics (desaturated; status only) — Dark / Light",
+          "level": 3,
+          "line": 192
+        },
+        {
+          "heading": "Typography",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "Radius / Shadow / Misc",
+          "level": 3,
+          "line": 215
+        },
+        {
+          "heading": "8. Cross-cutting behaviors to implement",
+          "level": 2,
+          "line": 231
+        },
+        {
+          "heading": "9. The marketing site (`Waggle Landing.html` → `apps/www`)",
+          "level": 2,
+          "line": 259
+        },
+        {
+          "heading": "10. Per-screen specifications",
+          "level": 2,
+          "line": 276
+        },
+        {
+          "heading": "11. Assets",
+          "level": 2,
+          "line": 283
+        },
+        {
+          "heading": "12. Tech mapping (existing monorepo)",
+          "level": 2,
+          "line": 298
+        },
+        {
+          "heading": "13. Files in this bundle",
+          "level": 2,
+          "line": 316
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/design_handoff_waggle_app/SCREENS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 371,
+      "nonEmptyLines": 278,
+      "sections": [
+        {
+          "heading": "SCREENS.md — Per-screen specifications",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "01 · Home / Cockpit — `home.html`  → **Ship: Variation A (Editorial)**",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "02 · Chat / agent runtime — `chat.html`  → **Ship: Variation B (Split work canvas)**",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "03 · Workspace — `workspace.html`  → **Ship: Variation A (Overview + tabs)**",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "04 · All workspaces — `workspaces.html`",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "05 · Sidebar + ⌘K — `ia.html`",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "06 · Launcher (AI-OS) — `launcher.html`",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "07 · Storage & Files — `storage.html`",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "08 · Power surfaces — `surfaces.html`",
+          "level": 2,
+          "line": 172
+        },
+        {
+          "heading": "09 · Marketplace — `marketplace.html`",
+          "level": 2,
+          "line": 189
+        },
+        {
+          "heading": "10 · Onboarding — `onboarding.html`",
+          "level": 2,
+          "line": 211
+        },
+        {
+          "heading": "11 · Settings — `settings.html`",
+          "level": 2,
+          "line": 231
+        },
+        {
+          "heading": "12 · Skill evolution + diffusion — `evolution.html`",
+          "level": 2,
+          "line": 253
+        },
+        {
+          "heading": "13 · Auth (Clerk) — `auth.html`",
+          "level": 2,
+          "line": 269
+        },
+        {
+          "heading": "14 · Billing (Stripe) — `billing.html`",
+          "level": 2,
+          "line": 282
+        },
+        {
+          "heading": "15 · Habit loop — `habit.html`",
+          "level": 2,
+          "line": 299
+        },
+        {
+          "heading": "16 · App surfaces — `appsurfaces.html`",
+          "level": 2,
+          "line": 313
+        },
+        {
+          "heading": "17 · Benchmarks — `benchmark.html`",
+          "level": 2,
+          "line": 329
+        },
+        {
+          "heading": "18 · Platform & roadmap — `platform.html`",
+          "level": 2,
+          "line": 344
+        },
+        {
+          "heading": "Ship-variation summary",
+          "level": 2,
+          "line": 359
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    }
+  ]
+}

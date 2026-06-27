@@ -1,0 +1,661 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/core/src/config.ts",
+      "type": "file",
+      "name": "config.ts",
+      "filePath": "packages/core/src/config.ts",
+      "summary": "Provides the WaggleConfig class for reading and writing the user-level configuration file, managing LLM providers, budget settings, model preferences, team server connection, telemetry flags, and embedding provider config.",
+      "tags": ["configuration", "singleton", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/core/src/config.ts:WaggleConfig",
+      "type": "class",
+      "name": "WaggleConfig",
+      "filePath": "packages/core/src/config.ts",
+      "lineRange": [54, 230],
+      "summary": "Singleton-style class that persists Waggle workspace configuration to a JSON file; exposes typed getters/setters for all config fields including model routing, budgets, team server, telemetry, and embedding.",
+      "tags": ["configuration", "singleton", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/core/src/cron-store.ts",
+      "type": "file",
+      "name": "cron-store.ts",
+      "filePath": "packages/core/src/cron-store.ts",
+      "summary": "Implements SQLite-backed storage for scheduled cron jobs, execution history, and user notifications, including CRUD for schedules, due-schedule querying, execution recording, history pruning, and notification read/unread management.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/core/src/cron-store.ts:CronStore",
+      "type": "class",
+      "name": "CronStore",
+      "filePath": "packages/core/src/cron-store.ts",
+      "lineRange": [142, 367],
+      "summary": "SQLite-backed store for cron schedules, execution history records, and in-app notifications with full CRUD, due-schedule polling, history pruning, and unread-count queries.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/core/src/file-indexer.ts",
+      "type": "file",
+      "name": "file-indexer.ts",
+      "filePath": "packages/core/src/file-indexer.ts",
+      "summary": "Provides the FileIndexer class which indexes local files into the memory FrameStore, computing content hashes for deduplication and building text frames for hybrid search.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/core/src/file-indexer.ts:FileIndexer",
+      "type": "class",
+      "name": "FileIndexer",
+      "filePath": "packages/core/src/file-indexer.ts",
+      "lineRange": [63, 259],
+      "summary": "Indexes files into the SQLite file_index table and FrameStore, supporting add/remove/move operations with SHA-256 content hashing, extension filtering, and text normalization for memory search.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/core/src/file-store.ts",
+      "type": "file",
+      "name": "file-store.ts",
+      "filePath": "packages/core/src/file-store.ts",
+      "summary": "Provides multiple FileStore implementations (local filesystem, linked directory, and S3) with a unified interface for read/write/delete/move/list/search, plus a factory function that selects the appropriate backend based on configuration.",
+      "tags": ["service", "factory", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/core/src/file-store.ts:LocalFileStore",
+      "type": "class",
+      "name": "LocalFileStore",
+      "filePath": "packages/core/src/file-store.ts",
+      "lineRange": [73, 181],
+      "summary": "Local filesystem FileStore implementation storing workspace files in a managed directory with path-traversal protection via resolveSafe.",
+      "tags": ["service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/core/src/file-store.ts:LinkedDirStore",
+      "type": "class",
+      "name": "LinkedDirStore",
+      "filePath": "packages/core/src/file-store.ts",
+      "lineRange": [185, 294],
+      "summary": "FileStore implementation that reads/writes directly to a user-specified linked directory on disk, filtering out dotfiles and node_modules from listings.",
+      "tags": ["service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/core/src/file-store.ts:S3FileStore",
+      "type": "class",
+      "name": "S3FileStore",
+      "filePath": "packages/core/src/file-store.ts",
+      "lineRange": [307, 444],
+      "summary": "AWS S3-backed FileStore implementation using lazy dynamic imports of @aws-sdk/client-s3 for object read, write, delete, list, and move operations under a configurable bucket prefix.",
+      "tags": ["service", "data-model"],
+      "complexity": "complex",
+      "languageNotes": "Uses dynamic `import()` of @aws-sdk/client-s3 at call time to avoid bundling S3 SDK unless the S3 backend is actually used."
+    },
+    {
+      "id": "file:packages/core/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/core/src/index.ts",
+      "summary": "Public barrel for the @waggle/core package, re-exporting all symbols from the memory substrate (hive-mind-core), config, migration, team-sync, cron-store, vault, telemetry, skill-hashes, memory-import, file-store, file-indexer, optimization-log, and compliance sub-modules.",
+      "tags": ["barrel", "entry-point", "exports"],
+      "complexity": "moderate",
+      "languageNotes": "Exports 275+ symbols — the widest barrel in the monorepo; consumers typically import from this single path."
+    },
+    {
+      "id": "file:packages/core/src/memory-import.ts",
+      "type": "file",
+      "name": "memory-import.ts",
+      "filePath": "packages/core/src/memory-import.ts",
+      "summary": "Parses ChatGPT and Claude conversation export files and extracts typed knowledge items (decisions, preferences, facts) for bulk import into the Waggle memory substrate.",
+      "tags": ["utility", "serialization", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/core/src/memory-import.ts:parseChatGPTExport",
+      "type": "function",
+      "name": "parseChatGPTExport",
+      "filePath": "packages/core/src/memory-import.ts",
+      "lineRange": [87, 130],
+      "summary": "Parses the ChatGPT conversation export JSON format, flattening the node-mapping graph into chronological ConversationMessage arrays.",
+      "tags": ["serialization", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/core/src/memory-import.ts:parseClaudeExport",
+      "type": "function",
+      "name": "parseClaudeExport",
+      "filePath": "packages/core/src/memory-import.ts",
+      "lineRange": [132, 160],
+      "summary": "Parses the Claude conversation export JSON format, normalising both the old (text/sender) and new (content/role) message schemas.",
+      "tags": ["serialization", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/core/src/memory-import.ts:extractKnowledge",
+      "type": "function",
+      "name": "extractKnowledge",
+      "filePath": "packages/core/src/memory-import.ts",
+      "lineRange": [181, 256],
+      "summary": "Applies regex pattern sets (decision, preference, fact) to conversation messages to extract structured knowledge items, deduplicating by normalised sentence key.",
+      "tags": ["utility", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/core/src/memory-import.ts:processImport",
+      "type": "function",
+      "name": "processImport",
+      "filePath": "packages/core/src/memory-import.ts",
+      "lineRange": [260, 292],
+      "summary": "Top-level import pipeline that dispatches JSON data to the correct parser, runs knowledge extraction, and returns an ImportResult with parsed conversations and extracted knowledge.",
+      "tags": ["utility", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/src/migration.ts",
+      "type": "file",
+      "name": "migration.ts",
+      "filePath": "packages/core/src/migration.ts",
+      "summary": "Provides two functions for detecting and performing the one-time migration from the legacy single-mind layout to the multi-mind per-workspace directory structure.",
+      "tags": ["utility", "migration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/src/optimization-log.ts",
+      "type": "file",
+      "name": "optimization-log.ts",
+      "filePath": "packages/core/src/optimization-log.ts",
+      "summary": "Implements OptimizationLogStore, a SQLite-backed store for agent self-improvement log entries, supporting insert, recent/workspace queries, stats aggregation, and time-based pruning.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/core/src/optimization-log.ts:OptimizationLogStore",
+      "type": "class",
+      "name": "OptimizationLogStore",
+      "filePath": "packages/core/src/optimization-log.ts",
+      "lineRange": [60, 154],
+      "summary": "SQLite-backed store for optimization/self-improvement events emitted by the evolution subsystem, with CRUD, stats aggregation, and auto-pruning of old entries.",
+      "tags": ["service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/src/skill-hashes.ts",
+      "type": "file",
+      "name": "skill-hashes.ts",
+      "filePath": "packages/core/src/skill-hashes.ts",
+      "summary": "Provides SkillHashStore for SQLite-backed tracking of installed skill content hashes, enabling change detection and update notifications when skills on disk differ from the stored baseline.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/src/team-sync.ts",
+      "type": "file",
+      "name": "team-sync.ts",
+      "filePath": "packages/core/src/team-sync.ts",
+      "summary": "Implements TeamSync, which pushes local memory frames to a remote Waggle team server and pulls new frames authored by teammates, enabling shared workspace memory across TEAMS-tier users.",
+      "tags": ["service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/core/src/team-sync.ts:TeamSync",
+      "type": "class",
+      "name": "TeamSync",
+      "filePath": "packages/core/src/team-sync.ts",
+      "lineRange": [1, 186],
+      "summary": "Bidirectional memory frame sync client for TEAMS tier: pushes newly created local frames to the team server API and pulls teammate frames for local ingestion.",
+      "tags": ["service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/src/telemetry.ts",
+      "type": "file",
+      "name": "telemetry.ts",
+      "filePath": "packages/core/src/telemetry.ts",
+      "summary": "Provides TelemetryStore and TelemetryCollector for SQLite-backed opt-in usage telemetry: event recording, periodic batched flush to a remote endpoint, summary aggregation, and auto-pruning of old events.",
+      "tags": ["service", "data-model", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/core/tests/config.test.ts",
+      "type": "file",
+      "name": "config.test.ts",
+      "filePath": "packages/core/tests/config.test.ts",
+      "summary": "Vitest unit tests for WaggleConfig covering constructor defaults, provider set/remove, model preferences, budget settings, team server wiring, telemetry toggle, and embedding config.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/cron-store.test.ts",
+      "type": "file",
+      "name": "cron-store.test.ts",
+      "filePath": "packages/core/tests/cron-store.test.ts",
+      "summary": "Vitest unit tests for CronStore covering schedule CRUD, due-schedule polling, execution history recording and pruning, and notification read/unread lifecycle.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/embedding-provider-quota.test.ts",
+      "type": "file",
+      "name": "embedding-provider-quota.test.ts",
+      "filePath": "packages/core/tests/embedding-provider-quota.test.ts",
+      "summary": "Vitest unit tests for the embedding provider quota system, verifying tier-gated access enforcement and EmbeddingQuotaExceededError behaviour across provider configurations.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/file-indexer.test.ts",
+      "type": "file",
+      "name": "file-indexer.test.ts",
+      "filePath": "packages/core/tests/file-indexer.test.ts",
+      "summary": "Vitest unit tests for FileIndexer covering file indexing, deduplication by content hash, remove, move, listAll, and extension filtering logic.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/file-store-s3.test.ts",
+      "type": "file",
+      "name": "file-store-s3.test.ts",
+      "filePath": "packages/core/tests/file-store-s3.test.ts",
+      "summary": "Vitest unit tests for the S3FileStore backend, mocking @aws-sdk/client-s3 to verify read, write, delete, list, search, and move operations against a stubbed S3 bucket.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/litellm-embedder.test.ts",
+      "type": "file",
+      "name": "litellm-embedder.test.ts",
+      "filePath": "packages/core/tests/litellm-embedder.test.ts",
+      "summary": "Vitest unit tests for the LiteLLM embedder factory, verifying HTTP batching, error handling, and dimension normalisation behaviour.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/memory-import.test.ts",
+      "type": "file",
+      "name": "memory-import.test.ts",
+      "filePath": "packages/core/tests/memory-import.test.ts",
+      "summary": "Vitest unit tests for the memory-import pipeline covering ChatGPT export parsing, Claude export parsing, knowledge extraction patterns, and the end-to-end processImport function.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/migration.test.ts",
+      "type": "file",
+      "name": "migration.test.ts",
+      "filePath": "packages/core/tests/migration.test.ts",
+      "summary": "Vitest unit tests for the needsMigration detection and migrateToMultiMind filesystem migration functions.",
+      "tags": ["test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/tests/skill-hashes.test.ts",
+      "type": "file",
+      "name": "skill-hashes.test.ts",
+      "filePath": "packages/core/tests/skill-hashes.test.ts",
+      "summary": "Vitest unit tests for SkillHashStore covering hash insertion, change detection, and update tracking across multiple skill entries.",
+      "tags": ["test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/tests/structured-tasks.test.ts",
+      "type": "file",
+      "name": "structured-tasks.test.ts",
+      "filePath": "packages/core/tests/structured-tasks.test.ts",
+      "summary": "Vitest unit tests for the structured task store verifying task lifecycle management including creation, status transitions, and listing.",
+      "tags": ["test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/tests/team-sync.test.ts",
+      "type": "file",
+      "name": "team-sync.test.ts",
+      "filePath": "packages/core/tests/team-sync.test.ts",
+      "summary": "Vitest unit tests for TeamSync covering push/pull frame synchronisation against a mocked team server HTTP API and frame conversion helpers.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/telemetry.test.ts",
+      "type": "file",
+      "name": "telemetry.test.ts",
+      "filePath": "packages/core/tests/telemetry.test.ts",
+      "summary": "Vitest unit tests for TelemetryStore and TelemetryCollector verifying event recording, summary aggregation, flush behaviour, and opt-out gating.",
+      "tags": ["test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/core/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/core/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the @waggle/core package, extending the monorepo base tsconfig with composite mode and project references to @waggle/shared and @waggle/hive-mind-core.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/core/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "packages/core/vitest.config.ts",
+      "summary": "Vitest configuration for the @waggle/core package, setting the test environment and including all test files under the tests/ directory.",
+      "tags": ["configuration", "test", "build-system"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/core/src/config.ts",
+      "target": "class:packages/core/src/config.ts:WaggleConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/config.ts",
+      "target": "class:packages/core/src/config.ts:WaggleConfig",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/cron-store.ts",
+      "target": "class:packages/core/src/cron-store.ts:CronStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/cron-store.ts",
+      "target": "class:packages/core/src/cron-store.ts:CronStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/file-indexer.ts",
+      "target": "class:packages/core/src/file-indexer.ts:FileIndexer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/file-indexer.ts",
+      "target": "class:packages/core/src/file-indexer.ts:FileIndexer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "class:packages/core/src/file-store.ts:LocalFileStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "class:packages/core/src/file-store.ts:LocalFileStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "class:packages/core/src/file-store.ts:LinkedDirStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "class:packages/core/src/file-store.ts:LinkedDirStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "class:packages/core/src/file-store.ts:S3FileStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "class:packages/core/src/file-store.ts:S3FileStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:parseChatGPTExport",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:parseChatGPTExport",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:parseClaudeExport",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:parseClaudeExport",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:extractKnowledge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:extractKnowledge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:processImport",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "function:packages/core/src/memory-import.ts:processImport",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/optimization-log.ts",
+      "target": "class:packages/core/src/optimization-log.ts:OptimizationLogStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/optimization-log.ts",
+      "target": "class:packages/core/src/optimization-log.ts:OptimizationLogStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/src/team-sync.ts",
+      "target": "class:packages/core/src/team-sync.ts:TeamSync",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/team-sync.ts",
+      "target": "class:packages/core/src/team-sync.ts:TeamSync",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/tests/config.test.ts",
+      "target": "file:packages/core/src/config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/cron-store.test.ts",
+      "target": "file:packages/core/src/cron-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/file-indexer.test.ts",
+      "target": "file:packages/core/src/file-indexer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/file-store-s3.test.ts",
+      "target": "file:packages/core/src/file-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/memory-import.test.ts",
+      "target": "file:packages/core/src/memory-import.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/migration.test.ts",
+      "target": "file:packages/core/src/migration.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/skill-hashes.test.ts",
+      "target": "file:packages/core/src/skill-hashes.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/team-sync.test.ts",
+      "target": "file:packages/core/src/team-sync.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/telemetry.test.ts",
+      "target": "file:packages/core/src/telemetry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/src/config.ts",
+      "target": "file:packages/core/tests/config.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/cron-store.ts",
+      "target": "file:packages/core/tests/cron-store.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/file-indexer.ts",
+      "target": "file:packages/core/tests/file-indexer.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/file-store.ts",
+      "target": "file:packages/core/tests/file-store-s3.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/memory-import.ts",
+      "target": "file:packages/core/tests/memory-import.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/migration.ts",
+      "target": "file:packages/core/tests/migration.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/skill-hashes.ts",
+      "target": "file:packages/core/tests/skill-hashes.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/team-sync.ts",
+      "target": "file:packages/core/tests/team-sync.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/telemetry.ts",
+      "target": "file:packages/core/tests/telemetry.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/core/tsconfig.json",
+      "target": "file:packages/core/src/index.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/core/vitest.config.ts",
+      "target": "file:packages/core/tests/config.test.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

@@ -1,0 +1,307 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 7,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "apps/www/.env.example",
+      "language": "config",
+      "fileCategory": "config",
+      "totalLines": 11,
+      "nonEmptyLines": 9,
+      "definitions": [
+        {
+          "name": "VITE_API_URL",
+          "kind": "variable",
+          "fields": [],
+          "startLine": 5,
+          "endLine": 5
+        },
+        {
+          "name": "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY",
+          "kind": "variable",
+          "fields": [],
+          "startLine": 10,
+          "endLine": 10
+        },
+        {
+          "name": "STRIPE_SECRET_KEY",
+          "kind": "variable",
+          "fields": [],
+          "startLine": 11,
+          "endLine": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "definitionCount": 3
+      }
+    },
+    {
+      "path": "apps/www/.env.local.example",
+      "language": "config",
+      "fileCategory": "config",
+      "totalLines": 49,
+      "nonEmptyLines": 42,
+      "metrics": {}
+    },
+    {
+      "path": "apps/www/LIGHTHOUSE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 69,
+      "nonEmptyLines": 51,
+      "sections": [
+        {
+          "heading": "Lighthouse Audit — Sesija D §3.3 Final Pass",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Scores (acceptance threshold: ≥85 / ≥95 / ≥95)",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Core Web Vitals (final)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Two fixes that mattered",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Sub-100 audits (passing thresholds, but room for v1.5)",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Methodology + reproducibility",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Acceptance — amendment §3 #16",
+          "level": 2,
+          "line": 65
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "apps/www/SESIJA-D-MANIFEST.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 119,
+      "nonEmptyLines": 94,
+      "sections": [
+        {
+          "heading": "Sesija D Manifest — apps/www Next.js Port v3.2",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Commit ledger (12 commits, 11 CC + 1 Marko mid-session)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Acceptance criteria — amendment §3 (16 items)",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Out of scope (per amendment §5, OUT-of-scope locked)",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "Day-2 polish backlog (carryover for Marko ratification)",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Verification artifacts",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "Repo state at end of Sesija D",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "Standing-down",
+          "level": 2,
+          "line": 108
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "apps/www/SESIJA-E-MANIFEST.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 188,
+      "nonEmptyLines": 142,
+      "sections": [
+        {
+          "heading": "Sesija E Manifest — Clerk auth + Stripe-Clerk linkage + branding fixes",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Commit ledger (4 commits to date — extends through §5.6)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§5.3 Stripe catalog state (test mode, account `acct_1SzHlbC0mmjh4oEM`)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "§5.3 Phase B — Local webhook listener (Marko-side, separate terminal)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "§5.3 Phase E — End-to-end smoke test",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "§5.3 Troubleshooting (smoke-test failure modes)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "§5.3 Phase D — Why no Clerk webhook is needed",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "Out of scope (locked for §5.4+)",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "Day-2 polish backlog (post §5.6)",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "§5.3 acceptance criteria",
+          "level": 2,
+          "line": 173
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "apps/www/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 34,
+      "nonEmptyLines": 34,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "private",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "devDependencies",
+          "level": 1,
+          "line": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "apps/www/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 31,
+      "nonEmptyLines": 31,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 22
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    }
+  ]
+}

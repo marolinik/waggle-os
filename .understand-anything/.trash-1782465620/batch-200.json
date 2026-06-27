@@ -1,0 +1,632 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-mcp-server/NOTICE",
+      "type": "file",
+      "name": "NOTICE",
+      "filePath": "packages/hive-mind-mcp-server/NOTICE",
+      "summary": "License and attribution notice for the hive-mind-mcp-server package, listing third-party dependencies and their respective licenses.",
+      "tags": ["documentation", "license", "legal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-shim-core/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/hive-mind-shim-core/src/index.ts",
+      "summary": "Main barrel export for the hive-mind-shim-core package, re-exporting all public types, interfaces, and functions for hook events, frame encoding, workspace resolution, CLI bridging, importance classification, prompt summarization, retry utilities, logging, and signal emission.",
+      "tags": ["barrel", "entry-point", "type-definition", "exports"],
+      "complexity": "moderate",
+      "languageNotes": "Pure re-export barrel with 52 named exports — no logic of its own."
+    },
+    {
+      "id": "file:packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "type": "file",
+      "name": "prompt-summarizer.ts",
+      "filePath": "packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "summary": "Provides the summarizeTurn function that condenses long prompt content by collapsing whitespace, stripping code blocks, and truncating to a configurable character budget with head/tail retention.",
+      "tags": ["utility", "text-processing", "summarization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-shim-core/src/prompt-summarizer.ts:summarizeTurn",
+      "type": "function",
+      "name": "summarizeTurn",
+      "filePath": "packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "lineRange": [27, 56],
+      "summary": "Condenses a conversation turn's content to a target character limit by normalizing line endings, replacing code blocks with [code] placeholders, and retaining head and tail sections when truncation is needed.",
+      "tags": ["utility", "text-processing", "summarization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "type": "file",
+      "name": "workspace-resolver.ts",
+      "filePath": "packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "summary": "Resolves the active hive-mind workspace directory by searching from the current working directory upward and falling back to the user home directory, supporting multiple resolution strategies via options.",
+      "tags": ["utility", "workspace", "file-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-shim-core/src/workspace-resolver.ts:resolveWorkspace",
+      "type": "function",
+      "name": "resolveWorkspace",
+      "filePath": "packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "lineRange": [52, 81],
+      "summary": "Walks the filesystem from cwd upward looking for a .hive-mind directory, then checks the home directory as a fallback, returning a Workspace object describing the resolved path and mode.",
+      "tags": ["utility", "workspace", "file-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-shim-core/src/workspace-resolver.ts:isAbsoluteWorkspacePath",
+      "type": "function",
+      "name": "isAbsoluteWorkspacePath",
+      "filePath": "packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "lineRange": [83, 85],
+      "summary": "Predicate that returns true if the given path string is an absolute filesystem path.",
+      "tags": ["utility", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-shim-core/tests/prompt-summarizer.test.ts",
+      "type": "file",
+      "name": "prompt-summarizer.test.ts",
+      "filePath": "packages/hive-mind-shim-core/tests/prompt-summarizer.test.ts",
+      "summary": "Unit tests for the summarizeTurn function, covering short content pass-through, whitespace collapsing, code-block stripping, truncation logic, and edge cases.",
+      "tags": ["test", "unit-test", "text-processing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-shim-core/tests/workspace-resolver.test.ts",
+      "type": "file",
+      "name": "workspace-resolver.test.ts",
+      "filePath": "packages/hive-mind-shim-core/tests/workspace-resolver.test.ts",
+      "summary": "Unit tests for the workspace resolver, using a synthetic filesystem presence mock to verify CWD-upward search, home-directory fallback, absolute path detection, and mode classification.",
+      "tags": ["test", "unit-test", "workspace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-wiki-compiler/NOTICE",
+      "type": "file",
+      "name": "NOTICE",
+      "filePath": "packages/hive-mind-wiki-compiler/NOTICE",
+      "summary": "License and attribution notice for the hive-mind-wiki-compiler package, listing third-party dependencies and their licenses.",
+      "tags": ["documentation", "license", "legal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-wiki-compiler/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/hive-mind-wiki-compiler/src/index.ts",
+      "summary": "Barrel entry point for the hive-mind-wiki-compiler package, re-exporting the WikiCompiler class, compilation types, synthesizer utilities, page prompt builders, and health reporting types.",
+      "tags": ["barrel", "entry-point", "exports", "type-definition"],
+      "complexity": "simple",
+      "languageNotes": "Pure re-export barrel with 20 named exports covering the wiki compilation pipeline."
+    },
+    {
+      "id": "config:packages/launcher/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/launcher/package.json",
+      "summary": "Package manifest for the @waggle/launcher CLI, defining the waggle binary entry point, Node.js engine requirements (>=18), build scripts using tsup, and runtime dependencies.",
+      "tags": ["configuration", "build-system", "cli"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/launcher/src/cli.ts",
+      "type": "file",
+      "name": "cli.ts",
+      "filePath": "packages/launcher/src/cli.ts",
+      "summary": "Main CLI entry point for the Waggle launcher that parses command-line arguments, validates the Node.js version, starts the Fastify sidecar service, opens the browser to the web UI, and handles startup errors.",
+      "tags": ["entry-point", "cli", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/launcher/src/cli.ts:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "packages/launcher/src/cli.ts",
+      "lineRange": [80, 155],
+      "summary": "Orchestrates launcher startup: parses args, checks for version flag/help, validates Node version, starts the sidecar service with a progress display, opens the browser once ready, and handles fatal errors with a clean exit.",
+      "tags": ["entry-point", "cli", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/launcher/src/cli.ts:parseArgs",
+      "type": "function",
+      "name": "parseArgs",
+      "filePath": "packages/launcher/src/cli.ts",
+      "lineRange": [20, 47],
+      "summary": "Parses CLI argv into structured options including port, no-browser flag, version flag, and help flag.",
+      "tags": ["utility", "cli", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/launcher/src/cli.ts:openBrowser",
+      "type": "function",
+      "name": "openBrowser",
+      "filePath": "packages/launcher/src/cli.ts",
+      "lineRange": [51, 64],
+      "summary": "Cross-platform browser opener that uses the appropriate system command (open/xdg-open/start) based on the detected OS platform.",
+      "tags": ["utility", "cli"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/launcher/tests/cli.test.ts",
+      "type": "file",
+      "name": "cli.test.ts",
+      "filePath": "packages/launcher/tests/cli.test.ts",
+      "summary": "Unit tests for the launcher CLI argument parsing logic, verifying default values, port parsing, flag detection, and invalid input handling.",
+      "tags": ["test", "unit-test", "cli"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/launcher/tsup.config.ts",
+      "type": "file",
+      "name": "tsup.config.ts",
+      "filePath": "packages/launcher/tsup.config.ts",
+      "summary": "tsup bundler configuration for the launcher package, targeting Node.js with CJS output, bundling the CLI entry point and externalizing native dependencies.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/marketplace/src/enterprise-packs.ts",
+      "type": "file",
+      "name": "enterprise-packs.ts",
+      "filePath": "packages/marketplace/src/enterprise-packs.ts",
+      "summary": "Defines and exports the ENTERPRISE_PACKS constant — an array of curated enterprise capability packs (e.g., Legal Suite, Finance Suite) with metadata such as tier requirements, tool lists, and descriptions.",
+      "tags": ["data-model", "marketplace", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/marketplace/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/marketplace/src/index.ts",
+      "summary": "Main barrel export for the marketplace package, re-exporting all public APIs including MarketplaceDB, installer, sync, security scanning, enterprise packs, MCP servers, package categories, and all associated types.",
+      "tags": ["barrel", "entry-point", "marketplace", "exports"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/tests/enterprise-packs.test.ts",
+      "type": "file",
+      "name": "enterprise-packs.test.ts",
+      "filePath": "packages/marketplace/tests/enterprise-packs.test.ts",
+      "summary": "Unit tests for the ENTERPRISE_PACKS data structure, verifying pack metadata integrity, required fields, valid tier values, and tool list structure.",
+      "tags": ["test", "unit-test", "marketplace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/optimizer/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/optimizer/src/index.ts",
+      "summary": "Barrel entry point for the optimizer package, re-exporting the PromptOptimizer class, configuration types, execution results, and factory functions for creating summarizers, classifiers, and prompt expanders.",
+      "tags": ["barrel", "entry-point", "exports"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/optimizer/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "packages/optimizer/vitest.config.ts",
+      "summary": "Vitest test runner configuration for the optimizer package, setting up the test environment and resolver options.",
+      "tags": ["configuration", "testing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/sdk/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/sdk/package.json",
+      "summary": "Package manifest for the @waggle/sdk package, declaring ESM module type, CJS main entry, TypeScript declarations path, exports map, and development dependencies for building skill scaffolding and validation utilities.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/sdk/src/capability-packs/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/sdk/src/capability-packs/index.ts",
+      "summary": "Provides filesystem utilities for discovering and loading capability pack JSON manifests from the SDK's bundled capability-packs directory, with src/dist path fallback resolution.",
+      "tags": ["utility", "file-system", "sdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/sdk/src/capability-packs/index.ts:getCapabilityPacksDir",
+      "type": "function",
+      "name": "getCapabilityPacksDir",
+      "filePath": "packages/sdk/src/capability-packs/index.ts",
+      "lineRange": [18, 26],
+      "summary": "Locates the capability packs directory by checking both src and dist paths relative to the package root, returning the first that exists and contains JSON files.",
+      "tags": ["utility", "file-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/sdk/src/capability-packs/index.ts:listCapabilityPacks",
+      "type": "function",
+      "name": "listCapabilityPacks",
+      "filePath": "packages/sdk/src/capability-packs/index.ts",
+      "lineRange": [31, 41],
+      "summary": "Lists all capability packs by reading and parsing JSON files from the capability packs directory, returning them sorted by name.",
+      "tags": ["utility", "file-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/sdk/src/capability-packs/index.ts:getPackManifest",
+      "type": "function",
+      "name": "getPackManifest",
+      "filePath": "packages/sdk/src/capability-packs/index.ts",
+      "lineRange": [46, 51],
+      "summary": "Retrieves a specific capability pack manifest by ID, returning null if the pack file does not exist.",
+      "tags": ["utility", "file-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/sdk/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/sdk/src/index.ts",
+      "summary": "Main barrel export for the @waggle/sdk package, re-exporting skill validation, initialization, plugin management, runtime, starter skills, and capability pack utilities.",
+      "tags": ["barrel", "entry-point", "exports"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/sdk/src/init-skill.ts",
+      "type": "file",
+      "name": "init-skill.ts",
+      "filePath": "packages/sdk/src/init-skill.ts",
+      "summary": "Provides the initSkill function that scaffolds a new skill directory by creating the folder structure, a package.json manifest, and a starter skill.md template file.",
+      "tags": ["utility", "scaffolding", "sdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/sdk/src/init-skill.ts:initSkill",
+      "type": "function",
+      "name": "initSkill",
+      "filePath": "packages/sdk/src/init-skill.ts",
+      "lineRange": [10, 38],
+      "summary": "Creates a new skill directory with the required files (package.json and skill.md) populated with boilerplate content based on the provided name.",
+      "tags": ["utility", "scaffolding"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/sdk/src/starter-skills/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/sdk/src/starter-skills/index.ts",
+      "summary": "Provides utilities for discovering, listing, and installing bundled starter skills from the SDK into a target skills directory, handling src/dist path fallback and skip-if-exists logic.",
+      "tags": ["utility", "sdk", "file-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/sdk/src/starter-skills/index.ts:installStarterSkills",
+      "type": "function",
+      "name": "installStarterSkills",
+      "filePath": "packages/sdk/src/starter-skills/index.ts",
+      "lineRange": [39, 56],
+      "summary": "Copies bundled starter skill markdown files into the target directory, skipping any that already exist, and returns the list of newly installed skill names.",
+      "tags": ["utility", "sdk", "file-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/sdk/src/validate-skill.ts",
+      "type": "file",
+      "name": "validate-skill.ts",
+      "filePath": "packages/sdk/src/validate-skill.ts",
+      "summary": "Implements skill metadata validation including YAML frontmatter parsing, semver validation, dependency checking, and version downgrade detection for skill markdown files.",
+      "tags": ["validation", "utility", "sdk"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/sdk/src/validate-skill.ts:validateSkillMd",
+      "type": "function",
+      "name": "validateSkillMd",
+      "filePath": "packages/sdk/src/validate-skill.ts",
+      "lineRange": [93, 137],
+      "summary": "Validates a skill's markdown content by checking for a required frontmatter block, mandatory name/version fields, valid semver format, and a non-empty skill body, returning errors and warnings.",
+      "tags": ["validation", "sdk"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/sdk/src/validate-skill.ts:checkSkillDependencies",
+      "type": "function",
+      "name": "checkSkillDependencies",
+      "filePath": "packages/sdk/src/validate-skill.ts",
+      "lineRange": [143, 157],
+      "summary": "Checks whether all tools listed in a skill's requires field are present in the available tools set, returning warnings for any missing dependencies.",
+      "tags": ["validation", "sdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/sdk/src/validate-skill.ts:checkVersionDowngrade",
+      "type": "function",
+      "name": "checkVersionDowngrade",
+      "filePath": "packages/sdk/src/validate-skill.ts",
+      "lineRange": [163, 179],
+      "summary": "Detects whether installing a new version of a skill would downgrade the existing installed version, returning a warning result when a version regression is detected.",
+      "tags": ["validation", "sdk"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/sdk/tests/starter-skills.test.ts",
+      "type": "file",
+      "name": "starter-skills.test.ts",
+      "filePath": "packages/sdk/tests/starter-skills.test.ts",
+      "summary": "Unit tests for the starter skills utilities, verifying that getStarterSkillsDir returns a valid path, listStarterSkills returns markdown file names, and installStarterSkills correctly copies files to a target directory.",
+      "tags": ["test", "unit-test", "sdk"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/sdk/tests/validate-skill.test.ts",
+      "type": "file",
+      "name": "validate-skill.test.ts",
+      "filePath": "packages/sdk/tests/validate-skill.test.ts",
+      "summary": "Comprehensive unit tests for skill validation covering valid/invalid frontmatter, semver parsing, dependency checking, version downgrade detection, and edge cases with 284 lines of test coverage.",
+      "tags": ["test", "unit-test", "validation"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "target": "function:packages/hive-mind-shim-core/src/prompt-summarizer.ts:summarizeTurn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "target": "function:packages/hive-mind-shim-core/src/prompt-summarizer.ts:summarizeTurn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "target": "function:packages/hive-mind-shim-core/src/workspace-resolver.ts:resolveWorkspace",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "target": "function:packages/hive-mind-shim-core/src/workspace-resolver.ts:resolveWorkspace",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "target": "function:packages/hive-mind-shim-core/src/workspace-resolver.ts:isAbsoluteWorkspacePath",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "target": "function:packages/hive-mind-shim-core/src/workspace-resolver.ts:isAbsoluteWorkspacePath",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/tests/prompt-summarizer.test.ts",
+      "target": "file:packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/prompt-summarizer.ts",
+      "target": "file:packages/hive-mind-shim-core/tests/prompt-summarizer.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/tests/workspace-resolver.test.ts",
+      "target": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-shim-core/src/workspace-resolver.ts",
+      "target": "file:packages/hive-mind-shim-core/tests/workspace-resolver.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/launcher/src/cli.ts",
+      "target": "function:packages/launcher/src/cli.ts:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/launcher/src/cli.ts",
+      "target": "function:packages/launcher/src/cli.ts:parseArgs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/launcher/src/cli.ts",
+      "target": "function:packages/launcher/src/cli.ts:openBrowser",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "config:packages/launcher/package.json",
+      "target": "file:packages/launcher/src/cli.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/marketplace/tests/enterprise-packs.test.ts",
+      "target": "file:packages/marketplace/src/enterprise-packs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/enterprise-packs.ts",
+      "target": "file:packages/marketplace/tests/enterprise-packs.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/sdk/src/capability-packs/index.ts",
+      "target": "function:packages/sdk/src/capability-packs/index.ts:getCapabilityPacksDir",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/capability-packs/index.ts",
+      "target": "function:packages/sdk/src/capability-packs/index.ts:getCapabilityPacksDir",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/capability-packs/index.ts",
+      "target": "function:packages/sdk/src/capability-packs/index.ts:listCapabilityPacks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/capability-packs/index.ts",
+      "target": "function:packages/sdk/src/capability-packs/index.ts:listCapabilityPacks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/capability-packs/index.ts",
+      "target": "function:packages/sdk/src/capability-packs/index.ts:getPackManifest",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/capability-packs/index.ts",
+      "target": "function:packages/sdk/src/capability-packs/index.ts:getPackManifest",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/init-skill.ts",
+      "target": "function:packages/sdk/src/init-skill.ts:initSkill",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/init-skill.ts",
+      "target": "function:packages/sdk/src/init-skill.ts:initSkill",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/starter-skills/index.ts",
+      "target": "function:packages/sdk/src/starter-skills/index.ts:installStarterSkills",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/starter-skills/index.ts",
+      "target": "function:packages/sdk/src/starter-skills/index.ts:installStarterSkills",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "function:packages/sdk/src/validate-skill.ts:validateSkillMd",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "function:packages/sdk/src/validate-skill.ts:validateSkillMd",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "function:packages/sdk/src/validate-skill.ts:checkSkillDependencies",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "function:packages/sdk/src/validate-skill.ts:checkSkillDependencies",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "function:packages/sdk/src/validate-skill.ts:checkVersionDowngrade",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "function:packages/sdk/src/validate-skill.ts:checkVersionDowngrade",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/sdk/tests/starter-skills.test.ts",
+      "target": "file:packages/sdk/src/starter-skills/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/sdk/src/starter-skills/index.ts",
+      "target": "file:packages/sdk/tests/starter-skills.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/sdk/tests/validate-skill.test.ts",
+      "target": "file:packages/sdk/src/validate-skill.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/sdk/src/validate-skill.ts",
+      "target": "file:packages/sdk/tests/validate-skill.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/sdk/package.json",
+      "target": "file:packages/sdk/src/index.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

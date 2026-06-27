@@ -1,0 +1,33 @@
+{
+  "nodes": [
+    {
+      "id": "config:packages/server/.mcp.json",
+      "type": "config",
+      "name": ".mcp.json",
+      "filePath": "packages/server/.mcp.json",
+      "summary": "Empty MCP server registry for the Fastify server package, defining a placeholder mcpServers object with no registered servers.",
+      "tags": ["configuration", "mcp", "server"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/server/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/server/package.json",
+      "summary": "Package manifest for the @waggle/server Fastify sidecar, declaring its ESM exports (main, local, routes), dev/start scripts, and a rich dependency set including Fastify 5, Clerk auth, BullMQ job queue, ioredis, Drizzle ORM, WebSocket support, and all internal @waggle/* workspace packages.",
+      "tags": ["configuration", "build-system", "server", "dependencies"],
+      "complexity": "moderate",
+      "languageNotes": "Uses ESM type:module with explicit exports map exposing src/*.ts directly (transpile-only via tsx at runtime; tsc is used for type-checking only per CLAUDE.md notes)."
+    },
+    {
+      "id": "config:packages/server/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/server/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the @waggle/server sidecar, targeting ES2022 with strict mode, composite project references to @waggle/shared, and declaration map output to dist/.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": []
+}

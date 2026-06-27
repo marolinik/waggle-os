@@ -1,0 +1,1460 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "type": "file",
+      "name": "ChatApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "summary": "Core chat experience component (1280 lines) rendering the full message thread with tool-use cards, approval gates, autonomy toggle, suggested actions, memory recall toasts, and a file-drop zone.",
+      "tags": ["component", "chat", "app-screen", "agent"],
+      "complexity": "complex",
+      "languageNotes": "Largest file in the batch at 1218 non-empty lines; contains 8 sub-components inline (ToolCard, FeedbackButtons, ApprovalGate, AutonomyToggle, etc.) before the main ChatApp export."
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/ChatApp.tsx:ChatApp",
+      "type": "function",
+      "name": "ChatApp",
+      "filePath": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "lineRange": [453, 1278],
+      "summary": "Main chat interface rendering message thread, tool blocks, approval gates, autonomy controls, model selector, workspace briefing panel, and suggested actions.",
+      "tags": ["component", "chat", "agent"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/ChatApp.tsx:ApprovalGate",
+      "type": "function",
+      "name": "ApprovalGate",
+      "filePath": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "lineRange": [226, 312],
+      "summary": "Inline approval gate card rendered within the chat thread for pending agent tool-use approvals, showing risk level, tool details, and approve/reject controls.",
+      "tags": ["component", "approvals", "agent"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/ChatApp.tsx:AutonomyToggle",
+      "type": "function",
+      "name": "AutonomyToggle",
+      "filePath": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "lineRange": [344, 438],
+      "summary": "Toggle control for switching between autonomy levels (ask/auto/fully-auto) with countdown timer and tool-count display.",
+      "tags": ["component", "autonomy", "agent"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "type": "file",
+      "name": "ChatWindowInstance.tsx",
+      "filePath": "apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "summary": "Wrapper component that hosts a single ChatApp instance within the ChatHost container pool, wiring session hooks and chat state management.",
+      "tags": ["component", "chat", "wrapper"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/ChatWindowInstance.tsx:ChatWindowInstance",
+      "type": "function",
+      "name": "ChatWindowInstance",
+      "filePath": "apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "lineRange": [74, 261],
+      "summary": "Manages a single persistent chat window: initialises sessions, wires useChat hook, forwards persona/title to the hosting ChatHost.",
+      "tags": ["component", "chat", "session"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "type": "file",
+      "name": "CockpitApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/CockpitApp.tsx",
+      "summary": "Mission Control cockpit app screen showing cron job scheduling, compliance dashboard, and system-health metrics for admin operators.",
+      "tags": ["component", "cockpit", "app-screen", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/CockpitApp.tsx:CockpitApp",
+      "type": "function",
+      "name": "CockpitApp",
+      "filePath": "apps/web/src/components/os/apps/CockpitApp.tsx",
+      "lineRange": [26, 318],
+      "summary": "Renders the cockpit with cron preset picker, job list, compliance dashboard embed, and system metric panels.",
+      "tags": ["component", "cockpit", "cron"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "type": "file",
+      "name": "ConnectorsApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "summary": "Connectors hub app screen for managing OAuth-based integrations, showing connector cards with credential input, risk badges, and revoke/reconnect actions.",
+      "tags": ["component", "connectors", "app-screen", "oauth"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/ConnectorsApp.tsx:ConnectorsApp",
+      "type": "function",
+      "name": "ConnectorsApp",
+      "filePath": "apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "lineRange": [97, 390],
+      "summary": "Full connector management screen with connector card grid, credential input forms, OAuth flow, revoke confirmation, and install audit panel.",
+      "tags": ["component", "connectors", "oauth"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "type": "file",
+      "name": "DashboardApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/DashboardApp.tsx",
+      "summary": "Workspace dashboard app screen displaying brain health score, recent memory activity, workspace groups, and persona utilization across the workspace.",
+      "tags": ["component", "dashboard", "app-screen", "analytics"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/DashboardApp.tsx:DashboardApp",
+      "type": "function",
+      "name": "DashboardApp",
+      "filePath": "apps/web/src/components/os/apps/DashboardApp.tsx",
+      "lineRange": [84, 303],
+      "summary": "Renders the workspace dashboard with brain health ring, memory summary cards, workspace group overview, and persona usage breakdown.",
+      "tags": ["component", "dashboard", "analytics"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "type": "file",
+      "name": "EventsApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "summary": "Events and execution trace app screen showing a hierarchical agent run tree with step cards, timestamps, and tool-use history.",
+      "tags": ["component", "events", "app-screen", "agent"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/EventsApp.tsx:EventsApp",
+      "type": "function",
+      "name": "EventsApp",
+      "filePath": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "lineRange": [300, 454],
+      "summary": "Root events browser with date-filtered agent run list and expandable tree view of execution steps.",
+      "tags": ["component", "events", "agent"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/EventsApp.tsx:buildAgentTree",
+      "type": "function",
+      "name": "buildAgentTree",
+      "filePath": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "lineRange": [122, 186],
+      "summary": "Builds a nested tree structure from a flat list of agent execution events, grouping steps under their parent run.",
+      "tags": ["utility", "data-transformation", "agent"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "type": "file",
+      "name": "FilesApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/FilesApp.tsx",
+      "summary": "Full-featured file manager app screen with a workspace rail, file tree, upload zone, preview panel, version history, and file action menu.",
+      "tags": ["component", "files", "app-screen", "file-manager"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/FilesApp.tsx:FilesApp",
+      "type": "function",
+      "name": "FilesApp",
+      "filePath": "apps/web/src/components/os/apps/FilesApp.tsx",
+      "lineRange": [87, 799],
+      "summary": "Main file manager component wiring the workspace rail, file tree navigation, upload, preview, version history, and deep-link handling.",
+      "tags": ["component", "files", "file-manager"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "type": "file",
+      "name": "FilesAppTabs.tsx",
+      "filePath": "apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "summary": "Tab controller composing StorageApp and FilesApp into a unified tabbed storage-and-files view, initialising the active tab from deep-link or URL context.",
+      "tags": ["component", "files", "tabs", "wrapper"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "type": "file",
+      "name": "HomeCockpit.tsx",
+      "filePath": "apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "summary": "Home screen cockpit component (596 lines) displaying the overnight activity story, recent workspaces panel, suggested actions, up-next tasks, greeting header, and offline handling.",
+      "tags": ["component", "home", "app-screen", "dashboard"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/HomeCockpit.tsx:HomeCockpit",
+      "type": "function",
+      "name": "HomeCockpit",
+      "filePath": "apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "lineRange": [352, 579],
+      "summary": "Root home screen component fetching overnight briefing, orchestrating workspace panels, activity story, and suggested actions with loading/offline states.",
+      "tags": ["component", "home", "dashboard"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/HomeCockpit.tsx:RecentWorkspacesPanel",
+      "type": "function",
+      "name": "RecentWorkspacesPanel",
+      "filePath": "apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "lineRange": [177, 245],
+      "summary": "Renders a horizontally scrollable panel of recent workspace cards with run chips and navigation links.",
+      "tags": ["component", "workspace", "home"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "type": "file",
+      "name": "MCPHubApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "summary": "MCP Hub app screen for browsing the MCP server catalog, installing/uninstalling MCP servers, managing custom MCP configs, and viewing scope/risk before enabling.",
+      "tags": ["component", "mcp", "app-screen", "integrations"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/MCPHubApp.tsx:MCPHubApp",
+      "type": "function",
+      "name": "MCPHubApp",
+      "filePath": "apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "lineRange": [67, 422],
+      "summary": "Full MCP hub with catalog browser, installed list, custom MCP form, scope dialog, approval modal, and audit panel.",
+      "tags": ["component", "mcp", "integrations"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "type": "file",
+      "name": "MarketplaceApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "summary": "Marketplace app screen for browsing and installing extension packs (skills, connectors, agents, models) with one-click install, risk assessment, and audit trail.",
+      "tags": ["component", "marketplace", "app-screen", "extensions"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/MarketplaceApp.tsx:MarketplaceApp",
+      "type": "function",
+      "name": "MarketplaceApp",
+      "filePath": "apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "lineRange": [91, 334],
+      "summary": "Extension marketplace with category shelves, search, install/remove actions with risk gating, approval modal, and audit panel.",
+      "tags": ["component", "marketplace", "extensions"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "type": "file",
+      "name": "MemoryCenterApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "summary": "Memory Center app screen with tabbed views for memory frames, timeline, harvest, knowledge graph, evolution, weaver panel, and wiki — the primary memory management UI.",
+      "tags": ["component", "memory", "app-screen", "tabs"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "type": "file",
+      "name": "MemoryTrust.tsx",
+      "filePath": "apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "summary": "Memory Trust front-door screen surfacing provenance data, manage-memory actions, and the 'Why does Waggle remember this?' explainability panel.",
+      "tags": ["component", "memory", "trust", "provenance"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/MemoryTrust.tsx:MemoryTrust",
+      "type": "function",
+      "name": "MemoryTrust",
+      "filePath": "apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "lineRange": [110, 224],
+      "summary": "Tabbed memory trust component switching between Manage and Why views with provenance metadata fetch.",
+      "tags": ["component", "memory", "trust"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/PaymentSuccessApp.tsx",
+      "type": "file",
+      "name": "PaymentSuccessApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/PaymentSuccessApp.tsx",
+      "summary": "Post-payment success screen displayed after Stripe checkout completion, confirming tier upgrade and providing navigation back to the app.",
+      "tags": ["component", "billing", "app-screen", "stripe"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "type": "file",
+      "name": "SettingsApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/SettingsApp.tsx",
+      "summary": "Comprehensive settings app screen (1089 lines) with tier-filtered tab sections for model routing, providers, billing/plans, appearance, developer tools, and onboarding controls.",
+      "tags": ["component", "settings", "app-screen", "configuration"],
+      "complexity": "complex",
+      "languageNotes": "Tier-gated tab system: essential/standard/power tabs shown per user tier via getSettingsTabsForTier; 23 imports across billing, model selection, providers, and UI components."
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/SettingsApp.tsx:SettingsApp",
+      "type": "function",
+      "name": "SettingsApp",
+      "filePath": "apps/web/src/components/os/apps/SettingsApp.tsx",
+      "lineRange": [51, 1087],
+      "summary": "Monolithic settings screen with tier-filtered tabs, ModelPilotCard integration, provider key management, theme switching, dock labels, and billing plan cards.",
+      "tags": ["component", "settings", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/StorageAndFilesApp.test.tsx",
+      "type": "file",
+      "name": "StorageAndFilesApp.test.tsx",
+      "filePath": "apps/web/src/components/os/apps/StorageAndFilesApp.test.tsx",
+      "summary": "Unit tests for StorageAndFilesApp verifying tab rendering, storage stats display, and tooltip behaviour.",
+      "tags": ["test", "storage", "component"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "type": "file",
+      "name": "StorageAndFilesApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "summary": "Composite storage-and-files screen composing StorageApp and FilesAppTabs into a single unified view with tab switching.",
+      "tags": ["component", "storage", "files", "wrapper"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/StorageApp.tsx",
+      "type": "file",
+      "name": "StorageApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/StorageApp.tsx",
+      "summary": "Storage usage overview app screen showing disk usage by workspace with storage breakdown charts and quota information.",
+      "tags": ["component", "storage", "app-screen", "analytics"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/StorageApp.tsx:StorageApp",
+      "type": "function",
+      "name": "StorageApp",
+      "filePath": "apps/web/src/components/os/apps/StorageApp.tsx",
+      "lineRange": [93, 305],
+      "summary": "Renders storage usage analytics with workspace breakdown, file type distribution, and quota warnings.",
+      "tags": ["component", "storage", "analytics"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/ChatApp.tsx:ChatApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/ChatApp.tsx:ApprovalGate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/ChatApp.tsx:AutonomyToggle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/ChatWorkCanvas.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/os/warm/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/os/WorkspaceBriefing.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/ui/avatar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/components/ui/scroll-area.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/hooks/useContainerWidth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/chat-header-layout.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/memory-recall-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/platform.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/suggested-actions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "target": "function:apps/web/src/components/os/apps/ChatWindowInstance.tsx:ChatWindowInstance",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "target": "file:apps/web/src/components/os/apps/ChatApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "target": "file:apps/web/src/hooks/useChat.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "target": "file:apps/web/src/hooks/useSessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/CockpitApp.tsx:CockpitApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/cockpit/ComplianceDashboard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "target": "file:apps/web/src/lib/cron-presets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/ConnectorsApp.tsx:ConnectorsApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/connectors/ConnectorCard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/extend/InstallAuditPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/components/ui/approval-modal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/lib/persona-display.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/DashboardApp.tsx:DashboardApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/components/ui/avatar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/lib/brain-health.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/lib/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/DashboardApp.tsx",
+      "target": "file:apps/web/src/lib/workspace-groups.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/EventsApp.tsx:EventsApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/EventsApp.tsx:buildAgentTree",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "target": "file:apps/web/src/lib/decode-entities.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/FilesApp.tsx:FilesApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/file-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/FileActions.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/FilePreview.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/FileTree.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/FileUploadZone.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/WorkspaceRail.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/file-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/files-tabs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "target": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "function:apps/web/src/components/os/apps/HomeCockpit.tsx:HomeCockpit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "function:apps/web/src/components/os/apps/HomeCockpit.tsx:RecentWorkspacesPanel",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/components/os/warm/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/components/os/WorkspaceActionsMenu.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/hooks/useOfflineStatus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/MCPHubApp.tsx:MCPHubApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/connectors/McpCatalog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/extend/InstallAuditPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/mcp/AddCustomMcpForm.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/mcp/InstalledMcpList.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/mcp/mcp-hub-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/mcp/McpScopeDialog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/ui/approval-modal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/hooks/useRevalidateOnError.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/MarketplaceApp.tsx:MarketplaceApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/extend/AgentSearchBox.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/extend/ExtensionCard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/extend/InstallAuditPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/components/ui/approval-modal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/components/ui/input.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/lib/dedupe-packs.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/lib/extension-catalog.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/lib/risk-display.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/EvolutionTab.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/HarvestTab.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/ImportReminderBanner.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/KnowledgeGraphViewer.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/MemoryCenterTab.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/TimelineTab.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/WeaverPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/WikiTab.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/hooks/useOnboarding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "target": "file:apps/web/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "function:apps/web/src/components/os/apps/MemoryTrust.tsx:MemoryTrust",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "function:apps/web/src/components/os/apps/MemoryTrust.tsx:MemoryTrust",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/MemoryTrustManage.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "file:apps/web/src/components/os/apps/memory/MemoryTrustWhy.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "file:apps/web/src/components/os/warm/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "target": "file:apps/web/src/lib/utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PaymentSuccessApp.tsx",
+      "target": "file:apps/web/src/hooks/useBilling.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/SettingsApp.tsx:SettingsApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/billing/PlanCards.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/LockedFeature.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/model-gate/ModelGate.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/ModelPilotCard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/ModelSelector.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/overlays/EraseDataDialog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/settings/CoverageCompassCard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/os/settings/TelegramDigestCard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/components/ui/input.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/useBilling.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/useDeveloperMode.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/useDockLabels.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/useFeatureGate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/useOnboarding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/hooks/useProviders.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/lib/dock-tiers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/lib/login-briefing.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/lib/settings-tier-filter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/lib/shape-selection.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "target": "file:apps/web/src/providers/ThemeProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/FilesAppTabs.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/StorageApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/StorageApp.tsx:StorageApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/files/file-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageApp.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/StorageApp.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

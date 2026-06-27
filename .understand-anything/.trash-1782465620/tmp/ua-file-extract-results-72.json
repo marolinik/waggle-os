@@ -1,0 +1,407 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-hooks-core/src/install-core.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 190,
+      "nonEmptyLines": 175,
+      "functions": [
+        {
+          "name": "backupByteIdentical",
+          "startLine": 60,
+          "endLine": 71,
+          "params": [
+            "configPath",
+            "isoTimestamp"
+          ]
+        },
+        {
+          "name": "writePointer",
+          "startLine": 73,
+          "endLine": 75,
+          "params": [
+            "pointerPath",
+            "pointer"
+          ]
+        },
+        {
+          "name": "isInstallPointer",
+          "startLine": 77,
+          "endLine": 86,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "readPointer",
+          "startLine": 89,
+          "endLine": 107,
+          "params": [
+            "pointerPath"
+          ]
+        },
+        {
+          "name": "restoreFromBackup",
+          "startLine": 130,
+          "endLine": 190,
+          "params": [
+            "args"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "backupByteIdentical",
+          "line": 60,
+          "isDefault": false
+        },
+        {
+          "name": "writePointer",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "readPointer",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "restoreFromBackup",
+          "line": 130,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "backupByteIdentical",
+          "callee": "existsSync",
+          "lineNumber": 64
+        },
+        {
+          "caller": "backupByteIdentical",
+          "callee": "readFile",
+          "lineNumber": 67
+        },
+        {
+          "caller": "backupByteIdentical",
+          "callee": "backupPathFor",
+          "lineNumber": 68
+        },
+        {
+          "caller": "backupByteIdentical",
+          "callee": "writeFile",
+          "lineNumber": 69
+        },
+        {
+          "caller": "writePointer",
+          "callee": "writeFile",
+          "lineNumber": 74
+        },
+        {
+          "caller": "writePointer",
+          "callee": "JSON.stringify",
+          "lineNumber": 74
+        },
+        {
+          "caller": "isInstallPointer",
+          "callee": "Array.isArray",
+          "lineNumber": 84
+        },
+        {
+          "caller": "readPointer",
+          "callee": "existsSync",
+          "lineNumber": 90
+        },
+        {
+          "caller": "readPointer",
+          "callee": "readFile",
+          "lineNumber": 93
+        },
+        {
+          "caller": "readPointer",
+          "callee": "JSON.parse",
+          "lineNumber": 96
+        },
+        {
+          "caller": "readPointer",
+          "callee": "String",
+          "lineNumber": 100
+        },
+        {
+          "caller": "readPointer",
+          "callee": "isInstallPointer",
+          "lineNumber": 103
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "readFile",
+          "lineNumber": 147
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "writeFile",
+          "lineNumber": 148
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "existsSync",
+          "lineNumber": 152
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "unlink",
+          "lineNumber": 153
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "existsSync",
+          "lineNumber": 165
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "rf",
+          "lineNumber": 171
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "wf",
+          "lineNumber": 172
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "rf",
+          "lineNumber": 175
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "backupBytes.equals",
+          "lineNumber": 176
+        },
+        {
+          "caller": "restoreFromBackup",
+          "callee": "unlink",
+          "lineNumber": 185
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 4,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-core/src/paths-core.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 74,
+      "nonEmptyLines": 68,
+      "functions": [
+        {
+          "name": "backupPathFor",
+          "startLine": 18,
+          "endLine": 21,
+          "params": [
+            "configPath",
+            "isoTimestamp"
+          ]
+        },
+        {
+          "name": "hookCommandFor",
+          "startLine": 34,
+          "endLine": 37,
+          "params": [
+            "scriptPath",
+            "cliPath"
+          ]
+        },
+        {
+          "name": "normalizeCliPath",
+          "startLine": 47,
+          "endLine": 57,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "hooksDirFromModuleUrl",
+          "startLine": 66,
+          "endLine": 69,
+          "params": [
+            "moduleUrl"
+          ]
+        },
+        {
+          "name": "hookScriptPath",
+          "startLine": 72,
+          "endLine": 74,
+          "params": [
+            "hooksDir",
+            "basename"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "backupPathFor",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "normalizeCliPath",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "hooksDirFromModuleUrl",
+          "line": 66,
+          "isDefault": false
+        },
+        {
+          "name": "hookScriptPath",
+          "line": 72,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "backupPathFor",
+          "callee": "isoTimestamp.replace",
+          "lineNumber": 19
+        },
+        {
+          "caller": "normalizeCliPath",
+          "callee": "input.trim",
+          "lineNumber": 49
+        },
+        {
+          "caller": "normalizeCliPath",
+          "callee": "trimmed.includes",
+          "lineNumber": 51
+        },
+        {
+          "caller": "normalizeCliPath",
+          "callee": "trimmed.slice",
+          "lineNumber": 53
+        },
+        {
+          "caller": "hooksDirFromModuleUrl",
+          "callee": "dirname",
+          "lineNumber": 67
+        },
+        {
+          "caller": "hooksDirFromModuleUrl",
+          "callee": "fileURLToPath",
+          "lineNumber": 67
+        },
+        {
+          "caller": "hooksDirFromModuleUrl",
+          "callee": "resolve",
+          "lineNumber": 68
+        },
+        {
+          "caller": "hookScriptPath",
+          "callee": "join",
+          "lineNumber": 73
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-core/tests/install-core.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 233,
+      "nonEmptyLines": 200,
+      "functions": [
+        {
+          "name": "sha256",
+          "startLine": 18,
+          "endLine": 20,
+          "params": [
+            "buf"
+          ]
+        },
+        {
+          "name": "tmp",
+          "startLine": 24,
+          "endLine": 27,
+          "params": []
+        },
+        {
+          "name": "basePointer",
+          "startLine": 33,
+          "endLine": 45,
+          "params": [
+            "over"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update(buf).digest",
+          "lineNumber": 19
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 19
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash",
+          "lineNumber": 19
+        },
+        {
+          "caller": "tmp",
+          "callee": "mkdtemp",
+          "lineNumber": 25
+        },
+        {
+          "caller": "tmp",
+          "callee": "join",
+          "lineNumber": 25
+        },
+        {
+          "caller": "tmp",
+          "callee": "tmpdir",
+          "lineNumber": 25
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-core/tests/paths-core.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 87,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

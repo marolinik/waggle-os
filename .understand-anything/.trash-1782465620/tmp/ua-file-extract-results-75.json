@@ -1,0 +1,578 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "app/scripts/bundle-runtimes.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 180,
+      "nonEmptyLines": 145,
+      "callGraph": [
+        {
+          "caller": "mockExists",
+          "callee": "existingPaths.has",
+          "lineNumber": 142
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/scripts/bundle-runtimes.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 166,
+      "nonEmptyLines": 135,
+      "functions": [
+        {
+          "name": "downloadFile",
+          "startLine": 32,
+          "endLine": 50,
+          "params": [
+            "url",
+            "destPath"
+          ]
+        },
+        {
+          "name": "downloadNodeBinary",
+          "startLine": 52,
+          "endLine": 56,
+          "params": [
+            "version",
+            "resourcesDir"
+          ]
+        },
+        {
+          "name": "downloadPythonEmbed",
+          "startLine": 58,
+          "endLine": 79,
+          "params": [
+            "version",
+            "resourcesDir"
+          ]
+        },
+        {
+          "name": "installLiteLLM",
+          "startLine": 81,
+          "endLine": 115,
+          "params": [
+            "resourcesDir"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 119,
+          "endLine": 161,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "downloadFile",
+          "callee": "console.log",
+          "lineNumber": 33
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "console.log",
+          "lineNumber": 34
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "mkdir",
+          "lineNumber": 36
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "path.dirname",
+          "lineNumber": 36
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "fetch",
+          "lineNumber": 38
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "createWriteStream",
+          "lineNumber": 43
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "Readable.fromWeb",
+          "lineNumber": 47
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "import",
+          "lineNumber": 47
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "pipeline",
+          "lineNumber": 48
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "console.log",
+          "lineNumber": 49
+        },
+        {
+          "caller": "downloadNodeBinary",
+          "callee": "getNodeDownloadUrl",
+          "lineNumber": 53
+        },
+        {
+          "caller": "downloadNodeBinary",
+          "callee": "getResourcePaths",
+          "lineNumber": 54
+        },
+        {
+          "caller": "downloadNodeBinary",
+          "callee": "downloadFile",
+          "lineNumber": 55
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "console.warn",
+          "lineNumber": 60
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "console.warn",
+          "lineNumber": 61
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "getPythonDownloadUrl",
+          "lineNumber": 65
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "path.join",
+          "lineNumber": 66
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "downloadFile",
+          "lineNumber": 67
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "path.join",
+          "lineNumber": 69
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "console.log",
+          "lineNumber": 70
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "execFileSync",
+          "lineNumber": 71
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "rm",
+          "lineNumber": 77
+        },
+        {
+          "caller": "downloadPythonEmbed",
+          "callee": "console.log",
+          "lineNumber": 78
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "getResourcePaths",
+          "lineNumber": 82
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "existsSync",
+          "lineNumber": 83
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "path.join",
+          "lineNumber": 87
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "readdirSync(pythonDir).filter",
+          "lineNumber": 88
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "readdirSync",
+          "lineNumber": 88
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "f.endsWith",
+          "lineNumber": 88
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "path.join",
+          "lineNumber": 90
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "readFileSync",
+          "lineNumber": 91
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "content.replace",
+          "lineNumber": 92
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "writeFileSync",
+          "lineNumber": 93
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "path.join",
+          "lineNumber": 97
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "downloadFile",
+          "lineNumber": 98
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "console.log",
+          "lineNumber": 100
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "path.join",
+          "lineNumber": 101
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "mkdir",
+          "lineNumber": 102
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "execFileSync",
+          "lineNumber": 103
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "console.log",
+          "lineNumber": 107
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "execFileSync",
+          "lineNumber": 108
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "rm",
+          "lineNumber": 113
+        },
+        {
+          "caller": "installLiteLLM",
+          "callee": "console.log",
+          "lineNumber": 114
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 120
+        },
+        {
+          "caller": "main",
+          "callee": "args.includes",
+          "lineNumber": 122
+        },
+        {
+          "caller": "main",
+          "callee": "getBundleStatus",
+          "lineNumber": 123
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 124
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 125
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 126
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 127
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 131
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 132
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 133
+        },
+        {
+          "caller": "main",
+          "callee": "mkdir",
+          "lineNumber": 135
+        },
+        {
+          "caller": "main",
+          "callee": "getBundleStatus",
+          "lineNumber": 137
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 140
+        },
+        {
+          "caller": "main",
+          "callee": "downloadNodeBinary",
+          "lineNumber": 141
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 143
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 147
+        },
+        {
+          "caller": "main",
+          "callee": "downloadPythonEmbed",
+          "lineNumber": 148
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "installLiteLLM",
+          "lineNumber": 155
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 157
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 160
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "app/scripts/bundle-utils.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 123,
+      "nonEmptyLines": 109,
+      "functions": [
+        {
+          "name": "getNodeDownloadUrl",
+          "startLine": 14,
+          "endLine": 27,
+          "params": [
+            "version",
+            "platform",
+            "arch"
+          ]
+        },
+        {
+          "name": "getPythonDownloadUrl",
+          "startLine": 32,
+          "endLine": 45,
+          "params": [
+            "version",
+            "platform",
+            "arch"
+          ]
+        },
+        {
+          "name": "getResourcePaths",
+          "startLine": 58,
+          "endLine": 72,
+          "params": [
+            "resourcesDir",
+            "platform"
+          ]
+        },
+        {
+          "name": "getBundleStatus",
+          "startLine": 86,
+          "endLine": 96,
+          "params": [
+            "resourcesDir",
+            "_existsSync"
+          ]
+        },
+        {
+          "name": "parseVersion",
+          "startLine": 109,
+          "endLine": 116,
+          "params": [
+            "version"
+          ]
+        },
+        {
+          "name": "isValidVersion",
+          "startLine": 121,
+          "endLine": 123,
+          "params": [
+            "version"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "getNodeDownloadUrl",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "getPythonDownloadUrl",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "getResourcePaths",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "getBundleStatus",
+          "line": 86,
+          "isDefault": false
+        },
+        {
+          "name": "parseVersion",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "isValidVersion",
+          "line": 121,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getResourcePaths",
+          "callee": "path.join",
+          "lineNumber": 61
+        },
+        {
+          "caller": "getResourcePaths",
+          "callee": "path.join",
+          "lineNumber": 62
+        },
+        {
+          "caller": "getResourcePaths",
+          "callee": "path.join",
+          "lineNumber": 63
+        },
+        {
+          "caller": "getResourcePaths",
+          "callee": "path.join",
+          "lineNumber": 68
+        },
+        {
+          "caller": "getResourcePaths",
+          "callee": "path.join",
+          "lineNumber": 69
+        },
+        {
+          "caller": "getResourcePaths",
+          "callee": "path.join",
+          "lineNumber": 70
+        },
+        {
+          "caller": "getBundleStatus",
+          "callee": "getResourcePaths",
+          "lineNumber": 90
+        },
+        {
+          "caller": "getBundleStatus",
+          "callee": "_existsSync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "getBundleStatus",
+          "callee": "_existsSync",
+          "lineNumber": 93
+        },
+        {
+          "caller": "getBundleStatus",
+          "callee": "_existsSync",
+          "lineNumber": 94
+        },
+        {
+          "caller": "parseVersion",
+          "callee": "version.split('.').map",
+          "lineNumber": 110
+        },
+        {
+          "caller": "parseVersion",
+          "callee": "version.split",
+          "lineNumber": 110
+        },
+        {
+          "caller": "isValidVersion",
+          "callee": "/^\\d+\\.\\d+\\.\\d+$/.test",
+          "lineNumber": 122
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    }
+  ]
+}

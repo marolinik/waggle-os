@@ -1,0 +1,127 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/addiction-features/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "docs/addiction-features/README.md",
+      "summary": "Index and overview document for the 'Addiction Features' Block B design docs, listing 7 engagement-loop features with cross-feature decisions, a ratification checklist, and recommended build order.",
+      "tags": ["documentation", "design", "product-management", "engagement", "overview"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/addiction-features/01-memory-streak.md",
+      "type": "document",
+      "name": "01-memory-streak.md",
+      "filePath": "docs/addiction-features/01-memory-streak.md",
+      "summary": "Feature design spec for the Memory Streak Counter — a daily engagement hook that tracks consecutive days of memory activity, with UI sketch, data model, acceptance criteria, and implementation notes.",
+      "tags": ["documentation", "design", "engagement", "memory", "gamification"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/addiction-features/02-daily-brief.md",
+      "type": "document",
+      "name": "02-daily-brief.md",
+      "filePath": "docs/addiction-features/02-daily-brief.md",
+      "summary": "Feature design spec for the Daily Brief Notification — a server-generated morning summary surfacing yesterday's memory highlights to drive daily re-engagement, with data model and generator details.",
+      "tags": ["documentation", "design", "engagement", "notifications", "memory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/addiction-features/03-continuity-banner.md",
+      "type": "document",
+      "name": "03-continuity-banner.md",
+      "filePath": "docs/addiction-features/03-continuity-banner.md",
+      "summary": "Feature design spec for the Continuity Moments auto-resume banner — a UI surface that detects interrupted sessions and prompts users to pick up where they left off, with data model and acceptance criteria.",
+      "tags": ["documentation", "design", "engagement", "ux", "continuity"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/addiction-features/04-weekly-wins-digest.md",
+      "type": "document",
+      "name": "04-weekly-wins-digest.md",
+      "filePath": "docs/addiction-features/04-weekly-wins-digest.md",
+      "summary": "Feature design spec for the Weekly Memory Wins Digest — a server-generated weekly email/in-app summary surfacing the most impactful memories of the week to reinforce the memory value loop.",
+      "tags": ["documentation", "design", "engagement", "memory", "notifications"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/addiction-features/05-milestone-cards.md",
+      "type": "document",
+      "name": "05-milestone-cards.md",
+      "filePath": "docs/addiction-features/05-milestone-cards.md",
+      "summary": "Feature design spec for First-Time Milestone Cards — celebratory UI cards that fire on key user achievements (first memory saved, first week streak, etc.) to reinforce early habit formation.",
+      "tags": ["documentation", "design", "engagement", "gamification", "onboarding"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/addiction-features/06-tour-replay.md",
+      "type": "document",
+      "name": "06-tour-replay.md",
+      "filePath": "docs/addiction-features/06-tour-replay.md",
+      "summary": "Feature design spec for the Tour Replay Button — a persistent UI affordance letting users re-trigger the onboarding tour at any time to rediscover features, with data model and acceptance criteria.",
+      "tags": ["documentation", "design", "onboarding", "ux", "engagement"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/addiction-features/07-pending-imports-reminder.md",
+      "type": "document",
+      "name": "07-pending-imports-reminder.md",
+      "filePath": "docs/addiction-features/07-pending-imports-reminder.md",
+      "summary": "Feature design spec for the Pending Imports Reminder Banner — a contextual prompt that detects when users have unused data sources awaiting import and nudges them to harvest more memory.",
+      "tags": ["documentation", "design", "engagement", "harvest", "memory"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/01-memory-streak.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/02-daily-brief.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/03-continuity-banner.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/04-weekly-wins-digest.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/05-milestone-cards.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/06-tour-replay.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/addiction-features/README.md",
+      "target": "document:docs/addiction-features/07-pending-imports-reminder.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

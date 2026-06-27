@@ -1,0 +1,109 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "type": "file",
+      "name": "ontology.ts",
+      "filePath": "packages/hive-mind-core/src/mind/ontology.ts",
+      "summary": "Defines the Ontology class for registering named entity-type schemas and exports a validateEntity function that checks entity fields against a registered schema, reporting missing required fields and unknown properties.",
+      "tags": ["schema-definition", "utility", "data-model", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/ontology.ts:Ontology",
+      "type": "class",
+      "name": "Ontology",
+      "filePath": "packages/hive-mind-core/src/mind/ontology.ts",
+      "lineRange": [6, 24],
+      "summary": "Registry for entity-type schemas; supports defining types with required/optional fields and querying the registry by type name.",
+      "tags": ["data-model", "schema-definition", "registry"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/ontology.ts:validateEntity",
+      "type": "function",
+      "name": "validateEntity",
+      "filePath": "packages/hive-mind-core/src/mind/ontology.ts",
+      "lineRange": [31, 58],
+      "summary": "Validates an entity object against its registered schema in the given Ontology, returning a list of validation issues for missing required fields and unrecognized properties.",
+      "tags": ["validation", "utility", "schema-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/mind/ontology.test.ts",
+      "type": "file",
+      "name": "ontology.test.ts",
+      "filePath": "packages/hive-mind-core/tests/mind/ontology.test.ts",
+      "summary": "Vitest unit tests for the Ontology class and validateEntity function in the mind subdirectory test suite, covering schema registration and entity validation scenarios.",
+      "tags": ["test", "validation", "schema-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/ontology.test.ts",
+      "type": "file",
+      "name": "ontology.test.ts",
+      "filePath": "packages/hive-mind-core/tests/ontology.test.ts",
+      "summary": "Vitest unit tests for the Ontology class and validateEntity function in the top-level test directory, exercising schema define/query operations and field-level validation logic.",
+      "tags": ["test", "validation", "schema-definition"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "target": "class:packages/hive-mind-core/src/mind/ontology.ts:Ontology",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "target": "function:packages/hive-mind-core/src/mind/ontology.ts:validateEntity",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "target": "class:packages/hive-mind-core/src/mind/ontology.ts:Ontology",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "target": "function:packages/hive-mind-core/src/mind/ontology.ts:validateEntity",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/mind/ontology.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/ontology.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/ontology.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ontology.ts",
+      "target": "file:packages/hive-mind-core/tests/ontology.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

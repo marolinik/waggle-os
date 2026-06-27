@@ -1,0 +1,15 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-hooks-openclaw/README.md", "language": "markdown", "sizeLines": 104, "fileCategory": "docs"},
+    {"path": "packages/hive-mind-hooks-openclaw/package.json", "language": "json", "sizeLines": 65, "fileCategory": "config"},
+    {"path": "packages/hive-mind-hooks-openclaw/tsconfig.json", "language": "json", "sizeLines": 15, "fileCategory": "config"},
+    {"path": "packages/hive-mind-hooks-openclaw/tsconfig.test.json", "language": "json", "sizeLines": 12, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-hooks-openclaw/README.md": [],
+    "packages/hive-mind-hooks-openclaw/package.json": [],
+    "packages/hive-mind-hooks-openclaw/tsconfig.json": [],
+    "packages/hive-mind-hooks-openclaw/tsconfig.test.json": []
+  }
+}

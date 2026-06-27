@@ -1,0 +1,380 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/optimizer/src/optimizer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 41,
+      "classes": [
+        {
+          "name": "PromptOptimizer",
+          "startLine": 14,
+          "endLine": 50,
+          "methods": [
+            "constructor",
+            "execute",
+            "summarize",
+            "classify",
+            "expandPrompt",
+            "listPrograms"
+          ],
+          "properties": [
+            "ai"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "PromptOptimizer",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "execute",
+          "callee": "getProgram",
+          "lineNumber": 22
+        },
+        {
+          "caller": "execute",
+          "callee": "entry.create",
+          "lineNumber": 23
+        },
+        {
+          "caller": "execute",
+          "callee": "program.forward",
+          "lineNumber": 24
+        },
+        {
+          "caller": "summarize",
+          "callee": "this.execute",
+          "lineNumber": 33
+        },
+        {
+          "caller": "classify",
+          "callee": "this.execute",
+          "lineNumber": 38
+        },
+        {
+          "caller": "expandPrompt",
+          "callee": "this.execute",
+          "lineNumber": 43
+        },
+        {
+          "caller": "listPrograms",
+          "callee": "PROGRAM_REGISTRY.map",
+          "lineNumber": 48
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/optimizer/src/signatures.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 69,
+      "nonEmptyLines": 56,
+      "functions": [
+        {
+          "name": "createSummarizer",
+          "startLine": 20,
+          "endLine": 27,
+          "params": []
+        },
+        {
+          "name": "createClassifier",
+          "startLine": 29,
+          "endLine": 37,
+          "params": []
+        },
+        {
+          "name": "createPromptExpander",
+          "startLine": 39,
+          "endLine": 47,
+          "params": []
+        },
+        {
+          "name": "getProgram",
+          "startLine": 65,
+          "endLine": 69,
+          "params": [
+            "name"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SUMMARIZER_SIGNATURE",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "CLASSIFIER_SIGNATURE",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "PROMPT_EXPANDER_SIGNATURE",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "createSummarizer",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "createClassifier",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "createPromptExpander",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "PROGRAM_REGISTRY",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "getProgram",
+          "line": 65,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createSummarizer",
+          "callee": "gen.setInstruction",
+          "lineNumber": 22
+        },
+        {
+          "caller": "createClassifier",
+          "callee": "gen.setInstruction",
+          "lineNumber": 31
+        },
+        {
+          "caller": "createPromptExpander",
+          "callee": "gen.setInstruction",
+          "lineNumber": 41
+        },
+        {
+          "caller": "getProgram",
+          "callee": "PROGRAM_REGISTRY.find",
+          "lineNumber": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/optimizer/tests/optimizer.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 223,
+      "nonEmptyLines": 202,
+      "functions": [
+        {
+          "name": "toTitleCase",
+          "startLine": 17,
+          "endLine": 19,
+          "params": [
+            "camel"
+          ]
+        },
+        {
+          "name": "createMockAI",
+          "startLine": 23,
+          "endLine": 57,
+          "params": [
+            "responses"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "toTitleCase",
+          "callee": "camel.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim",
+          "lineNumber": 18
+        },
+        {
+          "caller": "toTitleCase",
+          "callee": "camel.replace(/([A-Z])/g, ' $1').replace",
+          "lineNumber": 18
+        },
+        {
+          "caller": "toTitleCase",
+          "callee": "camel.replace",
+          "lineNumber": 18
+        },
+        {
+          "caller": "toTitleCase",
+          "callee": "s.toUpperCase",
+          "lineNumber": 18
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "Object.entries(responses)\r\n    .map(([k, v]) => `${toTitleCase(k)}: ${v}`)\r\n    .join",
+          "lineNumber": 25
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "Object.entries(responses)\r\n    .map",
+          "lineNumber": 25
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "Object.entries",
+          "lineNumber": 25
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "toTitleCase",
+          "lineNumber": 26
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 30
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 30
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 34
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 35
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 35
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 46
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 46
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 47
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 49
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 49
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 50
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 50
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 51
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 51
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 52
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 52
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 54
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 54
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn().mockReturnValue",
+          "lineNumber": 55
+        },
+        {
+          "caller": "createMockAI",
+          "callee": "vi.fn",
+          "lineNumber": 55
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

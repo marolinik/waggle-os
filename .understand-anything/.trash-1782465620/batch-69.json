@@ -1,0 +1,134 @@
+{
+  "nodes": [
+    {
+      "id": "file:benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "type": "file",
+      "name": "cluster-bootstrap.ts",
+      "filePath": "benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "summary": "Implements cluster-bootstrap confidence interval computation for benchmark statistics, grouping evaluation rows by conversation cluster and resampling with a seeded Mulberry32 PRNG to produce robust percentile-based CIs that account for intra-cluster correlation.",
+      "tags": ["utility", "statistics", "benchmark"],
+      "complexity": "moderate",
+      "languageNotes": "Uses a self-contained seeded PRNG (mulberry32) to ensure reproducible bootstrap results without external dependencies."
+    },
+    {
+      "id": "function:benchmarks/harness/src/stats/cluster-bootstrap.ts:computeClusterBootstrapCI",
+      "type": "function",
+      "name": "computeClusterBootstrapCI",
+      "filePath": "benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "lineRange": [77, 169],
+      "summary": "Computes a bootstrap confidence interval for a proportion by resampling whole clusters (conversations) with replacement to correctly account for intra-cluster correlation in multi-turn evaluation data.",
+      "tags": ["statistics", "benchmark", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "type": "file",
+      "name": "wilson-ci.ts",
+      "filePath": "benchmarks/harness/src/stats/wilson-ci.ts",
+      "summary": "Provides the Wilson score confidence interval formula for benchmark accuracy proportions, exporting both the main `computeWilsonCI` function and the `Z_95_TWO_SIDED` constant used for 95% two-sided intervals.",
+      "tags": ["utility", "statistics", "benchmark"],
+      "complexity": "moderate",
+      "languageNotes": "Implements the Wilson score interval analytically (no resampling), making it fast and suitable for single-pass accuracy reporting."
+    },
+    {
+      "id": "function:benchmarks/harness/src/stats/wilson-ci.ts:computeWilsonCI",
+      "type": "function",
+      "name": "computeWilsonCI",
+      "filePath": "benchmarks/harness/src/stats/wilson-ci.ts",
+      "lineRange": [55, 98],
+      "summary": "Computes a Wilson score confidence interval for a success proportion given successes, total trials, and a z-score, returning lower and upper bounds clamped to [0, 1].",
+      "tags": ["statistics", "benchmark", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/stats/cluster-bootstrap.test.ts",
+      "type": "file",
+      "name": "cluster-bootstrap.test.ts",
+      "filePath": "benchmarks/harness/tests/stats/cluster-bootstrap.test.ts",
+      "summary": "Unit test suite for `computeClusterBootstrapCI`, covering input validation, deterministic reproducibility via seeding, cluster-level resampling correctness, and edge cases such as single-item clusters and extreme correctness rates.",
+      "tags": ["test", "statistics", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/stats/wilson-ci.test.ts",
+      "type": "file",
+      "name": "wilson-ci.test.ts",
+      "filePath": "benchmarks/harness/tests/stats/wilson-ci.test.ts",
+      "summary": "Unit test suite for `computeWilsonCI`, verifying the Wilson score interval formula against known values, input validation guards, and boundary conditions including zero and full success rates.",
+      "tags": ["test", "statistics", "benchmark"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "target": "function:benchmarks/harness/src/stats/cluster-bootstrap.ts:computeClusterBootstrapCI",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "target": "function:benchmarks/harness/src/stats/cluster-bootstrap.ts:computeClusterBootstrapCI",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "target": "function:benchmarks/harness/src/stats/wilson-ci.ts:computeWilsonCI",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "target": "function:benchmarks/harness/src/stats/wilson-ci.ts:computeWilsonCI",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:benchmarks/harness/tests/stats/cluster-bootstrap.test.ts",
+      "target": "file:benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/stats/cluster-bootstrap.test.ts",
+      "target": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/stats/wilson-ci.test.ts",
+      "target": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/cluster-bootstrap.ts",
+      "target": "file:benchmarks/harness/tests/stats/cluster-bootstrap.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "target": "file:benchmarks/harness/tests/stats/cluster-bootstrap.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/wilson-ci.ts",
+      "target": "file:benchmarks/harness/tests/stats/wilson-ci.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

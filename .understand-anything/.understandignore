@@ -1,0 +1,191 @@
+# .understandignore — patterns for files/dirs to exclude from analysis
+# Syntax: same as .gitignore (globs, # comments, ! negation, trailing / for dirs)
+# Lines below are suggestions — uncomment to activate.
+# Use ! prefix to force-include something excluded by defaults.
+#
+# Built-in defaults (always excluded unless negated):
+#   node_modules/, .git/, dist/, build/, obj/, *.lock, *.min.js, etc.
+#
+
+# --- From .gitignore (uncomment to exclude) ---
+
+# .mcp.json
+# logs
+# npm-debug.log*
+# yarn-debug.log*
+# yarn-error.log*
+# pnpm-debug.log*
+# lerna-debug.log*
+# dist-ssr
+# *.local
+# .env
+# .env.local
+# .env*.local
+# .waggle/
+# *.mind
+# marketplace.db
+# *.pfx
+# app/src-tauri/.thumbprint.txt
+# preflight-results/stage-0-query-*.json
+# preflight-results/stage-0-tmp/
+# preflight-results/stage-*-attempt-*.md
+# preflight-results/stage-*-exclusions.md
+# benchmarks/data/*
+# !benchmarks/data/.gitkeep
+# !benchmarks/data/preflight-locomo-50.json
+# !benchmarks/data/failure-mode-calibration-10.jsonl
+# !benchmarks/data/locomo/
+# !benchmarks/data/locomo/locomo-1540.jsonl
+# !benchmarks/data/locomo/locomo-1540.meta.json
+# !benchmarks/data/longmemeval/
+# benchmarks/data/longmemeval/*
+# !benchmarks/data/longmemeval/longmemeval.meta.json
+# !benchmarks/data/beam/
+# benchmarks/data/beam/*
+# !benchmarks/data/beam/beam-128K.meta.json
+# !benchmarks/data/beam/beam-1M.meta.json
+# benchmarks/memori-replication/
+# benchmarks/results/*
+# !benchmarks/results/.gitkeep
+# !benchmarks/results/manifest-*.md
+# !benchmarks/results/manifest-*.yaml
+# !benchmarks/results/stage*-gate-*.md
+# !benchmarks/results/stage*-gate-*.jsonl
+# !benchmarks/results/stage3-n400-v6-*.md
+# !benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
+# !benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
+# !benchmarks/results/v6-self-judge-rebench/
+# !benchmarks/results/v6-self-judge-rebench/*.jsonl
+# !benchmarks/results/v6-self-judge-rebench/*.md
+# !benchmarks/results/pilot-2026-04-26/
+# !benchmarks/results/pilot-2026-04-26/*.jsonl
+# !benchmarks/results/pilot-2026-04-26/*.json
+# !benchmarks/results/pilot-2026-04-26/*.log
+# !benchmarks/results/pilot-2026-04-26/prompts-archive/
+# !benchmarks/results/pilot-2026-04-26/prompts-archive/*.md
+# !benchmarks/results/pilot-2026-04-26/invalidated/
+# !benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl
+# !benchmarks/results/gepa-faza1/
+# !benchmarks/results/gepa-faza1/**/*.jsonl
+# !benchmarks/results/gepa-faza1/**/*.json
+# !benchmarks/results/gepa-faza1/**/*.md
+# !benchmarks/results/gepa-faza1/**/*.log
+# !benchmarks/results/gepa-faza1/**/*.yaml
+# !**/benchmarks/results/gepa-faza1
+# !**/benchmarks/results/gepa-faza1/
+# !**/benchmarks/results/gepa-faza1/**
+# !benchmarks/probes/**/*.log
+# !benchmarks/probes/**/*.jsonl
+# !benchmarks/probes/**/*.py
+# !benchmarks/probes/**/*.md
+# **/benchmarks/results/*
+# **/benchmarks/data/*
+# !**/benchmarks/data/preflight-locomo-50.json
+# !**/benchmarks/data/failure-mode-calibration-10.jsonl
+# !**/benchmarks/data/locomo/
+# !**/benchmarks/data/locomo/locomo-1540.jsonl
+# !**/benchmarks/data/locomo/locomo-1540.meta.json
+# !**/benchmarks/data/longmemeval/
+# **/benchmarks/data/longmemeval/*
+# !**/benchmarks/data/longmemeval/longmemeval.meta.json
+# !**/benchmarks/data/beam/
+# **/benchmarks/data/beam/*
+# !**/benchmarks/data/beam/beam-128K.meta.json
+# !**/benchmarks/data/beam/beam-1M.meta.json
+# !**/benchmarks/data/.gitkeep
+# !**/benchmarks/results/.gitkeep
+# !**/benchmarks/results/manifest-*.md
+# !**/benchmarks/results/manifest-*.yaml
+# !**/benchmarks/results/stage*-gate-*.md
+# !**/benchmarks/results/stage*-gate-*.jsonl
+# !**/benchmarks/results/stage3-n400-v6-*.md
+# !**/benchmarks/results/agentic-locomo-2026-04-25T*.jsonl
+# !**/benchmarks/results/agentic-locomo-2026-04-25T*.summary.json
+# !**/benchmarks/results/v6-self-judge-rebench/
+# !**/benchmarks/results/v6-self-judge-rebench/*.jsonl
+# !**/benchmarks/results/v6-self-judge-rebench/*.md
+# !**/benchmarks/results/pilot-2026-04-26/
+# !**/benchmarks/results/pilot-2026-04-26/*.jsonl
+# !**/benchmarks/results/pilot-2026-04-26/*.json
+# !**/benchmarks/results/pilot-2026-04-26/*.log
+# !**/benchmarks/results/pilot-2026-04-26/prompts-archive/
+# !**/benchmarks/results/pilot-2026-04-26/prompts-archive/*.md
+# !**/benchmarks/results/pilot-2026-04-26/invalidated/
+# !**/benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl
+# !benchmarks/archive/
+# !benchmarks/archive/**
+# test-regression-*.log
+# marketplace.db-shm
+# marketplace.db-wal
+# *.db-shm
+# *.db-wal
+# .workspace/
+# .scratch/
+# .mind/
+# .planning/
+# external/
+# *.tsbuildinfo
+# scripts/.cache/
+# app/src-tauri/resources/node
+# app/src-tauri/resources/node.exe
+# app/src-tauri/resources/native/
+# app/src-tauri/resources/service.js
+# app/src-tauri/resources/service.js.map
+# .vscode/*
+# !.vscode/extensions.json
+# .DS_Store
+# *.suo
+# *.ntvs*
+# *.njsproj
+# *.sln
+# *.sw?
+# .claude/
+# .playwright-mcp/
+# .superpowers/
+# ~$*
+# playwright-report/
+# test-results/
+# tests/screenshots/
+# s*.png
+# screen*.png
+# tmp_bench_results.json
+# tmp_bench_results-v5.json
+# tmp_hermes-skill-reuse.json
+# tmp_hermes-pilot*.json
+# tmp_hermes-pilot*.log
+# tmp_lpv*.log
+# tmp_lpv*.json
+# apps/www/public/brand/_backup-*/
+# .vercel/
+# apps/www/lighthouse-report.json
+# tests/vision/artifacts/
+# docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.pdf
+# docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.docx
+# docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.pptx
+# docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.png
+# docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.jpg
+
+# --- Detected directories (uncomment to exclude) ---
+
+# docs/
+# scripts/
+# tests/
+
+# --- Test file patterns (uncomment to exclude) ---
+
+# JS / TS
+# *.test.*
+# *.spec.*
+# *.snap
+# C# / .NET
+# **/*Tests.cs
+# **/*Test.cs
+# **/*Fixture.cs
+# **/*.Tests.csproj
+# Java / Kotlin
+# **/src/test/**
+# **/*Test.java
+# **/*IT.java
+# **/*Spec.kt
+# Go
+# **/*_test.go

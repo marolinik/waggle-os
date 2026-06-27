@@ -1,0 +1,146 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-hooks-openclaw/src/adapter.ts",
+      "type": "file",
+      "name": "adapter.ts",
+      "filePath": "packages/hive-mind-hooks-openclaw/src/adapter.ts",
+      "summary": "Defines the openclaw adapter object with field-extraction helpers (cwd, sessionId, prompt, response, parent) and exports the provenance constant and event name used by the openclaw hook integration.",
+      "tags": ["service", "utility", "adapter", "hook"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "type": "file",
+      "name": "handler.ts",
+      "filePath": "packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "summary": "Implements the main openclawHook entry point that intercepts openclaw AI tool events, determines the lifecycle phase, extracts context fields via the adapter, injects recalled memory into the prompt bootstrap, and persists the interaction to the hive-mind memory substrate.",
+      "tags": ["hook", "event-handler", "middleware", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-openclaw/tests/handler.test.ts",
+      "type": "file",
+      "name": "handler.test.ts",
+      "filePath": "packages/hive-mind-hooks-openclaw/tests/handler.test.ts",
+      "summary": "Unit tests for the openclaw hook handler covering event lifecycle routing, memory recall injection, session ID extraction, and save-memory flows using a mock bridge.",
+      "tags": ["test", "unit-test", "hook", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:openclawHook",
+      "type": "function",
+      "name": "openclawHook",
+      "filePath": "packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "lineRange": [161, 182],
+      "summary": "Default-exported main hook entry point; determines lifecycle phase, extracts context fields, injects memory bootstrap for prompt events, and delegates to the CLI bridge handler for event persistence.",
+      "tags": ["entry-point", "event-handler", "hook", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:injectBootstrap",
+      "type": "function",
+      "name": "injectBootstrap",
+      "filePath": "packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "lineRange": [190, 214],
+      "summary": "Recalls relevant memories from the hive-mind bridge and injects them as a formatted context block into the event payload's system prompt list before the hook continues processing.",
+      "tags": ["memory", "middleware", "hook", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:extractFor",
+      "type": "function",
+      "name": "extractFor",
+      "filePath": "packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "lineRange": [113, 135],
+      "summary": "Extracts structured context fields (cwd, provenance scope, prompt, response, parent) from an event using the adapter, keyed to the current lifecycle phase.",
+      "tags": ["utility", "adapter", "hook", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:lifecycleFor",
+      "type": "function",
+      "name": "lifecycleFor",
+      "filePath": "packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "lineRange": [95, 107],
+      "summary": "Determines the hook lifecycle phase (prompt, response, or stop) from the raw event name using suffix matching against known openclaw event name patterns.",
+      "tags": ["utility", "hook", "event-handler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-openclaw/tests/handler.test.ts:makeMockBridge",
+      "type": "function",
+      "name": "makeMockBridge",
+      "filePath": "packages/hive-mind-hooks-openclaw/tests/handler.test.ts",
+      "lineRange": [33, 61],
+      "summary": "Factory that creates a mock hive-mind CLI bridge with configurable recall hits and captured save calls, used to isolate handler tests from the real memory substrate.",
+      "tags": ["test", "factory", "utility", "mock"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "file:packages/hive-mind-hooks-openclaw/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/tests/handler.test.ts",
+      "target": "file:packages/hive-mind-hooks-openclaw/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:openclawHook",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:injectBootstrap",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:extractFor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:lifecycleFor",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "function:packages/hive-mind-hooks-openclaw/src/handler.ts:openclawHook",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/tests/handler.test.ts",
+      "target": "function:packages/hive-mind-hooks-openclaw/tests/handler.test.ts:makeMockBridge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-openclaw/src/handler.ts",
+      "target": "file:packages/hive-mind-hooks-openclaw/tests/handler.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

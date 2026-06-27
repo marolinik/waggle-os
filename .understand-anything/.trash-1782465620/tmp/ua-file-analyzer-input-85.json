@@ -1,0 +1,17 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/shared/src/connector-recommendations.ts", "language": "typescript", "sizeLines": 173, "fileCategory": "code"},
+    {"path": "packages/shared/src/mcp-catalog.ts", "language": "typescript", "sizeLines": 319, "fileCategory": "code"},
+    {"path": "packages/shared/tests/connector-recommendations.test.ts", "language": "typescript", "sizeLines": 113, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/shared/src/connector-recommendations.ts": [],
+    "packages/shared/src/mcp-catalog.ts": [],
+    "packages/shared/tests/connector-recommendations.test.ts": [
+      "packages/shared/src/connector-recommendations.ts",
+      "packages/shared/src/mcp-catalog.ts"
+    ]
+  },
+  "neighborMap": {}
+}

@@ -31,6 +31,8 @@
 
 import { test, expect, type Page } from '@playwright/test';
 
+const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Wait for the Waggle app shell to be ready (copied from user-journeys.spec.ts). */
@@ -57,7 +59,7 @@ async function isOnboarding(page: Page): Promise<boolean> {
  */
 async function skipOnboarding(page: Page): Promise<void> {
   // 1. Server-side: PATCH /api/settings — this is what the app reads on load
-  await page.request.patch('http://127.0.0.1:3333/api/settings', {
+  await page.request.patch(`${BASE}/api/settings`, {
     data: { onboardingCompleted: true },
     headers: { 'Content-Type': 'application/json' },
   }).catch(() => {}); // non-blocking — proceed even if server unreachable
@@ -75,6 +77,11 @@ async function skipOnboarding(page: Page): Promise<void> {
       localStorage.setItem('waggle:first-run', 'done');
     } catch { /* ignore */ }
   }).catch(() => {});
+}
+
+function routeWithSkip(route: string): string {
+  const separator = route.includes('?') ? '&' : '?';
+  return `${route}${separator}skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`;
 }
 
 /**
@@ -106,10 +113,44 @@ async function navigateTo(page: Page, viewName: string): Promise<void> {
     await page.waitForTimeout(300);
   }
 
+  const sidebarSelectors: Record<string, string[]> = {
+    Chat: ['[data-testid="nav-chat"]', 'button[aria-label="Chat"]'],
+    Memory: ['[data-testid="nav-memory"]', 'button[aria-label="Memory"]'],
+    Settings: ['[data-testid="sidebar-user"]', 'button[aria-label="Account and settings"]'],
+    'Agents & tasks': ['[data-testid="nav-agents"]', 'button[aria-label="Agents & tasks"]'],
+    Library: ['[data-testid="nav-library"]', 'button[aria-label="Library"]'],
+  };
+
+  for (const selector of sidebarSelectors[viewName] ?? []) {
+    const candidate = sidebar.locator(selector).first();
+    if (await candidate.isVisible({ timeout: 700 }).catch(() => false)) {
+      await candidate.click();
+      await page.waitForTimeout(600);
+      return;
+    }
+  }
+
   const btn = sidebar.locator('button', { hasText: viewName }).first();
-  await btn.waitFor({ state: 'visible', timeout: 10000 });
-  await btn.click();
-  await page.waitForTimeout(600);
+  if (await btn.isVisible({ timeout: 700 }).catch(() => false)) {
+    await btn.click();
+    await page.waitForTimeout(600);
+    return;
+  }
+
+  const routes: Record<string, string> = {
+    Chat: '/workspaces/default/chat',
+    Memory: '/memory',
+    Events: '/settings/events',
+    Capabilities: '/skills',
+    'Skills Hub': '/skills',
+    Cockpit: '/settings/mission-control',
+    'Mission Control': '/settings/mission-control',
+    Settings: '/settings',
+  };
+  const route = routes[viewName];
+  if (!route) throw new Error(`No current navigation target configured for "${viewName}"`);
+  await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });
+  await waitForApp(page);
 }
 
 /**
@@ -118,29 +159,12 @@ async function navigateTo(page: Page, viewName: string): Promise<void> {
  */
 async function setTheme(page: Page, target: 'dark' | 'light'): Promise<void> {
   // Theme toggle is in the sidebar — ensure it's expanded
-  const expandBtn = page.locator('button[aria-label="Expand sidebar"]');
-  if (await expandBtn.isVisible().catch(() => false)) {
-    await expandBtn.click();
-    await page.waitForTimeout(200);
-  }
-
-  const sidebar = page.locator('[role="navigation"]');
-
-  // Check current theme from html element
-  const getCurrentTheme = async (): Promise<'dark' | 'light'> => {
-    const cls = await page.locator('html').getAttribute('class') ?? '';
-    const dt = await page.locator('html').getAttribute('data-theme') ?? '';
-    return (cls.includes('dark') || dt === 'dark') ? 'dark' : 'light';
-  };
-
-  const current = await getCurrentTheme();
-  if (current !== target) {
-    const toggle = sidebar.locator('button', { hasText: /light mode|dark mode/i });
-    if (await toggle.isVisible().catch(() => false)) {
-      await toggle.click();
-      await page.waitForTimeout(400);
-    }
-  }
+  await page.evaluate((mode) => {
+    localStorage.setItem('waggle-theme', mode);
+    if (mode === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }, target);
+  await page.waitForTimeout(100);
 }
 
 /**
@@ -163,10 +187,23 @@ async function stableScreenshot(page: Page): Promise<Buffer> {
         (el as HTMLElement).style.visibility = 'hidden';
       });
     }
+    const dynamicText = [
+      /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s/i,
+      /^\d{1,2}:\d{2}$/,
+      /^Last active:/i,
+    ];
+    document.querySelectorAll('body *').forEach((el) => {
+      if (el.children.length > 0) return;
+      const text = el.textContent?.trim() ?? '';
+      if (dynamicText.some((pattern) => pattern.test(text))) {
+        (el as HTMLElement).style.visibility = 'hidden';
+      }
+    });
+    document.querySelectorAll('button[aria-label="Notifications"]').forEach((el) => {
+      (el as HTMLElement).style.visibility = 'hidden';
+    });
   });
 
-  // Wait for any pending network activity to settle
-  await page.waitForLoadState('networkidle').catch(() => {});
   await page.waitForTimeout(200);
 
   return page.screenshot({ fullPage: false });
@@ -199,17 +236,20 @@ for (const theme of THEMES) {
     test.beforeEach(async ({ page }) => {
       // CRITICAL: register addInitScript BEFORE first goto so localStorage
       // is set BEFORE React mounts and reads onboarding state.
-      await page.addInitScript(() => {
+      await page.addInitScript((targetTheme) => {
         localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
         localStorage.setItem('waggle:first-run', 'done');
-      });
+        localStorage.setItem('waggle-theme', targetTheme);
+        if (targetTheme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        else document.documentElement.removeAttribute('data-theme');
+      }, theme);
       // Server-side: PATCH /api/settings (belt and suspenders)
-      await page.request.patch('http://127.0.0.1:3333/api/settings', {
+      await page.request.patch(`${BASE}/api/settings`, {
         data: { onboardingCompleted: true },
         headers: { 'Content-Type': 'application/json' },
       }).catch(() => {});
       // NOW navigate — initScript fires before React, no onboarding shown
-      await page.goto('/');
+      await page.goto(routeWithSkip('/home'));
       await waitForApp(page);
       await setTheme(page, theme);
     });
@@ -225,7 +265,6 @@ for (const theme of THEMES) {
           (document.body.textContent?.length ?? 0) > 100,
           { timeout: 8000 }
         ).catch(() => {});
-        await page.waitForLoadState('networkidle').catch(() => {});
         await page.waitForTimeout(400); // short final settle for animations
 
         const screenshot = await stableScreenshot(page);
@@ -247,11 +286,11 @@ test.describe('View structural smoke tests', () => {
       localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true, step: 7 }));
       localStorage.setItem('waggle:first-run', 'done');
     });
-    await page.request.patch('http://127.0.0.1:3333/api/settings', {
+    await page.request.patch(`${BASE}/api/settings`, {
       data: { onboardingCompleted: true },
       headers: { 'Content-Type': 'application/json' },
     }).catch(() => {});
-    await page.goto('/');
+    await page.goto(routeWithSkip('/home'));
     await waitForApp(page);
   });
 
@@ -366,16 +405,16 @@ test.describe('View structural smoke tests', () => {
       return cls + dt;
     };
 
+    await navigateTo(page, 'Settings');
+    await page.getByRole('tab', { name: /General/i }).click();
+    await expect(page.getByText('Theme')).toBeVisible({ timeout: 5000 });
     const before = await getThemeSignal();
+    const target = before.includes('light') ? 'Dark' : 'Light';
 
-    const sidebar = page.locator('[role="navigation"][aria-label="Main navigation"]');
-    const toggle = sidebar.locator('button', { hasText: /light mode|dark mode/i });
+    await page.getByRole('button', { name: new RegExp(target, 'i') }).first().click();
+    await page.waitForTimeout(400);
 
-    if (await toggle.isVisible().catch(() => false)) {
-      await toggle.click();
-      await page.waitForTimeout(400);
-      const after = await getThemeSignal();
-      expect(after).not.toBe(before);
-    }
+    const after = await getThemeSignal();
+    expect(after).not.toBe(before);
   });
 });

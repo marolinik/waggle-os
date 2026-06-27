@@ -1,0 +1,236 @@
+{
+  "nodes": [
+    {
+      "id": "file:tests/e2e/full-product-audit.spec.ts",
+      "type": "file",
+      "name": "full-product-audit.spec.ts",
+      "filePath": "tests/e2e/full-product-audit.spec.ts",
+      "summary": "Comprehensive Playwright E2E audit spec that validates every major surface in the Waggle app shell by opening apps via the dock and asserting visible text and UI state across 300+ lines of test scenarios.",
+      "tags": ["test", "e2e", "audit", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/full-wiring-audit.spec.ts",
+      "type": "file",
+      "name": "full-wiring-audit.spec.ts",
+      "filePath": "tests/e2e/full-wiring-audit.spec.ts",
+      "summary": "Large Playwright E2E spec that audits all navigation wiring across sidebar views and collects console errors, verifying that every route and section loads without runtime failures.",
+      "tags": ["test", "e2e", "audit", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/light-mode-polish.spec.ts",
+      "type": "file",
+      "name": "light-mode-polish.spec.ts",
+      "filePath": "tests/e2e/light-mode-polish.spec.ts",
+      "summary": "Playwright E2E spec focused on validating light-mode theme polishing — seeds fresh-boot light mode state and checks WCAG contrast ratios using luminance calculations.",
+      "tags": ["test", "e2e", "accessibility", "theme"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/e2e/live-chat-flow.spec.ts",
+      "type": "file",
+      "name": "live-chat-flow.spec.ts",
+      "filePath": "tests/e2e/live-chat-flow.spec.ts",
+      "summary": "Playwright E2E spec that exercises the live chat agent interaction flow, navigating to the desktop workspace and testing message sending and agent response rendering.",
+      "tags": ["test", "e2e", "chat", "playwright"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/e2e/phase-ab-verification.spec.ts",
+      "type": "file",
+      "name": "phase-ab-verification.spec.ts",
+      "filePath": "tests/e2e/phase-ab-verification.spec.ts",
+      "summary": "Playwright E2E spec verifying Phase A and B feature correctness, navigating through dock-based app launch flows and asserting expected UI state for warm-hive redesign phases.",
+      "tags": ["test", "e2e", "verification", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/phase8-visual.spec.ts",
+      "type": "file",
+      "name": "phase8-visual.spec.ts",
+      "filePath": "tests/e2e/phase8-visual.spec.ts",
+      "summary": "Playwright visual regression spec for Phase 8 of the warm-hive redesign — sets themes, navigates to multiple views, and captures stable screenshots for visual comparison across dark and light modes.",
+      "tags": ["test", "e2e", "visual-regression", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/polish-verification.spec.ts",
+      "type": "file",
+      "name": "polish-verification.spec.ts",
+      "filePath": "tests/e2e/polish-verification.spec.ts",
+      "summary": "Playwright E2E spec verifying UI polish across tier states — skips onboarding, sets the user tier via API, and asserts the app shell and feature gating display correctly.",
+      "tags": ["test", "e2e", "tier-gating", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/power-user-stress.spec.ts",
+      "type": "file",
+      "name": "power-user-stress.spec.ts",
+      "filePath": "tests/e2e/power-user-stress.spec.ts",
+      "summary": "Playwright stress-test spec simulating rapid power-user interactions — dispatches keyboard events, rapid navigation across views, and verifies no console errors or crashes under load.",
+      "tags": ["test", "e2e", "stress-test", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/room-parallel-agents.spec.ts",
+      "type": "file",
+      "name": "room-parallel-agents.spec.ts",
+      "filePath": "tests/e2e/room-parallel-agents.spec.ts",
+      "summary": "Playwright E2E spec testing the Room multi-agent surface — installs an SSE mock to simulate parallel agent streams, then verifies the Room UI renders agent progress and results correctly.",
+      "tags": ["test", "e2e", "agents", "playwright"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/e2e/spawn-agent-flow.spec.ts",
+      "type": "file",
+      "name": "spawn-agent-flow.spec.ts",
+      "filePath": "tests/e2e/spawn-agent-flow.spec.ts",
+      "summary": "Playwright E2E spec validating the spawn-agent flow — sets up a fresh desktop page and exercises the agent spawning UI including model selection and task submission.",
+      "tags": ["test", "e2e", "agents", "playwright"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/e2e/team-server.spec.ts",
+      "type": "file",
+      "name": "team-server.spec.ts",
+      "filePath": "tests/e2e/team-server.spec.ts",
+      "summary": "Playwright E2E spec testing team-tier server API endpoints and multi-user collaboration features, asserting correct access-gating for TEAMS-tier routes.",
+      "tags": ["test", "e2e", "teams", "playwright"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/e2e/user-behavior.spec.ts",
+      "type": "file",
+      "name": "user-behavior.spec.ts",
+      "filePath": "tests/e2e/user-behavior.spec.ts",
+      "summary": "Large Playwright E2E spec simulating comprehensive user behavioral journeys — covers persona switching, memory save/search/count via API helpers, and validates the full interaction lifecycle across 1000+ lines.",
+      "tags": ["test", "e2e", "user-behavior", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/user-journeys.spec.ts",
+      "type": "file",
+      "name": "user-journeys.spec.ts",
+      "filePath": "tests/e2e/user-journeys.spec.ts",
+      "summary": "Playwright E2E spec covering critical user journeys end-to-end — onboarding, workspace navigation, keyboard shortcut dispatch, and cross-view workflows.",
+      "tags": ["test", "e2e", "user-journeys", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/e2e/waggle-complete.spec.ts",
+      "type": "file",
+      "name": "waggle-complete.spec.ts",
+      "filePath": "tests/e2e/waggle-complete.spec.ts",
+      "summary": "Most comprehensive Playwright E2E spec covering the complete Waggle product — exercises all major surfaces including chat, memory, agents, skills, and settings in a single mega-suite exceeding 1000 lines.",
+      "tags": ["test", "e2e", "integration", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/hive-950-token-guard.test.ts",
+      "type": "file",
+      "name": "hive-950-token-guard.test.ts",
+      "filePath": "tests/hive-950-token-guard.test.ts",
+      "summary": "Vitest unit test that guards against accidental re-introduction of the deprecated hive-950 design token — scans the source tree for any file containing the literal `hive-950` string and fails if found.",
+      "tags": ["test", "design-system", "token-guard", "regression"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/login-flow.spec.ts",
+      "type": "file",
+      "name": "login-flow.spec.ts",
+      "filePath": "tests/login-flow.spec.ts",
+      "summary": "Short Playwright E2E spec verifying the login and authentication flow — checks that the app routes unauthenticated users correctly and that login surfaces appear as expected.",
+      "tags": ["test", "e2e", "authentication", "playwright"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/oss-subtree-split.test.ts",
+      "type": "file",
+      "name": "oss-subtree-split.test.ts",
+      "filePath": "tests/oss-subtree-split.test.ts",
+      "summary": "Vitest unit test auditing the OSS subtree split integrity — verifies that proprietary files (vault.ts, compliance/, etc.) are absent from the hive-mind-* packages and that the split script's abort guard is in place.",
+      "tags": ["test", "oss", "security", "audit"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/placeholder-audit.test.ts",
+      "type": "file",
+      "name": "placeholder-audit.test.ts",
+      "filePath": "tests/placeholder-audit.test.ts",
+      "summary": "Vitest unit test scanning the codebase for unresolved placeholder strings (e.g., TODO, FIXME, placeholder text in UI) to prevent shipping incomplete copy to production.",
+      "tags": ["test", "audit", "content-quality"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/sidecar/skill-loader.test.ts",
+      "type": "file",
+      "name": "skill-loader.test.ts",
+      "filePath": "tests/sidecar/skill-loader.test.ts",
+      "summary": "Vitest unit test for the sidecar SkillLoader — tests loading, parsing, and validating skill frontmatter from the skills directory, verifying that skills are correctly discovered and enumerated.",
+      "tags": ["test", "unit", "skill-loader", "sidecar"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:tests/vision/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "tests/vision/README.md",
+      "summary": "Documentation for the vision-based E2E testing harness — explains the two-phase capture/judge workflow using Playwright screenshots and an LLM vision judge workflow, including the rubric and current status.",
+      "tags": ["documentation", "e2e", "vision-testing", "testing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/visual/r2-uat-mega.spec.ts",
+      "type": "file",
+      "name": "r2-uat-mega.spec.ts",
+      "filePath": "tests/visual/r2-uat-mega.spec.ts",
+      "summary": "Large Playwright visual UAT spec covering the R2 warm-hive redesign — iterates through all navigation views in both dark and light modes, capturing screenshots for visual regression comparison.",
+      "tags": ["test", "visual-regression", "uat", "playwright"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:tests/visual/views.spec.ts",
+      "type": "file",
+      "name": "views.spec.ts",
+      "filePath": "tests/visual/views.spec.ts",
+      "summary": "Playwright visual spec that captures screenshots of all navigation view states in dark and light themes for visual regression testing of the Waggle app shell.",
+      "tags": ["test", "visual-regression", "theme", "playwright"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:vitest.setup.ts",
+      "type": "file",
+      "name": "vitest.setup.ts",
+      "filePath": "vitest.setup.ts",
+      "summary": "Root Vitest test setup file — configures global test environment, mocks, and shared fixtures used across all unit and integration test suites in the monorepo.",
+      "tags": ["test", "configuration", "vitest", "setup"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:Waggle_Competitive_Intelligence_Full_Landscape_March_2026.docx",
+      "type": "file",
+      "name": "Waggle_Competitive_Intelligence_Full_Landscape_March_2026.docx",
+      "filePath": "Waggle_Competitive_Intelligence_Full_Landscape_March_2026.docx",
+      "summary": "Competitive intelligence document analyzing the full AI workspace and agent platform landscape as of March 2026, used for product positioning and strategic decision-making.",
+      "tags": ["documentation", "competitive-intelligence", "strategy"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:tests/sidecar/skill-loader.test.ts",
+      "target": "file:sidecar/src/skill-loader.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/sidecar/skill-loader.test.ts",
+      "target": "file:sidecar/src/skill-loader.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

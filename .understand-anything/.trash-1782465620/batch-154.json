@@ -1,0 +1,169 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/wiki-live/egzakta-group.md",
+      "type": "document",
+      "name": "egzakta-group.md",
+      "filePath": "docs/wiki-live/egzakta-group.md",
+      "summary": "Live wiki entry describing Egzakta Group — the parent company behind Waggle OS and KVARK — covering its mission, key facts, and founding timeline.",
+      "tags": ["documentation", "company-profile", "knowledge-base", "wiki"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/wiki-live/index.md",
+      "type": "document",
+      "name": "index.md",
+      "filePath": "docs/wiki-live/index.md",
+      "summary": "Master index for the live wiki directory, listing all entity pages and cross-source synthesis documents with their descriptions and links.",
+      "tags": ["documentation", "entry-point", "wiki", "index"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/wiki-live/kvark.md",
+      "type": "document",
+      "name": "kvark.md",
+      "filePath": "docs/wiki-live/kvark.md",
+      "summary": "Live wiki entry for KVARK — Egzakta's sovereign enterprise AI platform — covering its summary, key facts, product timeline, entity relations, and open strategic questions.",
+      "tags": ["documentation", "product-profile", "knowledge-base", "wiki"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/wiki-live/marko-markovic.md",
+      "type": "document",
+      "name": "marko-markovic.md",
+      "filePath": "docs/wiki-live/marko-markovic.md",
+      "summary": "Live wiki entry profiling Marko Markovic — founder of Waggle OS and Egzakta Group — with biographical summary and key professional facts.",
+      "tags": ["documentation", "person-profile", "knowledge-base", "wiki"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/wiki-live/memory-harvest.md",
+      "type": "document",
+      "name": "memory-harvest.md",
+      "filePath": "docs/wiki-live/memory-harvest.md",
+      "summary": "Comprehensive wiki synthesis of the Memory Harvest subsystem — covering architecture, adapter pipeline, performance benchmarks, monetization lock-in strategy, compliance integration, and known gaps.",
+      "tags": ["documentation", "architecture", "memory-system", "wiki"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/wiki-live/synthesis-waggle-os.md",
+      "type": "document",
+      "name": "synthesis-waggle-os.md",
+      "filePath": "docs/wiki-live/synthesis-waggle-os.md",
+      "summary": "Cross-source synthesis document for Waggle OS identifying recurring architectural patterns (memory-first, WaggleDance, two-product flywheel), contradictions between sources, and strategic insights.",
+      "tags": ["documentation", "synthesis", "architecture", "wiki"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/wiki-live/waggle-os.md",
+      "type": "document",
+      "name": "waggle-os.md",
+      "filePath": "docs/wiki-live/waggle-os.md",
+      "summary": "Live wiki entity page for Waggle OS as a product — covering its summary description, key technical facts, and positioning as a workspace-native AI agent platform.",
+      "tags": ["documentation", "product-profile", "knowledge-base", "wiki"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/wiki-live/wiki-compiler.md",
+      "type": "document",
+      "name": "wiki-compiler.md",
+      "filePath": "docs/wiki-live/wiki-compiler.md",
+      "summary": "Deep-dive wiki page on the Wiki Compiler feature — documenting its concept, compilation architecture, page types, universal source pipeline, regulatory compliance layer, implementation status, competitive position, and 9-phase execution plan.",
+      "tags": ["documentation", "architecture", "wiki", "knowledge-base"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/egzakta-group.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/kvark.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/marko-markovic.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/memory-harvest.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/synthesis-waggle-os.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/waggle-os.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/index.md",
+      "target": "document:docs/wiki-live/wiki-compiler.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/synthesis-waggle-os.md",
+      "target": "document:docs/wiki-live/waggle-os.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/synthesis-waggle-os.md",
+      "target": "document:docs/wiki-live/memory-harvest.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/kvark.md",
+      "target": "document:docs/wiki-live/egzakta-group.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/waggle-os.md",
+      "target": "document:docs/wiki-live/egzakta-group.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/marko-markovic.md",
+      "target": "document:docs/wiki-live/egzakta-group.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-live/memory-harvest.md",
+      "target": "document:docs/wiki-live/wiki-compiler.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

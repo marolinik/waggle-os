@@ -1,0 +1,1286 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "type": "file",
+      "name": "chatgpt-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "summary": "Implements the ChatGPTAdapter class that parses ChatGPT conversation export JSON files into the hive-mind harvest item format, handling multiple conversation structures and tree-based message mappings.",
+      "tags": ["harvest", "adapter", "serialization", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts:ChatGPTAdapter",
+      "type": "class",
+      "name": "ChatGPTAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "lineRange": [12, 154],
+      "summary": "Parses ChatGPT export JSON into normalized harvest items, traversing mapping trees and extracting text from multi-part message content.",
+      "tags": ["adapter", "serialization", "harvest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "type": "file",
+      "name": "chunk-utils.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "summary": "Provides a paragraph-based text chunking utility used by PDF and plaintext adapters to split large documents into manageable segments.",
+      "tags": ["utility", "harvest", "text-processing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/chunk-utils.ts:chunkByParagraphs",
+      "type": "function",
+      "name": "chunkByParagraphs",
+      "filePath": "packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "lineRange": [10, 30],
+      "summary": "Splits text into chunks at paragraph boundaries, respecting a maximum length constraint.",
+      "tags": ["utility", "text-processing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "type": "file",
+      "name": "claude-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "summary": "Implements the ClaudeAdapter class that parses Claude.ai export JSON, handling conversations, project docs, memories, and design chat records into normalized harvest items.",
+      "tags": ["harvest", "adapter", "serialization", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/claude-adapter.ts:ClaudeAdapter",
+      "type": "class",
+      "name": "ClaudeAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "lineRange": [25, 268],
+      "summary": "Multi-format Claude export parser supporting conversations, project docs, memories, and design chats with structured content block handling.",
+      "tags": ["adapter", "serialization", "harvest"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/claude-code-adapter.ts",
+      "type": "file",
+      "name": "claude-code-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/claude-code-adapter.ts",
+      "summary": "Implements the ClaudeCodeAdapter class that scans local Claude Code project directories, extracting memory files, plans, preferences, and decision records into harvest items.",
+      "tags": ["harvest", "adapter", "serialization", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/claude-code-adapter.ts:ClaudeCodeAdapter",
+      "type": "class",
+      "name": "ClaudeCodeAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/claude-code-adapter.ts",
+      "lineRange": [91, 351],
+      "summary": "Scans Claude Code project directories for memory docs, plans, preferences, and mind-dir files, extracting structured decision records via pattern matching.",
+      "tags": ["adapter", "harvest", "file-system"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "type": "file",
+      "name": "dedup.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/dedup.ts",
+      "summary": "Provides content deduplication for harvest items using SHA-256 content hashes and trigram similarity scoring to filter out near-duplicate entries.",
+      "tags": ["utility", "harvest", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/dedup.ts:dedup",
+      "type": "function",
+      "name": "dedup",
+      "filePath": "packages/hive-mind-core/src/harvest/dedup.ts",
+      "lineRange": [70, 112],
+      "summary": "Filters incoming harvest items against existing content using hash-exact and trigram-similarity deduplication, returning unique items and flagged contradictions.",
+      "tags": ["utility", "validation", "harvest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/dedup.ts:harvestSetHash",
+      "type": "function",
+      "name": "harvestSetHash",
+      "filePath": "packages/hive-mind-core/src/harvest/dedup.ts",
+      "lineRange": [28, 35],
+      "summary": "Computes a stable SHA-256 hash over a sorted set of harvest items for idempotent run detection.",
+      "tags": ["utility", "harvest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "type": "file",
+      "name": "extract-kg-entities.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "summary": "Extracts knowledge-graph entities from memory frames using LLM batch calls, writing named entities with types and properties into the KnowledgeGraph store with injection-scan protection.",
+      "tags": ["harvest", "knowledge-graph", "ai-integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/extract-kg-entities.ts:extractKgEntities",
+      "type": "function",
+      "name": "extractKgEntities",
+      "filePath": "packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "lineRange": [183, 204],
+      "summary": "Batches dated frames, calls the LLM for entity extraction, and parses JSONL output into typed entity lists with error collection.",
+      "tags": ["knowledge-graph", "ai-integration", "harvest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/extract-kg-entities.ts:writeKgEntities",
+      "type": "function",
+      "name": "writeKgEntities",
+      "filePath": "packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "lineRange": [230, 265],
+      "summary": "Writes extracted entities to the KnowledgeGraph, merging with existing entities by name or creating new ones, with noise-name filtering.",
+      "tags": ["knowledge-graph", "harvest", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "type": "file",
+      "name": "extract-memory-lanes.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "summary": "Extracts facts, events, and profile cards from conversation text via three parallel LLM passes, writing them as typed memory frames with injection-scan protection.",
+      "tags": ["harvest", "memory-extraction", "ai-integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts:extractMemoryLanes",
+      "type": "function",
+      "name": "extractMemoryLanes",
+      "filePath": "packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "lineRange": [194, 261],
+      "summary": "Runs three concurrent LLM extraction passes (facts, events, profiles) over a text input and collects results into typed lane arrays.",
+      "tags": ["memory-extraction", "ai-integration", "harvest"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts:writeMemoryLaneFrames",
+      "type": "function",
+      "name": "writeMemoryLaneFrames",
+      "filePath": "packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "lineRange": [288, 335],
+      "summary": "Writes fact, event, and profile extraction results as typed IFrames into the FrameStore, using injection-scan guards before each write.",
+      "tags": ["memory-extraction", "harvest", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "type": "file",
+      "name": "gemini-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "summary": "Implements the GeminiAdapter class that parses Google Gemini/AI Studio export JSON into normalized harvest items, handling both array and nested conversation formats with media caption parity.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/gemini-adapter.ts:GeminiAdapter",
+      "type": "class",
+      "name": "GeminiAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "lineRange": [11, 161],
+      "summary": "Parses Gemini export data supporting multiple conversation container shapes with W4.4 media-caption extraction for fileData and inlineData parts.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/markdown-adapter.ts",
+      "type": "file",
+      "name": "markdown-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/markdown-adapter.ts",
+      "summary": "Implements the MarkdownAdapter that ingests markdown files or text, splitting by headings into section-level harvest items with bold-term tag extraction.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/markdown-adapter.ts:MarkdownAdapter",
+      "type": "class",
+      "name": "MarkdownAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/markdown-adapter.ts",
+      "lineRange": [69, 142],
+      "summary": "Reads markdown from file paths or raw text, splits by heading-anchored sections, and extracts bold terms as metadata tags for each item.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "type": "file",
+      "name": "pdf-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "summary": "Implements the PdfAdapter that dynamically imports pdf-parse to extract text from PDF files, splitting content into paragraph chunks for harvest ingestion.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/pdf-adapter.ts:PdfAdapter",
+      "type": "class",
+      "name": "PdfAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "lineRange": [17, 97],
+      "summary": "Uses dynamic import of pdf-parse to convert PDF buffers into chunked text harvest items with document metadata extracted from PDF info.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "type": "file",
+      "name": "perplexity-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "summary": "Implements the PerplexityAdapter that parses Perplexity AI export formats (arrays, threads, single conversations) into harvest items with source-URL extraction.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/perplexity-adapter.ts:PerplexityAdapter",
+      "type": "class",
+      "name": "PerplexityAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "lineRange": [22, 163],
+      "summary": "Handles multiple Perplexity export container shapes, extracts cited URLs as sources, and resolves ambiguous role labels across format variants.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "file",
+      "name": "pipeline.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/pipeline.ts",
+      "summary": "Core harvest processing pipeline implementing classify, extract, and synthesize stages with batched LLM calls, concurrency control, injection scanning, and deduplication.",
+      "tags": ["harvest", "data-pipeline", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/pipeline.ts:HarvestPipeline",
+      "type": "class",
+      "name": "HarvestPipeline",
+      "filePath": "packages/hive-mind-core/src/harvest/pipeline.ts",
+      "lineRange": [83, 339],
+      "summary": "Orchestrates the full harvest pipeline: injection scan → classify → extract → synthesize → dedup, with configurable batch sizes, concurrency limits, and progress callbacks.",
+      "tags": ["data-pipeline", "service", "harvest"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "type": "file",
+      "name": "plaintext-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "summary": "Implements the PlaintextAdapter that reads plain text files or raw text input and chunks them into paragraph-based harvest items.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/plaintext-adapter.ts:PlaintextAdapter",
+      "type": "class",
+      "name": "PlaintextAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "lineRange": [13, 61],
+      "summary": "Simple text ingestion adapter that reads files or raw strings and splits content into paragraph chunks for harvest processing.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/prompts.ts",
+      "type": "file",
+      "name": "prompts.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/prompts.ts",
+      "summary": "Exports the three LLM prompt templates (CLASSIFY_PROMPT, EXTRACT_PROMPT, SYNTHESIZE_PROMPT) used by the harvest pipeline stages.",
+      "tags": ["harvest", "ai-integration", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "type": "file",
+      "name": "raw-turns.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "summary": "Manages raw conversation turn storage as IFrames in the FrameStore, providing header encoding/parsing utilities and the writeRawTurnFrames function for the raw-detail memory lane.",
+      "tags": ["harvest", "memory-extraction", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/harvest/raw-turns.ts:writeRawTurnFrames",
+      "type": "function",
+      "name": "writeRawTurnFrames",
+      "filePath": "packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "lineRange": [112, 166],
+      "summary": "Writes individual conversation turn frames into the FrameStore with injection scan protection, per-turn deduplication by conversation key, and turn-count limiting.",
+      "tags": ["harvest", "memory-extraction", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/raw-types.ts",
+      "type": "file",
+      "name": "raw-types.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/raw-types.ts",
+      "summary": "Provides type-safe runtime accessor utilities (asRecord, getString, getNumber, getArray, firstString) for safely traversing unknown JSON payloads from AI export files.",
+      "tags": ["utility", "type-definition", "harvest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/run-store.ts",
+      "type": "file",
+      "name": "run-store.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/run-store.ts",
+      "summary": "Implements HarvestRunStore, a SQLite-backed store for tracking harvest run lifecycle (start/heartbeat/complete/fail/abandon) with resumable interrupted-run detection.",
+      "tags": ["harvest", "data-model", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/run-store.ts:HarvestRunStore",
+      "type": "class",
+      "name": "HarvestRunStore",
+      "filePath": "packages/hive-mind-core/src/harvest/run-store.ts",
+      "lineRange": [55, 191],
+      "summary": "SQLite-backed run tracker for harvest operations with status lifecycle management, progress heartbeat, and interrupted-run resumption queries.",
+      "tags": ["data-model", "database", "harvest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/source-store.ts",
+      "type": "file",
+      "name": "source-store.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/source-store.ts",
+      "summary": "Implements HarvestSourceStore, a SQLite-backed registry for harvest source configurations with auto-sync scheduling and stale-source detection.",
+      "tags": ["harvest", "data-model", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/source-store.ts:HarvestSourceStore",
+      "type": "class",
+      "name": "HarvestSourceStore",
+      "filePath": "packages/hive-mind-core/src/harvest/source-store.ts",
+      "lineRange": [24, 126],
+      "summary": "SQLite registry for harvest sources tracking display names, paths, sync counters, frame counts, and auto-sync intervals with stale-source queries.",
+      "tags": ["data-model", "database", "harvest"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "file",
+      "name": "types.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/types.ts",
+      "summary": "Defines the core harvest domain types and interfaces (HarvestItem, HarvestAdapter, HarvestSource, etc.) shared across all adapters and pipeline components.",
+      "tags": ["type-definition", "harvest", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "type": "file",
+      "name": "universal-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "summary": "Implements the UniversalAdapter as a fallback parser that auto-detects source type by heuristic and handles arbitrary JSON conversation structures and plain-text formats.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/universal-adapter.ts:UniversalAdapter",
+      "type": "class",
+      "name": "UniversalAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "lineRange": [68, 238],
+      "summary": "Generic fallback adapter with source-type auto-detection, recursive conversation-tree discovery, and multi-format text/JSON parsing for unknown AI export shapes.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/harvest/url-adapter.ts",
+      "type": "file",
+      "name": "url-adapter.ts",
+      "filePath": "packages/hive-mind-core/src/harvest/url-adapter.ts",
+      "summary": "Implements the UrlAdapter that fetches web pages or parses inline HTML, extracting title, description, and section-split plain-text content as harvest items.",
+      "tags": ["harvest", "adapter", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/harvest/url-adapter.ts:UrlAdapter",
+      "type": "class",
+      "name": "UrlAdapter",
+      "filePath": "packages/hive-mind-core/src/harvest/url-adapter.ts",
+      "lineRange": [61, 177],
+      "summary": "Fetches URLs with timeout and parses HTML into structured harvest items using stripped plain text with heading-based sectioning.",
+      "tags": ["adapter", "harvest", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "type": "file",
+      "name": "injection-scanner.ts",
+      "filePath": "packages/hive-mind-core/src/injection-scanner.ts",
+      "summary": "Exports scanForInjection(), a three-pattern security scanner that detects prompt-injection attempts in external content before it enters the memory substrate.",
+      "tags": ["security", "utility", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "function",
+      "name": "scanForInjection",
+      "filePath": "packages/hive-mind-core/src/injection-scanner.ts",
+      "lineRange": [59, 85],
+      "summary": "Tests text against three regex pattern sets (role override, instruction injection, context manipulation) and returns a scan result with matched flags and risk score.",
+      "tags": ["security", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "file",
+      "name": "logger.ts",
+      "filePath": "packages/hive-mind-core/src/logger.ts",
+      "summary": "Exports createCoreLogger(), a lightweight tagged logger factory providing warn/info/error/fatal methods used throughout the hive-mind-core package.",
+      "tags": ["utility", "logging"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/logger.ts:createCoreLogger",
+      "type": "function",
+      "name": "createCoreLogger",
+      "filePath": "packages/hive-mind-core/src/logger.ts",
+      "lineRange": [16, 30],
+      "summary": "Factory that creates a tagged logger object routing warn/info/error/fatal to console methods, used as the package-wide logging abstraction.",
+      "tags": ["utility", "logging", "factory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/api-embedder.ts",
+      "type": "file",
+      "name": "api-embedder.ts",
+      "filePath": "packages/hive-mind-core/src/mind/api-embedder.ts",
+      "summary": "Implements createApiEmbedder(), an HTTP-based embedding provider that calls an OpenAI-compatible embeddings API with timeout, batching, and dimension normalization.",
+      "tags": ["embedding", "ai-integration", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/api-embedder.ts:createApiEmbedder",
+      "type": "function",
+      "name": "createApiEmbedder",
+      "filePath": "packages/hive-mind-core/src/mind/api-embedder.ts",
+      "lineRange": [22, 73],
+      "summary": "Factory that creates an embedding client calling an HTTP API endpoint, with per-request timeout, dimension normalization, and both single-text and batch modes.",
+      "tags": ["embedding", "factory", "ai-integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "type": "file",
+      "name": "awareness.ts",
+      "filePath": "packages/hive-mind-core/src/mind/awareness.ts",
+      "summary": "Implements the AwarenessLayer class providing SQLite-backed active-task and state tracking with priority ordering, TTL expiry, category filtering, and context serialization.",
+      "tags": ["memory-substrate", "data-model", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/awareness.ts:AwarenessLayer",
+      "type": "class",
+      "name": "AwarenessLayer",
+      "filePath": "packages/hive-mind-core/src/mind/awareness.ts",
+      "lineRange": [27, 170],
+      "summary": "SQLite-backed awareness store tracking active tasks and state items with priority ordering, TTL expiry, category bucketing, metadata JSON fields, and context-string serialization.",
+      "tags": ["memory-substrate", "data-model", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/chunker.ts",
+      "type": "file",
+      "name": "chunker.ts",
+      "filePath": "packages/hive-mind-core/src/mind/chunker.ts",
+      "summary": "Implements the mind chunker that splits memory frames into overlapping token-bounded segments for vector-indexed chunk retrieval (HybridSearch chunk lane).",
+      "tags": ["memory-substrate", "utility", "embedding"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/concept-tracker.ts",
+      "type": "file",
+      "name": "concept-tracker.ts",
+      "filePath": "packages/hive-mind-core/src/mind/concept-tracker.ts",
+      "summary": "Implements the ConceptTracker class that maintains a SQLite-backed frequency map of concepts mentioned in memory frames, used for ontology and relevance scoring.",
+      "tags": ["memory-substrate", "knowledge-graph", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/content-hash.ts",
+      "type": "file",
+      "name": "content-hash.ts",
+      "filePath": "packages/hive-mind-core/src/mind/content-hash.ts",
+      "summary": "Provides a SHA-256 content hashing utility for deduplicating memory frames at the storage layer, used by FrameStore and db.ts.",
+      "tags": ["utility", "memory-substrate"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "file",
+      "name": "db.ts",
+      "filePath": "packages/hive-mind-core/src/mind/db.ts",
+      "summary": "Central database initialization module that opens/creates the SQLite database, applies schema migrations, and provides the MindDb accessor class used by all mind subsystems.",
+      "tags": ["memory-substrate", "database", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/embedding-provider.ts",
+      "type": "file",
+      "name": "embedding-provider.ts",
+      "filePath": "packages/hive-mind-core/src/mind/embedding-provider.ts",
+      "summary": "Implements the EmbeddingProvider orchestrator that selects and initializes the appropriate embedder backend (in-process, API, LiteLLM, Ollama) based on configuration, with fallback logic and dimension validation.",
+      "tags": ["embedding", "ai-integration", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "file",
+      "name": "embeddings.ts",
+      "filePath": "packages/hive-mind-core/src/mind/embeddings.ts",
+      "summary": "Re-exports the Embedder interface and related types as a barrel entry point for the embedding subsystem.",
+      "tags": ["type-definition", "barrel", "embedding"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/entity-normalizer.ts",
+      "type": "file",
+      "name": "entity-normalizer.ts",
+      "filePath": "packages/hive-mind-core/src/mind/entity-normalizer.ts",
+      "summary": "Provides entity name normalization and noise-name filtering utilities used during knowledge graph entity extraction to canonicalize names and filter out non-entity strings.",
+      "tags": ["utility", "knowledge-graph", "validation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/raw-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts:ChatGPTAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts:ChatGPTAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/chunk-utils.ts:chunkByParagraphs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/chunk-utils.ts:chunkByParagraphs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/raw-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/claude-adapter.ts:ClaudeAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/claude-adapter.ts:ClaudeAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-code-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-code-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/claude-code-adapter.ts:ClaudeCodeAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-code-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/claude-code-adapter.ts:ClaudeCodeAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/dedup.ts:dedup",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/dedup.ts:harvestSetHash",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/dedup.ts:dedup",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/dedup.ts:harvestSetHash",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "file:packages/hive-mind-core/src/mind/entity-normalizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-kg-entities.ts:extractKgEntities",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-kg-entities.ts:writeKgEntities",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-kg-entities.ts:extractKgEntities",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-kg-entities.ts:writeKgEntities",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts:extractMemoryLanes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts:writeMemoryLaneFrames",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts:extractMemoryLanes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts:writeMemoryLaneFrames",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/raw-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/gemini-adapter.ts:GeminiAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/gemini-adapter.ts:GeminiAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/markdown-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/markdown-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/markdown-adapter.ts:MarkdownAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/markdown-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/markdown-adapter.ts:MarkdownAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/pdf-adapter.ts:PdfAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pdf-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/pdf-adapter.ts:PdfAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/perplexity-adapter.ts:PerplexityAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/perplexity-adapter.ts:PerplexityAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/prompts.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/pipeline.ts:HarvestPipeline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/pipeline.ts:HarvestPipeline",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/chunk-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/plaintext-adapter.ts:PlaintextAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/plaintext-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/plaintext-adapter.ts:PlaintextAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/raw-turns.ts:writeRawTurnFrames",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/raw-turns.ts:writeRawTurnFrames",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/run-store.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/run-store.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/run-store.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/run-store.ts:HarvestRunStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/run-store.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/run-store.ts:HarvestRunStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/source-store.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/source-store.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/source-store.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/source-store.ts:HarvestSourceStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/source-store.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/source-store.ts:HarvestSourceStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/raw-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/universal-adapter.ts:UniversalAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/universal-adapter.ts:UniversalAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/url-adapter.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/url-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/url-adapter.ts:UrlAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/url-adapter.ts",
+      "target": "class:packages/hive-mind-core/src/harvest/url-adapter.ts:UrlAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "target": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/injection-scanner.ts",
+      "target": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/logger.ts",
+      "target": "function:packages/hive-mind-core/src/logger.ts:createCoreLogger",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/logger.ts",
+      "target": "function:packages/hive-mind-core/src/logger.ts:createCoreLogger",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/api-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/api-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/api-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/api-embedder.ts:createApiEmbedder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/api-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/api-embedder.ts:createApiEmbedder",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "target": "class:packages/hive-mind-core/src/mind/awareness.ts:AwarenessLayer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "target": "class:packages/hive-mind-core/src/mind/awareness.ts:AwarenessLayer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/concept-tracker.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/content-hash.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/db.ts",
+      "target": "file:packages/hive-mind-core/src/mind/content-hash.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/db.ts",
+      "target": "file:packages/hive-mind-core/src/mind/schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/embedding-provider.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/embedding-provider.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "function:packages/hive-mind-core/src/injection-scanner.ts:scanForInjection",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "target": "function:packages/hive-mind-core/src/harvest/dedup.ts:dedup",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "target": "class:packages/hive-mind-core/src/mind/knowledge.ts:KnowledgeGraph",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "target": "class:packages/hive-mind-core/src/mind/frames.ts:FrameStore",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "class:packages/hive-mind-core/src/mind/frames.ts:FrameStore",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

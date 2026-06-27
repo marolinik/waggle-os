@@ -1,0 +1,38 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-shim-core/src/cli-bridge.ts", "language": "typescript", "sizeLines": 361, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/src/frame-encoder.ts", "language": "typescript", "sizeLines": 137, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/src/hook-event-types.ts", "language": "typescript", "sizeLines": 61, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/src/importance-classifier.ts", "language": "typescript", "sizeLines": 99, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/src/logger.ts", "language": "typescript", "sizeLines": 76, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/src/retry-bridge.ts", "language": "typescript", "sizeLines": 88, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/src/signal-emitter.ts", "language": "typescript", "sizeLines": 208, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/cli-bridge.test.ts", "language": "typescript", "sizeLines": 270, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/frame-encoder.test.ts", "language": "typescript", "sizeLines": 143, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/hook-event-types.test.ts", "language": "typescript", "sizeLines": 53, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/importance-classifier.test.ts", "language": "typescript", "sizeLines": 90, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/integration/wire-roundtrip.integration.test.ts", "language": "typescript", "sizeLines": 162, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/logger.test.ts", "language": "typescript", "sizeLines": 84, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/retry-bridge.test.ts", "language": "typescript", "sizeLines": 91, "fileCategory": "code"},
+    {"path": "packages/hive-mind-shim-core/tests/signal-emitter.test.ts", "language": "typescript", "sizeLines": 272, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-shim-core/src/cli-bridge.ts": ["packages/hive-mind-shim-core/src/frame-encoder.ts", "packages/hive-mind-shim-core/src/logger.ts", "packages/hive-mind-shim-core/src/retry-bridge.ts"],
+    "packages/hive-mind-shim-core/src/frame-encoder.ts": ["packages/hive-mind-shim-core/src/hook-event-types.ts", "packages/hive-mind-shim-core/src/importance-classifier.ts"],
+    "packages/hive-mind-shim-core/src/hook-event-types.ts": [],
+    "packages/hive-mind-shim-core/src/importance-classifier.ts": [],
+    "packages/hive-mind-shim-core/src/logger.ts": [],
+    "packages/hive-mind-shim-core/src/retry-bridge.ts": [],
+    "packages/hive-mind-shim-core/src/signal-emitter.ts": ["packages/hive-mind-shim-core/src/hook-event-types.ts"],
+    "packages/hive-mind-shim-core/tests/cli-bridge.test.ts": ["packages/hive-mind-shim-core/src/cli-bridge.ts", "packages/hive-mind-shim-core/src/frame-encoder.ts"],
+    "packages/hive-mind-shim-core/tests/frame-encoder.test.ts": ["packages/hive-mind-shim-core/src/frame-encoder.ts", "packages/hive-mind-shim-core/src/hook-event-types.ts"],
+    "packages/hive-mind-shim-core/tests/hook-event-types.test.ts": ["packages/hive-mind-shim-core/src/hook-event-types.ts"],
+    "packages/hive-mind-shim-core/tests/importance-classifier.test.ts": ["packages/hive-mind-shim-core/src/importance-classifier.ts"],
+    "packages/hive-mind-shim-core/tests/integration/wire-roundtrip.integration.test.ts": ["packages/hive-mind-shim-core/src/cli-bridge.ts", "packages/hive-mind-shim-core/src/frame-encoder.ts", "packages/hive-mind-shim-core/src/hook-event-types.ts"],
+    "packages/hive-mind-shim-core/tests/logger.test.ts": ["packages/hive-mind-shim-core/src/logger.ts"],
+    "packages/hive-mind-shim-core/tests/retry-bridge.test.ts": ["packages/hive-mind-shim-core/src/retry-bridge.ts"],
+    "packages/hive-mind-shim-core/tests/signal-emitter.test.ts": ["packages/hive-mind-shim-core/src/signal-emitter.ts"]
+  },
+  "neighborMap": {}
+}

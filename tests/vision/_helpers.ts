@@ -8,7 +8,7 @@
  */
 import type { Page } from '@playwright/test';
 
-export const BASE = 'http://127.0.0.1:3333';
+export const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 /** Console errors / pageerrors / failed requests that are environmental noise,
  * not product defects (mirrors full-product-audit.spec.ts:312). */
@@ -66,8 +66,9 @@ export async function dismissOverlay(page: Page): Promise<void> {
 
 /** Deterministic entry: power tier, onboarding skipped, overlay dismissed. */
 export async function gotoDesktop(page: Page): Promise<void> {
-  await page.goto(`${BASE}/?skipOnboarding=true&tier=power`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(1500);
+  await page.goto(`${BASE}/home?skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
+  await page.waitForTimeout(500);
   await dismissOverlay(page);
 }
 
@@ -78,7 +79,7 @@ export async function gotoDesktop(page: Page): Promise<void> {
  */
 export async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<void> {
   await page.evaluate((t) => {
-    localStorage.setItem('waggle:theme', t);
+    localStorage.setItem('waggle-theme', t);
     if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
     else document.documentElement.removeAttribute('data-theme');
   }, theme);
@@ -92,6 +93,7 @@ export async function setTheme(page: Page, theme: 'dark' | 'light'): Promise<voi
  *  3. nothing found → returns false (caller records a nav miss)
  */
 export async function openAppViaDock(page: Page, label: string): Promise<boolean> {
+  const route = await routeForLabel(page, label);
   const directBtn = page.locator(`button[aria-label="${label}"]`);
   if (await directBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
     await directBtn.click();
@@ -116,7 +118,49 @@ export async function openAppViaDock(page: Page, label: string): Promise<boolean
       await page.waitForTimeout(200);
     }
   }
+  if (route) {
+    await page.goto(`${BASE}${route}${route.includes('?') ? '&' : '?'}skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
+    await page.waitForTimeout(600);
+    return true;
+  }
   return false;
+}
+
+async function firstWorkspaceId(page: Page): Promise<string | null> {
+  const res = await page.request.get(`${BASE}/api/workspaces`).catch(() => null);
+  if (!res?.ok()) return null;
+  const rows = await res.json().catch(() => null);
+  return Array.isArray(rows) ? rows[0]?.id ?? null : null;
+}
+
+async function routeForLabel(page: Page, label: string): Promise<string | null> {
+  if (label === 'Chat') {
+    const wsId = await firstWorkspaceId(page);
+    return wsId ? `/workspaces/${wsId}/chat` : '/home';
+  }
+  const routes: Record<string, string> = {
+    Home: '/home',
+    Room: '/room',
+    Memory: '/memory',
+    'Agent Center': '/agents',
+    Files: '/files',
+    Approvals: '/approvals',
+    'Mission Control': '/settings/mission-control',
+    Timeline: '/settings/timeline',
+    'Usage & Cost': '/settings/usage',
+    'Events & Logs': '/settings/events',
+    'Team Governance': '/team',
+    'Skills Hub': '/skills',
+    'Connector Hub': '/connectors',
+    'MCP Hub': '/mcps',
+    Marketplace: '/marketplace',
+    Settings: '/settings',
+    Vault: '/settings/vault',
+  };
+  return routes[label] ?? null;
 }
 
 /** Fire a keyboard shortcut at the window (the app listens on window keydown). */

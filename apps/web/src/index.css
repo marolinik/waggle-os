@@ -1,11 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
+/* Import Hive DS theme aliases and utility classes */
+@import "./waggle-theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import Hive DS theme aliases and utility classes */
-@import "./waggle-theme.css";
 
 @layer base {
   :root {

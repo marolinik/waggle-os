@@ -1,0 +1,428 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/ga/GA-STATUS-2026-05-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 80,
+      "nonEmptyLines": 57,
+      "sections": [
+        {
+          "heading": "Waggle OS — Consolidated \"What's Left for GA\"",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. One-paragraph headline",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "2. GA gate checklist (from PRODUCTION-PLAN §1) — current truth",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "3. DONE this session (all on `origin/main`, 22 commits `0f6bb4c..6a526a6`)",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "4. What genuinely remains — by blocker class",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "4a. 🔴 Platform-blocked on Windows (need a Mac and/or signed binary)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "4b. 🟡 Needs a build + human visual QA (not headless-verifiable)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "4c. 🟢 Codeable headless — small remaining",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "5. Recommended path to GA cut",
+          "level": 2,
+          "line": 73
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/ga/OPERATING-MANUAL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 207,
+      "nonEmptyLines": 159,
+      "sections": [
+        {
+          "heading": "Waggle OS → GA: Solo-Dev Operating Manual",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. The mental model shift",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "1. Model routing (don't pay Opus rates for mechanical work)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "2. The four ready-to-run workflows for the remaining GA work",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "2.1 Independent verification (READ-ONLY) — *the template*",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "2.2 Fix-execution (WORKTREE-ISOLATED) — *the only safe way to mutate while a session is live*",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "2.3 E2E + synthetic-failure generation — *kills the 10/10s structurally*",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "2.4 Release-readiness sweep (READ-ONLY) — *the GA launch-line*",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "3. ultracode: when to flip it on",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "4. The solo cadence (your day)",
+          "level": 2,
+          "line": 163
+        },
+        {
+          "heading": "5. The two-session sync protocol (active right now)",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "6. Guardrails",
+          "level": 2,
+          "line": 198
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/ga/PHASE2-FAILURE-INJECTION-2026-05-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 161,
+      "nonEmptyLines": 118,
+      "sections": [
+        {
+          "heading": "Phase 2 — Failure-Injection Coverage & CI Wiring",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Headline",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1b. EXECUTION OUTCOME (2026-05-30, post-authoring) — pushed to main @ 25cb5c0",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "2. Per-Path Table",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "3. CI Wiring Fix",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "3a. Does the new spec already run in CI?",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "3b. EXACT diff — ci.yml (make scope explicit; behavior-equivalent, lists the new suite)",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "3c. EXACT diff — package.json (resolve the project mismatch)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "4. Serial Verification Runbook (one-boot constraint)",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "5. Honest Residuals",
+          "level": 2,
+          "line": 155
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/ga/PRODUCTION-PLAN.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 141,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "Waggle OS → GA Production Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Post-merge status — 2026-05-29 (Phase 0 + Phase 1 LANDED on `main`)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "1. Definition of GA (the bar you chose)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "2. Two decisions to make first (they gate everything)",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "3. Workstreams (mapped to verified residuals)",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "4. Phased sequence (solo, ~6–8 weeks)",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Phase 0 — Make signal real (Days 1–3) · WS-0",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "Phase 1 — Close security to GA (Weeks 1–2) · WS-A",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "Phase 2 — Real verification infrastructure (Weeks 2–3) · WS-B",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Phase 3 — Build / Release / Distribution, both surfaces (Weeks 3–5) · WS-C",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "Phase 4 — UX to GA (Weeks 5–7) · WS-D",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "Phase 5 — GA cut (Weeks 7–8)",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "5. Immediate next actions (this week)",
+          "level": 2,
+          "line": 113
+        },
+        {
+          "heading": "6. Sync protocol (active — two sessions live)",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "7. Risks & how the fleet de-risks them",
+          "level": 2,
+          "line": 128
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/ga/RECONCILIATION-2026-05-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 65,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "Waggle-OS GA Reconciliation — 2026-05-30",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Headline — what genuinely remains for GA",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "2. Cluster status matrix",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "3. Per-phase: what's actually left",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Phase 2 (WS-B) — E2E + failure-injection — PARTIAL",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "Phase 3 (WS-C) — desktop, web, migration — mixed",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Phase 4 (WS-D) — light mode + a11y/perf — OPEN / PARTIAL",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "Phase 5 — not present in reconciliation set",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "4. Platform-blocked on Windows (cannot be completed in this env)",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "5. Recommended next workflow",
+          "level": 2,
+          "line": 64
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/ga/TRUST-REPORT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 100,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "Waggle OS — Independent Verification (Trust Report)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Bottom line",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "2. Scorecard",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "3. 🔴 NEW issues the adversarial pass surfaced (highest value — not in the original audit, or understated by it)",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "4. ⛔ Ship blockers still open",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "5. 🟡 Partials (fix landed, but incomplete)",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "6. ❌ Not fixed (deliberate or deferred)",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "7. ✅ Genuinely closed (high confidence) — keep, don't re-litigate",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "8. What this means",
+          "level": 2,
+          "line": 96
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    }
+  ]
+}

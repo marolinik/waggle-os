@@ -1,0 +1,57 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/hive-mind-hooks-hermes/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/hive-mind-hooks-hermes/README.md",
+      "summary": "Documentation for the @waggle/hive-mind-hooks-hermes package, describing how Hermes AI agent lifecycle hooks (on_session_start, pre_llm_call, post_llm_call) are wired into hive-mind frames for silent conversation capture, including install/uninstall instructions, capture fidelity table, and headless consent caveats.",
+      "tags": ["documentation", "hive-mind", "hooks", "hermes", "memory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-hermes/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/hive-mind-hooks-hermes/package.json",
+      "summary": "NPM package manifest for @waggle/hive-mind-hooks-hermes v0.1.0, declaring the Hermes silent-capture shim with ESM exports for three hook entry points (session-start, user-prompt-submit, stop), a CLI binary, and dependencies on hive-mind-hooks-core and hive-mind-shim-core.",
+      "tags": ["configuration", "package-manifest", "build-system", "hive-mind"],
+      "complexity": "moderate",
+      "languageNotes": "ESM-only module (type: module) with three named hook exports and a bin entry for the hermes-hooks CLI. Peer-depends on @waggle/hive-mind-cli (optional)."
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-hermes/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/hive-mind-hooks-hermes/tsconfig.json",
+      "summary": "TypeScript build configuration for the hive-mind-hooks-hermes package, extending the monorepo base config with composite project references to hive-mind-hooks-core and hive-mind-shim-core, and compiling src to dist.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-hermes/tsconfig.test.json",
+      "type": "config",
+      "name": "tsconfig.test.json",
+      "filePath": "packages/hive-mind-hooks-hermes/tsconfig.test.json",
+      "summary": "TypeScript configuration for test files in hive-mind-hooks-hermes, extending the base monorepo config with noEmit mode, covering both src and tests directories without emitting declarations or source maps.",
+      "tags": ["configuration", "typescript", "test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/hive-mind-hooks-hermes/README.md",
+      "target": "config:packages/hive-mind-hooks-hermes/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/hive-mind-hooks-hermes/tsconfig.json",
+      "target": "config:packages/hive-mind-hooks-hermes/tsconfig.test.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

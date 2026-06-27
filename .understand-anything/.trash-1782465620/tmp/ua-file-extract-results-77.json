@@ -1,0 +1,147 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "apps/web/src/components/os/apps/PlatformApp.test.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 64,
+      "nonEmptyLines": 55,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 363,
+      "nonEmptyLines": 344,
+      "functions": [
+        {
+          "name": "PlatformApp",
+          "startLine": 112,
+          "endLine": 151,
+          "params": []
+        },
+        {
+          "name": "SectionHead",
+          "startLine": 158,
+          "endLine": 166,
+          "params": [
+            "{ eyebrow, title, blurb }"
+          ]
+        },
+        {
+          "name": "DesktopView",
+          "startLine": 172,
+          "endLine": 274,
+          "params": [
+            "{ os, onOsChange }"
+          ]
+        },
+        {
+          "name": "BootView",
+          "startLine": 276,
+          "endLine": 314,
+          "params": []
+        },
+        {
+          "name": "RoadmapView",
+          "startLine": 316,
+          "endLine": 361,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "PlatformApp",
+          "callee": "useState",
+          "lineNumber": 113
+        },
+        {
+          "caller": "PlatformApp",
+          "callee": "useState",
+          "lineNumber": 114
+        },
+        {
+          "caller": "PlatformApp",
+          "callee": "TABS.map",
+          "lineNumber": 124
+        },
+        {
+          "caller": "PlatformApp",
+          "callee": "setTab",
+          "lineNumber": 130
+        },
+        {
+          "caller": "DesktopView",
+          "callee": "(['mac', 'win'] as const).map",
+          "lineNumber": 190
+        },
+        {
+          "caller": "DesktopView",
+          "callee": "onOsChange",
+          "lineNumber": 195
+        },
+        {
+          "caller": "DesktopView",
+          "callee": "[\r\n                { label: 'Home', on: true },\r\n                { label: 'Chat', on: false },\r\n                { label: 'Memory', on: false },\r\n                { label: 'Agents', on: false },\r\n                { label: 'Library', on: false },\r\n              ].map",
+          "lineNumber": 233
+        },
+        {
+          "caller": "DesktopView",
+          "callee": "SPECS.map",
+          "lineNumber": 265
+        },
+        {
+          "caller": "BootView",
+          "callee": "BOOT_STEPS.map",
+          "lineNumber": 296
+        },
+        {
+          "caller": "RoadmapView",
+          "callee": "CHANNELS.map",
+          "lineNumber": 325
+        },
+        {
+          "caller": "RoadmapView",
+          "callee": "ch.platforms.map",
+          "lineNumber": 341
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/routes/PlatformRoute.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 11,
+      "nonEmptyLines": 9,
+      "functions": [
+        {
+          "name": "PlatformRoute",
+          "startLine": 5,
+          "endLine": 9,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

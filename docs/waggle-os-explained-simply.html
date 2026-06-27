@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waggle OS — Explained Simply</title>
+<style>
+  :root{
+    --paper:#faf6ee; --paper-2:#fffdf8; --tint:#fdf3dd;
+    --ink:#2c2620; --soft:#6c6354; --faint:#9a9183;
+    --honey:#e9a52c; --honey-deep:#bd7d12;
+    --green:#3f9d6b; --blue:#3d83c2; --line:#ece2cf; --line-2:#e3d7c0;
+    --sans:"Hanken Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;line-height:1.5;}
+  .wrap{max-width:1000px;margin:0 auto;padding:40px 28px 56px;}
+
+  /* hero */
+  .kicker{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;letter-spacing:1.5px;
+    color:var(--honey-deep);text-transform:uppercase;}
+  h1{font-size:clamp(30px,5vw,46px);line-height:1.08;margin:14px 0 0;font-weight:800;letter-spacing:-.5px;}
+  h1 .hl{color:var(--honey-deep);}
+  .lede{font-size:clamp(16px,2.2vw,20px);color:var(--soft);max-width:680px;margin:16px 0 0;}
+
+  /* section heads */
+  h2{font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:var(--faint);
+    margin:46px 0 16px;display:flex;align-items:center;gap:10px;}
+  h2::after{content:"";flex:1;height:1px;background:var(--line);}
+
+  /* analogy panel */
+  .analogy{background:var(--tint);border:1px solid var(--line-2);border-radius:20px;padding:24px 26px;margin-top:26px;}
+  .analogy .big{font-size:20px;font-weight:700;margin:0 0 4px;}
+  .analogy .big .em{color:var(--honey-deep);}
+  .analogy .sub{color:var(--soft);font-size:14.5px;margin:0 0 18px;}
+  .three{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .three .pt{display:flex;gap:12px;align-items:flex-start;}
+  .three .ic{font-size:26px;flex:0 0 auto;line-height:1.1;}
+  .three .pt b{display:block;font-size:15px;margin-bottom:2px;}
+  .three .pt span{font-size:13.5px;color:var(--soft);}
+
+  /* what it does cards */
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .card{background:var(--paper-2);border:1px solid var(--line);border-radius:16px;padding:18px;
+    box-shadow:0 2px 10px rgba(120,90,20,.04);transition:.16s transform,.16s box-shadow;}
+  .card:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(120,90,20,.1);}
+  .card .ic{font-size:24px;}
+  .card .h{font-weight:700;font-size:15.5px;margin:9px 0 5px;}
+  .card .quote{font-size:13.5px;color:var(--soft);font-style:italic;}
+  .card .quote::before{content:"\201C";} .card .quote::after{content:"\201D";}
+
+  /* how it works — 3 steps */
+  .steps{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:0;}
+  .stp{background:var(--paper-2);border:1px solid var(--line);border-radius:18px;padding:22px 20px;text-align:center;position:relative;}
+  .stp .num{width:38px;height:38px;border-radius:50%;background:var(--honey);color:#23190a;font-weight:800;
+    display:grid;place-items:center;margin:0 auto 12px;font-size:17px;}
+  .stp .ic{font-size:30px;}
+  .stp .h{font-weight:700;font-size:17px;margin:8px 0 6px;}
+  .stp .d{font-size:13.5px;color:var(--soft);}
+  .arrow{display:grid;place-items:center;color:var(--honey-deep);font-size:26px;font-weight:700;padding:0 4px;}
+  .loop{margin-top:16px;text-align:center;background:#eef7f0;border:1px solid #cfe9d8;border-radius:14px;
+    padding:13px 18px;color:#2f7a52;font-size:14.5px;font-weight:600;}
+  .loop .big{font-size:16px;}
+
+  /* why different — compare */
+  .compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .col{border-radius:18px;padding:22px;border:1px solid var(--line);}
+  .col.old{background:#f4efe6;}
+  .col.us{background:linear-gradient(180deg,#fff8e8,#fdf0d2);border-color:var(--honey);}
+  .col .top{display:flex;align-items:center;gap:10px;font-weight:800;font-size:16px;margin-bottom:14px;}
+  .col.us .top{color:var(--honey-deep);}
+  .col ul{margin:0;padding:0;list-style:none;}
+  .col li{display:flex;gap:10px;align-items:flex-start;font-size:14.5px;padding:7px 0;border-top:1px dashed var(--line-2);}
+  .col li:first-child{border-top:none;}
+  .col li .m{flex:0 0 auto;font-size:15px;}
+  .col.old li .m{filter:grayscale(.4);opacity:.8;}
+
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--faint);}
+  footer .privacy{color:var(--green);font-weight:600;}
+
+  @media(max-width:720px){
+    .three,.cards{grid-template-columns:1fr;}
+    .steps{grid-template-columns:1fr;}
+    .arrow{transform:rotate(90deg);padding:8px 0;}
+    .compare{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HERO -->
+  <span class="kicker">🐝 Waggle OS</span>
+  <h1>Your AI team that <span class="hl">never forgets</span>.</h1>
+  <p class="lede">One smart assistant for every project. It does real work for you — research, writing, planning —
+     and remembers everything, so it keeps getting better the more you use it.</p>
+
+  <!-- THE ANALOGY (the aha) -->
+  <div class="analogy">
+    <p class="big">The simplest way to picture it: <span class="em">your own office of expert assistants.</span></p>
+    <p class="sub">Three ideas, and you've got it:</p>
+    <div class="three">
+      <div class="pt"><div class="ic">🚪</div><div><b>A room per project</b><span>Each project gets its own space. What's discussed in one room never leaks into another.</span></div></div>
+      <div class="pt"><div class="ic">🧑‍🔬</div><div><b>Call in the right expert</b><span>Need a researcher? A writer? A legal eye? Switch the assistant's "hat" to fit the job.</span></div></div>
+      <div class="pt"><div class="ic">🗃️</div><div><b>It remembers everything</b><span>Come back next week and it already knows your project, your style, and every decision so far.</span></div></div>
+    </div>
+  </div>
+
+  <!-- WHAT IT DOES -->
+  <h2>What you can ask it to do</h2>
+  <div class="cards">
+    <div class="card"><div class="ic">🔎</div><div class="h">Research anything</div><div class="quote">Find my top 5 competitors and summarize what they do.</div></div>
+    <div class="card"><div class="ic">✍️</div><div class="h">Write &amp; draft</div><div class="quote">Draft a proposal for this client in our usual tone.</div></div>
+    <div class="card"><div class="ic">📊</div><div class="h">Make sense of data</div><div class="quote">Look at this spreadsheet and tell me what's going on.</div></div>
+    <div class="card"><div class="ic">📅</div><div class="h">Plan &amp; organize</div><div class="quote">Break my product launch into a step-by-step plan.</div></div>
+    <div class="card"><div class="ic">📧</div><div class="h">Handle the busywork</div><div class="quote">Prep me for tomorrow's meeting and draft a follow-up email.</div></div>
+    <div class="card"><div class="ic">🧠</div><div class="h">Remember it all</div><div class="quote">You already know my project — just continue where we left off.</div></div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <h2>How it works — in 3 steps</h2>
+  <div class="steps">
+    <div class="stp">
+      <div class="num">1</div><div class="ic">🗣️</div>
+      <div class="h">You ask</div>
+      <div class="d">In plain words — like texting a colleague. No commands to learn.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stp">
+      <div class="num">2</div><div class="ic">🤝</div>
+      <div class="h">It remembers + does the work</div>
+      <div class="d">It pulls up everything it knows about your project, then actually does the task — writes the doc, runs the research.</div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="stp">
+      <div class="num">3</div><div class="ic">📈</div>
+      <div class="h">It gets smarter</div>
+      <div class="d">It files away what it learned. Next time, it already knows — no need to re-explain.</div>
+    </div>
+  </div>
+  <div class="loop"><span class="big">↺</span> &nbsp;The more you use it, the better it knows you — and the less you have to repeat yourself.</div>
+
+  <!-- WHY DIFFERENT -->
+  <h2>Why it's different from a normal chatbot</h2>
+  <div class="compare">
+    <div class="col old">
+      <div class="top">💬 A normal AI chatbot</div>
+      <ul>
+        <li><span class="m">🔁</span><span>Forgets you the moment the chat ends — every time you start from zero.</span></li>
+        <li><span class="m">🌀</span><span>One generic helper for everything, with no sense of your projects.</span></li>
+        <li><span class="m">💭</span><span>Just talks. You still do the actual work yourself.</span></li>
+      </ul>
+    </div>
+    <div class="col us">
+      <div class="top">🐝 Waggle</div>
+      <ul>
+        <li><span class="m">🗃️</span><span><b>Remembers everything</b>, forever — across days, weeks, and projects.</span></li>
+        <li><span class="m">🚪</span><span><b>A separate space for each project</b>, with the right expert on call.</span></li>
+        <li><span class="m">⚡</span><span><b>Does the work</b> — research, documents, plans — not just chit-chat.</span></li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    <span class="privacy">🔒 Private by design — your memory stays on your own computer.</span>
+    <span>Waggle OS · Egzakta Group</span>
+  </footer>
+
+</div>
+</body>
+</html>

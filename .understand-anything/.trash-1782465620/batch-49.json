@@ -1,0 +1,740 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/marketplace/src/categories.ts",
+      "type": "file",
+      "name": "categories.ts",
+      "filePath": "packages/marketplace/src/categories.ts",
+      "summary": "Provides keyword-based package categorization logic for the marketplace, mapping package names and descriptions to predefined category buckets, plus a bulk recategorization utility.",
+      "tags": ["utility", "marketplace", "categorization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/marketplace/src/categories.ts:categorizePackage",
+      "type": "function",
+      "name": "categorizePackage",
+      "filePath": "packages/marketplace/src/categories.ts",
+      "lineRange": [44, 74],
+      "summary": "Classifies a marketplace package into a category by applying regex patterns against its name and description.",
+      "tags": ["utility", "categorization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/marketplace/src/categories.ts:recategorizeAll",
+      "type": "function",
+      "name": "recategorizeAll",
+      "filePath": "packages/marketplace/src/categories.ts",
+      "lineRange": [81, 100],
+      "summary": "Bulk-updates all packages in the database to recalculate and persist their categories using categorizePackage.",
+      "tags": ["utility", "database", "categorization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/marketplace/src/cisco-scanner.ts",
+      "type": "file",
+      "name": "cisco-scanner.ts",
+      "filePath": "packages/marketplace/src/cisco-scanner.ts",
+      "summary": "Integrates with the Cisco security scanner CLI to perform content scanning on marketplace packages, handling availability detection, temporary file management, and JSON output parsing.",
+      "tags": ["security", "service", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/marketplace/src/cisco-scanner.ts:ciscoScan",
+      "type": "function",
+      "name": "ciscoScan",
+      "filePath": "packages/marketplace/src/cisco-scanner.ts",
+      "lineRange": [175, 273],
+      "summary": "Executes the Cisco scanner on provided content by writing to a temp file, running the scanner binary, and returning structured scan results.",
+      "tags": ["security", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/marketplace/src/cisco-scanner.ts:isCiscoScannerAvailable",
+      "type": "function",
+      "name": "isCiscoScannerAvailable",
+      "filePath": "packages/marketplace/src/cisco-scanner.ts",
+      "lineRange": [106, 148],
+      "summary": "Checks scanner binary availability via multiple detection strategies with TTL-based caching to avoid repeated subprocess calls.",
+      "tags": ["utility", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/src/cli.ts",
+      "type": "file",
+      "name": "cli.ts",
+      "filePath": "packages/marketplace/src/cli.ts",
+      "summary": "Command-line interface entry point for the marketplace package, supporting search, install, uninstall, sync, info, audit, and scan-all subcommands against the local SQLite database.",
+      "tags": ["entry-point", "utility", "marketplace"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/marketplace/src/cli.ts:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "packages/marketplace/src/cli.ts",
+      "lineRange": [37, 393],
+      "summary": "Top-level CLI dispatcher that parses arguments and routes to search, install, uninstall, list, info, sync, and security audit operations.",
+      "tags": ["entry-point", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/marketplace/src/db.ts",
+      "type": "file",
+      "name": "db.ts",
+      "filePath": "packages/marketplace/src/db.ts",
+      "summary": "SQLite-backed data access layer for the marketplace, encapsulating packages, sources, installations, packs, and sync state via the MarketplaceDB class with schema migration support.",
+      "tags": ["database", "service", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/marketplace/src/db.ts:MarketplaceDB",
+      "type": "class",
+      "name": "MarketplaceDB",
+      "filePath": "packages/marketplace/src/db.ts",
+      "lineRange": [26, 541],
+      "summary": "Central database abstraction for the marketplace, providing CRUD operations for packages, sources, packs, installations, and scan state on top of better-sqlite3.",
+      "tags": ["database", "service", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/marketplace/src/installer.ts",
+      "type": "file",
+      "name": "installer.ts",
+      "filePath": "packages/marketplace/src/installer.ts",
+      "summary": "Handles end-to-end installation and uninstallation of marketplace packages (skills, plugins, and MCP servers), including security scanning, file system operations, config file updates, and server notification.",
+      "tags": ["service", "marketplace", "installation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/marketplace/src/installer.ts:MarketplaceInstaller",
+      "type": "class",
+      "name": "MarketplaceInstaller",
+      "filePath": "packages/marketplace/src/installer.ts",
+      "lineRange": [66, 775],
+      "summary": "Orchestrates package installation/uninstallation lifecycle: resolves content, runs security gates, writes files to ~/.claude directories, updates plugin/MCP registries, and notifies the sidecar.",
+      "tags": ["service", "marketplace", "installation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/marketplace/src/mcp-registry.ts",
+      "type": "file",
+      "name": "mcp-registry.ts",
+      "filePath": "packages/marketplace/src/mcp-registry.ts",
+      "summary": "Contains the bundled MCP_SERVERS catalog and seeds it into the marketplace SQLite database on initialization, providing the default set of discoverable MCP server packages.",
+      "tags": ["data-model", "marketplace", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/marketplace/src/mcp-registry.ts:seedMcpServers",
+      "type": "function",
+      "name": "seedMcpServers",
+      "filePath": "packages/marketplace/src/mcp-registry.ts",
+      "lineRange": [737, 795],
+      "summary": "Upserts all built-in MCP server definitions from MCP_SERVERS into the database, updating install manifests for existing entries and inserting new ones.",
+      "tags": ["database", "marketplace", "initialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/src/security.ts",
+      "type": "file",
+      "name": "security.ts",
+      "filePath": "packages/marketplace/src/security.ts",
+      "summary": "Implements multi-engine security scanning for marketplace packages via SecurityGate, integrating GenTrustHub, Cisco scanner, mcp-guardian, and heuristic pattern analysis with caching and severity aggregation.",
+      "tags": ["security", "service", "validation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/marketplace/src/security.ts:SecurityGate",
+      "type": "class",
+      "name": "SecurityGate",
+      "filePath": "packages/marketplace/src/security.ts",
+      "lineRange": [217, 1226],
+      "summary": "Orchestrates multi-engine content security scanning (GenTrustHub API, Cisco scanner, mcp-guardian, regex heuristics), caches results to disk, and formats human-readable security reports.",
+      "tags": ["security", "service", "validation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/marketplace/src/sources-seed.ts",
+      "type": "file",
+      "name": "sources-seed.ts",
+      "filePath": "packages/marketplace/src/sources-seed.ts",
+      "summary": "Defines additional marketplace source registries (NEW_SOURCES) and provides seedNewSources to upsert them into the database on first run.",
+      "tags": ["data-model", "marketplace", "initialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/marketplace/src/sources-seed.ts:seedNewSources",
+      "type": "function",
+      "name": "seedNewSources",
+      "filePath": "packages/marketplace/src/sources-seed.ts",
+      "lineRange": [189, 221],
+      "summary": "Inserts new package source registry entries into the database if they do not already exist, seeding the marketplace discovery catalog.",
+      "tags": ["database", "marketplace", "initialization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/marketplace/src/sync.ts",
+      "type": "file",
+      "name": "sync.ts",
+      "filePath": "packages/marketplace/src/sync.ts",
+      "summary": "Implements marketplace synchronization across multiple source types (GitHub awesome lists, npm, Waggle skill repos, plugin registries), with per-adapter sync logic, deduplication, and pagination state management.",
+      "tags": ["service", "marketplace", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/marketplace/src/sync.ts:MarketplaceSync",
+      "type": "class",
+      "name": "MarketplaceSync",
+      "filePath": "packages/marketplace/src/sync.ts",
+      "lineRange": [1313, 1373],
+      "summary": "Entry-point class for marketplace sync operations, providing syncAll() which iterates registered source adapters and runs each with deduplication as a post-step.",
+      "tags": ["service", "marketplace", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/marketplace/src/sync.ts:deduplicatePackages",
+      "type": "function",
+      "name": "deduplicatePackages",
+      "filePath": "packages/marketplace/src/sync.ts",
+      "lineRange": [1249, 1293],
+      "summary": "Removes duplicate package entries by normalized name, keeping the highest-scoring copy and cleaning up associated pack_packages and package_tags rows.",
+      "tags": ["database", "marketplace", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/marketplace/src/sync.ts:parseAwesomeListMarkdown",
+      "type": "function",
+      "name": "parseAwesomeListMarkdown",
+      "filePath": "packages/marketplace/src/sync.ts",
+      "lineRange": [235, 268],
+      "summary": "Parses GitHub awesome-list Markdown to extract named links with descriptions, filtering out image links and duplicates.",
+      "tags": ["utility", "marketplace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/src/types.ts",
+      "type": "file",
+      "name": "types.ts",
+      "filePath": "packages/marketplace/src/types.ts",
+      "summary": "Defines all TypeScript interfaces and types for the marketplace package, including Package, Source, Installation, ScanResult, InstallManifest, and sync-related structures.",
+      "tags": ["type-definition", "marketplace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/tests/categories.test.ts",
+      "type": "file",
+      "name": "categories.test.ts",
+      "filePath": "packages/marketplace/tests/categories.test.ts",
+      "summary": "Unit tests for the package categorization logic, including edge cases for all category patterns and the recategorizeAll bulk operation against a temp SQLite database.",
+      "tags": ["test", "marketplace", "categorization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/tests/cisco-scanner.test.ts",
+      "type": "file",
+      "name": "cisco-scanner.test.ts",
+      "filePath": "packages/marketplace/tests/cisco-scanner.test.ts",
+      "summary": "Unit tests for the Cisco scanner integration, mocking the exec layer to verify availability detection, scan output parsing, severity mapping, and error handling paths.",
+      "tags": ["test", "security", "marketplace"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/marketplace/tests/mcp-registry.test.ts",
+      "type": "file",
+      "name": "mcp-registry.test.ts",
+      "filePath": "packages/marketplace/tests/mcp-registry.test.ts",
+      "summary": "Integration tests for MCP server seeding and registry lookup, verifying that bundled MCP_SERVERS are correctly upserted into and retrievable from a temp SQLite database.",
+      "tags": ["test", "marketplace", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/marketplace/tests/sync-adapters.test.ts",
+      "type": "file",
+      "name": "sync-adapters.test.ts",
+      "filePath": "packages/marketplace/tests/sync-adapters.test.ts",
+      "summary": "Comprehensive tests for each marketplace sync adapter (awesome list, GitHub API, npm, Waggle registry), using fetch mocks and a temp database to verify package upsert behavior and pagination state.",
+      "tags": ["test", "marketplace", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/marketplace/tests/sync-verification.test.ts",
+      "type": "file",
+      "name": "sync-verification.test.ts",
+      "filePath": "packages/marketplace/tests/sync-verification.test.ts",
+      "summary": "Verification tests that run real sync adapters against the bundled marketplace database to confirm source compatibility, package count expectations, and deduplication correctness.",
+      "tags": ["test", "marketplace", "data-pipeline"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/marketplace/src/categories.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/cli.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/cli.ts",
+      "target": "file:packages/marketplace/src/installer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/cli.ts",
+      "target": "file:packages/marketplace/src/security.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/cli.ts",
+      "target": "file:packages/marketplace/src/sync.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/cli.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/db.ts",
+      "target": "file:packages/marketplace/src/mcp-registry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/db.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/installer.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/installer.ts",
+      "target": "file:packages/marketplace/src/security.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/installer.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/mcp-registry.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/mcp-registry.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/security.ts",
+      "target": "file:packages/marketplace/src/cisco-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/security.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/sources-seed.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/categories.test.ts",
+      "target": "file:packages/marketplace/src/categories.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/categories.test.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/cisco-scanner.test.ts",
+      "target": "file:packages/marketplace/src/cisco-scanner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/cisco-scanner.test.ts",
+      "target": "file:packages/marketplace/src/security.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/cisco-scanner.test.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/mcp-registry.test.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/mcp-registry.test.ts",
+      "target": "file:packages/marketplace/src/mcp-registry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-adapters.test.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-adapters.test.ts",
+      "target": "file:packages/marketplace/src/sources-seed.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-adapters.test.ts",
+      "target": "file:packages/marketplace/src/sync.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-adapters.test.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-verification.test.ts",
+      "target": "file:packages/marketplace/src/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-verification.test.ts",
+      "target": "file:packages/marketplace/src/sync.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/tests/sync-verification.test.ts",
+      "target": "file:packages/marketplace/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/marketplace/src/categories.ts",
+      "target": "function:packages/marketplace/src/categories.ts:categorizePackage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/categories.ts",
+      "target": "function:packages/marketplace/src/categories.ts:recategorizeAll",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/categories.ts",
+      "target": "function:packages/marketplace/src/categories.ts:categorizePackage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/categories.ts",
+      "target": "function:packages/marketplace/src/categories.ts:recategorizeAll",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/cisco-scanner.ts",
+      "target": "function:packages/marketplace/src/cisco-scanner.ts:ciscoScan",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/cisco-scanner.ts",
+      "target": "function:packages/marketplace/src/cisco-scanner.ts:isCiscoScannerAvailable",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/cisco-scanner.ts",
+      "target": "function:packages/marketplace/src/cisco-scanner.ts:ciscoScan",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/cisco-scanner.ts",
+      "target": "function:packages/marketplace/src/cisco-scanner.ts:isCiscoScannerAvailable",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/cli.ts",
+      "target": "function:packages/marketplace/src/cli.ts:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/db.ts",
+      "target": "class:packages/marketplace/src/db.ts:MarketplaceDB",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/db.ts",
+      "target": "class:packages/marketplace/src/db.ts:MarketplaceDB",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/installer.ts",
+      "target": "class:packages/marketplace/src/installer.ts:MarketplaceInstaller",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/installer.ts",
+      "target": "class:packages/marketplace/src/installer.ts:MarketplaceInstaller",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/mcp-registry.ts",
+      "target": "function:packages/marketplace/src/mcp-registry.ts:seedMcpServers",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/mcp-registry.ts",
+      "target": "function:packages/marketplace/src/mcp-registry.ts:seedMcpServers",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/security.ts",
+      "target": "class:packages/marketplace/src/security.ts:SecurityGate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/security.ts",
+      "target": "class:packages/marketplace/src/security.ts:SecurityGate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/sources-seed.ts",
+      "target": "function:packages/marketplace/src/sources-seed.ts:seedNewSources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/sources-seed.ts",
+      "target": "function:packages/marketplace/src/sources-seed.ts:seedNewSources",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "class:packages/marketplace/src/sync.ts:MarketplaceSync",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "function:packages/marketplace/src/sync.ts:deduplicatePackages",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "function:packages/marketplace/src/sync.ts:parseAwesomeListMarkdown",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "class:packages/marketplace/src/sync.ts:MarketplaceSync",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "function:packages/marketplace/src/sync.ts:deduplicatePackages",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "function:packages/marketplace/src/sync.ts:parseAwesomeListMarkdown",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/marketplace/src/categories.ts",
+      "target": "file:packages/marketplace/tests/categories.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/marketplace/src/cisco-scanner.ts",
+      "target": "file:packages/marketplace/tests/cisco-scanner.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/marketplace/src/mcp-registry.ts",
+      "target": "file:packages/marketplace/tests/mcp-registry.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "file:packages/marketplace/tests/sync-adapters.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/marketplace/src/sync.ts",
+      "target": "file:packages/marketplace/tests/sync-verification.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:packages/marketplace/src/installer.ts:MarketplaceInstaller",
+      "target": "class:packages/marketplace/src/security.ts:SecurityGate",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "class:packages/marketplace/src/installer.ts:MarketplaceInstaller",
+      "target": "class:packages/marketplace/src/db.ts:MarketplaceDB",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "class:packages/marketplace/src/security.ts:SecurityGate",
+      "target": "function:packages/marketplace/src/cisco-scanner.ts:ciscoScan",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/marketplace/src/security.ts:SecurityGate",
+      "target": "function:packages/marketplace/src/cisco-scanner.ts:isCiscoScannerAvailable",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/marketplace/src/sync.ts:MarketplaceSync",
+      "target": "function:packages/marketplace/src/sync.ts:deduplicatePackages",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

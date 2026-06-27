@@ -1,0 +1,135 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/optimizer/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 41,
+      "nonEmptyLines": 31,
+      "sections": [
+        {
+          "heading": "@waggle/optimizer",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why this package still exists",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Programs",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "When to extend",
+          "level": 2,
+          "line": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "packages/optimizer/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 18,
+      "nonEmptyLines": 18,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "exports",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 17
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "packages/optimizer/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 21,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    }
+  ]
+}

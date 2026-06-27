@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
@@ -62,6 +62,8 @@ import {
 } from '@waggle/agent';
 import { PluginRuntimeManager, getStarterSkillsDir, validatePluginManifest } from '@waggle/sdk';
 import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '@waggle/marketplace';
+import { parseTier } from '@waggle/shared';
+import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -98,6 +100,7 @@ import { connectorRoutes } from './routes/connectors.js';
 import { mcpRoutes } from './routes/mcps.js';
 import { extendRoutes } from './routes/extend.js';
 import { populateMcpRuntimeFromConfig } from './mcp-config.js';
+import { scheduleMarketplaceBackgroundSync } from './marketplace-background-sync.js';
 import { fleetRoutes } from './routes/fleet.js';
 import { importRoutes } from './routes/import.js';
 import { vaultRoutes } from './routes/vault.js';
@@ -152,6 +155,7 @@ import {
 } from './proactive-handlers.js';
 import { generateMonthlyAssessment, saveAssessmentToMind } from './monthly-assessment.js';
 import { WorkspaceSessionManager } from './workspace-sessions.js';
+import { maxWorkspaceSessionsForTier } from './tier-session-cap.js';
 import { EventEmitter } from 'node:events';
 
 export interface LocalConfig {
@@ -183,7 +187,7 @@ export type LlmHealthStatus = 'healthy' | 'degraded' | 'unavailable';
 /** Which LLM provider is active and its runtime health */
 export interface LlmProviderStatus {
   /** Which provider is handling LLM requests */
-  provider: 'litellm' | 'anthropic-proxy';
+  provider: 'litellm' | 'anthropic-proxy' | 'ollama';
   /** Runtime health — truthful, not optimistic */
   health: LlmHealthStatus;
   /** Human-readable detail (e.g. "LiteLLM on port 4000" or "No API key configured") */
@@ -307,6 +311,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmUrl: config.litellmUrl ?? 'http://localhost:4000',
     ...config,
   };
+  const resolvedTier = parseTier(String(fullConfig.tier ?? '')) ?? readTierFromDataDir(fullConfig.dataDir);
+  fullConfig.tier = resolvedTier;
 
   const server = Fastify({ logger: false });
 
@@ -322,7 +328,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Workspace manager
   const wsManager = new WorkspaceManager(fullConfig.dataDir);
-  wsManager.ensureDefault();
+  const defaultWorkspaceConfig = wsManager.ensureDefault();
+  const defaultWorkspaceId = defaultWorkspaceConfig.id;
   server.decorate('workspaceManager', wsManager);
 
   // MultiMind — open personal mind, no workspace yet (selected via API)
@@ -507,23 +514,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   server.decorate('marketplace', marketplaceDb);
 
   // ── Daily marketplace sync (non-blocking, 15s delay after startup) ──
-  if (marketplaceDb) {
-    const mpDb = marketplaceDb;
-    setTimeout(async () => {
-      async function runSync() {
-        try {
-          const sync = new MarketplaceSync(mpDb);
-          const results = await sync.syncAll();
-          const added = results.reduce((s: number, r: { added: number }) => s + r.added, 0);
-          if (added > 0) log.info(`[marketplace] Sync: +${added} new packages`);
-        } catch (e) {
-          log.info(`[marketplace] Sync error (non-blocking): ${(e as Error).message}`);
-        }
-      }
-      await runSync();
-      setInterval(runSync, 24 * 60 * 60 * 1000);
-    }, 15_000);
-  }
+  const stopMarketplaceBackgroundSync = scheduleMarketplaceBackgroundSync({ marketplaceDb, log });
 
   // ── Agent state (matches CLI initialization) ────────────────────────
   const litellmApiKey = process.env.LITELLM_API_KEY ?? process.env.LITELLM_MASTER_KEY ?? 'sk-waggle-dev';
@@ -780,7 +771,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
     onSubAgentStatus: (event) => {
-      emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? 'default', [{
+      emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
         id: event.agentId,
         name: event.name,
         role: event.role,
@@ -856,7 +847,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
         startedAt: event.workerState.startedAt,
         completedAt: event.workerState.completedAt,
       }];
-      emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? 'default', agents);
+      emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, agents);
     },
   });
 
@@ -1046,7 +1037,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       litellmApiKey: litellmApiKey,
       defaultModel: 'claude-sonnet-4-6',
       onSubAgentStatus: (event) => {
-        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? 'default', [{
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
           id: event.agentId,
           name: event.name,
           role: event.role,
@@ -1075,7 +1066,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           toolsUsed: event.workerState.toolsUsed, startedAt: event.workerState.startedAt,
           completedAt: event.workerState.completedAt,
         }];
-        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? 'default', agents);
+        emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, agents);
       },
     });
     return [...wsBase, ...wsSub, ...wsWorkflow];
@@ -1083,9 +1074,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // ── Workspace Session Manager ────────────────────────────────────
   // Manages concurrent workspace sessions with independent minds, orchestrators,
-  // and tools. Default cap: 3 (Solo tier). Cap is raised via sessionManager.setMaxSessions()
-  // at startup once the user's tier is resolved (Basic=5, Teams=10, Enterprise=unbounded).
+  // and tools. Cap is tied to the active tier at startup and when the tier changes.
   const sessionManager = new WorkspaceSessionManager(3);
+  sessionManager.setMaxSessions(maxWorkspaceSessionsForTier(resolvedTier));
   server.decorate('sessionManager', sessionManager);
 
   /**
@@ -1160,11 +1151,16 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // path outside this root is rejected before MindDB construction.
   const mindCache = new MultiMindCache({
     maxOpen: 20,
-    getMindPath: (id) => wsManager.getMindPath(id),
+    getMindPath: (id) => (wsManager.get(id) ? wsManager.getMindPath(id) : null),
     allowedRoot: path.join(fullConfig.dataDir, 'workspaces'),
   });
   server.decorate('mindCache', mindCache);
   let activeWorkspaceId: string | null = null;
+  const setActiveWorkspaceId = (workspaceId: string | null): void => {
+    activeWorkspaceId = workspaceId;
+    const decorated = (server as FastifyInstance & { agentState?: AgentState }).agentState;
+    if (decorated) decorated.activeWorkspaceId = workspaceId;
+  };
 
   // ── TeamSync cache — one TeamSync instance per team workspace ──
   const teamSyncCache = new Map<string, TeamSync>();
@@ -1192,12 +1188,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
    */
   const activateWorkspaceMind = (workspaceId: string): boolean => {
     if (activeWorkspaceId === workspaceId) return true; // already active
+    if (!wsManager.get(workspaceId)) return false;
 
     const wsDb = mindCache.getOrOpen(workspaceId);
     if (!wsDb) return false;
 
     orchestrator.setWorkspaceMind(wsDb);
-    activeWorkspaceId = workspaceId;
+    setActiveWorkspaceId(workspaceId);
     return true;
   };
 
@@ -1365,11 +1362,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     mindCache.close(workspaceId);
     if (activeWorkspaceId === workspaceId) {
       orchestrator.clearWorkspaceMind();
-      activeWorkspaceId = null;
+      setActiveWorkspaceId(null);
     }
   };
 
   const getWorkspaceMindDb = (workspaceId: string): MindDB | null => {
+    if (!wsManager.get(workspaceId)) return null;
     return mindCache.getOrOpen(workspaceId);
   };
 
@@ -1408,6 +1406,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     },
     wsSessionToken: crypto.randomBytes(32).toString('hex'),
   });
+  activateWorkspaceMindWithWeaver(defaultWorkspaceId);
 
   // Wire up skill hot-reload callback
   const reloadSkills = (fresh: LoadedSkill[]) => {
@@ -2489,7 +2488,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         health: llm.health,
         detail: llm.detail,
         checkedAt: llm.checkedAt,
-        reachable: !offlineManager.state.offline,
+        reachable: llm.health === 'healthy' || !offlineManager.state.offline,
         lastCheck: new Date().toISOString(),
       },
       database: { healthy: dbHealthy },
@@ -2506,6 +2505,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // Cleanup on close
   server.addHook('onClose', async () => {
     // Stop cron scheduler
+    stopMarketplaceBackgroundSync();
     scheduler.stop();
     evolutionService.stop();
     offlineManager.stop();

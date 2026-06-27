@@ -1,0 +1,480 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/wiki-live/egzakta-group.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 91,
+      "nonEmptyLines": 72,
+      "sections": [
+        {
+          "heading": "Egzakta Group",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "Egzakta Group",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Key Facts",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Timeline",
+          "level": 2,
+          "line": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/wiki-live/index.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 36,
+      "nonEmptyLines": 31,
+      "sections": [
+        {
+          "heading": "Wiki Index",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Entities",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Cross-Source Synthesis",
+          "level": 2,
+          "line": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "docs/wiki-live/kvark.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 78,
+      "nonEmptyLines": 60,
+      "sections": [
+        {
+          "heading": "KVARK",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "KVARK",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Key Facts",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Timeline",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Relations",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "Open Questions",
+          "level": 2,
+          "line": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/wiki-live/marko-markovic.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 81,
+      "nonEmptyLines": 67,
+      "sections": [
+        {
+          "heading": "Marko Markovic",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "Marko Markovic",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Key Facts",
+          "level": 2,
+          "line": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "docs/wiki-live/memory-harvest.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 114,
+      "nonEmptyLines": 77,
+      "sections": [
+        {
+          "heading": "Memory Harvest",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Memory Harvest",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "What We Know",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Core Definition & Purpose",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Architecture & Implementation",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Performance & Reality Check",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Monetization & Lock-In",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "Compliance Integration",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "Known Gaps & Future Work",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "Sources & Evolution",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "Initial Spec → Implementation",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "Monetization Crystallization",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "Wiki Compilation Reality Check",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "Related Topics",
+          "level": 2,
+          "line": 112
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/wiki-live/synthesis-waggle-os.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 94,
+      "nonEmptyLines": 71,
+      "sections": [
+        {
+          "heading": "Synthesis: Waggle OS",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Waggle OS — Cross-Source Synthesis",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "Cross-Source Summary",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Patterns (Recurring Themes)",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "1. **Memory-First Architecture**",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "2. **Waggle Dance Protocol (Agent-to-Agent Communication)**",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "3. **Two-Product Flywheel**",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "4. **Regulatory/Sovereign Moat**",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "5. **Velocity Through Isolation Testing**",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "Contradictions",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Insights",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "1. **The Architecture Implies Offline-First Sync**",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "2. **Production Hardening Completed, But Distribution Incomplete**",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "3. **Memory Harvest is the Intellectual Moat, Not the Technology**",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "4. **Waggle Dance Protocol is Central, But Not Yet Documented**",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "5. **KVARK Wiring is Mostly Mocked**",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "6. **The \"Test User\" Frames are Isolation/Benchmark Data**",
+          "level": 3,
+          "line": 94
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/wiki-live/waggle-os.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 81,
+      "nonEmptyLines": 66,
+      "sections": [
+        {
+          "heading": "Waggle OS",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "Waggle OS",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Key Facts",
+          "level": 2,
+          "line": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "docs/wiki-live/wiki-compiler.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 119,
+      "nonEmptyLines": 87,
+      "sections": [
+        {
+          "heading": "Wiki Compiler",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "Wiki Compiler",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "What We Know",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Core Concept & Inspiration",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Architecture & Compilation",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Page Types",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "Universal Source Pipeline",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Regulatory Compliance Layer",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Implementation Status (v1 BUILD Complete)",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Competitive Position",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "Dual-Track Delivery",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "9-Phase Execution Plan",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Sources & Evolution",
+          "level": 2,
+          "line": 111
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    }
+  ]
+}

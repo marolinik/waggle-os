@@ -1,0 +1,600 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 64,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "Agentic Knowledge Work Pilot — N=3 Direction Validator",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why this pilot exists",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Files in this folder",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Hypotheses pilot validates",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Cost & time envelope",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "Sequencing",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Notes on synthetic materials",
+          "level": 2,
+          "line": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 223,
+      "nonEmptyLines": 162,
+      "sections": [
+        {
+          "heading": "CC-1 Brief Amendment — Agentic Knowledge Work Pilot",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "(binding for execution; supersedes original cc1-brief.md where in conflict)",
+          "level": 2,
+          "line": 2
+        },
+        {
+          "heading": "§1 — Cell B/D renamed definition",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "§2 — Per-task agent loop specification (Cells B/D)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "§3 — Wrapper script location and structure",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "§4 — Hive-mind in-tree import path (precise)",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "§5 — Manifest anchor scope notes",
+          "level": 2,
+          "line": 124
+        },
+        {
+          "heading": "§6 — Cost ceiling update",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "§7 — Execution sequence (amended)",
+          "level": 2,
+          "line": 177
+        },
+        {
+          "heading": "§8 — What is NOT changed by this amendment",
+          "level": 2,
+          "line": 191
+        },
+        {
+          "heading": "§9 — Audit trail",
+          "level": 2,
+          "line": 209
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 164,
+      "nonEmptyLines": 113,
+      "sections": [
+        {
+          "heading": "CC-1 Brief Amendment v2 — Agentic Knowledge Work Pilot",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "(binding for Cells C/D restart + Tasks 2/3 execution; supplements amendment v1)",
+          "level": 2,
+          "line": 2
+        },
+        {
+          "heading": "§1 — Trigger",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "§2 — Explicit Qwen config (verbatim, audit-verified)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "§3 — Retroactive scope note",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "§4 — Cost ceiling (REVISED per PM update 2026-04-26)",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "§5 — Manifest scope note appended",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "§6 — Anchor unchanged",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "§7 — Restart sequence (binding on PM amendment-v2 verification)",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "§8 — Audit SHA capture in pilot result commit body",
+          "level": 2,
+          "line": 148
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 217,
+      "nonEmptyLines": 150,
+      "sections": [
+        {
+          "heading": "CC-1 Brief — Agentic Knowledge Work Pilot Execution",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Substrate readiness gate",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§1 — Goal & rationale",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "§2 — Hypotheses (pre-registered, not modifiable post-results)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "§3 — Cell specification",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "§4 — Tasks",
+          "level": 2,
+          "line": 72
+        },
+        {
+          "heading": "§5 — Judge ensemble",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "§6 — Output",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "Per-cell JSONL records",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Aggregate summary",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "Run log",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "§7 — Cost & halt rules",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "§8 — Reproducibility",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "§9 — Execution sequence",
+          "level": 2,
+          "line": 167
+        },
+        {
+          "heading": "§10 — Open questions for PM ratification",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "§11 — Post-execution PM actions",
+          "level": 2,
+          "line": 199
+        },
+        {
+          "heading": "§12 — Notes",
+          "level": 2,
+          "line": 212
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 221,
+      "nonEmptyLines": 170,
+      "sections": [
+        {
+          "heading": "Judge Rubric — Trio Ensemble × 6 Dimensions × Likert 1-5",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Six dimensions",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "D1 — Completeness",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "D2 — Accuracy",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "D3 — Synthesis quality",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "D4 — Judgment quality",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "D5 — Recommendation actionability",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "D6 — Structure / Communication",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Overall scoring",
+          "level": 2,
+          "line": 80
+        },
+        {
+          "heading": "Judge prompt template (per cell response)",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "Output JSONL schema (per cell, per task)",
+          "level": 2,
+          "line": 144
+        },
+        {
+          "heading": "Aggregate summary file",
+          "level": 2,
+          "line": 184
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 186,
+      "nonEmptyLines": 132,
+      "sections": [
+        {
+          "heading": "Task 1 — Multi-Document Strategic Synthesis",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "DOC 1 — Q1 2026 P&L Summary (Internal)",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "DOC 2 — Sales Pipeline Review (VP Sales, April 8, 2026)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "DOC 3 — Customer Health & Churn Analysis (CS Director, April 12, 2026)",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "DOC 4 — Engineering Velocity Report (VP Engineering, April 15, 2026)",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "DOC 5 — Marketing Efficiency Dashboard (CMO, April 10, 2026)",
+          "level": 2,
+          "line": 104
+        },
+        {
+          "heading": "DOC 6 — Board Feedback Notes (post-March 28, 2026 board meeting)",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "DOC 7 — Competitor Intelligence Brief (Strategy Lead, April 5, 2026)",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "End of materials",
+          "level": 2,
+          "line": 178
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 277,
+      "nonEmptyLines": 183,
+      "sections": [
+        {
+          "heading": "Task 2 — Cross-Thread Project Coordination",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "THREAD 1 — Initial Scoping Call Notes (January 14, 2026)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "THREAD 2 — Mid-Engagement Workshop Notes (February 26, 2026)",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "THREAD 3 — CFO Email Thread (March 18-25, 2026)",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "From: Diane Mercer",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "To: Marko Marković",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "Date: March 18, 2026, 10:42 AM",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Subject: Cost savings memo + scope question",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "From: Marko Marković",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "To: Diane Mercer",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "Date: March 18, 2026, 6:15 PM",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "Subject: Re: Cost savings memo + scope question",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "From: Diane Mercer",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "To: Marko Marković",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "Date: March 23, 2026, 8:55 PM",
+          "level": 3,
+          "line": 157
+        },
+        {
+          "heading": "Subject: Heads up — internal politics",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "From: Marko Marković",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "To: Diane Mercer",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "Date: March 25, 2026, 7:20 AM",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "Subject: Thursday call confirmation + agenda",
+          "level": 3,
+          "line": 179
+        },
+        {
+          "heading": "THREAD 4 — Client Team Slack Messages (April 6-24, 2026)",
+          "level": 2,
+          "line": 196
+        },
+        {
+          "heading": "End of materials",
+          "level": 2,
+          "line": 269
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 160,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "Task 3 — Decision Support Under Conflict",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "MEMO 1 — From CFO (Sarah Chen)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "MEMO 2 — From CMO (Daniel Okafor)",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "MEMO 3 — From CTO (Anika Rao)",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "End of materials",
+          "level": 2,
+          "line": 151
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

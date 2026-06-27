@@ -1,0 +1,903 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 11,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 148,
+      "nonEmptyLines": 136,
+      "functions": [
+        {
+          "name": "parseHookArgs",
+          "startLine": 48,
+          "endLine": 55,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "readStdinAsString",
+          "startLine": 64,
+          "endLine": 88,
+          "params": [
+            "timeoutMs"
+          ]
+        },
+        {
+          "name": "safeJsonParse",
+          "startLine": 90,
+          "endLine": 97,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "runHook",
+          "startLine": 99,
+          "endLine": 129,
+          "params": [
+            "handler",
+            "opts"
+          ]
+        },
+        {
+          "name": "pickStringField",
+          "startLine": 135,
+          "endLine": 143,
+          "params": [
+            "payload",
+            "...keys"
+          ]
+        },
+        {
+          "name": "pickStringFromObject",
+          "startLine": 145,
+          "endLine": 148,
+          "params": [
+            "obj",
+            "key"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseHookArgs",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "readStdinAsString",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "safeJsonParse",
+          "line": 90,
+          "isDefault": false
+        },
+        {
+          "name": "runHook",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "pickStringField",
+          "line": 135,
+          "isDefault": false
+        },
+        {
+          "name": "pickStringFromObject",
+          "line": 145,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseHookArgs",
+          "callee": "argv.indexOf",
+          "lineNumber": 49
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "setTimeout",
+          "lineNumber": 69
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "resolve",
+          "lineNumber": 72
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "Buffer.concat(chunks).toString",
+          "lineNumber": 72
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "Buffer.concat",
+          "lineNumber": 72
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "process.stdin.on",
+          "lineNumber": 74
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "chunks.push",
+          "lineNumber": 74
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "process.stdin.on",
+          "lineNumber": 75
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "clearTimeout",
+          "lineNumber": 78
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "resolve",
+          "lineNumber": 79
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "Buffer.concat(chunks).toString",
+          "lineNumber": 79
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "Buffer.concat",
+          "lineNumber": 79
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "process.stdin.on",
+          "lineNumber": 81
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "clearTimeout",
+          "lineNumber": 84
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "resolve",
+          "lineNumber": 85
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "Buffer.concat(chunks).toString",
+          "lineNumber": 85
+        },
+        {
+          "caller": "readStdinAsString",
+          "callee": "Buffer.concat",
+          "lineNumber": 85
+        },
+        {
+          "caller": "safeJsonParse",
+          "callee": "raw.trim",
+          "lineNumber": 91
+        },
+        {
+          "caller": "safeJsonParse",
+          "callee": "JSON.parse",
+          "lineNumber": 93
+        },
+        {
+          "caller": "runHook",
+          "callee": "createLogger",
+          "lineNumber": 103
+        },
+        {
+          "caller": "runHook",
+          "callee": "process.stdout.write",
+          "lineNumber": 104
+        },
+        {
+          "caller": "runHook",
+          "callee": "process.exit",
+          "lineNumber": 105
+        },
+        {
+          "caller": "runHook",
+          "callee": "process.argv.slice",
+          "lineNumber": 107
+        },
+        {
+          "caller": "runHook",
+          "callee": "parseHookArgs",
+          "lineNumber": 108
+        },
+        {
+          "caller": "runHook",
+          "callee": "createCliBridge",
+          "lineNumber": 111
+        },
+        {
+          "caller": "runHook",
+          "callee": "reader",
+          "lineNumber": 114
+        },
+        {
+          "caller": "runHook",
+          "callee": "safeJsonParse",
+          "lineNumber": 115
+        },
+        {
+          "caller": "runHook",
+          "callee": "handler.parse",
+          "lineNumber": 116
+        },
+        {
+          "caller": "runHook",
+          "callee": "handler.run",
+          "lineNumber": 117
+        },
+        {
+          "caller": "runHook",
+          "callee": "writeStdout",
+          "lineNumber": 119
+        },
+        {
+          "caller": "runHook",
+          "callee": "JSON.stringify",
+          "lineNumber": 119
+        },
+        {
+          "caller": "runHook",
+          "callee": "exit",
+          "lineNumber": 121
+        },
+        {
+          "caller": "runHook",
+          "callee": "logger.warn",
+          "lineNumber": 123
+        },
+        {
+          "caller": "runHook",
+          "callee": "String",
+          "lineNumber": 125
+        },
+        {
+          "caller": "runHook",
+          "callee": "exit",
+          "lineNumber": 127
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/hooks/pre-compact.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 46,
+      "functions": [
+        {
+          "name": "runPreCompact",
+          "startLine": 37,
+          "endLine": 39,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "preCompactHandler",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "runPreCompact",
+          "line": 37,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 21
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 22
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 23
+        },
+        {
+          "caller": "run",
+          "callee": "bridge.cleanupFrames",
+          "lineNumber": 31
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 32
+        },
+        {
+          "caller": "runPreCompact",
+          "callee": "runHook",
+          "lineNumber": 38
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 93,
+      "functions": [
+        {
+          "name": "formatHitsForContext",
+          "startLine": 42,
+          "endLine": 57,
+          "params": [
+            "hits"
+          ]
+        },
+        {
+          "name": "runSessionStart",
+          "startLine": 87,
+          "endLine": 89,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "sessionStartHandler",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "runSessionStart",
+          "line": 87,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "formatHitsForContext",
+          "callee": "h.content.slice",
+          "lineNumber": 52
+        },
+        {
+          "caller": "formatHitsForContext",
+          "callee": "lines.push",
+          "lineNumber": 54
+        },
+        {
+          "caller": "formatHitsForContext",
+          "callee": "lines.join",
+          "lineNumber": 56
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 62
+        },
+        {
+          "caller": "parse",
+          "callee": "process.cwd",
+          "lineNumber": 62
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 63
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 64
+        },
+        {
+          "caller": "parse",
+          "callee": "Math.floor",
+          "lineNumber": 67
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 75
+        },
+        {
+          "caller": "run",
+          "callee": "bridge.recallMemory",
+          "lineNumber": 76
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 77
+        },
+        {
+          "caller": "run",
+          "callee": "formatHitsForContext",
+          "lineNumber": 81
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "runHook",
+          "lineNumber": 88
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/hooks/stop.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 126,
+      "nonEmptyLines": 116,
+      "functions": [
+        {
+          "name": "runStop",
+          "startLine": 111,
+          "endLine": 113,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "stopHandler",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "runStop",
+          "line": 111,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parse",
+          "callee": "process.cwd",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 37
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 38
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 39
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 41
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 42
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 48
+        },
+        {
+          "caller": "run",
+          "callee": "summarizeTurn",
+          "lineNumber": 51
+        },
+        {
+          "caller": "run",
+          "callee": "classifyImportance",
+          "lineNumber": 52
+        },
+        {
+          "caller": "run",
+          "callee": "new Date().toISOString",
+          "lineNumber": 59
+        },
+        {
+          "caller": "run",
+          "callee": "encodeFrame",
+          "lineNumber": 67
+        },
+        {
+          "caller": "run",
+          "callee": "bridge.saveMemory",
+          "lineNumber": 68
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 69
+        },
+        {
+          "caller": "run",
+          "callee": "emitFlag.toLowerCase",
+          "lineNumber": 81
+        },
+        {
+          "caller": "run",
+          "callee": "maybeEmitDiscovery",
+          "lineNumber": 91
+        },
+        {
+          "caller": "run",
+          "callee": "summary.slice",
+          "lineNumber": 97
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 103
+        },
+        {
+          "caller": "runStop",
+          "callee": "runHook",
+          "lineNumber": 112
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/hooks/user-prompt-submit.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 72,
+      "nonEmptyLines": 66,
+      "functions": [
+        {
+          "name": "runUserPromptSubmit",
+          "startLine": 57,
+          "endLine": 59,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "userPromptSubmitHandler",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "runUserPromptSubmit",
+          "line": 57,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 25
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 26
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 28
+        },
+        {
+          "caller": "parse",
+          "callee": "process.cwd",
+          "lineNumber": 28
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parse",
+          "callee": "pickStringFromObject",
+          "lineNumber": 30
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 37
+        },
+        {
+          "caller": "run",
+          "callee": "new Date().toISOString",
+          "lineNumber": 44
+        },
+        {
+          "caller": "run",
+          "callee": "encodeFrame",
+          "lineNumber": 50
+        },
+        {
+          "caller": "run",
+          "callee": "bridge.saveMemory",
+          "lineNumber": 51
+        },
+        {
+          "caller": "run",
+          "callee": "logger.debug",
+          "lineNumber": 52
+        },
+        {
+          "caller": "runUserPromptSubmit",
+          "callee": "runHook",
+          "lineNumber": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 57,
+      "nonEmptyLines": 52,
+      "functions": [
+        {
+          "name": "makeMockBridge",
+          "startLine": 20,
+          "endLine": 38,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeHookCaptures",
+          "startLine": 45,
+          "endLine": 57,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "makeMockBridge",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "makeHookCaptures",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 23
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 24
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 25
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 26
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 27
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 28
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 29
+        },
+        {
+          "caller": "makeHookCaptures",
+          "callee": "stdout.push",
+          "lineNumber": 54
+        },
+        {
+          "caller": "makeHookCaptures",
+          "callee": "exits.push",
+          "lineNumber": 55
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/hooks/pre-compact.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 46,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/hooks/session-start.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 84,
+      "nonEmptyLines": 77,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/hooks/shared.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 65,
+      "nonEmptyLines": 54,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/hooks/stop.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 259,
+      "nonEmptyLines": 245,
+      "callGraph": [
+        {
+          "caller": "withCapturedFetch",
+          "callee": "fn().finally",
+          "lineNumber": 92
+        },
+        {
+          "caller": "withCapturedFetch",
+          "callee": "fn",
+          "lineNumber": 92
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "JSON.parse",
+          "lineNumber": 102
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "String",
+          "lineNumber": 102
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "calls.push",
+          "lineNumber": 103
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "String",
+          "lineNumber": 103
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "JSON.stringify",
+          "lineNumber": 105
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "new Date().toISOString",
+          "lineNumber": 116
+        },
+        {
+          "caller": "withEnv",
+          "callee": "fn().finally",
+          "lineNumber": 134
+        },
+        {
+          "caller": "withEnv",
+          "callee": "fn",
+          "lineNumber": 134
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/hooks/user-prompt-submit.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 60,
+      "nonEmptyLines": 56,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

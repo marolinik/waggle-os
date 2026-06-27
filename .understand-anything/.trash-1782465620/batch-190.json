@@ -1,0 +1,735 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/www/app/(legal)/privacy/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/(legal)/privacy/page.tsx",
+      "summary": "Next.js page component rendering the full Privacy Policy for waggle-os.ai, with SEO metadata and structured sections covering data collection, usage, cookies, and user rights.",
+      "tags": ["component", "documentation", "legal", "markup"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/(legal)/privacy/page.tsx:PrivacyPage",
+      "type": "function",
+      "name": "PrivacyPage",
+      "filePath": "apps/www/app/(legal)/privacy/page.tsx",
+      "lineRange": [11, 167],
+      "summary": "Renders the full Privacy Policy page with headings and structured content sections for the landing site.",
+      "tags": ["component", "legal", "markup"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/(legal)/terms/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/(legal)/terms/page.tsx",
+      "summary": "Next.js page component rendering the Terms of Service for waggle-os.ai, with SEO metadata and sections covering acceptance, accounts, billing, and limitations.",
+      "tags": ["component", "documentation", "legal", "markup"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/(legal)/terms/page.tsx:TermsPage",
+      "type": "function",
+      "name": "TermsPage",
+      "filePath": "apps/www/app/(legal)/terms/page.tsx",
+      "lineRange": [11, 157],
+      "summary": "Renders the full Terms of Service page with headings and structured content sections for the landing site.",
+      "tags": ["component", "legal", "markup"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/account/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/account/page.tsx",
+      "summary": "Protected account page that redirects unauthenticated users to sign-in using Clerk auth, and displays a Clerk UserProfile component for authenticated users.",
+      "tags": ["component", "api-handler", "middleware", "auth"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "type": "file",
+      "name": "route.ts",
+      "filePath": "apps/www/app/api/stripe/checkout/route.ts",
+      "summary": "Next.js API route handling GET and POST requests to initiate Stripe Checkout sessions for PRO and TEAMS tier upgrades, resolving price IDs dynamically from environment variables or the Stripe catalog.",
+      "tags": ["api-handler", "billing", "stripe", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/api/stripe/checkout/route.ts:runCheckout",
+      "type": "function",
+      "name": "runCheckout",
+      "filePath": "apps/www/app/api/stripe/checkout/route.ts",
+      "lineRange": [122, 190],
+      "summary": "Core checkout orchestration — authenticates the user via Clerk, ensures a Stripe customer record exists, resolves the price ID, and creates a Checkout session.",
+      "tags": ["api-handler", "billing", "stripe", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/api/stripe/checkout/route.ts:resolvePriceId",
+      "type": "function",
+      "name": "resolvePriceId",
+      "filePath": "apps/www/app/api/stripe/checkout/route.ts",
+      "lineRange": [102, 120],
+      "summary": "Resolves the Stripe price ID for a given tier and billing cycle, preferring pinned env-var IDs before falling back to live catalog lookup.",
+      "tags": ["billing", "stripe", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/api/stripe/checkout/route.ts:ensureStripeCustomer",
+      "type": "function",
+      "name": "ensureStripeCustomer",
+      "filePath": "apps/www/app/api/stripe/checkout/route.ts",
+      "lineRange": [81, 100],
+      "summary": "Creates a new Stripe customer for the user if one doesn't exist yet, then persists the customer ID to Clerk public metadata.",
+      "tags": ["billing", "stripe", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/api/stripe/checkout/route.ts:GET",
+      "type": "function",
+      "name": "GET",
+      "filePath": "apps/www/app/api/stripe/checkout/route.ts",
+      "lineRange": [211, 238],
+      "summary": "Next.js GET route handler that validates tier/billing query params and redirects to a Stripe Checkout URL on success.",
+      "tags": ["api-handler", "billing", "entry-point"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/api/stripe/checkout/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "apps/www/app/api/stripe/checkout/route.ts",
+      "lineRange": [240, 282],
+      "summary": "Next.js POST route handler that accepts JSON body with tier/billing and returns the Stripe Checkout URL as JSON.",
+      "tags": ["api-handler", "billing", "entry-point"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/api/webhooks/stripe/route.ts",
+      "type": "file",
+      "name": "route.ts",
+      "filePath": "apps/www/app/api/webhooks/stripe/route.ts",
+      "summary": "Stripe webhook handler that verifies signatures and syncs subscription state (checkout completed, subscription updated/deleted) back to Clerk user public metadata.",
+      "tags": ["api-handler", "billing", "stripe", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/api/webhooks/stripe/route.ts:POST",
+      "type": "function",
+      "name": "POST",
+      "filePath": "apps/www/app/api/webhooks/stripe/route.ts",
+      "lineRange": [153, 220],
+      "summary": "Webhook POST handler — verifies Stripe signature, routes events to handleCheckoutCompleted / handleSubscriptionUpdated / handleSubscriptionDeleted.",
+      "tags": ["api-handler", "billing", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/api/webhooks/stripe/route.ts:handleCheckoutCompleted",
+      "type": "function",
+      "name": "handleCheckoutCompleted",
+      "filePath": "apps/www/app/api/webhooks/stripe/route.ts",
+      "lineRange": [98, 115],
+      "summary": "Handles the checkout.session.completed event by extracting the tier from metadata and patching Clerk user metadata with the new subscription tier.",
+      "tags": ["event-handler", "billing", "stripe"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/api/webhooks/stripe/route.ts:handleSubscriptionUpdated",
+      "type": "function",
+      "name": "handleSubscriptionUpdated",
+      "filePath": "apps/www/app/api/webhooks/stripe/route.ts",
+      "lineRange": [117, 136],
+      "summary": "Handles subscription update events by resolving the Clerk user ID from the Stripe customer, then patching tier and subscription status.",
+      "tags": ["event-handler", "billing", "stripe"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/api/webhooks/stripe/route.ts:patchClerkPublicMetadata",
+      "type": "function",
+      "name": "patchClerkPublicMetadata",
+      "filePath": "apps/www/app/api/webhooks/stripe/route.ts",
+      "lineRange": [86, 96],
+      "summary": "Fetches the Clerk user and merges new billing/tier metadata fields into the existing public metadata via updateUserMetadata.",
+      "tags": ["utility", "billing", "auth"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/app/docs/methodology/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/docs/methodology/page.tsx",
+      "summary": "Next.js page presenting the memory evaluation methodology used in the LoCoMo benchmark, documenting the scoring approach, judge ensemble, and statistical validation.",
+      "tags": ["component", "documentation", "benchmark"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/docs/methodology/page.tsx:MethodologyPage",
+      "type": "function",
+      "name": "MethodologyPage",
+      "filePath": "apps/www/app/docs/methodology/page.tsx",
+      "lineRange": [39, 70],
+      "summary": "Renders the benchmark methodology documentation page, importing and composing markdown-derived content sections.",
+      "tags": ["component", "documentation", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/globals.css",
+      "type": "file",
+      "name": "globals.css",
+      "filePath": "apps/www/app/globals.css",
+      "summary": "Global CSS stylesheet for the apps/www Next.js landing app, defining Tailwind directives, CSS custom properties for the Hive design system tokens, and base resets.",
+      "tags": ["configuration", "design-system", "markup", "styling"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/layout.tsx",
+      "type": "file",
+      "name": "layout.tsx",
+      "filePath": "apps/www/app/layout.tsx",
+      "summary": "Root Next.js layout for apps/www that sets up ClerkProvider, next-intl NextIntlClientProvider, font loading (Hanken Grotesk + JetBrains Mono), and global metadata for the waggle-os.ai landing site.",
+      "tags": ["entry-point", "component", "configuration", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/layout.tsx:RootLayout",
+      "type": "function",
+      "name": "RootLayout",
+      "filePath": "apps/www/app/layout.tsx",
+      "lineRange": [161, 186],
+      "summary": "Root layout component that wraps the app with ClerkProvider, IntlWrapper, and injects global fonts and analytics scripts.",
+      "tags": ["entry-point", "component", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/sign-in/[[...sign-in]]/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/sign-in/[[...sign-in]]/page.tsx",
+      "summary": "Catch-all sign-in page for the landing site rendering Clerk's themed SignIn component centered on the page.",
+      "tags": ["component", "auth", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/app/sign-up/[[...sign-up]]/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/sign-up/[[...sign-up]]/page.tsx",
+      "summary": "Catch-all sign-up page for the landing site rendering Clerk's themed SignUp component centered on the page.",
+      "tags": ["component", "auth", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/app/sitemap.ts",
+      "type": "file",
+      "name": "sitemap.ts",
+      "filePath": "apps/www/app/sitemap.ts",
+      "summary": "Next.js sitemap generator that returns a static list of public URLs for the waggle-os.ai landing site, used for SEO indexing.",
+      "tags": ["utility", "configuration", "seo"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/i18n/request.ts",
+      "type": "file",
+      "name": "request.ts",
+      "filePath": "apps/www/i18n/request.ts",
+      "summary": "next-intl request configuration that provides locale and message loading per request for the landing site's internationalization setup.",
+      "tags": ["configuration", "middleware", "i18n"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:apps/www/messages/en.json",
+      "type": "config",
+      "name": "en.json",
+      "filePath": "apps/www/messages/en.json",
+      "summary": "English translation strings for the waggle-os.ai landing site, covering hero copy, features, pricing, navbar, and footer used by next-intl.",
+      "tags": ["configuration", "i18n", "documentation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/www/middleware.ts",
+      "type": "file",
+      "name": "middleware.ts",
+      "filePath": "apps/www/middleware.ts",
+      "summary": "Next.js middleware combining Clerk authentication with next-intl locale routing; configures matcher to exclude static assets and API routes.",
+      "tags": ["middleware", "auth", "configuration", "i18n"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/next-env.d.ts",
+      "type": "file",
+      "name": "next-env.d.ts",
+      "filePath": "apps/www/next-env.d.ts",
+      "summary": "Auto-generated Next.js TypeScript environment declaration file that references Next.js type definitions; should not be edited manually.",
+      "tags": ["type-definition", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/next.config.mjs",
+      "type": "file",
+      "name": "next.config.mjs",
+      "filePath": "apps/www/next.config.mjs",
+      "summary": "Next.js configuration for apps/www enabling next-intl plugin and configuring remote image domains for the landing site.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "apps/www/vitest.config.ts",
+      "summary": "Vitest test configuration for the apps/www landing site, setting up jsdom environment and path aliases for testing Next.js components.",
+      "tags": ["configuration", "test", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/archive/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "benchmarks/archive/README.md",
+      "summary": "Documents the retention contract for the benchmarks/archive directory, covering naming conventions, preservation policy, and sprint 11 archival state per H-AUDIT-1 ratification.",
+      "tags": ["documentation", "benchmark", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "type": "file",
+      "name": "cold-probes-phase2.py",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "summary": "Phase 2 calibration script that calls MiniMax and Kimi (Moonshot) LLMs as secondary judges on LoCoMo benchmark cold-probe instances to validate inter-rater agreement.",
+      "tags": ["benchmark", "data-pipeline", "script", "validation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "lineRange": [246, 308],
+      "summary": "Entry point: loads environment variables, iterates over cold-probe instances calling both MiniMax and Kimi judges, parses verdicts, and writes output JSONL results.",
+      "tags": ["entry-point", "benchmark", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py:call_minimax",
+      "type": "function",
+      "name": "call_minimax",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "lineRange": [160, 199],
+      "summary": "Calls the MiniMax model via OpenRouter HTTP API with a judge prompt and returns the raw verdict response with latency and token usage.",
+      "tags": ["benchmark", "data-pipeline", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py:call_kimi",
+      "type": "function",
+      "name": "call_kimi",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "lineRange": [202, 243],
+      "summary": "Calls the Kimi (Moonshot) model via its HTTP API with a judge prompt and returns the raw verdict response with latency and token usage.",
+      "tags": ["benchmark", "data-pipeline", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/calibration/v6-kappa-recal/kappa-sample-instances.jsonl",
+      "type": "file",
+      "name": "kappa-sample-instances.jsonl",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/kappa-sample-instances.jsonl",
+      "summary": "100-instance JSONL sample drawn from the LoCoMo benchmark used as input data for Cohen's kappa inter-rater calibration between judge models.",
+      "tags": ["data-pipeline", "benchmark", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "type": "file",
+      "name": "kappa-v6-compute.py",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "summary": "Computes Cohen's kappa inter-rater agreement scores between three judge model pairs (Opus/MiniMax, Opus/Gemini, MiniMax/Gemini) on the LoCoMo v6 calibration sample, producing a detailed analysis report and JSON summary.",
+      "tags": ["benchmark", "data-pipeline", "validation", "script"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "lineRange": [105, 325],
+      "summary": "Main analysis function: loads kappa sample and MiniMax responses, computes pairwise kappa scores and confusion matrices for all three judge pairs, and writes analysis text and JSON summary.",
+      "tags": ["entry-point", "benchmark", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py:cohen_kappa",
+      "type": "function",
+      "name": "cohen_kappa",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "lineRange": [48, 70],
+      "summary": "Computes Cohen's kappa coefficient from a list of (rater_a, rater_b) verdict pairs, returning NaN if computation is not possible.",
+      "tags": ["benchmark", "validation", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "type": "file",
+      "name": "minimax-kappa-probe.py",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "summary": "Orchestrates the MiniMax kappa calibration probe: builds a sample from existing calibration results, submits each instance to MiniMax via OpenRouter with retries, and saves raw responses for downstream kappa computation.",
+      "tags": ["benchmark", "data-pipeline", "script", "validation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "lineRange": [276, 357],
+      "summary": "Entry point: loads environment, builds sample, submits all instances to MiniMax, saves raw responses JSONL for kappa analysis.",
+      "tags": ["entry-point", "benchmark", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py:build_sample",
+      "type": "function",
+      "name": "build_sample",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "lineRange": [231, 273],
+      "summary": "Enriches calibration rows with LoCoMo reference answers and per-model verdicts (Opus, GPT, Gemini) to build the submission sample.",
+      "tags": ["benchmark", "data-pipeline", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-responses.jsonl",
+      "type": "file",
+      "name": "minimax-kappa-responses.jsonl",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/minimax-kappa-responses.jsonl",
+      "summary": "100-entry JSONL file containing raw MiniMax model responses to the kappa calibration probe instances, used as input for kappa-v6-compute.py.",
+      "tags": ["data-pipeline", "benchmark", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/calibration/v6-kappa-recal/phase2-cold-probes.jsonl",
+      "type": "file",
+      "name": "phase2-cold-probes.jsonl",
+      "filePath": "benchmarks/calibration/v6-kappa-recal/phase2-cold-probes.jsonl",
+      "summary": "Small 6-entry JSONL dataset of cold-probe instances used as input for the phase 2 calibration run in cold-probes-phase2.py.",
+      "tags": ["data-pipeline", "benchmark", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/chunk-probe/run-probe.mjs",
+      "type": "file",
+      "name": "run-probe.mjs",
+      "filePath": "benchmarks/chunk-probe/run-probe.mjs",
+      "summary": "ESM benchmark script that probes the memory substrate's chunk recall accuracy by inserting a needle sentence at a known position and querying the HybridSearch endpoint to measure retrieval precision.",
+      "tags": ["benchmark", "script", "data-pipeline", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:benchmarks/chunk-probe/run-probe.mjs:extractNeedle",
+      "type": "function",
+      "name": "extractNeedle",
+      "filePath": "benchmarks/chunk-probe/run-probe.mjs",
+      "lineRange": [92, 101],
+      "summary": "Extracts the most distinctive sentence from a content slice at a target position for use as the search needle in recall testing.",
+      "tags": ["benchmark", "utility"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/www/app/(legal)/privacy/page.tsx",
+      "target": "function:apps/www/app/(legal)/privacy/page.tsx:PrivacyPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/(legal)/privacy/page.tsx",
+      "target": "function:apps/www/app/(legal)/privacy/page.tsx:PrivacyPage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/(legal)/terms/page.tsx",
+      "target": "function:apps/www/app/(legal)/terms/page.tsx:TermsPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/(legal)/terms/page.tsx",
+      "target": "function:apps/www/app/(legal)/terms/page.tsx:TermsPage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:runCheckout",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:resolvePriceId",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:ensureStripeCustomer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:GET",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:POST",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:GET",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/api/stripe/checkout/route.ts",
+      "target": "function:apps/www/app/api/stripe/checkout/route.ts:POST",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/api/webhooks/stripe/route.ts",
+      "target": "function:apps/www/app/api/webhooks/stripe/route.ts:POST",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/webhooks/stripe/route.ts",
+      "target": "function:apps/www/app/api/webhooks/stripe/route.ts:handleCheckoutCompleted",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/webhooks/stripe/route.ts",
+      "target": "function:apps/www/app/api/webhooks/stripe/route.ts:handleSubscriptionUpdated",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/webhooks/stripe/route.ts",
+      "target": "function:apps/www/app/api/webhooks/stripe/route.ts:patchClerkPublicMetadata",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/api/webhooks/stripe/route.ts",
+      "target": "function:apps/www/app/api/webhooks/stripe/route.ts:POST",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/docs/methodology/page.tsx",
+      "target": "function:apps/www/app/docs/methodology/page.tsx:MethodologyPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/docs/methodology/page.tsx",
+      "target": "function:apps/www/app/docs/methodology/page.tsx:MethodologyPage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/layout.tsx",
+      "target": "function:apps/www/app/layout.tsx:RootLayout",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/layout.tsx",
+      "target": "function:apps/www/app/layout.tsx:RootLayout",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/layout.tsx",
+      "target": "file:apps/www/app/globals.css",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/www/app/layout.tsx",
+      "target": "file:apps/www/app/globals.css",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:apps/www/messages/en.json",
+      "target": "file:apps/www/app/layout.tsx",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:apps/www/i18n/request.ts",
+      "target": "file:apps/www/app/layout.tsx",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:apps/www/middleware.ts",
+      "target": "file:apps/www/app/layout.tsx",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:apps/www/next.config.mjs",
+      "target": "file:apps/www/app/layout.tsx",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:apps/www/vitest.config.ts",
+      "target": "file:apps/www/app/layout.tsx",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:apps/www/app/docs/methodology/page.tsx",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py:call_minimax",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py:call_kimi",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/cold-probes-phase2.py",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/phase2-cold-probes.jsonl",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py:cohen_kappa",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/kappa-sample-instances.jsonl",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-responses.jsonl",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "target": "function:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py:build_sample",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/kappa-sample-instances.jsonl",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-probe.py",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/minimax-kappa-responses.jsonl",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:benchmarks/chunk-probe/run-probe.mjs",
+      "target": "function:benchmarks/chunk-probe/run-probe.mjs:extractNeedle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "document:benchmarks/archive/README.md",
+      "target": "file:benchmarks/calibration/v6-kappa-recal/kappa-v6-compute.py",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

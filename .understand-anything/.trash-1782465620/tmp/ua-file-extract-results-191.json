@@ -1,0 +1,1027 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/data/.gitkeep",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 2,
+      "nonEmptyLines": 2,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/data/beam/beam-128K.meta.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 47,
+      "nonEmptyLines": 47,
+      "sections": [
+        {
+          "heading": "dataset_version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "instance_count",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "chat_size",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "built_at",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "source",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "source_reference",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "beam_chats_path",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "conversations_processed",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "chat_size_dir_alias",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "canonicalisation",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "distribution_by_memory_ability",
+          "level": 1,
+          "line": 28
+        },
+        {
+          "heading": "skip_stats",
+          "level": 1,
+          "line": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "benchmarks/data/failure-mode-calibration-10.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 18,
+      "nonEmptyLines": 18,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/data/locomo/locomo-1540.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1531,
+      "nonEmptyLines": 1531,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/data/locomo/locomo-1540.meta.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 41,
+      "nonEmptyLines": 41,
+      "sections": [
+        {
+          "heading": "dataset_version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "instance_count",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "built_at",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "source",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "source_reference",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "canonicalisation",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "distribution",
+          "level": 1,
+          "line": 26
+        },
+        {
+          "heading": "skip_stats",
+          "level": 1,
+          "line": 32
+        },
+        {
+          "heading": "paper_total_claim",
+          "level": 1,
+          "line": 38
+        },
+        {
+          "heading": "actual_count",
+          "level": 1,
+          "line": 39
+        },
+        {
+          "heading": "count_matches_paper",
+          "level": 1,
+          "line": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "benchmarks/data/longmemeval/longmemeval.meta.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 42,
+      "nonEmptyLines": 42,
+      "sections": [
+        {
+          "heading": "dataset_version",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "instance_count",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "variant",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "built_at",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "source",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "source_reference",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "hf_repo",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "canonicalisation",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "distribution_by_question_type",
+          "level": 1,
+          "line": 27
+        },
+        {
+          "heading": "abstention_count",
+          "level": 1,
+          "line": 35
+        },
+        {
+          "heading": "skip_stats",
+          "level": 1,
+          "line": 36
+        },
+        {
+          "heading": "expected_count",
+          "level": 1,
+          "line": 40
+        },
+        {
+          "heading": "count_matches_expected",
+          "level": 1,
+          "line": 41
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "benchmarks/data/preflight-locomo-50.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 918,
+      "nonEmptyLines": 918,
+      "sections": [
+        {
+          "heading": "_meta",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "instances",
+          "level": 1,
+          "line": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": "benchmarks/gaia2/runs/smoke-c2-2026-04-30/smoke-A-oracle/final_state.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/gaia2/runs/smoke-c2-2026-04-30/smoke-A-oracle/initial_state.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/gaia2/runs/smoke-c2-2026-04-30/smoke-A-oracle/output.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/gaia2/runs/smoke-c2-2026-04-30/smoke-B-gaia2-mock-thread/benchmark_stats.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 68,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "metadata",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "statistics",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "run_configurations",
+          "level": 1,
+          "line": 53
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "benchmarks/gaia2/runs/smoke-c2-2026-04-30/smoke-B-gaia2-mock-thread/output.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 3,
+      "nonEmptyLines": 3,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/gepa/oracle/faza-1/mutation-prompt-template-non-qwen.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 54,
+      "nonEmptyLines": 36,
+      "sections": [
+        {
+          "heading": "GEPA Mutation Oracle Prompt — Non-Qwen (Claude / GPT / Generic-Simple)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context (non-Qwen branch)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Failure modes from Phase 4.3 (top-3 T2 categories for this shape)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Mutation guidance (binding)",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Prohibited modifications (cell semantic LOCK)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Baseline shape file (the input to your mutation)",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Output format",
+          "level": 2,
+          "line": 52
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "benchmarks/gepa/oracle/faza-1/mutation-prompt-template-qwen.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 64,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "GEPA Mutation Oracle Prompt — Qwen-Targeted Shape",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Empirical context (binding)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Failure modes from Phase 4.3 (top-3 T2 categories for this shape)",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Mutation guidance (binding)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Prohibited modifications (cell semantic LOCK)",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Baseline shape file (the input to your mutation)",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "Output format",
+          "level": 2,
+          "line": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "benchmarks/gepa/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 117,
+      "nonEmptyLines": 89,
+      "sections": [
+        {
+          "heading": "GEPA — Tier 2 Prompt-Shapes Evolution",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Authority chain",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Substrate freeze",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Module map (`src/faza-1/`)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Boundary anchors (LOCKED at substrate c9bda3d)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Baseline shape SHAs (LOCKED)",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Per-shape fitness fork (Amendment 2 §3)",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "§F.5 false-positive guard (Amendment 2 §5)",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Tests",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "Halt-and-PM checkpoints",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "Acceptance criteria summary",
+          "level": 2,
+          "line": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "benchmarks/gepa/scripts/faza-1/analyze-checkpoint-a.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 142,
+      "nonEmptyLines": 125,
+      "functions": [
+        {
+          "name": "per_judge",
+          "startLine": 67,
+          "endLine": 68,
+          "params": [
+            "model",
+            "t"
+          ]
+        },
+        {
+          "name": "raw_agree",
+          "startLine": 73,
+          "endLine": 73,
+          "params": [
+            "a",
+            "b"
+          ]
+        },
+        {
+          "name": "kappa",
+          "startLine": 74,
+          "endLine": 78,
+          "params": [
+            "a",
+            "b"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "per_judge",
+          "line": 67,
+          "isDefault": false
+        },
+        {
+          "name": "raw_agree",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "kappa",
+          "line": 74,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "per_judge",
+          "callee": "next",
+          "lineNumber": 68
+        },
+        {
+          "caller": "raw_agree",
+          "callee": "sum",
+          "lineNumber": 73
+        },
+        {
+          "caller": "raw_agree",
+          "callee": "zip",
+          "lineNumber": 73
+        },
+        {
+          "caller": "raw_agree",
+          "callee": "len",
+          "lineNumber": 73
+        },
+        {
+          "caller": "kappa",
+          "callee": "len",
+          "lineNumber": 75
+        },
+        {
+          "caller": "kappa",
+          "callee": "sum",
+          "lineNumber": 75
+        },
+        {
+          "caller": "kappa",
+          "callee": "zip",
+          "lineNumber": 75
+        },
+        {
+          "caller": "kappa",
+          "callee": "sum",
+          "lineNumber": 75
+        },
+        {
+          "caller": "kappa",
+          "callee": "zip",
+          "lineNumber": 75
+        },
+        {
+          "caller": "kappa",
+          "callee": "sum",
+          "lineNumber": 76
+        },
+        {
+          "caller": "kappa",
+          "callee": "zip",
+          "lineNumber": 76
+        },
+        {
+          "caller": "kappa",
+          "callee": "sum",
+          "lineNumber": 76
+        },
+        {
+          "caller": "kappa",
+          "callee": "zip",
+          "lineNumber": 76
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/gepa/src/faza-1/cost-tracker.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 133,
+      "nonEmptyLines": 117,
+      "functions": [
+        {
+          "name": "createCostTracker",
+          "startLine": 54,
+          "endLine": 60,
+          "params": [
+            "baselineMedianCostPerEvalUsd"
+          ]
+        },
+        {
+          "name": "recordEvaluation",
+          "startLine": 66,
+          "endLine": 72,
+          "params": [
+            "state",
+            "evalCostUsd"
+          ]
+        },
+        {
+          "name": "checkHaltTriggers",
+          "startLine": 85,
+          "endLine": 128,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "shouldAudit",
+          "startLine": 131,
+          "endLine": 133,
+          "params": [
+            "state"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HARD_CAP_USD",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "INTERNAL_HALT_USD",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "SUPER_LINEAR_MULTIPLIER",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "SUPER_LINEAR_OVERAGE_THRESHOLD",
+          "line": 27,
+          "isDefault": false
+        },
+        {
+          "name": "AUDIT_CADENCE_EVAL_COUNT",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "createCostTracker",
+          "line": 54,
+          "isDefault": false
+        },
+        {
+          "name": "recordEvaluation",
+          "line": 66,
+          "isDefault": false
+        },
+        {
+          "name": "checkHaltTriggers",
+          "line": 85,
+          "isDefault": false
+        },
+        {
+          "name": "shouldAudit",
+          "line": 131,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "state.cumulativeUsd.toFixed",
+          "lineNumber": 96
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "state.cumulativeUsd.toFixed",
+          "lineNumber": 106
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "state.cumulativeUsd.toFixed",
+          "lineNumber": 117
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "expectedAtThisCount.toFixed",
+          "lineNumber": 117
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "(overageFraction * 100).toFixed",
+          "lineNumber": 117
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "(SUPER_LINEAR_OVERAGE_THRESHOLD * 100).toFixed",
+          "lineNumber": 117
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "state.cumulativeUsd.toFixed",
+          "lineNumber": 126
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "expectedAtThisCount.toFixed",
+          "lineNumber": 126
+        },
+        {
+          "caller": "checkHaltTriggers",
+          "callee": "(overageFraction * 100).toFixed",
+          "lineNumber": 126
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/gepa/src/faza-1/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 24,
+      "nonEmptyLines": 23,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/gepa/tests/faza-1/__faza1-closed/mutation-validator.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 254,
+      "nonEmptyLines": 233,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/gepa/tests/faza-1/__faza1-closed/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 41,
+      "sections": [
+        {
+          "heading": "Faza 1 closed — quarantined tests",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Quarantined files",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Why these tests live here",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "What this quarantine does and does NOT mean",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Reactivation conditions",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "Audit trail",
+          "level": 2,
+          "line": 52
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "benchmarks/gepa/tests/faza-1/__faza1-closed/registry-injection.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 154,
+      "nonEmptyLines": 128,
+      "functions": [
+        {
+          "name": "makeProbeShape",
+          "startLine": 39,
+          "endLine": 56,
+          "params": [
+            "name"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/gepa/tests/faza-1/cost-tracker.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 180,
+      "nonEmptyLines": 160,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/gepa/tests/faza-1/null-baseline-shape-override.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 48,
+      "nonEmptyLines": 41,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/config/datasets.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 32,
+      "nonEmptyLines": 32,
+      "sections": [
+        {
+          "heading": "synthetic",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "locomo",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "longmemeval",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "beam-128k",
+          "level": 1,
+          "line": 20
+        },
+        {
+          "heading": "beam-1m",
+          "level": 1,
+          "line": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "benchmarks/harness/config/models.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 154,
+      "nonEmptyLines": 154,
+      "sections": [
+        {
+          "heading": "qwen3.6-35b-a3b",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "qwen3.6-35b-a3b-stage2",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "qwen3.6-35b-a3b-via-openrouter",
+          "level": 1,
+          "line": 17
+        },
+        {
+          "heading": "qwen3.6-35b-a3b-via-dashscope-direct",
+          "level": 1,
+          "line": 45
+        },
+        {
+          "heading": "qwen3.6-35b-a3b-local",
+          "level": 1,
+          "line": 61
+        },
+        {
+          "heading": "llama-3.1-8b-instruct",
+          "level": 1,
+          "line": 72
+        },
+        {
+          "heading": "claude-opus-4-6",
+          "level": 1,
+          "line": 83
+        },
+        {
+          "heading": "claude-opus-4-7",
+          "level": 1,
+          "line": 94
+        },
+        {
+          "heading": "gpt-5.4",
+          "level": 1,
+          "line": 106
+        },
+        {
+          "heading": "gemini-3.1",
+          "level": 1,
+          "line": 118
+        },
+        {
+          "heading": "gemini-3.1-pro",
+          "level": 1,
+          "line": 130
+        },
+        {
+          "heading": "grok-4.20",
+          "level": 1,
+          "line": 142
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    }
+  ]
+}

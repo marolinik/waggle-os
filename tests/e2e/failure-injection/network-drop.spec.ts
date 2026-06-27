@@ -27,7 +27,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:3333';
+const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 test.setTimeout(60_000);
 
@@ -74,9 +74,9 @@ async function navigateTo(page: Page, view: string) {
 }
 
 async function gotoDesktop(page: Page) {
-  await page.goto(`${BASE}/`);
-  await skipOnboarding(page);
-  await page.reload();
+  await page.goto(`${BASE}/chat?skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`, {
+    waitUntil: 'domcontentloaded',
+  });
   await waitForApp(page);
   await dismissLoginBriefing(page);
 }
@@ -84,9 +84,7 @@ async function gotoDesktop(page: Page) {
 async function openChatInput(page: Page) {
   await navigateTo(page, 'Chat');
   // Real placeholder: "Message Waggle... (/ for commands)" (ChatApp.tsx:1205)
-  const input = page
-    .locator('textarea[placeholder*="Message"], textarea[placeholder*="message"]')
-    .first();
+  const input = page.getByRole('textbox', { name: /reply|ask waggle|message/i }).first();
   await expect(input).toBeVisible({ timeout: 8000 });
   return input;
 }
@@ -112,8 +110,8 @@ test('chat SSE connection dropped → shows offline error, does not hang or cras
   await input.press('Enter');
 
   // (2) The graceful error message must be shown. BlockRenderer renders the
-  // error ContentBlock with text-destructive styling and the offline copy.
-  const offlineError = page.locator('.text-destructive', { hasText: /Backend is offline/i });
+  // The error block must expose the offline copy to the user.
+  const offlineError = page.getByText(/Backend is offline/i);
   await expect(offlineError.first()).toBeVisible({ timeout: 15_000 });
 
   // (3) No hang: the composer must become usable again (loading state cleared
@@ -167,7 +165,7 @@ test('user can re-send after a dropped stream and get a new complete response', 
   await input.fill('first attempt that will be dropped');
   await input.press('Enter');
 
-  const offlineError = page.locator('.text-destructive', { hasText: /Backend is offline/i });
+  const offlineError = page.getByText(/Backend is offline/i);
   await expect(offlineError.first()).toBeVisible({ timeout: 15_000 });
   await expect(input).toBeEditable({ timeout: 10_000 });
 

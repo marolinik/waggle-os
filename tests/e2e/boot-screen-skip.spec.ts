@@ -16,7 +16,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:3333';
+const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 const BOOT_KEY = 'waggle-booted';
 const BOOT_SCREEN = '[data-testid="boot-screen"]';
 

@@ -1,0 +1,196 @@
+{
+  "nodes": [
+    {
+      "id": "config:benchmarks/results/agentic-locomo-2026-04-25T16-13-29-924Z.summary.json",
+      "type": "config",
+      "name": "agentic-locomo-2026-04-25T16-13-29-924Z.summary.json",
+      "filePath": "benchmarks/results/agentic-locomo-2026-04-25T16-13-29-924Z.summary.json",
+      "summary": "Machine-generated summary artifact from a LoCoMo benchmark run on 2026-04-25, capturing run metadata, question counts, accuracy metrics, failure modes, and failure distribution across evaluation cells.",
+      "tags": ["benchmark", "data", "evaluation", "locomo", "results"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/manifest-v4-litellm-config-scope-audit.md",
+      "type": "document",
+      "name": "manifest-v4-litellm-config-scope-audit.md",
+      "filePath": "benchmarks/results/manifest-v4-litellm-config-scope-audit.md",
+      "summary": "Audit note for Manifest v4 §11 confirming the scope of LiteLLM config changes permitted during the Stage 3 N=400 code-freeze window, establishing what is and is not in-scope for the benchmark run.",
+      "tags": ["documentation", "benchmark", "audit", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/manifest-v4-lock-semantics-clarification.md",
+      "type": "document",
+      "name": "manifest-v4-lock-semantics-clarification.md",
+      "filePath": "benchmarks/results/manifest-v4-lock-semantics-clarification.md",
+      "summary": "Clarification document for Manifest v4 §7.4 that resolves PM ambiguity about code-freeze lock semantics, confirms the preferred path (ratify with no code change), and carries a Task 2.6 carry-over action item.",
+      "tags": ["documentation", "benchmark", "process", "decision-record"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/manifest-v4-preregistration.md",
+      "type": "document",
+      "name": "manifest-v4-preregistration.md",
+      "filePath": "benchmarks/results/manifest-v4-preregistration.md",
+      "summary": "Comprehensive pre-registration document for Stage 3 N=400 benchmark (Task 2.5), locking the primary hypothesis, secondary endpoints, sample design, model stack, judge ensemble, substrate configuration, stopping rules, deviation policy, PM gates, and budget prior to execution.",
+      "tags": ["documentation", "benchmark", "pre-registration", "evaluation"],
+      "complexity": "complex",
+      "languageNotes": "26-section pre-registration covering statistical methodology (Fisher one-sided test), model routing, tri-model judge ensemble with tie-break, and strict deviation policy — follows scientific pre-registration conventions to ensure no post-hoc HARKing."
+    },
+    {
+      "id": "config:benchmarks/results/manifest-v4-preregistration.yaml",
+      "type": "config",
+      "name": "manifest-v4-preregistration.yaml",
+      "filePath": "benchmarks/results/manifest-v4-preregistration.yaml",
+      "summary": "Machine-readable YAML encoding of the Manifest v4 Stage 3 N=400 pre-registration, with 45 top-level keys covering dataset spec, hypothesis, cells, model routes, judge ensemble, substrate, stopping rules, PM gates, budget, and validation gates — the authoritative locked artifact for the benchmark run.",
+      "tags": ["configuration", "benchmark", "pre-registration", "schema-definition"],
+      "complexity": "complex",
+      "languageNotes": "Structured companion to the markdown pre-registration; keys like cli_invocation_template and validation_gates make this directly machine-consumable by the benchmark runner."
+    },
+    {
+      "id": "document:benchmarks/results/manifest-v4-runner-early-exit-rca.md",
+      "type": "document",
+      "name": "manifest-v4-runner-early-exit-rca.md",
+      "filePath": "benchmarks/results/manifest-v4-runner-early-exit-rca.md",
+      "summary": "Root-cause analysis (RCA) for a suspected early-exit bug in the Manifest v4 benchmark runner, concluding that no judge-mode-specific early-exit path exists, all seven judge modes propagate identically, and the issue is deferred as Task 2.6 tech-debt rather than requiring a manifest v5.",
+      "tags": ["documentation", "benchmark", "debug", "root-cause-analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/manifest-v5-rpd-feasibility-check.md",
+      "type": "document",
+      "name": "manifest-v5-rpd-feasibility-check.md",
+      "filePath": "benchmarks/results/manifest-v5-rpd-feasibility-check.md",
+      "summary": "Feasibility check for the RPD (reduced-parallelism design) option in Manifest v5 §1.3e, deriving call counts, verifying isolation, and computing arithmetic to confirm whether the RPD approach is viable within budget and concurrency constraints.",
+      "tags": ["documentation", "benchmark", "feasibility", "evaluation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/stage3-gate-p-plus-probe-summary.md",
+      "type": "document",
+      "name": "stage3-gate-p-plus-probe-summary.md",
+      "filePath": "benchmarks/results/stage3-gate-p-plus-probe-summary.md",
+      "summary": "Summary of the Stage 3 Gate P+ pre-flight probe run, reporting the outcome of the pre-execution validation gate that must pass before the full N=400 benchmark run proceeds.",
+      "tags": ["documentation", "benchmark", "evaluation", "gate"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/stage3-gate-p-plus-probe-v2-summary.md",
+      "type": "document",
+      "name": "stage3-gate-p-plus-probe-v2-summary.md",
+      "filePath": "benchmarks/results/stage3-gate-p-plus-probe-v2-summary.md",
+      "summary": "Summary of the Stage 3 §1.3c throttle verification probe (v2), confirming rate-limit throttle behavior before the full Stage 3 N=400 run.",
+      "tags": ["documentation", "benchmark", "evaluation", "gate"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/stage3-n400-v6-final-5cell-summary.md",
+      "type": "document",
+      "name": "stage3-n400-v6-final-5cell-summary.md",
+      "filePath": "benchmarks/results/stage3-n400-v6-final-5cell-summary.md",
+      "summary": "Final 5-cell summary for Stage 3 Manifest v6 N=400 benchmark run, reporting per-cell pass rates, run timeline, cumulative cost, judge ensemble operation counts, result artifacts, and halt-ping reference.",
+      "tags": ["documentation", "benchmark", "results", "evaluation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/stage3-n400-v6-final-analysis.md",
+      "type": "document",
+      "name": "stage3-n400-v6-final-analysis.md",
+      "filePath": "benchmarks/results/stage3-n400-v6-final-analysis.md",
+      "summary": "Final statistical analysis for Stage 3 Manifest v6 N=400 benchmark, presenting the Fisher one-sided test result (H1 verdict), per-cell pass rates, agentic-cell TypeError cluster diagnostic, judge ensemble health, cost-vs-envelope summary, and PM action requested.",
+      "tags": ["documentation", "benchmark", "results", "statistical-analysis"],
+      "complexity": "moderate",
+      "languageNotes": "Formal statistical analysis document using Fisher one-sided test for the primary hypothesis; includes contingency tables and p-values — follows academic statistical reporting conventions."
+    },
+    {
+      "id": "document:benchmarks/results/stage3-n400-v6-final-memo.md",
+      "type": "document",
+      "name": "stage3-n400-v6-final-memo.md",
+      "filePath": "benchmarks/results/stage3-n400-v6-final-memo.md",
+      "summary": "Executive memo summarizing the Stage 3 v6 N=400 benchmark verdict, per-cell results, agentic-cell caveat disclosure, cumulative cost, and reproducibility reference — intended as a PM-facing decision summary.",
+      "tags": ["documentation", "benchmark", "results", "memo"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/stage3-n400-v6-followup-typeerror-cluster.md",
+      "type": "document",
+      "name": "stage3-n400-v6-followup-typeerror-cluster.md",
+      "filePath": "benchmarks/results/stage3-n400-v6-followup-typeerror-cluster.md",
+      "summary": "Task 2.7 backlog document analyzing the cluster of 5 agentic TypeError failures from the Stage 3 N=400 run, identifying common patterns via cross-cell forensics, and recommending a debug approach for the next iteration.",
+      "tags": ["documentation", "benchmark", "debug", "followup"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:benchmarks/results/manifest-v4-preregistration.md",
+      "target": "config:benchmarks/results/manifest-v4-preregistration.yaml",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/manifest-v4-runner-early-exit-rca.md",
+      "target": "document:benchmarks/results/manifest-v4-preregistration.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/manifest-v4-litellm-config-scope-audit.md",
+      "target": "document:benchmarks/results/manifest-v4-preregistration.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/manifest-v4-lock-semantics-clarification.md",
+      "target": "document:benchmarks/results/manifest-v4-preregistration.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/stage3-gate-p-plus-probe-summary.md",
+      "target": "config:benchmarks/results/manifest-v4-preregistration.yaml",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/stage3-gate-p-plus-probe-v2-summary.md",
+      "target": "config:benchmarks/results/manifest-v4-preregistration.yaml",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/stage3-n400-v6-final-5cell-summary.md",
+      "target": "document:benchmarks/results/stage3-n400-v6-final-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/stage3-n400-v6-final-memo.md",
+      "target": "document:benchmarks/results/stage3-n400-v6-final-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/stage3-n400-v6-followup-typeerror-cluster.md",
+      "target": "document:benchmarks/results/stage3-n400-v6-final-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:benchmarks/results/agentic-locomo-2026-04-25T16-13-29-924Z.summary.json",
+      "target": "document:benchmarks/results/stage3-n400-v6-final-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

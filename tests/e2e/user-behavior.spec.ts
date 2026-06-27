@@ -21,7 +21,7 @@
 
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
-const API = 'http://127.0.0.1:3333';
+const API = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 // ── Minimal response shapes (API JSON is untyped at the boundary) ──────────────
 interface PersonaShape { id: string }

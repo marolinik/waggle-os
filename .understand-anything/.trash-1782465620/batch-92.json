@@ -1,0 +1,43 @@
+{
+  "nodes": [
+    {
+      "id": "config:app/components.json",
+      "type": "config",
+      "name": "components.json",
+      "filePath": "app/components.json",
+      "summary": "shadcn/ui component registry configuration for the Tauri app shell, specifying the base-nova style, Tailwind CSS integration with cssVariables, lucide icon library, and path aliases for components, utils, ui, lib, and hooks.",
+      "tags": ["configuration", "ui-components", "shadcn", "tailwind", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "app/index.html",
+      "summary": "HTML entry point for the Vite-bundled Waggle app shell, mounting the React app into the #root div and loading the main.tsx module entry point with the Waggle logo favicon.",
+      "tags": ["entry-point", "markup", "html", "vite"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:app/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "app/package.json",
+      "summary": "Package manifest for the waggle-app Tauri desktop shell, defining build scripts for cross-platform Tauri binaries (Windows, macOS, debug/release), code signing workflows, and runtime dependencies including React 19, Tauri v2 APIs, and Tailwind 4.",
+      "tags": ["configuration", "build-system", "deployment", "tauri", "infrastructure"],
+      "complexity": "moderate",
+      "languageNotes": "The tauri:build scripts chain sidecar bundling, native dep bundling, and Vite build for apps/web before invoking tauri build — this reflects the multi-stage desktop packaging pipeline."
+    },
+    {
+      "id": "config:app/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "app/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the Tauri shell's build/installer/signing scripts under app/scripts/, enabling strict mode, bundler module resolution, React JSX, and the @/* path alias — intentionally excludes app/src-tauri (Rust) since the React UI now lives in apps/web.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "The include array targets only the scripts/ subdirectory, not src/, because the React cockpit UI was migrated to apps/web; this tsconfig serves as a type-gate for the Tauri build/signing tooling only."
+    }
+  ],
+  "edges": []
+}

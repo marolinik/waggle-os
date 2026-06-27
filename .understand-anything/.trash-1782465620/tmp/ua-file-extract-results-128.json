@@ -1,0 +1,362 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 5,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/decisions/2026-04-30-wave-1-memory-install-cleanup-LOCKED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 115,
+      "nonEmptyLines": 74,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Wave 1 Memory Install Cleanup Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Decision sazetak",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§2 — Wave 1 cleanup brief scope (autoring post Phase 5 §0 PASS)",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "§2.1 — Hive-mind-cli postinstall script",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "§2.2 — mcp-health-check.js root structural patch",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "§2.3 — Dead-simple install acceptance kriterija",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "§2.4 — Memory probe end-to-end test",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "§3 — Wave 2 cursor-hooks gating",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "§4 — Tactical CC patch (tekuca sesija)",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "§5 — Audit trail anchors",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "§6 — PM action item summary (tracked u TodoList)",
+          "level": 2,
+          "line": 107
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/decisions/2026-05-01-pass-7-block-c-close.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 64,
+      "nonEmptyLines": 39,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Pass 7 + Block C Close (Track A apps/web Pre-Launch Closure)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Šta je ratifikovano",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "§2 — Šta je deferred (Day-2 backlog, NOT launch blocker)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "§3 — Posledice za pre-launch sprint",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "§4 — Routine reminder",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "§5 — Authoring trace",
+          "level": 2,
+          "line": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/decisions/2026-05-02-landing-v32-surgical-edits.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 89,
+      "nonEmptyLines": 54,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Landing v3.2 (10 Surgical Copy Edits, Claude Design 019dd47b)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Pivot history",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "§2 — v1 base feature set (locked, not modified u v3.2)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "§3 — 10 ratifikovanih copy odluka",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "P0 priority (3 odluke)",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "P1 priority (5 odluka)",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "P2 priority (2 odluke)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "§4 — CC delivery confirmation",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "§5 — Posledice za pre-launch sprint",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "§6 — Authoring trace",
+          "level": 2,
+          "line": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/decisions/2026-05-02-track-e-arxiv-7-decisions.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 130,
+      "nonEmptyLines": 80,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Track E Arxiv Skeleton 7-Decision Ratifikacija",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Trigger i steering kontekst",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "§2 — Sedam ratifikovanih odluka",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Odluka 1 — Title",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Odluka 2 — Co-author roster",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "Odluka 3 — Endorsement path A+D combination",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Odluka 4 — Multiplier disclosure",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "Odluka 5 — GEPA scope §5.4",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "Odluka 6 — §5.5 framing",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Odluka 7 — Forward reference §5.6",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "§3 — Marko net evaluation note",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "§4 — Drafting kick-off prerequisites (sve resolved)",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "§5 — Posledice za pre-launch sprint i downstream",
+          "level": 2,
+          "line": 104
+        },
+        {
+          "heading": "§6 — Memory correction (2026-05-02)",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "§7 — Authoring trace",
+          "level": 2,
+          "line": 124
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/decisions/2026-05-02-track-h-hermes-canonical-integration.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 104,
+      "nonEmptyLines": 66,
+      "sections": [
+        {
+          "heading": "LOCKED Decision — Track H Hermes Intel Canonical Integration",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Trigger",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "§2 — 6 surgical edits ratifikovani",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Edit 1 — Header naming disambiguation",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "Edit 2 — §1.11 Hermes Agent profile (NEW)",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "Edit 3 — §2.1 Positioning Matrix update",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "Edit 4 — §3 SWOT Threats (added Hermes Agent threat point)",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Edit 5 — §5 Bottom Line update",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Edit 6 — §6 Sources (added Hermes Agent reference)",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "§3 — Marketing communication discipline",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "§4 — Posledice za Day 0 i downstream",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "§5 — Strateški closure",
+          "level": 2,
+          "line": 90
+        },
+        {
+          "heading": "§6 — Authoring trace",
+          "level": 2,
+          "line": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    }
+  ]
+}

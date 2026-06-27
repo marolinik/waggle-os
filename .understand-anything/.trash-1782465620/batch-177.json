@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/marketplace/skills/browser-automation.md",
+      "type": "document",
+      "name": "browser-automation.md",
+      "filePath": "packages/marketplace/skills/browser-automation.md",
+      "summary": "Marketplace skill documentation for the Browser Automation skill, describing setup requirements and the available browser-control tools exposed to agents.",
+      "tags": ["documentation", "marketplace", "skill", "browser-automation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/marketplace/skills/chart-generator.md",
+      "type": "document",
+      "name": "chart-generator.md",
+      "filePath": "packages/marketplace/skills/chart-generator.md",
+      "summary": "Marketplace skill documentation for the Chart Generator skill, listing supported chart types and providing a usage example for generating charts from agent workflows.",
+      "tags": ["documentation", "marketplace", "skill", "data-visualization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/marketplace/skills/pdf-generator.md",
+      "type": "document",
+      "name": "pdf-generator.md",
+      "filePath": "packages/marketplace/skills/pdf-generator.md",
+      "summary": "Marketplace skill documentation for the PDF Generator skill, covering the generation workflow, npm requirements, a full example script, and usage tips for producing PDFs from agent outputs.",
+      "tags": ["documentation", "marketplace", "skill", "pdf", "document-generation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:packages/marketplace/skills/pptx-generator.md",
+      "type": "document",
+      "name": "pptx-generator.md",
+      "filePath": "packages/marketplace/skills/pptx-generator.md",
+      "summary": "Marketplace skill documentation for the PPTX Generator skill, covering the presentation generation workflow, requirements, a sample script using pptxgenjs, and authoring tips.",
+      "tags": ["documentation", "marketplace", "skill", "presentation", "document-generation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/marketplace/skills/xlsx-generator.md",
+      "type": "document",
+      "name": "xlsx-generator.md",
+      "filePath": "packages/marketplace/skills/xlsx-generator.md",
+      "summary": "Marketplace skill documentation for the XLSX Generator skill, describing the spreadsheet creation workflow, npm dependencies, an example script using exceljs, and tips for multi-sheet workbooks.",
+      "tags": ["documentation", "marketplace", "skill", "spreadsheet", "document-generation"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": []
+}

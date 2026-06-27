@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/sdk/src/starter-skills/brainstorm.md",
+      "type": "document",
+      "name": "brainstorm.md",
+      "filePath": "packages/sdk/src/starter-skills/brainstorm.md",
+      "summary": "SDK starter skill defining a three-phase structured ideation workflow (diverge, cluster, converge) for agents to guide brainstorming sessions from open generation through organized prioritization.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "productivity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/catch-up.md",
+      "type": "document",
+      "name": "catch-up.md",
+      "filePath": "packages/sdk/src/starter-skills/catch-up.md",
+      "summary": "SDK starter skill that instructs agents to produce a concise workspace restart summary, helping users quickly re-orient after returning to a project or conversation.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "productivity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/code-review.md",
+      "type": "document",
+      "name": "code-review.md",
+      "filePath": "packages/sdk/src/starter-skills/code-review.md",
+      "summary": "SDK starter skill defining a structured code analysis workflow covering correctness, performance, security, and style, with a prescribed output structure for severity-ranked findings.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "code-quality"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/compare-docs.md",
+      "type": "document",
+      "name": "compare-docs.md",
+      "filePath": "packages/sdk/src/starter-skills/compare-docs.md",
+      "summary": "SDK starter skill for side-by-side document comparison, guiding agents to identify agreements, conflicts, and gaps between two or more documents with a structured diff output.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/daily-plan.md",
+      "type": "document",
+      "name": "daily-plan.md",
+      "filePath": "packages/sdk/src/starter-skills/daily-plan.md",
+      "summary": "SDK starter skill that guides agents to generate a morning context-aware daily plan by scanning workspace tasks, deadlines, and recent activity, producing a prioritized schedule.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "productivity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/decision-matrix.md",
+      "type": "document",
+      "name": "decision-matrix.md",
+      "filePath": "packages/sdk/src/starter-skills/decision-matrix.md",
+      "summary": "SDK starter skill for weighted option comparison, instructing agents to build a decision matrix scoring alternatives against criteria and producing a ranked recommendation.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/draft-memo.md",
+      "type": "document",
+      "name": "draft-memo.md",
+      "filePath": "packages/sdk/src/starter-skills/draft-memo.md",
+      "summary": "SDK starter skill for drafting structured memos or written communications from workspace context, with guidelines on tone, audience targeting, and document format.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "writing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/explain-concept.md",
+      "type": "document",
+      "name": "explain-concept.md",
+      "filePath": "packages/sdk/src/starter-skills/explain-concept.md",
+      "summary": "SDK starter skill for adjustable-depth concept explanation, guiding agents to tailor explanations from beginner to expert level with examples and analogies.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "education"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/extract-actions.md",
+      "type": "document",
+      "name": "extract-actions.md",
+      "filePath": "packages/sdk/src/starter-skills/extract-actions.md",
+      "summary": "SDK starter skill for pulling action items from unstructured text such as meeting notes or messages, assigning owners and deadlines in a structured output format.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "productivity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/meeting-prep.md",
+      "type": "document",
+      "name": "meeting-prep.md",
+      "filePath": "packages/sdk/src/starter-skills/meeting-prep.md",
+      "summary": "SDK starter skill for context-aware meeting preparation, guiding agents to synthesize relevant workspace history and produce a briefing with agenda, talking points, and open questions.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "productivity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/plan-execute.md",
+      "type": "document",
+      "name": "plan-execute.md",
+      "filePath": "packages/sdk/src/starter-skills/plan-execute.md",
+      "summary": "SDK starter skill defining a structured task decomposition and execution workflow, breaking complex goals into ordered steps with dependencies and tracking completion.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "task-management"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/research-synthesis.md",
+      "type": "document",
+      "name": "research-synthesis.md",
+      "filePath": "packages/sdk/src/starter-skills/research-synthesis.md",
+      "summary": "SDK starter skill for multi-source research investigation, guiding agents to gather, cross-reference, and synthesize findings from multiple sources into a coherent summary.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "research"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/research-team.md",
+      "type": "document",
+      "name": "research-team.md",
+      "filePath": "packages/sdk/src/starter-skills/research-team.md",
+      "summary": "SDK starter skill for multi-agent research coordination, describing how to spawn and orchestrate a team of sub-agents to investigate a topic in parallel and merge findings.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "multi-agent"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/retrospective.md",
+      "type": "document",
+      "name": "retrospective.md",
+      "filePath": "packages/sdk/src/starter-skills/retrospective.md",
+      "summary": "SDK starter skill for structured team or solo retrospectives, guiding agents to facilitate what-went-well, what-could-improve, and action-item extraction with a prescribed output format.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "team-process"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/review-pair.md",
+      "type": "document",
+      "name": "review-pair.md",
+      "filePath": "packages/sdk/src/starter-skills/review-pair.md",
+      "summary": "SDK starter skill implementing a writer-reviewer cycle where one agent drafts content and another critiques it, enabling iterative quality improvement through adversarial pairing.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "multi-agent"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/risk-assessment.md",
+      "type": "document",
+      "name": "risk-assessment.md",
+      "filePath": "packages/sdk/src/starter-skills/risk-assessment.md",
+      "summary": "SDK starter skill for project risk identification and ranking, guiding agents to enumerate risks by likelihood and impact and produce a mitigation-priority matrix.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/status-update.md",
+      "type": "document",
+      "name": "status-update.md",
+      "filePath": "packages/sdk/src/starter-skills/status-update.md",
+      "summary": "SDK starter skill for generating project progress reports, instructing agents to compile completed work, in-progress items, blockers, and next steps into a stakeholder-ready status update.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "reporting"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/sdk/src/starter-skills/task-breakdown.md",
+      "type": "document",
+      "name": "task-breakdown.md",
+      "filePath": "packages/sdk/src/starter-skills/task-breakdown.md",
+      "summary": "SDK starter skill for large task decomposition, guiding agents to break ambiguous high-level goals into concrete, independently executable subtasks with effort estimates.",
+      "tags": ["documentation", "skill-definition", "agent-skill", "task-management"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": []
+}

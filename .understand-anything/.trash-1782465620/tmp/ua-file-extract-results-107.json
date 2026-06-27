@@ -1,0 +1,769 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 12,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-A-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 187,
+      "nonEmptyLines": 130,
+      "sections": [
+        {
+          "heading": "DOC 1 — Q1 2026 P&L Summary (Internal)",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "DOC 2 — Sales Pipeline Review (VP Sales, April 8, 2026)",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "DOC 3 — Customer Health & Churn Analysis (CS Director, April 12, 2026)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "DOC 4 — Engineering Velocity Report (VP Engineering, April 15, 2026)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "DOC 5 — Marketing Efficiency Dashboard (CMO, April 10, 2026)",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "DOC 6 — Board Feedback Notes (post-March 28, 2026 board meeting)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "DOC 7 — Competitor Intelligence Brief (Strategy Lead, April 5, 2026)",
+          "level": 2,
+          "line": 154
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-B-trace.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 103,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "task-1 cell B — multi-step trace",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SYSTEM",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "STEP 1 — model call",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "STEP 1 — retrieval (7 results)",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "STEP 2 — model call",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "STEP 2 — retrieval (6 results)",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "STEP 3 — model call",
+          "level": 2,
+          "line": 80
+        },
+        {
+          "heading": "STEP 3 — finalize",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "MEMO: Q2–Q4 2026 Critical Risks & Action Plan",
+          "level": 1,
+          "line": 91
+        },
+        {
+          "heading": "Framing",
+          "level": 2,
+          "line": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-C-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 187,
+      "nonEmptyLines": 130,
+      "sections": [
+        {
+          "heading": "DOC 1 — Q1 2026 P&L Summary (Internal)",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "DOC 2 — Sales Pipeline Review (VP Sales, April 8, 2026)",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "DOC 3 — Customer Health & Churn Analysis (CS Director, April 12, 2026)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "DOC 4 — Engineering Velocity Report (VP Engineering, April 15, 2026)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "DOC 5 — Marketing Efficiency Dashboard (CMO, April 10, 2026)",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "DOC 6 — Board Feedback Notes (post-March 28, 2026 board meeting)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "DOC 7 — Competitor Intelligence Brief (Strategy Lead, April 5, 2026)",
+          "level": 2,
+          "line": 154
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-D-trace.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 75,
+      "nonEmptyLines": 51,
+      "sections": [
+        {
+          "heading": "task-1 cell D — multi-step trace",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SYSTEM",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "STEP 1 — model call",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "STEP 1 — retrieval (7 results)",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "STEP 2 — model call",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "STEP 2 — finalize",
+          "level": 2,
+          "line": 63
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-A-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 272,
+      "nonEmptyLines": 178,
+      "sections": [
+        {
+          "heading": "THREAD 1 — Initial Scoping Call Notes (January 14, 2026)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "THREAD 2 — Mid-Engagement Workshop Notes (February 26, 2026)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "THREAD 3 — CFO Email Thread (March 18-25, 2026)",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "From: Diane Mercer",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "To: Marko Marković",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "Date: March 18, 2026, 10:42 AM",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Subject: Cost savings memo + scope question",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "From: Marko Marković",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "To: Diane Mercer",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "Date: March 18, 2026, 6:15 PM",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "Subject: Re: Cost savings memo + scope question",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "From: Diane Mercer",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "To: Marko Marković",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "Date: March 23, 2026, 8:55 PM",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "Subject: Heads up — internal politics",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "From: Marko Marković",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "To: Diane Mercer",
+          "level": 3,
+          "line": 174
+        },
+        {
+          "heading": "Date: March 25, 2026, 7:20 AM",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "Subject: Thursday call confirmation + agenda",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "THREAD 4 — Client Team Slack Messages (April 6-24, 2026)",
+          "level": 2,
+          "line": 195
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-B-trace.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 98,
+      "nonEmptyLines": 63,
+      "sections": [
+        {
+          "heading": "task-2 cell B — multi-step trace",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SYSTEM",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "STEP 1 — model call",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "STEP 1 — retrieval (4 results)",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "STEP 2 — model call",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "STEP 2 — retrieval (4 results)",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "STEP 3 — model call",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "FORCE-FINALIZE",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Pre-Brief: Diane Mercer Emergency Check-In — April 27, 9:00 AM",
+          "level": 1,
+          "line": 90
+        },
+        {
+          "heading": "(1) ENGAGEMENT STATUS",
+          "level": 2,
+          "line": 92
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-C-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 272,
+      "nonEmptyLines": 178,
+      "sections": [
+        {
+          "heading": "THREAD 1 — Initial Scoping Call Notes (January 14, 2026)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "THREAD 2 — Mid-Engagement Workshop Notes (February 26, 2026)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "THREAD 3 — CFO Email Thread (March 18-25, 2026)",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "From: Diane Mercer",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "To: Marko Marković",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "Date: March 18, 2026, 10:42 AM",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Subject: Cost savings memo + scope question",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "From: Marko Marković",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "To: Diane Mercer",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "Date: March 18, 2026, 6:15 PM",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "Subject: Re: Cost savings memo + scope question",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "From: Diane Mercer",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "To: Marko Marković",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "Date: March 23, 2026, 8:55 PM",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "Subject: Heads up — internal politics",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "From: Marko Marković",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "To: Diane Mercer",
+          "level": 3,
+          "line": 174
+        },
+        {
+          "heading": "Date: March 25, 2026, 7:20 AM",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "Subject: Thursday call confirmation + agenda",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "THREAD 4 — Client Team Slack Messages (April 6-24, 2026)",
+          "level": 2,
+          "line": 195
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-D-trace.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 76,
+      "nonEmptyLines": 51,
+      "sections": [
+        {
+          "heading": "task-2 cell D — multi-step trace",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SYSTEM",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "STEP 1 — model call",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "STEP 1 — retrieval (4 results)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "STEP 2 — model call",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "STEP 2 — finalize",
+          "level": 2,
+          "line": 70
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-A-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 152,
+      "nonEmptyLines": 94,
+      "sections": [
+        {
+          "heading": "MEMO 1 — From CFO (Sarah Chen)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "MEMO 2 — From CMO (Daniel Okafor)",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "MEMO 3 — From CTO (Anika Rao)",
+          "level": 2,
+          "line": 104
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-B-trace.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 149,
+      "nonEmptyLines": 95,
+      "sections": [
+        {
+          "heading": "task-3 cell B — multi-step trace",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SYSTEM",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "STEP 1 — model call",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "STEP 1 — retrieval (3 results)",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "STEP 2 — model call",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "STEP 2 — retrieval (3 results)",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "STEP 3 — model call",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "STEP 3 — retrieval (3 results)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "STEP 4 — model call",
+          "level": 2,
+          "line": 138
+        },
+        {
+          "heading": "FORCE-FINALIZE",
+          "level": 2,
+          "line": 140
+        },
+        {
+          "heading": "CEO Decision Memo — Q2/Q3 2026 Strategy",
+          "level": 1,
+          "line": 142
+        },
+        {
+          "heading": "(1) The Genuine Tradeoffs Beneath the Surface",
+          "level": 2,
+          "line": 144
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-C-prompt.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 152,
+      "nonEmptyLines": 94,
+      "sections": [
+        {
+          "heading": "MEMO 1 — From CFO (Sarah Chen)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "MEMO 2 — From CMO (Daniel Okafor)",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "MEMO 3 — From CTO (Anika Rao)",
+          "level": 2,
+          "line": 104
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-D-trace.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 126,
+      "nonEmptyLines": 81,
+      "sections": [
+        {
+          "heading": "task-3 cell D — multi-step trace",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "SYSTEM",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "STEP 1 — model call",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "STEP 1 — retrieval (3 results)",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "STEP 2 — model call",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "STEP 2 — retrieval (3 results)",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "STEP 3 — model call",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "STEP 3 — malformed action; recovery attempt",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "STEP 4 — model call",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "STEP 4 — finalize",
+          "level": 2,
+          "line": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    }
+  ]
+}

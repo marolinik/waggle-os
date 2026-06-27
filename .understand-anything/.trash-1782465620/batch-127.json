@@ -1,0 +1,185 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/decisions/2026-04-27-memory-sync-repair-CLOSED.md",
+      "type": "document",
+      "name": "2026-04-27-memory-sync-repair-CLOSED.md",
+      "filePath": "docs/decisions/2026-04-27-memory-sync-repair-CLOSED.md",
+      "summary": "Consolidated closure memo for the memory-sync repair sprint, documenting the bidirectional parity verification between waggle-os and the hive-mind OSS mirror across 34 sections including empirical, structural, and procedural lenses, a full runbook for ongoing maintenance, and a lessons-learned catalogue of durable patterns.",
+      "tags": ["documentation", "decision-record", "memory-substrate", "maintenance"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-27-phase-2-acceptance-gate-PASS.md",
+      "type": "document",
+      "name": "2026-04-27-phase-2-acceptance-gate-PASS.md",
+      "filePath": "docs/decisions/2026-04-27-phase-2-acceptance-gate-PASS.md",
+      "summary": "Phase 2 acceptance gate results memo recording PASS status across 5 criteria including tsc strict-clean, 315/315 test suites green, dual-methodology substrate no-regression smoke (trio-strict and self-judge), scaffold deletion grep, and pilot wrapper verification, with Phase 3 authorization granted.",
+      "tags": ["documentation", "decision-record", "quality-gate", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-27-phase-2-gate-d3-rule-inspection.md",
+      "type": "document",
+      "name": "2026-04-27-phase-2-gate-d3-rule-inspection.md",
+      "filePath": "docs/decisions/2026-04-27-phase-2-gate-d3-rule-inspection.md",
+      "summary": "Detailed inspection of the D3 v6 accuracy rule that underpins the Phase 2 gate, re-aggregating N=20 sample results with the substring-match rule, applying statistical sample-variance correction, and reconciling self-judge methodology bias delta.",
+      "tags": ["documentation", "decision-record", "benchmark", "statistical-analysis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-27-phase-3-acceptance-gate-pre-run-halt.md",
+      "type": "document",
+      "name": "2026-04-27-phase-3-acceptance-gate-pre-run-halt.md",
+      "filePath": "docs/decisions/2026-04-27-phase-3-acceptance-gate-pre-run-halt.md",
+      "summary": "Pre-run halt-and-ping memo for Phase 3 acceptance gate surfacing five scope-discovery items including cost analysis showing the $4 halt estimate is 3-7x too low, criterion relaxation requirements for real LLMs, synthetic task specification gaps, ContextManager config ambiguity, and self-judge cross-model methodology.",
+      "tags": ["documentation", "decision-record", "quality-gate", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-27-phase-3-acceptance-gate-results.md",
+      "type": "document",
+      "name": "2026-04-27-phase-3-acceptance-gate-results.md",
+      "filePath": "docs/decisions/2026-04-27-phase-3-acceptance-gate-results.md",
+      "summary": "Phase 3 acceptance gate results memo reporting INCONCLUSIVE verdict on H6 after evaluating 8 criteria for crash-resume, compressed context, and long-task completion across 3 models, with root-cause diagnosis of compression event failures and recommendations feeding into Phase 4.",
+      "tags": ["documentation", "decision-record", "quality-gate", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-agent-fix-sprint-closure.md",
+      "type": "document",
+      "name": "2026-04-28-agent-fix-sprint-closure.md",
+      "filePath": "docs/decisions/2026-04-28-agent-fix-sprint-closure.md",
+      "summary": "Closure memo for the agent fix sprint covering the sprint timeline, test-coverage growth metrics, cost summary, Tier 1/Tier 2 categorization across Phases 4.3-4.5, Sprint 12 cleanup backlog handoff, and five reusable patterns for future sprint authoring including halt-and-PM checkpoint discipline.",
+      "tags": ["documentation", "decision-record", "sprint-retrospective", "quality-gate"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-gepa-faza1-launch.md",
+      "type": "document",
+      "name": "2026-04-28-gepa-faza1-launch.md",
+      "filePath": "docs/decisions/2026-04-28-gepa-faza1-launch.md",
+      "summary": "LOCKED launch decision document for GEPA (agent prompt evolution) Faza 1, defining 14 binding pre-flight rules covering config inheritance, mixed-methodology baseline, cost discipline, 4 mandatory halt-and-PM checkpoints, acceptance criteria, and operational sequencing with full manifest v7 SHA audit chain.",
+      "tags": ["documentation", "decision-record", "benchmark", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-phase-4-3-pre-run-halt.md",
+      "type": "document",
+      "name": "2026-04-28-phase-4-3-pre-run-halt.md",
+      "filePath": "docs/decisions/2026-04-28-phase-4-3-pre-run-halt.md",
+      "summary": "Pre-run halt-and-ping memo for Phase 4.3 re-score validation, surfacing a mismatch between brief assumptions and pilot actuality from the JSONL files, proposing Option D scope adjustment with four sub-components to work around the unavailability of direct gold-answer re-scoring.",
+      "tags": ["documentation", "decision-record", "quality-gate", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-phase-4-3-rescore-delta-report.md",
+      "type": "document",
+      "name": "2026-04-28-phase-4-3-rescore-delta-report.md",
+      "filePath": "docs/decisions/2026-04-28-phase-4-3-rescore-delta-report.md",
+      "summary": "Delta report for Phase 4.3 re-score validation presenting aggregate, per-hypothesis, per-task, and per-cell breakdowns of judge-score changes, interpreting why Tier 1 (clear prompt-shape causation) is low and deriving strategic implications for the Phase 5 mini re-pilot.",
+      "tags": ["documentation", "decision-record", "benchmark", "statistical-analysis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-phase-4-4-skills-audit-results.md",
+      "type": "document",
+      "name": "2026-04-28-phase-4-4-skills-audit-results.md",
+      "filePath": "docs/decisions/2026-04-28-phase-4-4-skills-audit-results.md",
+      "summary": "Results of the Phase 4.4 skills audit sweep covering TS source layer findings across skill-tools.ts, skill-frontmatter.ts, skill-recommender.ts, and skill-creator.ts, plus systematic scan of 159 skill SKILL.md content files across 6 regex patterns, with Tier 0/1/2 classification and Phase 5 NULL-baseline impact analysis.",
+      "tags": ["documentation", "decision-record", "audit", "skills"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-phase-4-5-tools-audit-results.md",
+      "type": "document",
+      "name": "2026-04-28-phase-4-5-tools-audit-results.md",
+      "filePath": "docs/decisions/2026-04-28-phase-4-5-tools-audit-results.md",
+      "summary": "Results of the Phase 4.5 tools audit sweep examining 22 function-calling tool TS source files and the multi-step retrieval contract, with empirical pilot retrieval engagement signal analysis, Tier 0/1/2 classification, and strategic implications for the Phase 5 NULL-baseline.",
+      "tags": ["documentation", "decision-record", "audit", "agent-tools"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-28-test-coverage-gap-report.md",
+      "type": "document",
+      "name": "2026-04-28-test-coverage-gap-report.md",
+      "filePath": "docs/decisions/2026-04-28-test-coverage-gap-report.md",
+      "summary": "Test coverage gap report identifying P1 critical-path, P2 supporting, and P3 barrel/type-only modules lacking tests across packages/agent and related packages, with Sprint 12 additions recommended and PM ratification asks.",
+      "tags": ["documentation", "decision-record", "test", "audit"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-29-gepa-faza1-results.md",
+      "type": "document",
+      "name": "2026-04-29-gepa-faza1-results.md",
+      "filePath": "docs/decisions/2026-04-29-gepa-faza1-results.md",
+      "summary": "Decision memo for GEPA Faza 1 results authorizing claude::gen1-v1 and qwen-thinking::gen1-v1 for Phase 5 deployment while withholding gpt::gen1-v2 pending N=16 re-validation, documenting 6 methodological findings, calibration evolution narrative through Amendments 7-11, and Faza 2 expansion authorization scope.",
+      "tags": ["documentation", "decision-record", "evolution", "benchmark"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-29-phase-5-brief-LOCKED.md",
+      "type": "document",
+      "name": "2026-04-29-phase-5-brief-LOCKED.md",
+      "filePath": "docs/decisions/2026-04-29-phase-5-brief-LOCKED.md",
+      "summary": "LOCKED ratification of the Phase 5 deployment brief covering cost ceiling lock, wall-clock projection, CC handoff readiness, halt-and-PM authority, and audit trail anchors for deploying GEPA-evolved prompt variants.",
+      "tags": ["documentation", "decision-record", "evolution", "deployment"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-29-phase-5-scope-LOCKED.md",
+      "type": "document",
+      "name": "2026-04-29-phase-5-scope-LOCKED.md",
+      "filePath": "docs/decisions/2026-04-29-phase-5-scope-LOCKED.md",
+      "summary": "LOCKED decision document defining Phase 5 deployment scope — narrowing to two authorized GEPA-evolved variants, rationale for scope limitation, strategic implications, PM-side delivery commitments, and audit trail anchors.",
+      "tags": ["documentation", "decision-record", "evolution", "deployment"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-30-branch-architecture-opcija-c.md",
+      "type": "document",
+      "name": "2026-04-30-branch-architecture-opcija-c.md",
+      "filePath": "docs/decisions/2026-04-30-branch-architecture-opcija-c.md",
+      "summary": "LOCKED decision ratifying Opcija C branch architecture for the Phase 5 baseline after a morning kickoff discovery of divergent commit chains, including SHA verification discipline, integration sprint policy, and dangling commit hygiene rules with integration deferred to post-Phase-5 production-stable.",
+      "tags": ["documentation", "decision-record", "git-workflow", "deployment"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-30-phase-5-1-5-pm-signoff-canary-authorize.md",
+      "type": "document",
+      "name": "2026-04-30-phase-5-1-5-pm-signoff-canary-authorize.md",
+      "filePath": "docs/decisions/2026-04-30-phase-5-1-5-pm-signoff-canary-authorize.md",
+      "summary": "LOCKED PM signoff for Phase 5 sections 1-5 and canary kick-off authorization, documenting the commit chain evidence, what was independently verified vs trusted via CC self-report, hygiene gaps acknowledged, and observation cadence with halt-and-PM authority.",
+      "tags": ["documentation", "decision-record", "evolution", "deployment"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md",
+      "type": "document",
+      "name": "2026-04-30-phase-5-cost-amendment-LOCKED.md",
+      "filePath": "docs/decisions/2026-04-30-phase-5-cost-amendment-LOCKED.md",
+      "summary": "LOCKED cost cap amendment for Phase 5 amending the deployment brief budget ceiling, distinguishing production vs research cost discipline, and authorizing CC continuation with an updated brief reference.",
+      "tags": ["documentation", "decision-record", "evolution", "deployment"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-30-pre-launch-sprint-consolidation-LOCKED.md",
+      "type": "document",
+      "name": "2026-04-30-pre-launch-sprint-consolidation-LOCKED.md",
+      "filePath": "docs/decisions/2026-04-30-pre-launch-sprint-consolidation-LOCKED.md",
+      "summary": "LOCKED strategic reset decision consolidating from three products to two (Waggle OS + hive-mind OSS) with 9 parallel pre-launch tracks over 12 days, Day 0 launch deliverables, post-launch 12-week sequencing, preservation list from Phase 5 work, and Marko-side ratification queue.",
+      "tags": ["documentation", "decision-record", "deployment", "strategic-planning"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/decisions/2026-04-30-wave-1-5-brief-queued-behind-live-test.md",
+      "type": "document",
+      "name": "2026-04-30-wave-1-5-brief-queued-behind-live-test.md",
+      "filePath": "docs/decisions/2026-04-30-wave-1-5-brief-queued-behind-live-test.md",
+      "summary": "LOCKED decision queuing the Wave 1.5 memory architecture fix brief behind an in-progress live test session, listing what is blocked vs what can proceed in parallel and defining the operational format for the live test session.",
+      "tags": ["documentation", "decision-record", "memory-substrate", "deployment"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": []
+}

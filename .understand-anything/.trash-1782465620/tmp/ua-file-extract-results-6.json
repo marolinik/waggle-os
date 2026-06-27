@@ -1,0 +1,1153 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 35,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/server/tests/local/phase2-traversal-documents.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 87,
+      "functions": [
+        {
+          "name": "buildServer",
+          "startLine": 15,
+          "endLine": 20,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildServer",
+          "callee": "Fastify",
+          "lineNumber": 16
+        },
+        {
+          "caller": "buildServer",
+          "callee": "s.register",
+          "lineNumber": 17
+        },
+        {
+          "caller": "buildServer",
+          "callee": "s.ready",
+          "lineNumber": 18
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase2-traversal-ingest.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 101,
+      "nonEmptyLines": 85,
+      "functions": [
+        {
+          "name": "buildServer",
+          "startLine": 25,
+          "endLine": 41,
+          "params": [
+            "dataDir"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildServer",
+          "callee": "Fastify",
+          "lineNumber": 26
+        },
+        {
+          "caller": "buildServer",
+          "callee": "s.decorate",
+          "lineNumber": 31
+        },
+        {
+          "caller": "buildServer",
+          "callee": "s.decorate",
+          "lineNumber": 32
+        },
+        {
+          "caller": "buildServer",
+          "callee": "s.register",
+          "lineNumber": 39
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase2-traversal-tasks.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 104,
+      "nonEmptyLines": 91,
+      "functions": [
+        {
+          "name": "buildServer",
+          "startLine": 15,
+          "endLine": 23,
+          "params": [
+            "dataDir"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildServer",
+          "callee": "Fastify",
+          "lineNumber": 16
+        },
+        {
+          "caller": "buildServer",
+          "callee": "server.decorate",
+          "lineNumber": 20
+        },
+        {
+          "caller": "buildServer",
+          "callee": "server.register",
+          "lineNumber": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase2-traversal-workspace-context.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 80,
+      "nonEmptyLines": 72,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase4-harvest-embedder.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 182,
+      "nonEmptyLines": 160,
+      "functions": [
+        {
+          "name": "countVecRows",
+          "startLine": 58,
+          "endLine": 67,
+          "params": [
+            "dataDir"
+          ]
+        },
+        {
+          "name": "makeEmbedderStub",
+          "startLine": 74,
+          "endLine": 104,
+          "params": [
+            "activeProvider",
+            "marker"
+          ]
+        },
+        {
+          "name": "buildServer",
+          "startLine": 106,
+          "endLine": 115,
+          "params": [
+            "dataDir"
+          ]
+        },
+        {
+          "name": "commitHarvest",
+          "startLine": 117,
+          "endLine": 123,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "countVecRows",
+          "callee": "path.join",
+          "lineNumber": 59
+        },
+        {
+          "caller": "countVecRows",
+          "callee": "mind.getDatabase",
+          "lineNumber": 61
+        },
+        {
+          "caller": "countVecRows",
+          "callee": "db.prepare('SELECT COUNT(*) as cnt FROM memory_frames_vec').get",
+          "lineNumber": 62
+        },
+        {
+          "caller": "countVecRows",
+          "callee": "db.prepare",
+          "lineNumber": 62
+        },
+        {
+          "caller": "countVecRows",
+          "callee": "mind.close",
+          "lineNumber": 65
+        },
+        {
+          "caller": "embed",
+          "callee": "vec",
+          "lineNumber": 86
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "texts.map",
+          "lineNumber": 87
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "vec",
+          "lineNumber": 87
+        },
+        {
+          "caller": "getStatus",
+          "callee": "new Date().toISOString",
+          "lineNumber": 95
+        },
+        {
+          "caller": "reprobe",
+          "callee": "instance.getStatus",
+          "lineNumber": 98
+        },
+        {
+          "caller": "getQuotaStatus",
+          "callee": "new Date().toISOString",
+          "lineNumber": 100
+        },
+        {
+          "caller": "buildServer",
+          "callee": "path.join",
+          "lineNumber": 108
+        },
+        {
+          "caller": "buildServer",
+          "callee": "sessions.create",
+          "lineNumber": 111
+        },
+        {
+          "caller": "buildServer",
+          "callee": "frames.createIFrame",
+          "lineNumber": 112
+        },
+        {
+          "caller": "buildServer",
+          "callee": "mind.close",
+          "lineNumber": 113
+        },
+        {
+          "caller": "buildServer",
+          "callee": "buildLocalServer",
+          "lineNumber": 114
+        },
+        {
+          "caller": "commitHarvest",
+          "callee": "injectWithAuth",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase5-connector-health.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 106,
+      "nonEmptyLines": 99,
+      "functions": [
+        {
+          "name": "buildServerWithThrowingRegistry",
+          "startLine": 14,
+          "endLine": 26,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildServerWithThrowingRegistry",
+          "callee": "Fastify",
+          "lineNumber": 15
+        },
+        {
+          "caller": "buildServerWithThrowingRegistry",
+          "callee": "fastify.decorate",
+          "lineNumber": 16
+        },
+        {
+          "caller": "buildServerWithThrowingRegistry",
+          "callee": "fastify.register",
+          "lineNumber": 23
+        },
+        {
+          "caller": "buildServerWithThrowingRegistry",
+          "callee": "fastify.ready",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase5-cron-parse.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 89,
+      "nonEmptyLines": 73,
+      "functions": [
+        {
+          "name": "createTestServer",
+          "startLine": 15,
+          "endLine": 20,
+          "params": [
+            "store"
+          ]
+        },
+        {
+          "name": "seedRow",
+          "startLine": 23,
+          "endLine": 29,
+          "params": [
+            "db",
+            "name",
+            "jobConfig"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createTestServer",
+          "callee": "Fastify",
+          "lineNumber": 16
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.decorate",
+          "lineNumber": 17
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.register",
+          "lineNumber": 18
+        },
+        {
+          "caller": "seedRow",
+          "callee": "db.getDatabase().prepare(`\r\n    INSERT INTO cron_schedules (name, cron_expr, job_type, job_config, workspace_id, enabled, next_run_at)\r\n    VALUES (?, ?, ?, ?, ?, ?, ?)\r\n  `).run",
+          "lineNumber": 24
+        },
+        {
+          "caller": "seedRow",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 24
+        },
+        {
+          "caller": "seedRow",
+          "callee": "db.getDatabase",
+          "lineNumber": 24
+        },
+        {
+          "caller": "seedRow",
+          "callee": "new Date().toISOString",
+          "lineNumber": 27
+        },
+        {
+          "caller": "seedRow",
+          "callee": "Number",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase5-files-upload-limit.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 88,
+      "nonEmptyLines": 72,
+      "functions": [
+        {
+          "name": "fakeRequest",
+          "startLine": 25,
+          "endLine": 31,
+          "params": [
+            "contentLength"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fakeRequest",
+          "callee": "String",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/providers.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 325,
+      "nonEmptyLines": 282,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/security-middleware.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 674,
+      "nonEmptyLines": 583,
+      "functions": [
+        {
+          "name": "createTestServer",
+          "startLine": 18,
+          "endLine": 58,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createTestServer",
+          "callee": "Fastify",
+          "lineNumber": 22
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.register",
+          "lineNumber": 23
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.get",
+          "lineNumber": 29
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.get",
+          "lineNumber": 32
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.post",
+          "lineNumber": 35
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.post",
+          "lineNumber": 38
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.post",
+          "lineNumber": 41
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.post",
+          "lineNumber": 44
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.get",
+          "lineNumber": 49
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.get",
+          "lineNumber": 52
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.ready",
+          "lineNumber": 56
+        },
+        {
+          "caller": "createSseTestServer",
+          "callee": "Fastify",
+          "lineNumber": 504
+        },
+        {
+          "caller": "createSseTestServer",
+          "callee": "server.register",
+          "lineNumber": 505
+        },
+        {
+          "caller": "createSseTestServer",
+          "callee": "server.get",
+          "lineNumber": 506
+        },
+        {
+          "caller": "createSseTestServer",
+          "callee": "server.get",
+          "lineNumber": 508
+        },
+        {
+          "caller": "createSseTestServer",
+          "callee": "server.ready",
+          "lineNumber": 510
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/session-timeout.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 198,
+      "nonEmptyLines": 148,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/settings-permissions.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 174,
+      "nonEmptyLines": 156,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/skills-phase3.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 220,
+      "nonEmptyLines": 202,
+      "callGraph": [
+        {
+          "caller": "createSkill",
+          "callee": "server.inject",
+          "lineNumber": 63
+        },
+        {
+          "caller": "createSkill",
+          "callee": "expect(res.statusCode).toBe",
+          "lineNumber": 67
+        },
+        {
+          "caller": "createSkill",
+          "callee": "expect",
+          "lineNumber": 67
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/sse-resilience.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 278,
+      "nonEmptyLines": 233,
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/suggestion-sanitize.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 44,
+      "nonEmptyLines": 38,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/team-integration.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 230,
+      "nonEmptyLines": 194,
+      "functions": [
+        {
+          "name": "writeTeamConfig",
+          "startLine": 29,
+          "endLine": 38,
+          "params": [
+            "dataDir",
+            "token"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "writeTeamConfig",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 37
+        },
+        {
+          "caller": "writeTeamConfig",
+          "callee": "path.join",
+          "lineNumber": 37
+        },
+        {
+          "caller": "writeTeamConfig",
+          "callee": "JSON.stringify",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/telegram.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 142,
+      "nonEmptyLines": 129,
+      "functions": [
+        {
+          "name": "fakeServer",
+          "startLine": 53,
+          "endLine": 63,
+          "params": [
+            "creds"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/vault-routes.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 275,
+      "nonEmptyLines": 224,
+      "functions": [
+        {
+          "name": "createTestServer",
+          "startLine": 27,
+          "endLine": 32,
+          "params": [
+            "vault"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createTestServer",
+          "callee": "Fastify",
+          "lineNumber": 28
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.decorate",
+          "lineNumber": 29
+        },
+        {
+          "caller": "createTestServer",
+          "callee": "server.register",
+          "lineNumber": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/w43-harvest-temporal.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 69,
+      "nonEmptyLines": 61,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/w46-harvest-raw-turns.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 129,
+      "nonEmptyLines": 118,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/wiki-mock-guard.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 101,
+      "nonEmptyLines": 91,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/workspace-sessions.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 218,
+      "nonEmptyLines": 173,
+      "functions": [
+        {
+          "name": "createMockMind",
+          "startLine": 6,
+          "endLine": 10,
+          "params": []
+        },
+        {
+          "name": "createMockTools",
+          "startLine": 12,
+          "endLine": 14,
+          "params": []
+        },
+        {
+          "name": "createMockOrchestrator",
+          "startLine": 16,
+          "endLine": 20,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createMockMind",
+          "callee": "vi.fn",
+          "lineNumber": 8
+        },
+        {
+          "caller": "createMockOrchestrator",
+          "callee": "vi.fn",
+          "lineNumber": 18
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/workspaces-lifecycle.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 151,
+      "nonEmptyLines": 136,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/ws-team-client.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 190,
+      "nonEmptyLines": 143,
+      "functions": [
+        {
+          "name": "getLastWs",
+          "startLine": 51,
+          "endLine": 55,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "send",
+          "callee": "this.sent.push",
+          "lineNumber": 27
+        },
+        {
+          "caller": "close",
+          "callee": "this.emit",
+          "lineNumber": 32
+        },
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 42
+        },
+        {
+          "caller": "constructor",
+          "callee": "setTimeout",
+          "lineNumber": 45
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.emit",
+          "lineNumber": 45
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/offline-mode.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 277,
+      "nonEmptyLines": 229,
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/performance/benchmarks.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 440,
+      "nonEmptyLines": 366,
+      "functions": [
+        {
+          "name": "createTmpDir",
+          "startLine": 29,
+          "endLine": 31,
+          "params": [
+            "prefix"
+          ]
+        },
+        {
+          "name": "cleanupDir",
+          "startLine": 33,
+          "endLine": 37,
+          "params": [
+            "dir"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createTmpDir",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 30
+        },
+        {
+          "caller": "createTmpDir",
+          "callee": "path.join",
+          "lineNumber": 30
+        },
+        {
+          "caller": "createTmpDir",
+          "callee": "os.tmpdir",
+          "lineNumber": 30
+        },
+        {
+          "caller": "cleanupDir",
+          "callee": "fs.rmSync",
+          "lineNumber": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/persona-tool-filter.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 58,
+      "nonEmptyLines": 50,
+      "functions": [
+        {
+          "name": "tool",
+          "startLine": 9,
+          "endLine": 10,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "persona",
+          "startLine": 13,
+          "endLine": 14,
+          "params": [
+            "over"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/plugin-autoload.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 237,
+      "nonEmptyLines": 200,
+      "functions": [
+        {
+          "name": "createTmpDataDir",
+          "startLine": 16,
+          "endLine": 27,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createTmpDataDir",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 17
+        },
+        {
+          "caller": "createTmpDataDir",
+          "callee": "path.join",
+          "lineNumber": 17
+        },
+        {
+          "caller": "createTmpDataDir",
+          "callee": "os.tmpdir",
+          "lineNumber": 17
+        },
+        {
+          "caller": "createTmpDataDir",
+          "callee": "path.join",
+          "lineNumber": 19
+        },
+        {
+          "caller": "createTmpDataDir",
+          "callee": "sessions.create",
+          "lineNumber": 23
+        },
+        {
+          "caller": "createTmpDataDir",
+          "callee": "frames.createIFrame",
+          "lineNumber": 24
+        },
+        {
+          "caller": "createTmpDataDir",
+          "callee": "mind.close",
+          "lineNumber": 25
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/proactive-handlers.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 272,
+      "nonEmptyLines": 227,
+      "callGraph": [
+        {
+          "caller": "makeContext",
+          "callee": "mindDbs.get",
+          "lineNumber": 24
+        },
+        {
+          "caller": "makeContext",
+          "callee": "path.join",
+          "lineNumber": 26
+        },
+        {
+          "caller": "makeContext",
+          "callee": "fs.existsSync",
+          "lineNumber": 27
+        },
+        {
+          "caller": "makeContext",
+          "callee": "mindDbs.set",
+          "lineNumber": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/routes/agent-search.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 119,
+      "nonEmptyLines": 108,
+      "functions": [
+        {
+          "name": "conn",
+          "startLine": 14,
+          "endLine": 18,
+          "params": [
+            "over"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/routes/approval-flow.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 133,
+      "nonEmptyLines": 111,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/routes/capabilities.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 250,
+      "nonEmptyLines": 206,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/routes/capability-packs.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 95,
+      "nonEmptyLines": 85,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/routes/commands.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 152,
+      "nonEmptyLines": 138,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/routes/connectors-tier.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 30,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,588 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/redesign-warm-hive/pr4-recon/01-marketplace-fe.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 249,
+      "nonEmptyLines": 211,
+      "sections": [
+        {
+          "heading": "PR4 Recon · Slice 1 — Current Marketplace Front-End",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. What exists today",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "1a. The grid browser — `MarketplaceApp.tsx`",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "1b. Data flow — federate-at-read (A5)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "1c. The inline-in-chat card — `CapabilityRequestCard.tsx`",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "1d. Test coverage — `phase4b-marketplace-extend.test.tsx`",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "2. Gap vs screen-09 Variation A (the delta)",
+          "level": 2,
+          "line": 120
+        },
+        {
+          "heading": "Variation B (inline) delta",
+          "level": 3,
+          "line": 134
+        },
+        {
+          "heading": "Data availability for \"install count\"",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "3. Warm-Hive tokens / components to adopt",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "4. Exact integration points a PR4 build would touch",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "5. Risks",
+          "level": 2,
+          "line": 210
+        },
+        {
+          "heading": "6. Open questions for the lead",
+          "level": 2,
+          "line": 230
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr4-recon/02-marketplace-backend.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 183,
+      "nonEmptyLines": 131,
+      "sections": [
+        {
+          "heading": "PR4 Recon — Slice 2: Marketplace Backend + Routes",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR for the synthesizer",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Marketplace DB schema (`packages/marketplace/src/db.ts` + types.ts)",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Tables (inferred from queries — there is **no `CREATE TABLE` DDL in the TS source**; the schema ships pre-built inside the committed `marketplace.db` seed file)",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "Install-state API on `MarketplaceDB` (the methods a sync store would call)",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "2. List/search/install/uninstall APIs (`packages/server/src/local/routes/marketplace.ts`)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "3. Installer flow per type (`packages/marketplace/src/installer.ts`)",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "4. The three install-state stores in detail (the \"sync\" problem)",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "4a. Marketplace packages (skill/plugin/mcp) — `installations` table",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "4b. MCP runtime — `<dataDir>/.mcp.json` ⋈ `McpRuntime` (`routes/mcps.ts`)",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "4c. Connectors — Vault (`routes/connectors.ts`)",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "4d. The unifying write-side feed — `install_audit` (the one cross-type thing that exists)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "5. The install-audit trail (what's already auditable)",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "6. Exact integration points a PR4 \"sync store\" would hook into",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "7. Key deltas vs the §09 contract (territory, not plan)",
+          "level": 2,
+          "line": 155
+        },
+        {
+          "heading": "8. Risks / sharp edges for a builder",
+          "level": 2,
+          "line": 166
+        },
+        {
+          "heading": "9. Open questions for the founder/lead",
+          "level": 2,
+          "line": 177
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr4-recon/03-install-state-sync.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 370,
+      "nonEmptyLines": 323,
+      "sections": [
+        {
+          "heading": "PR4 Recon · Slice 3 — Shared Install State (\"sync\")",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR — the delta in one paragraph",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "1. Where install state lives TODAY — per type",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "1a. Skills — filesystem-backed",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "1b. Connectors — vault-credential-backed",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "1c. MCP — `.mcp.json` + live runtime",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "1d. Marketplace registry (the spine the others lean on)",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "2. The ONLY thing shared today: the install-audit trail",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "3. The FE today — `MarketplaceApp` federates at READ, holds no shared state",
+          "level": 2,
+          "line": 133
+        },
+        {
+          "heading": "Card today vs. design",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "Variation B today — `CapabilityRequestCard` (a partial, divergent precursor)",
+          "level": 3,
+          "line": 157
+        },
+        {
+          "heading": "4. What \"one store + cross-view reactivity\" requires",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "4a. The design's reference model (what we must reproduce, for real)",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "4b. FE store shape (the new artifact PR4 introduces)",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "4c. Server aggregate (the gap)",
+          "level": 3,
+          "line": 204
+        },
+        {
+          "heading": "4d. The three micro-state flows differ structurally — the store must encode that",
+          "level": 3,
+          "line": 218
+        },
+        {
+          "heading": "5. Concrete deltas vs. the screen-09 contract",
+          "level": 2,
+          "line": 232
+        },
+        {
+          "heading": "6. Integration points a PR4 build would touch",
+          "level": 2,
+          "line": 256
+        },
+        {
+          "heading": "7. Risks",
+          "level": 2,
+          "line": 298
+        },
+        {
+          "heading": "8. Open questions for the founder/lead",
+          "level": 2,
+          "line": 326
+        },
+        {
+          "heading": "9. Key files (quick index)",
+          "level": 2,
+          "line": 351
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 21
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr4-recon/04-inline-in-chat.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 348,
+      "nonEmptyLines": 285,
+      "sections": [
+        {
+          "heading": "PR4 Recon — Slice 4: Inline-in-Chat Install (Marketplace Variation B)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. The design contract (what Variation B must do)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "2. End-to-end map of the chat turn (what exists today)",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "2.1 SSE event protocol (server → FE)",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "2.2 Block model (the FE message content type)",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "2.3 SSE → block reduction (`useChat`)",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "2.4 Block rendering",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "2.5 Approval rendering (the inline card that exists)",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "3. The install / connect / vault paths (what an \"approve\" must trigger)",
+          "level": 2,
+          "line": 138
+        },
+        {
+          "heading": "3.1 Skill install — agent-loop reachable (the only one that is)",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "3.2 Connector connect — HTTP route, NOT agent-loop reachable",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "3.3 Connector OAuth — separate browser-redirect flow",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "3.4 Connector tools become live on the NEXT turn",
+          "level": 3,
+          "line": 180
+        },
+        {
+          "heading": "3.5 MCP enable — yet another backend",
+          "level": 3,
+          "line": 191
+        },
+        {
+          "heading": "4. The DELTA — what's missing vs the Screen-09 contract",
+          "level": 2,
+          "line": 199
+        },
+        {
+          "heading": "5. Exact integration points a PR4 build would touch",
+          "level": 2,
+          "line": 213
+        },
+        {
+          "heading": "Server (agent loop + routes)",
+          "level": 3,
+          "line": 215
+        },
+        {
+          "heading": "FE (chat + store)",
+          "level": 3,
+          "line": 238
+        },
+        {
+          "heading": "Recommended seam (lowest-risk wiring)",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "6. Risks / sharp edges",
+          "level": 2,
+          "line": 270
+        },
+        {
+          "heading": "7. Open questions for the founder/lead",
+          "level": 2,
+          "line": 301
+        },
+        {
+          "heading": "8. Key files (quick index)",
+          "level": 2,
+          "line": 326
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr4-recon/05-agent-pick-search.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 234,
+      "nonEmptyLines": 196,
+      "sections": [
+        {
+          "heading": "PR4 Recon — Slice 5: Agent-Search / Agent-Pick",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "What exists today (verified)",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "1. The matching brain — `searchCapabilities()` (the agent-pick core)",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "2. How it's invoked today — the agent tool `acquire_capability`",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "3. The marketplace search it sits on",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "4. The parallel, narrower \"recommend\" path (skills-only) — DO NOT confuse with agent-pick",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "5. The router (a third matcher) — for completeness",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "6. The inline-card render path (the \"sync\" downstream, shared with the grid)",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "7. Adapter methods already present (the install actions)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Gaps vs the Screen-09 contract",
+          "level": 2,
+          "line": 123
+        },
+        {
+          "heading": "Exact integration points a PR4 build would touch",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "Risks / watch-outs",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "Open questions for the founder/lead",
+          "level": 2,
+          "line": 221
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr4-recon/GROUNDING-2026-06-16.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 40,
+      "nonEmptyLines": 30,
+      "sections": [
+        {
+          "heading": "PR4 Grounding — recon verified against live code (2026-06-16)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Material drifts (these change HOW a phase is built)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "D-A (Slice 4, MAJOR) — Phase D binds to `CapabilityRequestCard`, NOT the approval gate",
+          "level": 3,
+          "line": 7
+        },
+        {
+          "heading": "D-B (Slice 5, minor but load-bearing) — `searchCapabilities` has NO connector/mcp lane",
+          "level": 3,
+          "line": 10
+        },
+        {
+          "heading": "Verified contracts (verbatim — bind to these)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Phase A — shared install store (UNAFFECTED by drifts; fully grounded, build now)",
+          "level": 3,
+          "line": 15
+        },
+        {
+          "heading": "Phase B — Variation A grid",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "Phase C — POST /api/marketplace/agent-search (route under `packages/server/src/local/routes/`, NOT `src/routes/`)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Phase D — inline (see D-A above for the corrected target)",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "install_audit (do not touch as state)",
+          "level": 2,
+          "line": 39
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    }
+  ]
+}

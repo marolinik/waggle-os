@@ -1,0 +1,2194 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/briefs/2026-04-28-landing-copy-v4-waggle-product.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 459,
+      "nonEmptyLines": 353,
+      "sections": [
+        {
+          "heading": "Landing Copy v4 — Waggle Product (post-pilot, post-Faza-1-NULL)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Why v4 exists",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "§1 — Per-persona hero variants (5 for Day 0, fallback Marcus default for remaining 6)",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "1.1 Marcus (P2) — Multi-Model Power User (DEFAULT — covers ~40% Day 0 traffic)",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "1.2 Klaudia (P11) — Mandate-Bound Compliance Director (regulated, Egzakta referral)",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "1.3 Yuki (P6) — Product Founder + Champion path (HN/YC channel)",
+          "level": 3,
+          "line": 84
+        },
+        {
+          "heading": "1.4 Sasha (P3) — AI Engineer Building Agents (GitHub/HN technical)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "1.5 Petra (P1) — Privacy-Constrained Attorney (legal tech)",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "1.6 Default (Marcus variant) covers remaining personas",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "§2 — Tier-by-tier copy (post-Faza-1-NULL refresh)",
+          "level": 2,
+          "line": 141
+        },
+        {
+          "heading": "2.1 Solo — Free forever",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "2.2 Pro — $19/month",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "2.3 Teams — $49/seat/month",
+          "level": 3,
+          "line": 189
+        },
+        {
+          "heading": "2.4 KVARK bridge (one sentence + one CTA, locked minimum per persona research §3.3)",
+          "level": 3,
+          "line": 212
+        },
+        {
+          "heading": "§3 — Trust band (Egzakta Group + ecosystem signals)",
+          "level": 2,
+          "line": 225
+        },
+        {
+          "heading": "§4 — How-it-works section (3-step narrative)",
+          "level": 2,
+          "line": 267
+        },
+        {
+          "heading": "§5 — Personas section (13 bee personas, per locked spec)",
+          "level": 2,
+          "line": 300
+        },
+        {
+          "heading": "§6 — Proof / SOTA section (5 cards)",
+          "level": 2,
+          "line": 315
+        },
+        {
+          "heading": "§7 — Final CTA + KVARK bridge (single section, per wireframe v1.1 §6 simplification)",
+          "level": 2,
+          "line": 372
+        },
+        {
+          "heading": "§8 — Footer",
+          "level": 2,
+          "line": 390
+        },
+        {
+          "heading": "§9 — Open questions for Marko (binding ratification needed)",
+          "level": 2,
+          "line": 406
+        },
+        {
+          "heading": "§10 — Sequencing (post v4 ratification)",
+          "level": 2,
+          "line": 424
+        },
+        {
+          "heading": "§11 — Cross-references",
+          "level": 2,
+          "line": 440
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-29-benchmark-portfolio-refresh-2026-venues.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 233,
+      "nonEmptyLines": 158,
+      "sections": [
+        {
+          "heading": "PM Brief — Benchmark Portfolio Refresh: 2026 Venue Landscape",
+          "level": 1,
+          "line": 21
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "§1 — What does NOT change",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "§2 — Landscape changes since 04-18 (binding new evidence)",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "2.1 Gaia2 (Meta SuperIntelligence Labs)",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "2.2 τ³-bench banking_knowledge (Sierra)",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "2.3 ERL methodology (ICLR 2026 MemAgents Workshop)",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "§3 — Competitive intelligence update",
+          "level": 2,
+          "line": 113
+        },
+        {
+          "heading": "3.1 Hermes Agent (Nous Research)",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "3.2 OpenClaw security posture (no new evidence required)",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "§4 — Recommended portfolio amendment",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "§5 — Sequencing (12-week horizon)",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "§6 — Risks and out-of-scope items",
+          "level": 2,
+          "line": 180
+        },
+        {
+          "heading": "6.1 Risk: GEPA +12.5 pp uplift on N=13 may not generalize to Gaia2 task distribution",
+          "level": 3,
+          "line": 182
+        },
+        {
+          "heading": "6.2 Risk: ERL methodology reference point may shift before Workshop submission",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "6.3 Risk: Hermes Agent or OpenClaw publish on Gaia2 / τ³ before us",
+          "level": 3,
+          "line": 190
+        },
+        {
+          "heading": "6.4 Out of scope (explicitly)",
+          "level": 3,
+          "line": 194
+        },
+        {
+          "heading": "§7 — Ratification asks",
+          "level": 2,
+          "line": 203
+        },
+        {
+          "heading": "§8 — Cross-references",
+          "level": 2,
+          "line": 217
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-29-phase-5-deployment-brief-v1.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 427,
+      "nonEmptyLines": 263,
+      "sections": [
+        {
+          "heading": "CC Brief — Phase 5 Deployment (GEPA-evolved variants)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Pre-flight gates (BLOCKING — must PASS before §2)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "§0.1 — Substrate readiness grep (BLOCKING)",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "§0.2 — Config inheritance audit (BLOCKING)",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "§0.3 — Cost projection probe (BLOCKING — per `feedback_cost_projection_real_anchoring` rule)",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "§0.4 — Deployment readiness checklist (BLOCKING)",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "§0 verdict aggregation",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "§1 — Scope declaration (LOCKED)",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "§2 — Deployment plan",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "§2.1 — Canary phase",
+          "level": 3,
+          "line": 124
+        },
+        {
+          "heading": "§2.2 — Full enable trigger",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "§2.3 — Rollback procedura",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "§3 — Monitoring infrastructure",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "§3.1 — Required metrics",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "§3.2 — Threshold alert routing",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "§3.3 — Observation cadence",
+          "level": 3,
+          "line": 181
+        },
+        {
+          "heading": "§3.4 — Dashboard reference",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "§4 — Pre-registered exit criteria (BIND)",
+          "level": 2,
+          "line": 191
+        },
+        {
+          "heading": "§4.1 — Promotion criteria (canary → full enable)",
+          "level": 3,
+          "line": 195
+        },
+        {
+          "heading": "§4.2 — Rollback triggers (immediate)",
+          "level": 3,
+          "line": 211
+        },
+        {
+          "heading": "§4.3 — Production-stable definition",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "§4.4 — No-revisit-without-amendment binding",
+          "level": 3,
+          "line": 231
+        },
+        {
+          "heading": "§5 — Cost projection (real-anchored)",
+          "level": 2,
+          "line": 237
+        },
+        {
+          "heading": "§5.1 — Model pricing reference (snapshot 2026-04-29)",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "§5.2 — Volume estimate",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "§5.3 — Per-request probe-validated cost",
+          "level": 3,
+          "line": 262
+        },
+        {
+          "heading": "§5.4 — Phase 5 cost ceiling computation",
+          "level": 3,
+          "line": 273
+        },
+        {
+          "heading": "§5.5 — Total Phase 5 budget allocation",
+          "level": 3,
+          "line": 284
+        },
+        {
+          "heading": "§6 — Cross-stream dependencies",
+          "level": 2,
+          "line": 300
+        },
+        {
+          "heading": "§6.1 — Landing v2 Proof Card 1 swap",
+          "level": 3,
+          "line": 304
+        },
+        {
+          "heading": "§6.2 — arxiv §5 evidence integration",
+          "level": 3,
+          "line": 313
+        },
+        {
+          "heading": "§6.3 — KVARK enterprise pitch deck",
+          "level": 3,
+          "line": 324
+        },
+        {
+          "heading": "§6.4 — Faza 2 sprint planning",
+          "level": 3,
+          "line": 330
+        },
+        {
+          "heading": "§7 — Decision points",
+          "level": 2,
+          "line": 343
+        },
+        {
+          "heading": "§7.1 — Marko ratifikacija drafted brief",
+          "level": 3,
+          "line": 345
+        },
+        {
+          "heading": "§7.2 — PM signoff on §0 preflight evidence",
+          "level": 3,
+          "line": 351
+        },
+        {
+          "heading": "§7.3 — Canary kick-off trigger",
+          "level": 3,
+          "line": 357
+        },
+        {
+          "heading": "§7.4 — Rollback authority",
+          "level": 3,
+          "line": 363
+        },
+        {
+          "heading": "§7.5 — Faza 2 sprint planning gate",
+          "level": 3,
+          "line": 373
+        },
+        {
+          "heading": "§8 — Audit trail anchors",
+          "level": 2,
+          "line": 381
+        },
+        {
+          "heading": "§8.1 — Upstream LOCKED decisions",
+          "level": 3,
+          "line": 383
+        },
+        {
+          "heading": "§8.2 — Faza 1 manifest chain SHA terminus",
+          "level": 3,
+          "line": 389
+        },
+        {
+          "heading": "§8.3 — Binding feedback rules applied",
+          "level": 3,
+          "line": 393
+        },
+        {
+          "heading": "§8.4 — Reference to Faza 1 amendments precedent",
+          "level": 3,
+          "line": 403
+        },
+        {
+          "heading": "§9 — Brief versioning",
+          "level": 2,
+          "line": 416
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 45
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-29-ui-ux-component-inventory.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 406,
+      "nonEmptyLines": 307,
+      "sections": [
+        {
+          "heading": "Waggle UI/UX Component Inventory — 2026-04-29",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1. Two distinct UI surfaces",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "§2. Surface A — Marketing landing (`apps/www`)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "§2.1 Tech stack — actual",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "§2.2 Implemented components — current `App.tsx` mount sequence",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "§2.3 Orphan / unmounted components",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "§2.4 Components specified in v2.3 but not yet implemented",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "§2.5 Design tokens (canonical: `apps/www/src/styles/globals.css`)",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "§2.6 Brand assets",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "§2.7 Anti-patterns (v2.3 binding — surface to Claude Design)",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "§3. Surface B — OS shell / desktop app (`apps/web`)",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "§3.1 Tech stack — actual",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "§3.2 Chrome layer (`apps/web/src/components/os/`)",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "§3.3 OS Apps (25 implemented in `apps/web/src/components/os/apps/`)",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "§3.4 Overlays (13 implemented in `apps/web/src/components/os/overlays/`)",
+          "level": 3,
+          "line": 240
+        },
+        {
+          "heading": "§3.5 shadcn/ui primitive library (60 + components in `components/ui/`)",
+          "level": 3,
+          "line": 257
+        },
+        {
+          "heading": "§3.6 Hooks (state surface visible in `Desktop.tsx`)",
+          "level": 3,
+          "line": 263
+        },
+        {
+          "heading": "§3.7 Paradigm correction status (DS audit v2, 2026-04-23)",
+          "level": 3,
+          "line": 267
+        },
+        {
+          "heading": "§4. Cross-surface design system",
+          "level": 2,
+          "line": 286
+        },
+        {
+          "heading": "§4.1 Color (locked palette)",
+          "level": 3,
+          "line": 290
+        },
+        {
+          "heading": "§4.2 Typography",
+          "level": 3,
+          "line": 298
+        },
+        {
+          "heading": "§4.3 Motion",
+          "level": 3,
+          "line": 305
+        },
+        {
+          "heading": "§4.4 Iconography",
+          "level": 3,
+          "line": 310
+        },
+        {
+          "heading": "§4.5 Iconic moments to preserve in polish",
+          "level": 3,
+          "line": 314
+        },
+        {
+          "heading": "§5. Drift / open issues / polish opportunities",
+          "level": 2,
+          "line": 322
+        },
+        {
+          "heading": "§5.1 Critical drift (ship-blocking)",
+          "level": 3,
+          "line": 326
+        },
+        {
+          "heading": "§5.2 Important drift (polish-grade)",
+          "level": 3,
+          "line": 333
+        },
+        {
+          "heading": "§5.3 Polish-only (no architectural change)",
+          "level": 3,
+          "line": 341
+        },
+        {
+          "heading": "§6. Source artifacts (priority-ranked for Claude Design)",
+          "level": 2,
+          "line": 355
+        },
+        {
+          "heading": "§6.1 Canonical (read in full)",
+          "level": 3,
+          "line": 359
+        },
+        {
+          "heading": "§6.2 Supporting (skim or query)",
+          "level": 3,
+          "line": 365
+        },
+        {
+          "heading": "§6.3 Repo references (verify against)",
+          "level": 3,
+          "line": 377
+        },
+        {
+          "heading": "§6.4 Brand assets (binary references)",
+          "level": 3,
+          "line": 388
+        },
+        {
+          "heading": "§7. Polish-pass instruction shape (suggested — for Claude Design briefing)",
+          "level": 2,
+          "line": 396
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-29-ui-ux-inventory-landing.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 302,
+      "nonEmptyLines": 231,
+      "sections": [
+        {
+          "heading": "Waggle UI/UX Component Inventory — Marketing Landing (`apps/www`)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1. Tech stack — actual",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "§2. Components",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "§2.1 Currently mounted in `App.tsx` (9 components, in order)",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "§2.2 Orphan / unmounted components",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "§2.3 Specified in v2.3 but not yet implemented",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "§3. Design tokens — canonical `apps/www/src/styles/globals.css`",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "§3.1 Color",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "§3.2 Typography",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "§3.3 Motion",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "§3.4 Background pattern",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "§3.5 Breakpoints",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "§4. Brand assets",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "§5. Anti-patterns (v2.3 binding — surface to Claude Design)",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "§6. Drift and polish opportunities (landing-only)",
+          "level": 2,
+          "line": 230
+        },
+        {
+          "heading": "§6.1 Critical drift (ship-blocking)",
+          "level": 3,
+          "line": 232
+        },
+        {
+          "heading": "§6.2 Important drift (polish-grade)",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "§6.3 Polish-only (no architectural change)",
+          "level": 3,
+          "line": 248
+        },
+        {
+          "heading": "§7. Source artifacts for Claude Design (priority-ranked)",
+          "level": 2,
+          "line": 259
+        },
+        {
+          "heading": "§7.1 Canonical (read in full)",
+          "level": 3,
+          "line": 261
+        },
+        {
+          "heading": "§7.2 Supporting (skim or query)",
+          "level": 3,
+          "line": 266
+        },
+        {
+          "heading": "§7.3 Repo references (verify against)",
+          "level": 3,
+          "line": 277
+        },
+        {
+          "heading": "§7.4 Brand asset references",
+          "level": 3,
+          "line": 287
+        },
+        {
+          "heading": "§8. Polish-pass instruction shape (suggested briefing for Claude Design)",
+          "level": 2,
+          "line": 294
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-29-ui-ux-inventory-os-shell.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 391,
+      "nonEmptyLines": 295,
+      "sections": [
+        {
+          "heading": "Waggle UI/UX Component Inventory — OS Shell / Desktop App (`apps/web`)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1. Tech stack — actual",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "§2. Chrome layer — `apps/web/src/components/os/`",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "§3. OS Apps — `apps/web/src/components/os/apps/` (25 implemented)",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "§3.1 Top-level app components",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "§3.2 Sub-folders (per-app internals)",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "§3.3 Apps named in DS audit v2 not directly visible as top-level files",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "§4. Overlays — `apps/web/src/components/os/overlays/` (13 components)",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "§5. shadcn/ui primitive library — `apps/web/src/components/ui/`",
+          "level": 2,
+          "line": 159
+        },
+        {
+          "heading": "§6. Hooks — state surface (visible from `Desktop.tsx`)",
+          "level": 2,
+          "line": 169
+        },
+        {
+          "heading": "§7. Paradigm correction status (DS audit v2, 2026-04-23)",
+          "level": 2,
+          "line": 194
+        },
+        {
+          "heading": "§7.1 What was rejected from prior DS mockup (per audit)",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "§7.2 What survives the shift",
+          "level": 3,
+          "line": 213
+        },
+        {
+          "heading": "§8. Texture opacity ramp + bee usage rules (DS audit v2 LOCKED)",
+          "level": 2,
+          "line": 222
+        },
+        {
+          "heading": "§8.1 Honeycomb texture opacity ramp",
+          "level": 3,
+          "line": 224
+        },
+        {
+          "heading": "§8.2 Bee usage rules in OS shell",
+          "level": 3,
+          "line": 233
+        },
+        {
+          "heading": "§9. Design tokens — shared with landing",
+          "level": 2,
+          "line": 251
+        },
+        {
+          "heading": "§9.1 Color (locked palette — same as landing)",
+          "level": 3,
+          "line": 255
+        },
+        {
+          "heading": "§9.2 Typography",
+          "level": 3,
+          "line": 286
+        },
+        {
+          "heading": "§9.3 Motion",
+          "level": 3,
+          "line": 294
+        },
+        {
+          "heading": "§9.4 Iconography",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "§10. Drift and polish opportunities (OS shell-only)",
+          "level": 2,
+          "line": 309
+        },
+        {
+          "heading": "§10.1 Critical drift (paradigm-blocking)",
+          "level": 3,
+          "line": 311
+        },
+        {
+          "heading": "§10.2 Important drift (polish-grade)",
+          "level": 3,
+          "line": 319
+        },
+        {
+          "heading": "§10.3 Polish-only (no architectural change)",
+          "level": 3,
+          "line": 329
+        },
+        {
+          "heading": "§11. Source artifacts for Claude Design (priority-ranked)",
+          "level": 2,
+          "line": 346
+        },
+        {
+          "heading": "§11.1 Canonical (read in full)",
+          "level": 3,
+          "line": 348
+        },
+        {
+          "heading": "§11.2 Supporting (skim or query)",
+          "level": 3,
+          "line": 354
+        },
+        {
+          "heading": "§11.3 Repo references (verify against)",
+          "level": 3,
+          "line": 360
+        },
+        {
+          "heading": "§11.4 Brand asset references",
+          "level": 3,
+          "line": 375
+        },
+        {
+          "heading": "§12. Polish-pass instruction shape (suggested briefing for Claude Design)",
+          "level": 2,
+          "line": 383
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 31
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-29-wave1-hooks-cleanup-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 128,
+      "nonEmptyLines": 91,
+      "sections": [
+        {
+          "heading": "Wave 1 Cleanup Brief — Windows MCP Hook Spawn Fix",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. What was patched (Wave 1, complete)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "2. Why the local patch is not enough",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "3. Required Wave 2 work (structural)",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "3.1 Upstream the patch (HIGH priority)",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "3.2 hive-mind-cli installer hardening (HIGH priority)",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "3.3 Health-check hook robustness (MEDIUM priority)",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "3.4 Documentation (MEDIUM)",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "3.5 Regression test (LOW but cheap)",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "4. Scope of the patch (what is NOT covered)",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "5. Open questions — RATIFIED 2026-04-30",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "Schedule decision (PM ratified 2026-04-30)",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "6. Definition of done (Wave 2)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "Evidence appendix",
+          "level": 2,
+          "line": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-30-cc-kickoff-phase-5.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 115,
+      "nonEmptyLines": 79,
+      "sections": [
+        {
+          "heading": "CC Kickoff — Phase 5 Deployment §0 Preflight",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Setup pre CC kickoff (Marko-side, 5 min)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "§2 — CC kickoff prompt (paste below into fresh CC session)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "§3 — Šta ja (PM) radim paralelno",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "§4 — Halt-and-PM cascade",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "§5 — Quick reference: ključne tačke iz brief-a",
+          "level": 2,
+          "line": 103
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-30-cc-sesija-A-waggle-apps-web-integration.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 194,
+      "nonEmptyLines": 127,
+      "sections": [
+        {
+          "heading": "CC Brief — Sesija A: Waggle apps/web Backend Integration",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Pre-flight gates (BLOCKING — must PASS before §1)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "§0.1 — Substrate readiness grep",
+          "level": 3,
+          "line": 20
+        },
+        {
+          "heading": "§0.2 — UI/UX spec dependency check",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "§0.3 — Cost projection probe",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "§1 — Scope declaration",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "§2 — Implementation plan (sekvencijalno unutar sesije)",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "§2.1 — Backend wiring (Days 1-2)",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "§2.2 — Stub UI komponente (Days 2-4)",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "§2.3 — Onboarding flow (Day 4)",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "§2.4 — Build pipeline (Days 4-5)",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "§2.5 — Tests (Days 5-6)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "§2.6 — UI/UX final polish pass (Day 6-7, čeka Track A spec)",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "§2.7 — Final acceptance (Day 7)",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "§3 — Halt-and-PM triggers",
+          "level": 2,
+          "line": 144
+        },
+        {
+          "heading": "§4 — Acceptance criteria (sve PASS pre §2.7 close)",
+          "level": 2,
+          "line": 159
+        },
+        {
+          "heading": "§5 — Cross-stream dependencies",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "§6 — Audit trail anchors",
+          "level": 2,
+          "line": 184
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-30-cc-sesija-B-hive-mind-monorepo-migration.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 245,
+      "nonEmptyLines": 168,
+      "sections": [
+        {
+          "heading": "CC Brief — Sesija B: hive-mind Monorepo Migration + OSS Subtree Split Prep",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Pre-flight gates (BLOCKING — must PASS before §1)",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "§0.1 — Repo state snapshot",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "§0.2 — Migration target structure verification",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "§0.3 — Sync mehanizam status",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "§1 — Scope declaration",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "§2 — Implementation plan",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "§2.1 — Pre-migration safety (Day 1 morning)",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "§2.2 — Tri divergentne grane merge (Day 1 afternoon — Day 2)",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "§2.3 — Migracija hive-mind sadržaja (Days 2-3)",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "§2.4 — Wave 1 cleanup brief execution (Day 3)",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "§2.5 — Apache 2.0 license + CONTRIBUTING.md (Day 4)",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "§2.6 — OSS subtree split prep (Day 4)",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "§2.7 — Tests + final acceptance (Days 4-5)",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "§3 — Halt-and-PM triggers",
+          "level": 2,
+          "line": 197
+        },
+        {
+          "heading": "§4 — Acceptance criteria (sve PASS pre §2.7 close)",
+          "level": 2,
+          "line": 208
+        },
+        {
+          "heading": "§5 — Cross-stream dependencies",
+          "level": 2,
+          "line": 223
+        },
+        {
+          "heading": "§6 — Audit trail anchors",
+          "level": 2,
+          "line": 233
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-30-cc-sesija-C-gaia2-setup-dry-verification.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 174,
+      "nonEmptyLines": 125,
+      "sections": [
+        {
+          "heading": "CC Brief — Sesija C: Gaia2 ARE Setup + GEPA Dry Verification",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Pre-flight gates (BLOCKING — must PASS before §1)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "§0.1 — Gaia2 ARE platform availability",
+          "level": 3,
+          "line": 20
+        },
+        {
+          "heading": "§0.2 — GEPA-evolved variants accessible",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "§0.3 — Cost projection probe",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "§1 — Scope declaration",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "§2 — Implementation plan",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "§2.1 — ARE platform install (Day 1 morning)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "§2.2 — Adapter za GEPA-evolved variants (Day 1 afternoon)",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "§2.3 — Dry run execution (Day 1 evening — Day 2 morning)",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "§2.4 — ERL methodology integration plan (Day 2)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "§2.5 — Cost validation + final acceptance (Day 2)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "§3 — Halt-and-PM triggers",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "§4 — Acceptance criteria (sve PASS pre §2.5 close)",
+          "level": 2,
+          "line": 140
+        },
+        {
+          "heading": "§5 — Cross-stream dependencies",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "§6 — Audit trail anchors",
+          "level": 2,
+          "line": 162
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-30-cc-sesija-C-gaia2-setup-evidence.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 159,
+      "nonEmptyLines": 105,
+      "sections": [
+        {
+          "heading": "CC Sesija C — §0 Preflight Evidence (gaia2-setup-evidence.md)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0.1 — Gaia2 ARE platform availability — **PASS**",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§0.2 — GEPA-evolved variants accessible — **PARTIAL FAIL (brief contradiction)**",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "§0.3 — Cost projection probe — **PAPER ESTIMATE (deferred actual probe)**",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Per-task cost estimate band",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Dry run total projection (4 shapes × 10 tasks = 40 invocations)",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Recommended scope adjustments (require PM ratification)",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "§0.4 — Independent halt-and-PM: working tree state inconsistency",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "§1 prerequisites — what PM must ratify",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "Ratification ask 1 — branch base (§0.2 contradiction resolution)",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "Ratification ask 2 — §0.3 cost projection scope (Option α/β/γ/δ)",
+          "level": 3,
+          "line": 127
+        },
+        {
+          "heading": "Ratification ask 3 — §0.4 working-tree resolution (Option A/B/C)",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "Audit anchors",
+          "level": 2,
+          "line": 144
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-01-cc-e2e-support-build-and-fix.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 165,
+      "nonEmptyLines": 112,
+      "sections": [
+        {
+          "heading": "CC E2E Support Brief — Build dev server + Stay-on-call za PM E2E testing",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Mode declaration",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§1 — Build phase (one-time setup)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Korak 1 — Branch + dependencies",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Korak 2 — npm install",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Korak 3 — Type check + lint",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "Korak 4 — Dev server start",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Korak 5 — Notify PM",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "§2 — Support phase (loop)",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "§3 — Halt triggers",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "§4 — Out of scope eksplicitno",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "§5 — Cumulative state tracking",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "§6 — End-of-day handoff",
+          "level": 2,
+          "line": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-01-cc-sesija-D-apps-web-ui-alignment.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 223,
+      "nonEmptyLines": 152,
+      "sections": [
+        {
+          "heading": "CC Sesija D — Waggle apps/web UI Alignment sa Claude Design Prototype",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Pre-flight gates (BLOCKING — CC mora da prođe pre §1 kickoff)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Gate G0.1 — Branch state verifikacija",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "Gate G0.2 — Test baseline establish",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Gate G0.3 — Visual reference acquisition",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "§1 — Scope declaration",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Šta ulazi u Sesija D",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Šta NE ulazi u Sesija D",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "§2 — Mapping table (Claude Design → waggle-os apps/web)",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "Mapping discovery uslovi",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "§3 — Implementation phases",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "§3.1 — Phase 1: Color + Typography tokens (P0, 1 dan)",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "§3.2 — Phase 2: Dock + StatusBar + MenuBar P0 (1-2 dana)",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "§3.3 — Phase 3: Memory app filter pills + Welcome cards (P1, 1 dan)",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "§3.4 — Phase 4: Z-order focus dim + AppWindow polish (P1, 1 dan)",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "§3.5 — Phase 5: Tweaks panel dropdowns (P2, 1-2 dana)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "§3.6 — Phase 6: Cockpit + Chat default states (P2, 0.5 dana)",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "§4 — Visual reference assets (PM dostavlja)",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "§5 — Acceptance criteria",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "§6 — Cost projection (real-anchored)",
+          "level": 2,
+          "line": 168
+        },
+        {
+          "heading": "§7 — Out of scope (eksplicitno isključeno)",
+          "level": 2,
+          "line": 188
+        },
+        {
+          "heading": "§8 — Audit trail anchors",
+          "level": 2,
+          "line": 201
+        },
+        {
+          "heading": "§9 — Marko ratifikacija decisions (4 odluke)",
+          "level": 2,
+          "line": 212
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-02-cc-sesija-D-apps-www-port-v3.2-amendment.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 170,
+      "nonEmptyLines": 118,
+      "sections": [
+        {
+          "heading": "CC Sesija D — Apps/www Next.js Port v3.2 AMENDMENT",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Why this amendment",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "§1 — Final copy locks (v3.2 ratified, 2026-05-02)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "§1.1 Hero (Variant A Marcus default + 4 ostalih variants)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "§1.2 Proof / SOTA Band (5 cards) — REORDERED",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "§1.3 How It Works — Step 02",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "§1.4 Personas — 13th tile",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "§1.5 Final CTA — subhead",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "§1.6 Sve ostalo — verbatim per prototype",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "§2 — Implementation deltas vs original 2026-04-25 brief",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "§2.1 Component additions",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "§2.2 i18n extraction (188-key contract)",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "§2.3 Comparison table — keep `<details>` collapsible",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "§2.4 MPEG-4 hero loop placeholder",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "§2.5 v1.5 light-mode",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "§2.6 GDPR cookie banner — keep",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "§3 — Acceptance criteria",
+          "level": 2,
+          "line": 121
+        },
+        {
+          "heading": "§4 — Halt triggers",
+          "level": 2,
+          "line": 143
+        },
+        {
+          "heading": "§5 — Out of scope (eksplicitno)",
+          "level": 2,
+          "line": 157
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-03-cc-sesija-E-clerk-stripe-linkage-logo-fix.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 352,
+      "nonEmptyLines": 272,
+      "sections": [
+        {
+          "heading": "CC Sesija E Brief — Clerk Auth + Stripe-Clerk Linkage + FR Pass8-A Logo Fix",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Marko-side action sequence pre CC kickoff",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§1 — Implementation scope (3 work units)",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "§1.1 — Clerk integration (Min scope)",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "§1.2 — Stripe-Clerk Connected linkage",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "§1.3 — Environment variables",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "§1.4 — FR Pass8-A logo asset fix",
+          "level": 3,
+          "line": 171
+        },
+        {
+          "heading": "§2 — Acceptance criteria",
+          "level": 2,
+          "line": 186
+        },
+        {
+          "heading": "§3 — Halt-and-PM triggers",
+          "level": 2,
+          "line": 209
+        },
+        {
+          "heading": "§4 — Out of scope (eksplicitno, ne raditi)",
+          "level": 2,
+          "line": 223
+        },
+        {
+          "heading": "§5 — Sequencing inside CC sesija",
+          "level": 2,
+          "line": 236
+        },
+        {
+          "heading": "§6 — Paste-ready CC Sesija E kickoff prompt",
+          "level": 2,
+          "line": 256
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-05-claude-md-amendment-invariants.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 207,
+      "nonEmptyLines": 131,
+      "sections": [
+        {
+          "heading": "CC Brief — CLAUDE.md Amendment: Code-Level Invariants",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Šta ovaj brief radi",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "§1 — Akcija za CC",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "§2 — Paste-ready Markdown sekcija",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "§3 — Acceptance criteria za CC",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "§4 — Halt-and-PM signali",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "§5 — Wall-clock projection",
+          "level": 2,
+          "line": 184
+        },
+        {
+          "heading": "§6 — Post-execution handoff",
+          "level": 2,
+          "line": 197
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-05-day-0-minus-1-runbook.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 588,
+      "nonEmptyLines": 438,
+      "sections": [
+        {
+          "heading": "CC Runbook — Day 0 Minus 1: OSS Push Gate + Track A Tag Ceremony",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Pre-flight gates (BLOCKING — must PASS before §1)",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "§0.1 — Repo state verification",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "§0.2 — Authentication verification",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "§0.3 — Working tree čistoća",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "§1 — Push gate Faza A: hive-mind monorepo grana (5 min)",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "§2 — Push gate Faza B: 12 OSS export grana (15-20 min)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "§2.1 — Validacija subtree split aktualnosti",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "§2.2 — Push redosled (zavisnosti naviše)",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "§2.3 — Verifikacija",
+          "level": 3,
+          "line": 192
+        },
+        {
+          "heading": "§2.5 — NPM Republish Faza B.5 (10-15 min)",
+          "level": 2,
+          "line": 204
+        },
+        {
+          "heading": "§2.5.1 — Version bump verifikacija",
+          "level": 3,
+          "line": 208
+        },
+        {
+          "heading": "§2.5.2 — Bump version u svim package.json fajlovima",
+          "level": 3,
+          "line": 235
+        },
+        {
+          "heading": "§2.5.3 — Build + test pre publish",
+          "level": 3,
+          "line": 264
+        },
+        {
+          "heading": "§2.5.4 — npm publish",
+          "level": 3,
+          "line": 277
+        },
+        {
+          "heading": "§2.5.5 — Commit version bump u hive-mind master",
+          "level": 3,
+          "line": 315
+        },
+        {
+          "heading": "§2.5.6 — Acceptance gate",
+          "level": 3,
+          "line": 332
+        },
+        {
+          "heading": "§3 — Tag ceremony Faza C: Track A freeze tag (5 min)",
+          "level": 2,
+          "line": 342
+        },
+        {
+          "heading": "§4 — Tag ceremony Faza D: hive-mind javni release tag (3 min)",
+          "level": 2,
+          "line": 384
+        },
+        {
+          "heading": "§5 — Verification battery (10 min)",
+          "level": 2,
+          "line": 414
+        },
+        {
+          "heading": "§5.1 — waggle-os origin reflection",
+          "level": 3,
+          "line": 418
+        },
+        {
+          "heading": "§5.2 — hive-mind origin reflection",
+          "level": 3,
+          "line": 432
+        },
+        {
+          "heading": "§5.3 — npm packages registry final check",
+          "level": 3,
+          "line": 446
+        },
+        {
+          "heading": "§5.4 — Final evidence log",
+          "level": 3,
+          "line": 458
+        },
+        {
+          "heading": "§6 — Rollback plan (drill OBAVEZAN pre stvarnog izvršenja)",
+          "level": 2,
+          "line": 472
+        },
+        {
+          "heading": "§6.1 — Rollback Faza A (hive-mind monorepo grana)",
+          "level": 3,
+          "line": 476
+        },
+        {
+          "heading": "§6.2 — Rollback Faza B (12 OSS export grana)",
+          "level": 3,
+          "line": 486
+        },
+        {
+          "heading": "§6.3 — Rollback Faza C (Track A freeze tag)",
+          "level": 3,
+          "line": 498
+        },
+        {
+          "heading": "§6.4 — Rollback Faza D (hive-mind Day 0 tag)",
+          "level": 3,
+          "line": 508
+        },
+        {
+          "heading": "§7 — Halt-and-PM signali (kada zaustaviti i tražiti Marka)",
+          "level": 2,
+          "line": 520
+        },
+        {
+          "heading": "§8 — Wall-clock projection",
+          "level": 2,
+          "line": 543
+        },
+        {
+          "heading": "§9 — Post-execution handoff",
+          "level": 2,
+          "line": 561
+        },
+        {
+          "heading": "§10 — Decision log (PM authoring trace)",
+          "level": 2,
+          "line": 571
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 33
+      }
+    },
+    {
+      "path": "docs/briefs/2026-05-10-day-0-minus-1-runbook-amendment-post-consolidation.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 127,
+      "nonEmptyLines": 95,
+      "sections": [
+        {
+          "heading": "Day-0 minus 1 Runbook — §3 Amendment (post-consolidation)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Why this amendment",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "§1 — Replacement procedure",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "§2 — Cross-references that also need adjusting",
+          "level": 2,
+          "line": 93
+        },
+        {
+          "heading": "§3 — Verification expectations after §3 (amended)",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "§4 — Decision log",
+          "level": 2,
+          "line": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/briefs/COWORK-PM-HUB-BRIEF.txt",
+      "language": "txt",
+      "fileCategory": "docs",
+      "totalLines": 302,
+      "nonEmptyLines": 302,
+      "metrics": {}
+    }
+  ]
+}

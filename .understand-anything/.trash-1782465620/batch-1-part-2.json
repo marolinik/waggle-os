@@ -1,0 +1,642 @@
+{
+  "nodes": [],
+  "edges": [
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/cors-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/cron.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/mcp-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/memory-lane-cron.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/monthly-assessment.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/net-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/offline-manager.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/origin-guard.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/proactive-handlers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/agent-groups.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/agent-run.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/agent-search.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/agent.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/agents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/anthropic-proxy.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/approval.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/artifacts.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/automations.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/backup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/browse.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/browser-ext.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/capabilities.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/chat.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/command.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/commands.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/compliance.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/connectors.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/cost.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/cron.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/data-erase.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/documents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/events.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/evolution.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/export.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/extend.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/feedback.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/files.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/fleet.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/harvest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/home.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/identity.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/import.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/ingest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/knowledge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/litellm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/local-inference.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/marketplace-dev.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/marketplace.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/mcps.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/memory-center.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/memory.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/mind.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/notifications.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/oauth.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/offline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/onboarding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/pins.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/profile.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/providers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/settings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/skills-aliases.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/skills.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/tasks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/team.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/telegram.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/telemetry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/vault.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/weaver.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/wiki.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/workflows.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/workspace-templates.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/routes/workspaces.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/security-middleware.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/services/evolution-service.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/setup-connectors.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/setup-crons.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/storage/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/vector-backfill.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/local/workspace-sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/index.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/agents.ts",
+      "target": "file:packages/server/src/local/agents-store.ts",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/browse.ts",
+      "target": "file:packages/server/src/local/origin-guard.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/server/src/local/routes/artifacts.ts",
+      "target": "file:packages/server/src/local/routes/artifact-index.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/server/src/local/routes/agent.ts",
+      "target": "file:packages/server/src/local/model-availability.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/server/src/local/routes/anthropic-proxy.ts",
+      "target": "file:packages/server/src/local/cors-config.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

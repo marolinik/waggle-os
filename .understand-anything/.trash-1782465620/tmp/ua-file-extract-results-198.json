@@ -1,0 +1,5009 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/core/src/config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 230,
+      "nonEmptyLines": 185,
+      "functions": [
+        {
+          "name": "getDefaultConfigDir",
+          "startLine": 49,
+          "endLine": 52,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "WaggleConfig",
+          "startLine": 54,
+          "endLine": 230,
+          "methods": [
+            "constructor",
+            "load",
+            "save",
+            "getDefaultModel",
+            "setDefaultModel",
+            "getProviders",
+            "setProvider",
+            "removeProvider",
+            "getMindPath",
+            "getConfigDir",
+            "getDailyBudget",
+            "setDailyBudget",
+            "getBudgetHardCap",
+            "setBudgetHardCap",
+            "getFallbackModel",
+            "setFallbackModel",
+            "clearFallbackModel",
+            "getBudgetModel",
+            "setBudgetModel",
+            "clearBudgetModel",
+            "getBudgetThreshold",
+            "setBudgetThreshold",
+            "getMaxIterations",
+            "setMaxIterations",
+            "getTeamServer",
+            "setTeamServer",
+            "clearTeamServer",
+            "isTeamConnected",
+            "getTelemetryEnabled",
+            "setTelemetryEnabled",
+            "getEmbeddingConfig",
+            "setEmbeddingProvider"
+          ],
+          "properties": [
+            "configDir",
+            "configPath",
+            "data"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "WaggleConfig",
+          "line": 54,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getDefaultConfigDir",
+          "callee": "os.homedir",
+          "lineNumber": 50
+        },
+        {
+          "caller": "getDefaultConfigDir",
+          "callee": "path.join",
+          "lineNumber": 51
+        },
+        {
+          "caller": "constructor",
+          "callee": "getDefaultConfigDir",
+          "lineNumber": 60
+        },
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 61
+        },
+        {
+          "caller": "constructor",
+          "callee": "fs.existsSync",
+          "lineNumber": 64
+        },
+        {
+          "caller": "constructor",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 65
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.load",
+          "lineNumber": 69
+        },
+        {
+          "caller": "load",
+          "callee": "fs.existsSync",
+          "lineNumber": 73
+        },
+        {
+          "caller": "load",
+          "callee": "fs.readFileSync",
+          "lineNumber": 74
+        },
+        {
+          "caller": "load",
+          "callee": "JSON.parse",
+          "lineNumber": 75
+        },
+        {
+          "caller": "save",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 84
+        },
+        {
+          "caller": "save",
+          "callee": "JSON.stringify",
+          "lineNumber": 84
+        },
+        {
+          "caller": "getMindPath",
+          "callee": "path.join",
+          "lineNumber": 109
+        },
+        {
+          "caller": "setBudgetThreshold",
+          "callee": "Math.max",
+          "lineNumber": 164
+        },
+        {
+          "caller": "setBudgetThreshold",
+          "callee": "Math.min",
+          "lineNumber": 164
+        },
+        {
+          "caller": "setMaxIterations",
+          "callee": "Math.max",
+          "lineNumber": 174
+        },
+        {
+          "caller": "setMaxIterations",
+          "callee": "Math.min",
+          "lineNumber": 174
+        },
+        {
+          "caller": "setTelemetryEnabled",
+          "callee": "this.save",
+          "lineNumber": 203
+        },
+        {
+          "caller": "getEmbeddingConfig",
+          "callee": "path.join",
+          "lineNumber": 215
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/cron-store.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 367,
+      "nonEmptyLines": 321,
+      "functions": [
+        {
+          "name": "computeNextRun",
+          "startLine": 120,
+          "endLine": 123,
+          "params": [
+            "cronExpr"
+          ]
+        },
+        {
+          "name": "cronExprError",
+          "startLine": 131,
+          "endLine": 138,
+          "params": [
+            "cronExpr"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "CronStore",
+          "startLine": 142,
+          "endLine": 367,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "create",
+            "list",
+            "getById",
+            "update",
+            "delete",
+            "getDue",
+            "markRun",
+            "clear",
+            "recordExecution",
+            "getExecutionHistory",
+            "pruneExecutionHistory",
+            "saveNotification",
+            "getNotifications",
+            "markNotificationRead",
+            "markAllRead",
+            "countUnread"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "VALID_JOB_TYPES",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "CRON_SCHEDULES_TABLE_SQL",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "CRON_HISTORY_TABLE_SQL",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "NOTIFICATIONS_TABLE_SQL",
+          "line": 104,
+          "isDefault": false
+        },
+        {
+          "name": "cronExprError",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "CronStore",
+          "line": 142,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "computeNextRun",
+          "callee": "parseExpression",
+          "lineNumber": 121
+        },
+        {
+          "caller": "computeNextRun",
+          "callee": "interval.next().toISOString",
+          "lineNumber": 122
+        },
+        {
+          "caller": "computeNextRun",
+          "callee": "interval.next",
+          "lineNumber": 122
+        },
+        {
+          "caller": "cronExprError",
+          "callee": "parseExpression",
+          "lineNumber": 133
+        },
+        {
+          "caller": "cronExprError",
+          "callee": "String",
+          "lineNumber": 136
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 147
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 151
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='cron_schedules'\",\r\n    ).get",
+          "lineNumber": 152
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 152
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 156
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='cron_execution_history'\",\r\n    ).get",
+          "lineNumber": 159
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 159
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 163
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='notifications'\",\r\n    ).get",
+          "lineNumber": 166
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 166
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 170
+        },
+        {
+          "caller": "create",
+          "callee": "VALID_JOB_TYPES.has",
+          "lineNumber": 177
+        },
+        {
+          "caller": "create",
+          "callee": "[...VALID_JOB_TYPES].join",
+          "lineNumber": 178
+        },
+        {
+          "caller": "create",
+          "callee": "computeNextRun",
+          "lineNumber": 187
+        },
+        {
+          "caller": "create",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 189
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(`\r\n      INSERT INTO cron_schedules (name, cron_expr, job_type, job_config, workspace_id, enabled, next_run_at)\r\n      VALUES (?, ?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 192
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 192
+        },
+        {
+          "caller": "create",
+          "callee": "JSON.stringify",
+          "lineNumber": 199
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(\r\n      'SELECT * FROM cron_schedules WHERE id = ?',\r\n    ).get",
+          "lineNumber": 205
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 205
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM cron_schedules ORDER BY name ASC',\r\n    ).all",
+          "lineNumber": 212
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 212
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 212
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM cron_schedules WHERE id = ?',\r\n    ).get",
+          "lineNumber": 219
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 219
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 219
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.push",
+          "lineNumber": 230
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 231
+        },
+        {
+          "caller": "update",
+          "callee": "computeNextRun",
+          "lineNumber": 234
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.push",
+          "lineNumber": 235
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 236
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.push",
+          "lineNumber": 237
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 238
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.push",
+          "lineNumber": 241
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 242
+        },
+        {
+          "caller": "update",
+          "callee": "JSON.stringify",
+          "lineNumber": 242
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.push",
+          "lineNumber": 245
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 246
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.push",
+          "lineNumber": 249
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 250
+        },
+        {
+          "caller": "update",
+          "callee": "values.push",
+          "lineNumber": 254
+        },
+        {
+          "caller": "update",
+          "callee": "this.db.getDatabase().prepare(\r\n        `UPDATE cron_schedules SET ${setClauses.join(', ')} WHERE id = ?`,\r\n      ).run",
+          "lineNumber": 255
+        },
+        {
+          "caller": "update",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 255
+        },
+        {
+          "caller": "update",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 255
+        },
+        {
+          "caller": "update",
+          "callee": "setClauses.join",
+          "lineNumber": 256
+        },
+        {
+          "caller": "update",
+          "callee": "this.getById",
+          "lineNumber": 260
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase().prepare(\r\n      'DELETE FROM cron_schedules WHERE id = ?',\r\n    ).run",
+          "lineNumber": 265
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 265
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 265
+        },
+        {
+          "caller": "getDue",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"SELECT * FROM cron_schedules WHERE enabled = 1 AND next_run_at <= datetime('now')\",\r\n    ).all",
+          "lineNumber": 272
+        },
+        {
+          "caller": "getDue",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 272
+        },
+        {
+          "caller": "getDue",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 272
+        },
+        {
+          "caller": "markRun",
+          "callee": "this.getById",
+          "lineNumber": 279
+        },
+        {
+          "caller": "markRun",
+          "callee": "computeNextRun",
+          "lineNumber": 282
+        },
+        {
+          "caller": "markRun",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"UPDATE cron_schedules SET last_run_at = datetime('now'), next_run_at = ? WHERE id = ?\",\r\n    ).run",
+          "lineNumber": 283
+        },
+        {
+          "caller": "markRun",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 283
+        },
+        {
+          "caller": "markRun",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 283
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM cron_schedules').run",
+          "lineNumber": 290
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 290
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 290
+        },
+        {
+          "caller": "recordExecution",
+          "callee": "this.db.getDatabase().prepare(\r\n      `INSERT INTO cron_execution_history (schedule_id, schedule_name, duration_ms, success, result_summary, error)\r\n       VALUES (?, ?, ?, ?, ?, ?)`,\r\n    ).run",
+          "lineNumber": 302
+        },
+        {
+          "caller": "recordExecution",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 302
+        },
+        {
+          "caller": "recordExecution",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 302
+        },
+        {
+          "caller": "getExecutionHistory",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM cron_execution_history WHERE schedule_id = ? ORDER BY executed_at DESC LIMIT ?',\r\n    ).all",
+          "lineNumber": 310
+        },
+        {
+          "caller": "getExecutionHistory",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 310
+        },
+        {
+          "caller": "getExecutionHistory",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 310
+        },
+        {
+          "caller": "pruneExecutionHistory",
+          "callee": "Math.max",
+          "lineNumber": 320
+        },
+        {
+          "caller": "pruneExecutionHistory",
+          "callee": "Math.floor",
+          "lineNumber": 320
+        },
+        {
+          "caller": "pruneExecutionHistory",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"DELETE FROM cron_execution_history WHERE executed_at < datetime('now', ?)\",\r\n    ).run",
+          "lineNumber": 321
+        },
+        {
+          "caller": "pruneExecutionHistory",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 321
+        },
+        {
+          "caller": "pruneExecutionHistory",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 321
+        },
+        {
+          "caller": "saveNotification",
+          "callee": "this.db.getDatabase().prepare(\r\n      'INSERT INTO notifications (title, body, category, action_url) VALUES (?, ?, ?, ?)',\r\n    ).run",
+          "lineNumber": 331
+        },
+        {
+          "caller": "saveNotification",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 331
+        },
+        {
+          "caller": "saveNotification",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 331
+        },
+        {
+          "caller": "saveNotification",
+          "callee": "Number",
+          "lineNumber": 334
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "conditions.push",
+          "lineNumber": 343
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "params.push",
+          "lineNumber": 343
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "conditions.push",
+          "lineNumber": 344
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "conditions.join",
+          "lineNumber": 345
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "params.push",
+          "lineNumber": 347
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "this.db.getDatabase().prepare(sql).all",
+          "lineNumber": 348
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 348
+        },
+        {
+          "caller": "getNotifications",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 348
+        },
+        {
+          "caller": "markNotificationRead",
+          "callee": "this.db.getDatabase().prepare('UPDATE notifications SET read = 1 WHERE id = ?').run",
+          "lineNumber": 353
+        },
+        {
+          "caller": "markNotificationRead",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 353
+        },
+        {
+          "caller": "markNotificationRead",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 353
+        },
+        {
+          "caller": "markAllRead",
+          "callee": "this.db.getDatabase().prepare('UPDATE notifications SET read = 1 WHERE read = 0').run",
+          "lineNumber": 358
+        },
+        {
+          "caller": "markAllRead",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 358
+        },
+        {
+          "caller": "markAllRead",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 358
+        },
+        {
+          "caller": "countUnread",
+          "callee": "this.db.getDatabase().prepare('SELECT COUNT(*) as cnt FROM notifications WHERE read = 0').get",
+          "lineNumber": 364
+        },
+        {
+          "caller": "countUnread",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 364
+        },
+        {
+          "caller": "countUnread",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 364
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/file-indexer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 259,
+      "nonEmptyLines": 232,
+      "classes": [
+        {
+          "name": "FileIndexer",
+          "startLine": 63,
+          "endLine": 259,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "shouldIndex",
+            "ensureSession",
+            "indexFile",
+            "removeFile",
+            "moveFile",
+            "getRow",
+            "listAll",
+            "normalizeText",
+            "buildFrameContent"
+          ],
+          "properties": [
+            "db",
+            "frames",
+            "sessions",
+            "cachedGopId"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MAX_CONTENT_BYTES",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "FileIndexer",
+          "line": 63,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 73
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 77
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='file_index'\",\r\n    ).get",
+          "lineNumber": 78
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 78
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(FILE_INDEX_TABLE_SQL).run",
+          "lineNumber": 82
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 82
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(FILE_INDEX_IDX_SQL).run",
+          "lineNumber": 83
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 83
+        },
+        {
+          "caller": "shouldIndex",
+          "callee": "path.extname(filePath).toLowerCase",
+          "lineNumber": 88
+        },
+        {
+          "caller": "shouldIndex",
+          "callee": "path.extname",
+          "lineNumber": 88
+        },
+        {
+          "caller": "shouldIndex",
+          "callee": "INDEXABLE_EXTENSIONS.has",
+          "lineNumber": 89
+        },
+        {
+          "caller": "ensureSession",
+          "callee": "this.sessions.ensure",
+          "lineNumber": 94
+        },
+        {
+          "caller": "indexFile",
+          "callee": "FileIndexer.shouldIndex",
+          "lineNumber": 108
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.removeFile",
+          "lineNumber": 114
+        },
+        {
+          "caller": "indexFile",
+          "callee": "createHash('sha256').update(content).digest",
+          "lineNumber": 118
+        },
+        {
+          "caller": "indexFile",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 118
+        },
+        {
+          "caller": "indexFile",
+          "callee": "createHash",
+          "lineNumber": 118
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 119
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare('SELECT * FROM file_index WHERE file_path = ?').get",
+          "lineNumber": 120
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare",
+          "lineNumber": 120
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.normalizeText",
+          "lineNumber": 128
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.buildFrameContent",
+          "lineNumber": 130
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.ensureSession",
+          "lineNumber": 131
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.transaction",
+          "lineNumber": 139
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.frames.createIFrame",
+          "lineNumber": 140
+        },
+        {
+          "caller": "indexFile",
+          "callee": "Number",
+          "lineNumber": 146
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare('SELECT 1 FROM file_index WHERE frame_id = ? AND file_path != ? LIMIT 1').get",
+          "lineNumber": 148
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare",
+          "lineNumber": 148
+        },
+        {
+          "caller": "indexFile",
+          "callee": "this.frames.delete",
+          "lineNumber": 150
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare(`\r\n          UPDATE file_index SET\r\n            frame_id = ?,\r\n            mime_type = ?,\r\n            size_bytes = ?,\r\n            content_hash = ?,\r\n            indexed_at = datetime('now')\r\n          WHERE file_path = ?\r\n        `).run",
+          "lineNumber": 153
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare",
+          "lineNumber": 153
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare(`\r\n          INSERT INTO file_index (file_path, frame_id, mime_type, size_bytes, content_hash)\r\n          VALUES (?, ?, ?, ?, ?)\r\n        `).run",
+          "lineNumber": 163
+        },
+        {
+          "caller": "indexFile",
+          "callee": "raw.prepare",
+          "lineNumber": 163
+        },
+        {
+          "caller": "indexFile",
+          "callee": "mutate",
+          "lineNumber": 172
+        },
+        {
+          "caller": "removeFile",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 178
+        },
+        {
+          "caller": "removeFile",
+          "callee": "raw.prepare('SELECT frame_id FROM file_index WHERE file_path = ?').get",
+          "lineNumber": 179
+        },
+        {
+          "caller": "removeFile",
+          "callee": "raw.prepare",
+          "lineNumber": 179
+        },
+        {
+          "caller": "removeFile",
+          "callee": "raw.prepare('SELECT 1 FROM file_index WHERE frame_id = ? AND file_path != ? LIMIT 1').get",
+          "lineNumber": 184
+        },
+        {
+          "caller": "removeFile",
+          "callee": "raw.prepare",
+          "lineNumber": 184
+        },
+        {
+          "caller": "removeFile",
+          "callee": "this.frames.delete",
+          "lineNumber": 186
+        },
+        {
+          "caller": "removeFile",
+          "callee": "raw.prepare('DELETE FROM file_index WHERE file_path = ?').run",
+          "lineNumber": 188
+        },
+        {
+          "caller": "removeFile",
+          "callee": "raw.prepare",
+          "lineNumber": 188
+        },
+        {
+          "caller": "moveFile",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 200
+        },
+        {
+          "caller": "moveFile",
+          "callee": "raw.prepare('SELECT * FROM file_index WHERE file_path = ?').get",
+          "lineNumber": 201
+        },
+        {
+          "caller": "moveFile",
+          "callee": "raw.prepare",
+          "lineNumber": 201
+        },
+        {
+          "caller": "moveFile",
+          "callee": "raw.prepare('DELETE FROM file_index WHERE file_path = ?').run",
+          "lineNumber": 207
+        },
+        {
+          "caller": "moveFile",
+          "callee": "raw.prepare",
+          "lineNumber": 207
+        },
+        {
+          "caller": "moveFile",
+          "callee": "raw.prepare('UPDATE file_index SET file_path = ?, indexed_at = datetime(\\'now\\') WHERE file_path = ?').run",
+          "lineNumber": 208
+        },
+        {
+          "caller": "moveFile",
+          "callee": "raw.prepare",
+          "lineNumber": 208
+        },
+        {
+          "caller": "getRow",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 213
+        },
+        {
+          "caller": "getRow",
+          "callee": "raw.prepare('SELECT * FROM file_index WHERE file_path = ?').get",
+          "lineNumber": 214
+        },
+        {
+          "caller": "getRow",
+          "callee": "raw.prepare",
+          "lineNumber": 214
+        },
+        {
+          "caller": "listAll",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 229
+        },
+        {
+          "caller": "listAll",
+          "callee": "raw.prepare('SELECT * FROM file_index ORDER BY indexed_at DESC').all",
+          "lineNumber": 230
+        },
+        {
+          "caller": "listAll",
+          "callee": "raw.prepare",
+          "lineNumber": 230
+        },
+        {
+          "caller": "listAll",
+          "callee": "rows.map",
+          "lineNumber": 231
+        },
+        {
+          "caller": "normalizeText",
+          "callee": "content.toString",
+          "lineNumber": 243
+        },
+        {
+          "caller": "normalizeText",
+          "callee": "Buffer.byteLength",
+          "lineNumber": 244
+        },
+        {
+          "caller": "normalizeText",
+          "callee": "full.slice",
+          "lineNumber": 247
+        },
+        {
+          "caller": "normalizeText",
+          "callee": "Buffer.byteLength",
+          "lineNumber": 248
+        },
+        {
+          "caller": "normalizeText",
+          "callee": "candidate.slice",
+          "lineNumber": 249
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/file-store.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 465,
+      "nonEmptyLines": 416,
+      "functions": [
+        {
+          "name": "resolveSafe",
+          "startLine": 57,
+          "endLine": 63,
+          "params": [
+            "root",
+            "relativePath"
+          ]
+        },
+        {
+          "name": "ensureDir",
+          "startLine": 65,
+          "endLine": 69,
+          "params": [
+            "dirPath"
+          ]
+        },
+        {
+          "name": "createFileStore",
+          "startLine": 454,
+          "endLine": 465,
+          "params": [
+            "dataDir",
+            "workspaceId",
+            "linkedDirectory",
+            "s3Config"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "LocalFileStore",
+          "startLine": 73,
+          "endLine": 181,
+          "methods": [
+            "constructor",
+            "getRootPath",
+            "getStorageType",
+            "readFile",
+            "listFiles",
+            "searchFiles",
+            "writeFile",
+            "deleteFile",
+            "moveFile",
+            "getStorageInfo"
+          ],
+          "properties": [
+            "root"
+          ]
+        },
+        {
+          "name": "LinkedDirStore",
+          "startLine": 185,
+          "endLine": 294,
+          "methods": [
+            "constructor",
+            "getRootPath",
+            "getStorageType",
+            "readFile",
+            "listFiles",
+            "searchFiles",
+            "writeFile",
+            "deleteFile",
+            "moveFile",
+            "getStorageInfo"
+          ],
+          "properties": [
+            "root"
+          ]
+        },
+        {
+          "name": "S3FileStore",
+          "startLine": 307,
+          "endLine": 444,
+          "methods": [
+            "constructor",
+            "getClient",
+            "getRootPath",
+            "getStorageType",
+            "readFile",
+            "writeFile",
+            "deleteFile",
+            "listFiles",
+            "searchFiles",
+            "moveFile",
+            "getStorageInfo"
+          ],
+          "properties": [
+            "config",
+            "client"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "LocalFileStore",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "LinkedDirStore",
+          "line": 185,
+          "isDefault": false
+        },
+        {
+          "name": "S3FileStore",
+          "line": 307,
+          "isDefault": false
+        },
+        {
+          "name": "createFileStore",
+          "line": 454,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolveSafe",
+          "callee": "path.resolve",
+          "lineNumber": 58
+        },
+        {
+          "caller": "resolveSafe",
+          "callee": "resolved.startsWith",
+          "lineNumber": 59
+        },
+        {
+          "caller": "resolveSafe",
+          "callee": "path.resolve",
+          "lineNumber": 59
+        },
+        {
+          "caller": "ensureDir",
+          "callee": "fs.existsSync",
+          "lineNumber": 66
+        },
+        {
+          "caller": "ensureDir",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 67
+        },
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 77
+        },
+        {
+          "caller": "readFile",
+          "callee": "resolveSafe",
+          "lineNumber": 84
+        },
+        {
+          "caller": "readFile",
+          "callee": "fs.readFileSync",
+          "lineNumber": 85
+        },
+        {
+          "caller": "listFiles",
+          "callee": "resolveSafe",
+          "lineNumber": 89
+        },
+        {
+          "caller": "listFiles",
+          "callee": "fs.existsSync",
+          "lineNumber": 90
+        },
+        {
+          "caller": "listFiles",
+          "callee": "fs.readdirSync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entries.map",
+          "lineNumber": 93
+        },
+        {
+          "caller": "listFiles",
+          "callee": "path.join",
+          "lineNumber": 94
+        },
+        {
+          "caller": "listFiles",
+          "callee": "fs.statSync",
+          "lineNumber": 95
+        },
+        {
+          "caller": "listFiles",
+          "callee": "path.relative(this.root, fullPath).replace",
+          "lineNumber": 98
+        },
+        {
+          "caller": "listFiles",
+          "callee": "path.relative",
+          "lineNumber": 98
+        },
+        {
+          "caller": "listFiles",
+          "callee": "stat.mtime.toISOString",
+          "lineNumber": 100
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entry.isDirectory",
+          "lineNumber": 101
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "fs.existsSync",
+          "lineNumber": 107
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "glob",
+          "lineNumber": 108
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "matches.slice(0, 200).map",
+          "lineNumber": 113
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "matches.slice",
+          "lineNumber": 113
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "path.join",
+          "lineNumber": 114
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "fs.statSync",
+          "lineNumber": 116
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "path.basename",
+          "lineNumber": 118
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "match.replace",
+          "lineNumber": 119
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "stat.mtime.toISOString",
+          "lineNumber": 121
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "path.basename",
+          "lineNumber": 125
+        },
+        {
+          "caller": "writeFile",
+          "callee": "resolveSafe",
+          "lineNumber": 131
+        },
+        {
+          "caller": "writeFile",
+          "callee": "ensureDir",
+          "lineNumber": 133
+        },
+        {
+          "caller": "writeFile",
+          "callee": "path.dirname",
+          "lineNumber": 133
+        },
+        {
+          "caller": "writeFile",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 134
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "resolveSafe",
+          "lineNumber": 138
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "fs.existsSync",
+          "lineNumber": 139
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "fs.statSync",
+          "lineNumber": 140
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "stat.isDirectory",
+          "lineNumber": 141
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "fs.rmSync",
+          "lineNumber": 142
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "fs.unlinkSync",
+          "lineNumber": 144
+        },
+        {
+          "caller": "moveFile",
+          "callee": "resolveSafe",
+          "lineNumber": 150
+        },
+        {
+          "caller": "moveFile",
+          "callee": "resolveSafe",
+          "lineNumber": 151
+        },
+        {
+          "caller": "moveFile",
+          "callee": "ensureDir",
+          "lineNumber": 152
+        },
+        {
+          "caller": "moveFile",
+          "callee": "path.dirname",
+          "lineNumber": 152
+        },
+        {
+          "caller": "moveFile",
+          "callee": "fs.renameSync",
+          "lineNumber": 153
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "fs.existsSync",
+          "lineNumber": 157
+        },
+        {
+          "caller": "walk",
+          "callee": "fs.readdirSync",
+          "lineNumber": 164
+        },
+        {
+          "caller": "walk",
+          "callee": "path.join",
+          "lineNumber": 166
+        },
+        {
+          "caller": "walk",
+          "callee": "entry.isDirectory",
+          "lineNumber": 167
+        },
+        {
+          "caller": "walk",
+          "callee": "walk",
+          "lineNumber": 168
+        },
+        {
+          "caller": "walk",
+          "callee": "fs.statSync",
+          "lineNumber": 171
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "walk",
+          "lineNumber": 178
+        },
+        {
+          "caller": "readFile",
+          "callee": "resolveSafe",
+          "lineNumber": 196
+        },
+        {
+          "caller": "readFile",
+          "callee": "fs.readFileSync",
+          "lineNumber": 197
+        },
+        {
+          "caller": "listFiles",
+          "callee": "resolveSafe",
+          "lineNumber": 201
+        },
+        {
+          "caller": "listFiles",
+          "callee": "fs.existsSync",
+          "lineNumber": 202
+        },
+        {
+          "caller": "listFiles",
+          "callee": "fs.readdirSync",
+          "lineNumber": 204
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entries\r\n      .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules')\r\n      .map",
+          "lineNumber": 205
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entries\r\n      .filter",
+          "lineNumber": 205
+        },
+        {
+          "caller": "listFiles",
+          "callee": "e.name.startsWith",
+          "lineNumber": 206
+        },
+        {
+          "caller": "listFiles",
+          "callee": "path.join",
+          "lineNumber": 208
+        },
+        {
+          "caller": "listFiles",
+          "callee": "fs.statSync",
+          "lineNumber": 210
+        },
+        {
+          "caller": "listFiles",
+          "callee": "path.relative(this.root, fullPath).replace",
+          "lineNumber": 213
+        },
+        {
+          "caller": "listFiles",
+          "callee": "path.relative",
+          "lineNumber": 213
+        },
+        {
+          "caller": "listFiles",
+          "callee": "stat.mtime.toISOString",
+          "lineNumber": 215
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entry.isDirectory",
+          "lineNumber": 216
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "glob",
+          "lineNumber": 225
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "matches.slice(0, 200).map",
+          "lineNumber": 230
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "matches.slice",
+          "lineNumber": 230
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "path.join",
+          "lineNumber": 231
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "fs.statSync",
+          "lineNumber": 233
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "path.basename",
+          "lineNumber": 235
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "match.replace",
+          "lineNumber": 236
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "stat.mtime.toISOString",
+          "lineNumber": 238
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "path.basename",
+          "lineNumber": 242
+        },
+        {
+          "caller": "writeFile",
+          "callee": "resolveSafe",
+          "lineNumber": 248
+        },
+        {
+          "caller": "writeFile",
+          "callee": "ensureDir",
+          "lineNumber": 249
+        },
+        {
+          "caller": "writeFile",
+          "callee": "path.dirname",
+          "lineNumber": 249
+        },
+        {
+          "caller": "writeFile",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 250
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "resolveSafe",
+          "lineNumber": 254
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "fs.existsSync",
+          "lineNumber": 255
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "fs.unlinkSync",
+          "lineNumber": 256
+        },
+        {
+          "caller": "moveFile",
+          "callee": "resolveSafe",
+          "lineNumber": 261
+        },
+        {
+          "caller": "moveFile",
+          "callee": "resolveSafe",
+          "lineNumber": 262
+        },
+        {
+          "caller": "moveFile",
+          "callee": "ensureDir",
+          "lineNumber": 263
+        },
+        {
+          "caller": "moveFile",
+          "callee": "path.dirname",
+          "lineNumber": 263
+        },
+        {
+          "caller": "moveFile",
+          "callee": "fs.renameSync",
+          "lineNumber": 264
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "fs.existsSync",
+          "lineNumber": 268
+        },
+        {
+          "caller": "walk",
+          "callee": "fs.readdirSync",
+          "lineNumber": 276
+        },
+        {
+          "caller": "walk",
+          "callee": "path.join",
+          "lineNumber": 279
+        },
+        {
+          "caller": "walk",
+          "callee": "entry.isDirectory",
+          "lineNumber": 280
+        },
+        {
+          "caller": "walk",
+          "callee": "walk",
+          "lineNumber": 281
+        },
+        {
+          "caller": "walk",
+          "callee": "fs.statSync",
+          "lineNumber": 284
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "walk",
+          "lineNumber": 291
+        },
+        {
+          "caller": "getClient",
+          "callee": "import",
+          "lineNumber": 319
+        },
+        {
+          "caller": "readFile",
+          "callee": "this.getClient",
+          "lineNumber": 336
+        },
+        {
+          "caller": "readFile",
+          "callee": "import",
+          "lineNumber": 337
+        },
+        {
+          "caller": "readFile",
+          "callee": "client.send",
+          "lineNumber": 339
+        },
+        {
+          "caller": "readFile",
+          "callee": "chunks.push",
+          "lineNumber": 347
+        },
+        {
+          "caller": "readFile",
+          "callee": "Buffer.concat",
+          "lineNumber": 348
+        },
+        {
+          "caller": "writeFile",
+          "callee": "this.getClient",
+          "lineNumber": 352
+        },
+        {
+          "caller": "writeFile",
+          "callee": "import",
+          "lineNumber": 353
+        },
+        {
+          "caller": "writeFile",
+          "callee": "client.send",
+          "lineNumber": 355
+        },
+        {
+          "caller": "writeFile",
+          "callee": "Buffer.from",
+          "lineNumber": 358
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "this.getClient",
+          "lineNumber": 363
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "import",
+          "lineNumber": 364
+        },
+        {
+          "caller": "deleteFile",
+          "callee": "client.send",
+          "lineNumber": 366
+        },
+        {
+          "caller": "listFiles",
+          "callee": "this.getClient",
+          "lineNumber": 373
+        },
+        {
+          "caller": "listFiles",
+          "callee": "import",
+          "lineNumber": 374
+        },
+        {
+          "caller": "listFiles",
+          "callee": "client.send",
+          "lineNumber": 376
+        },
+        {
+          "caller": "listFiles",
+          "callee": "obj.Key.slice",
+          "lineNumber": 384
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entries.push",
+          "lineNumber": 385
+        },
+        {
+          "caller": "listFiles",
+          "callee": "relPath.split('/').pop",
+          "lineNumber": 386
+        },
+        {
+          "caller": "listFiles",
+          "callee": "relPath.split",
+          "lineNumber": 386
+        },
+        {
+          "caller": "listFiles",
+          "callee": "obj.LastModified?.toISOString",
+          "lineNumber": 389
+        },
+        {
+          "caller": "listFiles",
+          "callee": "cpfx.Prefix.slice(this.config.prefix.length).replace",
+          "lineNumber": 395
+        },
+        {
+          "caller": "listFiles",
+          "callee": "cpfx.Prefix.slice",
+          "lineNumber": 395
+        },
+        {
+          "caller": "listFiles",
+          "callee": "entries.push",
+          "lineNumber": 396
+        },
+        {
+          "caller": "listFiles",
+          "callee": "relPath.split('/').pop",
+          "lineNumber": 397
+        },
+        {
+          "caller": "listFiles",
+          "callee": "relPath.split",
+          "lineNumber": 397
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "this.listFiles",
+          "lineNumber": 408
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "pattern.replace(/\\*/g, '.*').replace",
+          "lineNumber": 409
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "pattern.replace",
+          "lineNumber": 409
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "all.filter",
+          "lineNumber": 410
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "regex.test",
+          "lineNumber": 410
+        },
+        {
+          "caller": "searchFiles",
+          "callee": "regex.test",
+          "lineNumber": 410
+        },
+        {
+          "caller": "moveFile",
+          "callee": "this.getClient",
+          "lineNumber": 414
+        },
+        {
+          "caller": "moveFile",
+          "callee": "import",
+          "lineNumber": 415
+        },
+        {
+          "caller": "moveFile",
+          "callee": "client.send",
+          "lineNumber": 418
+        },
+        {
+          "caller": "moveFile",
+          "callee": "client.send",
+          "lineNumber": 423
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "this.getClient",
+          "lineNumber": 430
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "import",
+          "lineNumber": 431
+        },
+        {
+          "caller": "getStorageInfo",
+          "callee": "client.send",
+          "lineNumber": 432
+        },
+        {
+          "caller": "createFileStore",
+          "callee": "fs.existsSync",
+          "lineNumber": 461
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 3,
+        "classCount": 3
+      }
+    },
+    {
+      "path": "packages/core/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 150,
+      "nonEmptyLines": 147,
+      "exports": [
+        {
+          "name": "createCoreLogger",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "CoreLogger",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "scanForInjection",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ScanResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MindDB",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingDimMismatchError",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingFingerprint",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FingerprintCheck",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "IdentityLayer",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Identity",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "AwarenessLayer",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "AwarenessItem",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "AwarenessCategory",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FrameStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "stripHmPrefix",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "hashFrameContent",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MemoryFrame",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FrameType",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Importance",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FrameSource",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SessionStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Session",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HybridSearch",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SearchResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "chunkRetrievalEnabled",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "rechunkAllFrames",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "RechunkResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "chunkText",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ChunkOptions",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FrameChunk",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeGraph",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Entity",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Relation",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ValidationSchema",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SCHEMA_SQL",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "VEC_TABLE_SQL",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "CHUNKS_VEC_TABLE_SQL",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SCHEMA_VERSION",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "vecTableSqlForDim",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "chunksVecTableSqlForDim",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "computeRelevance",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "computeTemporalScore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "computePopularityScore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "computeContextualScore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "computeImportanceScore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SCORING_PROFILES",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ScoringProfile",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ScoringWeights",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Embedder",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createLiteLLMEmbedder",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "LiteLLMEmbedderConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createInProcessEmbedder",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "normalizeDimensions",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "InProcessEmbedderConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createOllamaEmbedder",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "OllamaEmbedderConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createApiEmbedder",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ApiEmbedderConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createEmbeddingProvider",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingQuotaExceededError",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "getMinimumTierForProvider",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderStatus",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderType",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderInstance",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingQuotaStatus",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "normalizeEntityName",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "findDuplicates",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "isNoiseName",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "isLikelyAcronym",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Ontology",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "validateEntity",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EntitySchema",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ValidationResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ImprovementSignalStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ImprovementSignal",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ActionableSignal",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SignalCategory",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ActionableThresholds",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ExecutionTraceStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EXECUTION_TRACES_TABLE_SQL",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ExecutionTrace",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ParsedExecutionTrace",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "TraceOutcome",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "TracePayload",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "TraceToolCall",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "TraceReasoningStep",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "StartTraceInput",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FinalizeTraceInput",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "TraceQueryFilter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EVOLUTION_RUNS_TABLE_SQL",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRun",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunStatus",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunTarget",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "CreateEvolutionRunInput",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunFilter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileIndexes",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileFtsIndex",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileVecIndex",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "cleanOrphanVectors",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "cleanOrphanFts",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ReconcileResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ConceptTracker",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "CONCEPT_MASTERY_TABLE_SQL",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ConceptEntry",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ConceptUpdate",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "TEMPORAL_GUIDANCE",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "toDatePrefix",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "renderDatedSnippet",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "referenceDate",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "renderReferenceDateLine",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "parseDateWindow",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "DateWindow",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "resolveRelativeDate",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvedDate",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createInProcessReranker",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "Reranker",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "InProcessRerankerConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestSourceStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRunStore",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRun",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRunStatus",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ChatGPTAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeCodeAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "GeminiAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "UniversalAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MarkdownAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "PlaintextAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "UrlAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "PdfAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestPipeline",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "LLMCallFn",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "PipelineOptions",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "extractMemoryLanes",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "writeMemoryLaneFrames",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_FACT_PREFIX",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_EVENT_PREFIX",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_PROFILE_PREFIX",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MemoryLaneExtraction",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedEvent",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedFact",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedProfile",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "WriteLaneFramesResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "extractKgEntities",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "writeKgEntities",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "KG_ENTITY_TYPES",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "KgEntity",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "KgEntityType",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "KgEntityExtraction",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "WriteKgEntitiesResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "writeRawTurnFrames",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnHeader",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "parseRawTurnHeader",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnConvKey",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_RAWTURN_PREFIX",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MAX_TURNS_PER_ITEM",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "RAWDETAIL_KILL_SWITCH",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "WriteRawTurnsResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ParsedRawTurnHeader",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "fetchRawDetailLane",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnBody",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "RAW_DETAIL_K",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "RawTurnHit",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "RawDetailLaneOptions",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "dedup",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "harvestSetHash",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HARVEST_FRAME_CONTENT_CAP",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ImportSourceType",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ImportItemType",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "UniversalImportItem",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "DistilledKnowledge",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestPipelineResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestSource",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SourceAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "FilesystemAdapter",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ClassifiedItem",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedContent",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeProvenance",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMind",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMindSearchResult",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MindSource",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "SearchScope",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMindCache",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMindCacheConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "WorkspaceManager",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "WorkspaceConfig",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "CreateWorkspaceOptions",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "WaggleConfig",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "ProviderEntry",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "TeamServerConfig",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "needsMigration",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "migrateToMultiMind",
+          "line": 110,
+          "isDefault": false
+        },
+        {
+          "name": "TeamSync",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "frameToEntity",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "entityToSyncedFrame",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "TeamSyncConfig",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "SyncedFrame",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "InstallAuditStore",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "INSTALL_AUDIT_TABLE_SQL",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "InstallAuditEntry",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "RecordAuditInput",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "AuditAction",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "AuditRiskLevel",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "AuditTrustSource",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "AuditApprovalClass",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "AuditInitiator",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "AuditCapabilityType",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "CronStore",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "CRON_SCHEDULES_TABLE_SQL",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "VALID_JOB_TYPES",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "cronExprError",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "CronSchedule",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "CreateScheduleInput",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "CronJobType",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "CronExecutionRow",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "VaultStore",
+          "line": 123,
+          "isDefault": false
+        },
+        {
+          "name": "VaultEntry",
+          "line": 123,
+          "isDefault": false
+        },
+        {
+          "name": "TelemetryStore",
+          "line": 124,
+          "isDefault": false
+        },
+        {
+          "name": "TelemetryCollector",
+          "line": 124,
+          "isDefault": false
+        },
+        {
+          "name": "TELEMETRY_EVENTS",
+          "line": 124,
+          "isDefault": false
+        },
+        {
+          "name": "TelemetryEvent",
+          "line": 124,
+          "isDefault": false
+        },
+        {
+          "name": "TelemetrySummary",
+          "line": 124,
+          "isDefault": false
+        },
+        {
+          "name": "SkillHashStore",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "computeSkillHash",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "SKILL_HASHES_TABLE_SQL",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "SkillHash",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "processImport",
+          "line": 129,
+          "isDefault": false
+        },
+        {
+          "name": "parseChatGPTExport",
+          "line": 129,
+          "isDefault": false
+        },
+        {
+          "name": "parseClaudeExport",
+          "line": 129,
+          "isDefault": false
+        },
+        {
+          "name": "extractKnowledge",
+          "line": 129,
+          "isDefault": false
+        },
+        {
+          "name": "createFileStore",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "LocalFileStore",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "LinkedDirStore",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "S3FileStore",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "FileStore",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "FileEntry",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "StorageInfo",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "S3Config",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "FileIndexer",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "MAX_CONTENT_BYTES",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "FileIndexRow",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "FileIndexResult",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "ImportSource",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "ImportResult",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedKnowledge",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "ParsedConversation",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "ConversationMessage",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "OptimizationLogStore",
+          "line": 133,
+          "isDefault": false
+        },
+        {
+          "name": "OPTIMIZATION_LOG_TABLE_SQL",
+          "line": 133,
+          "isDefault": false
+        },
+        {
+          "name": "OptimizationLogEntry",
+          "line": 133,
+          "isDefault": false
+        },
+        {
+          "name": "CreateOptimizationLogInput",
+          "line": 133,
+          "isDefault": false
+        },
+        {
+          "name": "InteractionStore",
+          "line": 139,
+          "isDefault": false
+        },
+        {
+          "name": "ComplianceStatusChecker",
+          "line": 140,
+          "isDefault": false
+        },
+        {
+          "name": "ReportGenerator",
+          "line": 141,
+          "isDefault": false
+        },
+        {
+          "name": "ReportGeneratorDeps",
+          "line": 141,
+          "isDefault": false
+        },
+        {
+          "name": "ComplianceTemplateStore",
+          "line": 142,
+          "isDefault": false
+        },
+        {
+          "name": "KVARK_TEMPLATE_NAME",
+          "line": 142,
+          "isDefault": false
+        },
+        {
+          "name": "TEMPLATE_RISK_MAP",
+          "line": 143,
+          "isDefault": false
+        },
+        {
+          "name": "AIActRiskLevel",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "HumanAction",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "AIInteraction",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "RecordInteractionInput",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "ComplianceStatus",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "ArticleStatus",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "AuditReport",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "AuditReportRequest",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "ModelInventoryEntry",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "OversightLogEntry",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestProvenanceEntry",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "ComplianceTemplate",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "ComplianceTemplateSections",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "CreateComplianceTemplateInput",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "UpdateComplianceTemplateInput",
+          "line": 144,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 275,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/src/memory-import.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 292,
+      "nonEmptyLines": 248,
+      "functions": [
+        {
+          "name": "extractConversations",
+          "startLine": 76,
+          "endLine": 83,
+          "params": [
+            "json"
+          ]
+        },
+        {
+          "name": "parseChatGPTExport",
+          "startLine": 87,
+          "endLine": 130,
+          "params": [
+            "json"
+          ]
+        },
+        {
+          "name": "parseClaudeExport",
+          "startLine": 132,
+          "endLine": 160,
+          "params": [
+            "json"
+          ]
+        },
+        {
+          "name": "extractKnowledge",
+          "startLine": 181,
+          "endLine": 256,
+          "params": [
+            "conversations"
+          ]
+        },
+        {
+          "name": "processImport",
+          "startLine": 260,
+          "endLine": 292,
+          "params": [
+            "jsonData",
+            "source"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseChatGPTExport",
+          "line": 87,
+          "isDefault": false
+        },
+        {
+          "name": "parseClaudeExport",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "extractKnowledge",
+          "line": 181,
+          "isDefault": false
+        },
+        {
+          "name": "processImport",
+          "line": 260,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "extractConversations",
+          "callee": "Array.isArray",
+          "lineNumber": 77
+        },
+        {
+          "caller": "extractConversations",
+          "callee": "Array.isArray",
+          "lineNumber": 80
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "extractConversations",
+          "lineNumber": 88
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "conversations.map((raw) => {\r\n    const conv = raw as ChatGPTConversation;\r\n    const title = conv.title || 'Untitled';\r\n    const messages: ConversationMessage[] = [];\r\n\r\n    // ChatGPT uses a mapping object with node IDs\r\n    if (conv.mapping && typeof conv.mapping === 'object') {\r\n      const nodes = Object.values(conv.mapping);\r\n      // Sort by create_time for chronological order\r\n      const sorted = nodes\r\n        .filter((n) => (n?.message?.content?.parts?.length ?? 0) > 0)\r\n        .sort((a, b) => (a.message?.create_time ?? 0) - (b.message?.create_time ?? 0));\r\n\r\n      for (const node of sorted) {\r\n        const msg = node.message;\r\n        if (!msg || !msg.author?.role) continue;\r\n        const role = msg.author.role === 'user' ? 'user' : 'assistant';\r\n        if (msg.author.role === 'system') continue; // Skip system messages\r\n\r\n        const text = (msg.content?.parts ?? [])\r\n          .filter((p): p is string => typeof p === 'string')\r\n          .join('\\n')\r\n          .trim();\r\n        if (!text) continue;\r\n\r\n        messages.push({\r\n          role,\r\n          text,\r\n          timestamp: msg.create_time ? new Date(msg.create_time * 1000).toISOString() : undefined,\r\n        });\r\n      }\r\n    }\r\n\r\n    return {\r\n      title,\r\n      messages,\r\n      createdAt: conv.create_time ? new Date(conv.create_time * 1000).toISOString() : undefined,\r\n      source: 'chatgpt' as ImportSource,\r\n    };\r\n  }).filter",
+          "lineNumber": 90
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "conversations.map",
+          "lineNumber": 90
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "Object.values",
+          "lineNumber": 97
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "nodes\r\n        .filter((n) => (n?.message?.content?.parts?.length ?? 0) > 0)\r\n        .sort",
+          "lineNumber": 99
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "nodes\r\n        .filter",
+          "lineNumber": 99
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "(msg.content?.parts ?? [])\r\n          .filter((p): p is string => typeof p === 'string')\r\n          .join('\\n')\r\n          .trim",
+          "lineNumber": 109
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "(msg.content?.parts ?? [])\r\n          .filter((p): p is string => typeof p === 'string')\r\n          .join",
+          "lineNumber": 109
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "(msg.content?.parts ?? [])\r\n          .filter",
+          "lineNumber": 109
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "messages.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "new Date(msg.create_time * 1000).toISOString",
+          "lineNumber": 118
+        },
+        {
+          "caller": "parseChatGPTExport",
+          "callee": "new Date(conv.create_time * 1000).toISOString",
+          "lineNumber": 126
+        },
+        {
+          "caller": "parseClaudeExport",
+          "callee": "extractConversations",
+          "lineNumber": 133
+        },
+        {
+          "caller": "parseClaudeExport",
+          "callee": "conversations.map((raw) => {\r\n    const conv = raw as ClaudeConversation;\r\n    const title = conv.name || conv.title || 'Untitled';\r\n    const messages: ConversationMessage[] = [];\r\n\r\n    const chatMessages = conv.chat_messages ?? conv.messages ?? [];\r\n    for (const msg of chatMessages) {\r\n      const role = (msg.sender === 'human' || msg.role === 'user') ? 'user' : 'assistant';\r\n      const text = (msg.text ?? msg.content ?? '').trim();\r\n      if (!text) continue;\r\n\r\n      messages.push({\r\n        role,\r\n        text,\r\n        timestamp: msg.created_at ?? msg.timestamp,\r\n      });\r\n    }\r\n\r\n    return {\r\n      title,\r\n      messages,\r\n      createdAt: conv.created_at ?? conv.create_time,\r\n      source: 'claude' as ImportSource,\r\n    };\r\n  }).filter",
+          "lineNumber": 135
+        },
+        {
+          "caller": "parseClaudeExport",
+          "callee": "conversations.map",
+          "lineNumber": 135
+        },
+        {
+          "caller": "parseClaudeExport",
+          "callee": "(msg.text ?? msg.content ?? '').trim",
+          "lineNumber": 143
+        },
+        {
+          "caller": "parseClaudeExport",
+          "callee": "messages.push",
+          "lineNumber": 146
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "conv.title.toLowerCase().trim",
+          "lineNumber": 188
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "conv.title.toLowerCase",
+          "lineNumber": 188
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "seen.has",
+          "lineNumber": 189
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "seen.add",
+          "lineNumber": 190
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "knowledge.push",
+          "lineNumber": 191
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "msg.text.split(/[.!?\\n]+/).map(s => s.trim()).filter",
+          "lineNumber": 206
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "msg.text.split(/[.!?\\n]+/).map",
+          "lineNumber": 206
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "msg.text.split",
+          "lineNumber": 206
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "s.trim",
+          "lineNumber": 206
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "sentence.toLowerCase().slice",
+          "lineNumber": 209
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "sentence.toLowerCase",
+          "lineNumber": 209
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "seen.has",
+          "lineNumber": 210
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "DECISION_PATTERNS.some",
+          "lineNumber": 213
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "p.test",
+          "lineNumber": 213
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "seen.add",
+          "lineNumber": 214
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "knowledge.push",
+          "lineNumber": 215
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "PREFERENCE_PATTERNS.some",
+          "lineNumber": 226
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "p.test",
+          "lineNumber": 226
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "seen.add",
+          "lineNumber": 227
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "knowledge.push",
+          "lineNumber": 228
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "FACT_PATTERNS.some",
+          "lineNumber": 239
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "p.test",
+          "lineNumber": 239
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "seen.add",
+          "lineNumber": 240
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "knowledge.push",
+          "lineNumber": 241
+        },
+        {
+          "caller": "extractKnowledge",
+          "callee": "knowledge.slice",
+          "lineNumber": 255
+        },
+        {
+          "caller": "processImport",
+          "callee": "parseChatGPTExport",
+          "lineNumber": 266
+        },
+        {
+          "caller": "processImport",
+          "callee": "parseClaudeExport",
+          "lineNumber": 267
+        },
+        {
+          "caller": "processImport",
+          "callee": "String",
+          "lineNumber": 269
+        },
+        {
+          "caller": "processImport",
+          "callee": "errors.push",
+          "lineNumber": 280
+        },
+        {
+          "caller": "processImport",
+          "callee": "extractKnowledge",
+          "lineNumber": 283
+        },
+        {
+          "caller": "processImport",
+          "callee": "conversations.filter",
+          "lineNumber": 288
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/src/migration.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 45,
+      "nonEmptyLines": 38,
+      "functions": [
+        {
+          "name": "needsMigration",
+          "startLine": 8,
+          "endLine": 12,
+          "params": [
+            "waggleDir"
+          ]
+        },
+        {
+          "name": "migrateToMultiMind",
+          "startLine": 25,
+          "endLine": 45,
+          "params": [
+            "waggleDir"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "needsMigration",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "migrateToMultiMind",
+          "line": 25,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "needsMigration",
+          "callee": "path.join",
+          "lineNumber": 9
+        },
+        {
+          "caller": "needsMigration",
+          "callee": "path.join",
+          "lineNumber": 10
+        },
+        {
+          "caller": "needsMigration",
+          "callee": "fs.existsSync",
+          "lineNumber": 11
+        },
+        {
+          "caller": "needsMigration",
+          "callee": "fs.existsSync",
+          "lineNumber": 11
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "needsMigration",
+          "lineNumber": 26
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "path.join",
+          "lineNumber": 30
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "path.join",
+          "lineNumber": 31
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "path.join",
+          "lineNumber": 32
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "path.join",
+          "lineNumber": 33
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "fs.copyFileSync",
+          "lineNumber": 36
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "fs.renameSync",
+          "lineNumber": 39
+        },
+        {
+          "caller": "migrateToMultiMind",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 42
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/src/optimization-log.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 154,
+      "nonEmptyLines": 136,
+      "classes": [
+        {
+          "name": "OptimizationLogStore",
+          "startLine": 60,
+          "endLine": 154,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "insert",
+            "getRecent",
+            "getByWorkspace",
+            "getStats",
+            "pruneOlderThan",
+            "clear"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "OPTIMIZATION_LOG_TABLE_SQL",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "OptimizationLogStore",
+          "line": 60,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 65
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 69
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='optimization_log'\",\r\n    ).get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 70
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 74
+        },
+        {
+          "caller": "insert",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 80
+        },
+        {
+          "caller": "insert",
+          "callee": "raw.prepare(`\r\n      INSERT INTO optimization_log (session_id, workspace_id, system_prompt, tools_used, turn_count, was_correction, input_tokens, output_tokens)\r\n      VALUES (?, ?, ?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 81
+        },
+        {
+          "caller": "insert",
+          "callee": "raw.prepare",
+          "lineNumber": 81
+        },
+        {
+          "caller": "insert",
+          "callee": "JSON.stringify",
+          "lineNumber": 88
+        },
+        {
+          "caller": "insert",
+          "callee": "raw.prepare(\r\n      'SELECT * FROM optimization_log WHERE id = ?',\r\n    ).get",
+          "lineNumber": 95
+        },
+        {
+          "caller": "insert",
+          "callee": "raw.prepare",
+          "lineNumber": 95
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM optimization_log ORDER BY timestamp DESC, id DESC LIMIT ?',\r\n    ).all",
+          "lineNumber": 102
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 102
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 102
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM optimization_log WHERE workspace_id = ? ORDER BY timestamp DESC, id DESC LIMIT ?',\r\n    ).all",
+          "lineNumber": 109
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 109
+        },
+        {
+          "caller": "getByWorkspace",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 109
+        },
+        {
+          "caller": "getStats",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 116
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare(`\r\n      SELECT\r\n        COUNT(*) as total,\r\n        COALESCE(AVG(was_correction * 1.0), 0) as correction_rate,\r\n        COALESCE(AVG(turn_count), 0) as avg_turn_count,\r\n        COALESCE(SUM(input_tokens), 0) as total_input_tokens,\r\n        COALESCE(SUM(output_tokens), 0) as total_output_tokens\r\n      FROM optimization_log\r\n    `).get",
+          "lineNumber": 117
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare",
+          "lineNumber": 117
+        },
+        {
+          "caller": "pruneOlderThan",
+          "callee": "this.db.getDatabase().prepare(\r\n      `DELETE FROM optimization_log WHERE timestamp < datetime('now', '-' || ? || ' days')`,\r\n    ).run",
+          "lineNumber": 144
+        },
+        {
+          "caller": "pruneOlderThan",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 144
+        },
+        {
+          "caller": "pruneOlderThan",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 144
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM optimization_log').run",
+          "lineNumber": 152
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 152
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/skill-hashes.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 122,
+      "nonEmptyLines": 100,
+      "functions": [
+        {
+          "name": "computeSkillHash",
+          "startLine": 33,
+          "endLine": 35,
+          "params": [
+            "content"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "SkillHashStore",
+          "startLine": 39,
+          "endLine": 122,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "setHash",
+            "getHash",
+            "removeHash",
+            "checkAll",
+            "verify",
+            "clear"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SKILL_HASHES_TABLE_SQL",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "computeSkillHash",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "SkillHashStore",
+          "line": 39,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "computeSkillHash",
+          "callee": "crypto.createHash('sha256').update(content).digest",
+          "lineNumber": 34
+        },
+        {
+          "caller": "computeSkillHash",
+          "callee": "crypto.createHash('sha256').update",
+          "lineNumber": 34
+        },
+        {
+          "caller": "computeSkillHash",
+          "callee": "crypto.createHash",
+          "lineNumber": 34
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 44
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 48
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT name FROM sqlite_master WHERE type='table' AND name='skill_hashes'\",\r\n    ).get",
+          "lineNumber": 49
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 49
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 53
+        },
+        {
+          "caller": "setHash",
+          "callee": "this.db.getDatabase().prepare(`\r\n      INSERT INTO skill_hashes (name, hash) VALUES (?, ?)\r\n      ON CONFLICT (name) DO UPDATE SET hash = ?, verified_at = datetime('now')\r\n    `).run",
+          "lineNumber": 59
+        },
+        {
+          "caller": "setHash",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 59
+        },
+        {
+          "caller": "setHash",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 59
+        },
+        {
+          "caller": "getHash",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM skill_hashes WHERE name = ?',\r\n    ).get",
+          "lineNumber": 67
+        },
+        {
+          "caller": "getHash",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 67
+        },
+        {
+          "caller": "getHash",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 67
+        },
+        {
+          "caller": "removeHash",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM skill_hashes WHERE name = ?').run",
+          "lineNumber": 74
+        },
+        {
+          "caller": "removeHash",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 74
+        },
+        {
+          "caller": "removeHash",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 74
+        },
+        {
+          "caller": "checkAll",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT name, hash FROM skill_hashes',\r\n    ).all",
+          "lineNumber": 86
+        },
+        {
+          "caller": "checkAll",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 86
+        },
+        {
+          "caller": "checkAll",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 86
+        },
+        {
+          "caller": "checkAll",
+          "callee": "storedHashes.map",
+          "lineNumber": 89
+        },
+        {
+          "caller": "checkAll",
+          "callee": "currentSkills.map",
+          "lineNumber": 90
+        },
+        {
+          "caller": "checkAll",
+          "callee": "computeSkillHash",
+          "lineNumber": 96
+        },
+        {
+          "caller": "checkAll",
+          "callee": "storedMap.get",
+          "lineNumber": 97
+        },
+        {
+          "caller": "checkAll",
+          "callee": "added.push",
+          "lineNumber": 100
+        },
+        {
+          "caller": "checkAll",
+          "callee": "changed.push",
+          "lineNumber": 102
+        },
+        {
+          "caller": "checkAll",
+          "callee": "storedHashes\r\n      .filter(h => !currentNames.has(h.name))\r\n      .map",
+          "lineNumber": 106
+        },
+        {
+          "caller": "checkAll",
+          "callee": "storedHashes\r\n      .filter",
+          "lineNumber": 106
+        },
+        {
+          "caller": "checkAll",
+          "callee": "currentNames.has",
+          "lineNumber": 107
+        },
+        {
+          "caller": "verify",
+          "callee": "this.setHash",
+          "lineNumber": 115
+        },
+        {
+          "caller": "verify",
+          "callee": "computeSkillHash",
+          "lineNumber": 115
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM skill_hashes').run",
+          "lineNumber": 120
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 120
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 120
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/team-sync.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 186,
+      "nonEmptyLines": 166,
+      "functions": [
+        {
+          "name": "frameToEntity",
+          "startLine": 44,
+          "endLine": 59,
+          "params": [
+            "frame",
+            "authorId",
+            "authorName"
+          ]
+        },
+        {
+          "name": "entityToSyncedFrame",
+          "startLine": 64,
+          "endLine": 82,
+          "params": [
+            "entity"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "TeamSync",
+          "startLine": 89,
+          "endLine": 186,
+          "methods": [
+            "constructor",
+            "pushFrame",
+            "pullFrames",
+            "getLastSyncTimestamp",
+            "setLastSyncTimestamp"
+          ],
+          "properties": [
+            "config",
+            "lastSyncTimestamp"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "frameToEntity",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "entityToSyncedFrame",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "TeamSync",
+          "line": 89,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "pushFrame",
+          "callee": "frameToEntity",
+          "lineNumber": 102
+        },
+        {
+          "caller": "pushFrame",
+          "callee": "fetch",
+          "lineNumber": 105
+        },
+        {
+          "caller": "pushFrame",
+          "callee": "JSON.stringify",
+          "lineNumber": 113
+        },
+        {
+          "caller": "pushFrame",
+          "callee": "log.error",
+          "lineNumber": 118
+        },
+        {
+          "caller": "pushFrame",
+          "callee": "response.json",
+          "lineNumber": 122
+        },
+        {
+          "caller": "pushFrame",
+          "callee": "log.error",
+          "lineNumber": 125
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "fetch",
+          "lineNumber": 140
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "log.error",
+          "lineNumber": 147
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "response.json",
+          "lineNumber": 151
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "entities.map",
+          "lineNumber": 158
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "frames.filter",
+          "lineNumber": 162
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "new Date().toISOString",
+          "lineNumber": 165
+        },
+        {
+          "caller": "pullFrames",
+          "callee": "log.error",
+          "lineNumber": 168
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/src/telemetry.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 324,
+      "nonEmptyLines": 278,
+      "classes": [
+        {
+          "name": "TelemetryStore",
+          "startLine": 77,
+          "endLine": 204,
+          "methods": [
+            "constructor",
+            "track",
+            "setEnabled",
+            "isEnabled",
+            "getSummary",
+            "getEvents",
+            "clear",
+            "close"
+          ],
+          "properties": [
+            "db",
+            "enabled"
+          ]
+        },
+        {
+          "name": "TelemetryCollector",
+          "startLine": 227,
+          "endLine": 324,
+          "methods": [
+            "constructor",
+            "recordToolUse",
+            "recordCommand",
+            "recordError",
+            "recordCapabilityGap",
+            "recordSession",
+            "upsertEvent",
+            "getReport",
+            "flush",
+            "setEnabled",
+            "isEnabled",
+            "close"
+          ],
+          "properties": [
+            "db",
+            "enabled",
+            "dataDir"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "TELEMETRY_EVENTS",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "TelemetryStore",
+          "line": 77,
+          "isDefault": false
+        },
+        {
+          "name": "TelemetryCollector",
+          "line": 227,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 83
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.db.pragma",
+          "lineNumber": 85
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.db.exec",
+          "lineNumber": 86
+        },
+        {
+          "caller": "track",
+          "callee": "this.db.prepare(\r\n      'INSERT INTO telemetry_events (event, properties) VALUES (?, ?)'\r\n    ).run",
+          "lineNumber": 92
+        },
+        {
+          "caller": "track",
+          "callee": "this.db.prepare",
+          "lineNumber": 92
+        },
+        {
+          "caller": "track",
+          "callee": "JSON.stringify",
+          "lineNumber": 94
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      'SELECT COUNT(*) as cnt FROM telemetry_events'\r\n    ).get",
+          "lineNumber": 109
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 109
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      'SELECT MIN(created_at) as d FROM telemetry_events'\r\n    ).get",
+          "lineNumber": 113
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 113
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      'SELECT MAX(created_at) as d FROM telemetry_events'\r\n    ).get",
+          "lineNumber": 117
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 117
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      \"SELECT COUNT(*) as cnt FROM telemetry_events WHERE event = 'onboarding_complete'\"\r\n    ).get",
+          "lineNumber": 121
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 121
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      \"SELECT COUNT(*) as cnt FROM telemetry_events WHERE event = 'session_start'\"\r\n    ).get",
+          "lineNumber": 125
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 125
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      \"SELECT properties FROM telemetry_events WHERE event = 'embedding_provider' ORDER BY created_at DESC LIMIT 1\"\r\n    ).get",
+          "lineNumber": 129
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 129
+        },
+        {
+          "caller": "getSummary",
+          "callee": "JSON.parse",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      \"SELECT DISTINCT json_extract(properties, '$.templateId') as tid FROM telemetry_events WHERE event IN ('template_selected', 'workspace_created') AND json_extract(properties, '$.templateId') IS NOT NULL\"\r\n    ).all",
+          "lineNumber": 136
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 136
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare(\r\n      'SELECT event, COUNT(*) as cnt FROM telemetry_events GROUP BY event ORDER BY cnt DESC'\r\n    ).all",
+          "lineNumber": 140
+        },
+        {
+          "caller": "getSummary",
+          "callee": "this.db.prepare",
+          "lineNumber": 140
+        },
+        {
+          "caller": "getSummary",
+          "callee": "tplRows.map",
+          "lineNumber": 156
+        },
+        {
+          "caller": "getEvents",
+          "callee": "conditions.push",
+          "lineNumber": 167
+        },
+        {
+          "caller": "getEvents",
+          "callee": "params.push",
+          "lineNumber": 168
+        },
+        {
+          "caller": "getEvents",
+          "callee": "conditions.push",
+          "lineNumber": 171
+        },
+        {
+          "caller": "getEvents",
+          "callee": "params.push",
+          "lineNumber": 172
+        },
+        {
+          "caller": "getEvents",
+          "callee": "conditions.push",
+          "lineNumber": 175
+        },
+        {
+          "caller": "getEvents",
+          "callee": "params.push",
+          "lineNumber": 176
+        },
+        {
+          "caller": "getEvents",
+          "callee": "conditions.join",
+          "lineNumber": 179
+        },
+        {
+          "caller": "getEvents",
+          "callee": "this.db.prepare(\r\n      `SELECT id, event, properties, created_at FROM telemetry_events ${where} ORDER BY created_at DESC LIMIT ?`\r\n    ).all",
+          "lineNumber": 182
+        },
+        {
+          "caller": "getEvents",
+          "callee": "this.db.prepare",
+          "lineNumber": 182
+        },
+        {
+          "caller": "getEvents",
+          "callee": "rows.map",
+          "lineNumber": 186
+        },
+        {
+          "caller": "getEvents",
+          "callee": "JSON.parse",
+          "lineNumber": 189
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.prepare('DELETE FROM telemetry_events').run",
+          "lineNumber": 196
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.prepare",
+          "lineNumber": 196
+        },
+        {
+          "caller": "close",
+          "callee": "this.db.close",
+          "lineNumber": 202
+        },
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 235
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.db.pragma",
+          "lineNumber": 237
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.db.exec",
+          "lineNumber": 238
+        },
+        {
+          "caller": "recordToolUse",
+          "callee": "this.upsertEvent",
+          "lineNumber": 243
+        },
+        {
+          "caller": "recordCommand",
+          "callee": "this.upsertEvent",
+          "lineNumber": 248
+        },
+        {
+          "caller": "recordError",
+          "callee": "this.upsertEvent",
+          "lineNumber": 253
+        },
+        {
+          "caller": "recordCapabilityGap",
+          "callee": "this.upsertEvent",
+          "lineNumber": 258
+        },
+        {
+          "caller": "recordSession",
+          "callee": "new Date().toISOString().split",
+          "lineNumber": 263
+        },
+        {
+          "caller": "recordSession",
+          "callee": "new Date().toISOString",
+          "lineNumber": 263
+        },
+        {
+          "caller": "recordSession",
+          "callee": "this.db.prepare(\r\n      `INSERT INTO collector_events (category, name, count, date) VALUES ('session', 'duration_total_ms', ?, ?)\r\n       ON CONFLICT(name, date) DO UPDATE SET count = count + excluded.count`\r\n    ).run",
+          "lineNumber": 264
+        },
+        {
+          "caller": "recordSession",
+          "callee": "this.db.prepare",
+          "lineNumber": 264
+        },
+        {
+          "caller": "recordSession",
+          "callee": "this.db.prepare(\r\n      `INSERT INTO collector_events (category, name, count, date) VALUES ('session', 'interaction_count', ?, ?)\r\n       ON CONFLICT(name, date) DO UPDATE SET count = count + excluded.count`\r\n    ).run",
+          "lineNumber": 268
+        },
+        {
+          "caller": "recordSession",
+          "callee": "this.db.prepare",
+          "lineNumber": 268
+        },
+        {
+          "caller": "recordSession",
+          "callee": "this.db.prepare(\r\n      `INSERT INTO collector_events (category, name, count, date) VALUES ('session', 'session_count', 1, ?)\r\n       ON CONFLICT(name, date) DO UPDATE SET count = count + 1`\r\n    ).run",
+          "lineNumber": 272
+        },
+        {
+          "caller": "recordSession",
+          "callee": "this.db.prepare",
+          "lineNumber": 272
+        },
+        {
+          "caller": "upsertEvent",
+          "callee": "new Date().toISOString().split",
+          "lineNumber": 279
+        },
+        {
+          "caller": "upsertEvent",
+          "callee": "new Date().toISOString",
+          "lineNumber": 279
+        },
+        {
+          "caller": "upsertEvent",
+          "callee": "this.db.prepare(\r\n      `INSERT INTO collector_events (category, name, count, date) VALUES (?, ?, 1, ?)\r\n       ON CONFLICT(name, date) DO UPDATE SET count = count + 1`\r\n    ).run",
+          "lineNumber": 280
+        },
+        {
+          "caller": "upsertEvent",
+          "callee": "this.db.prepare",
+          "lineNumber": 280
+        },
+        {
+          "caller": "getReport",
+          "callee": "since.setDate",
+          "lineNumber": 292
+        },
+        {
+          "caller": "getReport",
+          "callee": "since.getDate",
+          "lineNumber": 292
+        },
+        {
+          "caller": "getReport",
+          "callee": "since.toISOString().split",
+          "lineNumber": 293
+        },
+        {
+          "caller": "getReport",
+          "callee": "since.toISOString",
+          "lineNumber": 293
+        },
+        {
+          "caller": "getReport",
+          "callee": "this.db.prepare(\r\n      `SELECT name, SUM(count) as total_count, category, date\r\n       FROM collector_events WHERE date >= ?\r\n       GROUP BY name, category, date ORDER BY date DESC, name`\r\n    ).all",
+          "lineNumber": 295
+        },
+        {
+          "caller": "getReport",
+          "callee": "this.db.prepare",
+          "lineNumber": 295
+        },
+        {
+          "caller": "getReport",
+          "callee": "rows.reduce",
+          "lineNumber": 301
+        },
+        {
+          "caller": "getReport",
+          "callee": "rows.map",
+          "lineNumber": 302
+        },
+        {
+          "caller": "getReport",
+          "callee": "this.db.prepare(\r\n      'SELECT MIN(date) as first_date FROM collector_events'\r\n    ).get",
+          "lineNumber": 303
+        },
+        {
+          "caller": "getReport",
+          "callee": "this.db.prepare",
+          "lineNumber": 303
+        },
+        {
+          "caller": "flush",
+          "callee": "this.db.prepare(\r\n      'SELECT name, count, category, date FROM collector_events ORDER BY date DESC, name'\r\n    ).all",
+          "lineNumber": 312
+        },
+        {
+          "caller": "flush",
+          "callee": "this.db.prepare",
+          "lineNumber": 312
+        },
+        {
+          "caller": "flush",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 315
+        },
+        {
+          "caller": "flush",
+          "callee": "path.join",
+          "lineNumber": 316
+        },
+        {
+          "caller": "flush",
+          "callee": "JSON.stringify",
+          "lineNumber": 317
+        },
+        {
+          "caller": "close",
+          "callee": "this.db.close",
+          "lineNumber": 323
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 0,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "packages/core/tests/config.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 231,
+      "nonEmptyLines": 184,
+      "callGraph": [
+        {
+          "caller": "makeTempDir",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 11
+        },
+        {
+          "caller": "makeTempDir",
+          "callee": "path.join",
+          "lineNumber": 11
+        },
+        {
+          "caller": "makeTempDir",
+          "callee": "os.tmpdir",
+          "lineNumber": 11
+        },
+        {
+          "caller": "makeTempDir",
+          "callee": "tempDirs.push",
+          "lineNumber": 12
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/cron-store.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 177,
+      "nonEmptyLines": 148,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/embedding-provider-quota.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 267,
+      "nonEmptyLines": 231,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/file-indexer.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 267,
+      "nonEmptyLines": 230,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/file-store-s3.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 236,
+      "nonEmptyLines": 186,
+      "classes": [
+        {
+          "name": "MockS3Client",
+          "startLine": 10,
+          "endLine": 13,
+          "methods": [
+            "constructor"
+          ],
+          "properties": [
+            "send"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "Object.assign",
+          "lineNumber": 18
+        },
+        {
+          "caller": "constructor",
+          "callee": "Object.assign",
+          "lineNumber": 19
+        },
+        {
+          "caller": "constructor",
+          "callee": "Object.assign",
+          "lineNumber": 20
+        },
+        {
+          "caller": "constructor",
+          "callee": "Object.assign",
+          "lineNumber": 21
+        },
+        {
+          "caller": "constructor",
+          "callee": "Object.assign",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/tests/litellm-embedder.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 162,
+      "nonEmptyLines": 131,
+      "callGraph": [
+        {
+          "caller": "mockFetchOk",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 13
+        },
+        {
+          "caller": "mockFetchOk",
+          "callee": "vi.fn",
+          "lineNumber": 13
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/memory-import.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 340,
+      "nonEmptyLines": 306,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/migration.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 125,
+      "nonEmptyLines": 101,
+      "callGraph": [
+        {
+          "caller": "makeTmpDir",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 13
+        },
+        {
+          "caller": "makeTmpDir",
+          "callee": "path.join",
+          "lineNumber": 13
+        },
+        {
+          "caller": "makeTmpDir",
+          "callee": "os.tmpdir",
+          "lineNumber": 13
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/skill-hashes.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 115,
+      "nonEmptyLines": 91,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/structured-tasks.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 86,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/team-sync.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 297,
+      "nonEmptyLines": 253,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/telemetry.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 112,
+      "nonEmptyLines": 90,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 21,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "packages/core/vitest.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 9,
+      "nonEmptyLines": 8,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

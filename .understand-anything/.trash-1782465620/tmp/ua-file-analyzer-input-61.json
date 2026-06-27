@@ -1,0 +1,24 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-wiki-compiler/src/compiler.test.ts", "language": "typescript", "sizeLines": 212, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/compiler.ts", "language": "typescript", "sizeLines": 555, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/prompts.ts", "language": "typescript", "sizeLines": 94, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/state.test.ts", "language": "typescript", "sizeLines": 132, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/state.ts", "language": "typescript", "sizeLines": 160, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/synthesizer.test.ts", "language": "typescript", "sizeLines": 102, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/synthesizer.ts", "language": "typescript", "sizeLines": 157, "fileCategory": "code"},
+    {"path": "packages/hive-mind-wiki-compiler/src/types.ts", "language": "typescript", "sizeLines": 115, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-wiki-compiler/src/compiler.test.ts": ["packages/hive-mind-wiki-compiler/src/compiler.ts", "packages/hive-mind-wiki-compiler/src/state.ts", "packages/hive-mind-wiki-compiler/src/types.ts"],
+    "packages/hive-mind-wiki-compiler/src/compiler.ts": ["packages/hive-mind-wiki-compiler/src/prompts.ts", "packages/hive-mind-wiki-compiler/src/state.ts", "packages/hive-mind-wiki-compiler/src/types.ts"],
+    "packages/hive-mind-wiki-compiler/src/prompts.ts": [],
+    "packages/hive-mind-wiki-compiler/src/state.test.ts": ["packages/hive-mind-wiki-compiler/src/state.ts"],
+    "packages/hive-mind-wiki-compiler/src/state.ts": ["packages/hive-mind-wiki-compiler/src/types.ts"],
+    "packages/hive-mind-wiki-compiler/src/synthesizer.test.ts": ["packages/hive-mind-wiki-compiler/src/synthesizer.ts"],
+    "packages/hive-mind-wiki-compiler/src/synthesizer.ts": ["packages/hive-mind-wiki-compiler/src/types.ts"],
+    "packages/hive-mind-wiki-compiler/src/types.ts": []
+  },
+  "neighborMap": {}
+}

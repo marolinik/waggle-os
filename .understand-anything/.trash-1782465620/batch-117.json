@@ -1,0 +1,167 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/backend-map/sections/02a-data-model-memory.md",
+      "type": "document",
+      "name": "02a-data-model-memory.md",
+      "filePath": "docs/backend-map/sections/02a-data-model-memory.md",
+      "summary": "Comprehensive reference for the per-workspace SQLite memory layer (*.mind), documenting all 15 tables across 10 logical layers including FrameStore, HybridSearch, KnowledgeGraph, identity, sessions, FTS5/vec0 virtual tables, evolution runs, and harvest sources with full ER diagram.",
+      "tags": ["documentation", "database", "schema-definition", "api-schema", "infrastructure"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/02b-data-model-relational.md",
+      "type": "document",
+      "name": "02b-data-model-relational.md",
+      "filePath": "docs/backend-map/sections/02b-data-model-relational.md",
+      "summary": "Complete reference for the relational Postgres + Drizzle layer covering all 20 tables for multi-tenant teams including users, agents, tasks, messages, team knowledge graph, governance/capability control, background jobs, proactive intelligence, and audit logging with ER diagram.",
+      "tags": ["documentation", "database", "schema-definition", "infrastructure", "api-schema"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/02c-shared-types-tiers.md",
+      "type": "document",
+      "name": "02c-shared-types-tiers.md",
+      "filePath": "docs/backend-map/sections/02c-shared-types-tiers.md",
+      "summary": "Exhaustive reference for all TypeScript types, Zod schemas, and the 5-tier model (TRIAL/FREE/PRO/TEAMS/ENTERPRISE) exported from @waggle/shared, covering User, Team, AgentDef, Task, WaggleMessage, connectors, WebSocket event contracts, and the TierCapabilities matrix.",
+      "tags": ["documentation", "api-schema", "schema-definition", "configuration", "type-definition"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03a-api-chat-agents.md",
+      "type": "document",
+      "name": "03a-api-chat-agents.md",
+      "filePath": "docs/backend-map/sections/03a-api-chat-agents.md",
+      "summary": "API reference for the Chat/Agent-Execution/Session subsystem including the SSE POST /api/chat endpoint, conversation history, agent status/cost/model routes, tool-execution approvals, slash commands, session CRUD, agent groups, and one-shot structured retrieval via POST /api/agent/run.",
+      "tags": ["documentation", "api-schema", "api-handler", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03b-api-memory.md",
+      "type": "document",
+      "name": "03b-api-memory.md",
+      "filePath": "docs/backend-map/sections/03b-api-memory.md",
+      "summary": "API reference covering all memory-related HTTP routes: memory frame recall and save, knowledge graph read, wiki compilation, external AI export harvest ingestion, legacy import, identity/mind context, document version registry, GDPR data erasure, and file ingestion.",
+      "tags": ["documentation", "api-schema", "api-handler", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03c-api-workspace-team.md",
+      "type": "document",
+      "name": "03c-api-workspace-team.md",
+      "filePath": "docs/backend-map/sections/03c-api-workspace-team.md",
+      "summary": "API reference for workspace lifecycle, team management, personas, settings/tier/budget, user profile, and pins routes, including full data shapes for the workspace context catch-up block, workspace templates, team server config, and the persistence map of where each entity lives.",
+      "tags": ["documentation", "api-schema", "api-handler", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03d-api-marketplace-skills.md",
+      "type": "document",
+      "name": "03d-api-marketplace-skills.md",
+      "filePath": "docs/backend-map/sections/03d-api-marketplace-skills.md",
+      "summary": "API reference for the marketplace, skills/capability packs/plugins/hooks, connectors, AI-OS tool launcher, OAuth providers, vault secret management, and LLM/search provider routes, with install-audit, tier-gating rules, and security patterns documented.",
+      "tags": ["documentation", "api-schema", "api-handler", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03e-api-evolution-governance.md",
+      "type": "document",
+      "name": "03e-api-evolution-governance.md",
+      "filePath": "docs/backend-map/sections/03e-api-evolution-governance.md",
+      "summary": "API reference for the self-evolution loop, feedback collection, telemetry, EU AI Act compliance reporting, cost dashboard, capability status and plugin toggles, and approval inbox/grants, covering every route in the governance subsystem.",
+      "tags": ["documentation", "api-schema", "api-handler", "monitoring"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03f-api-realtime-ops.md",
+      "type": "document",
+      "name": "03f-api-realtime-ops.md",
+      "filePath": "docs/backend-map/sections/03f-api-realtime-ops.md",
+      "summary": "API reference for the real-time and ops surface including SSE streaming endpoints, WaggleDance signals/v2 protocol bus, audit events, cron schedules, notifications, offline mode, backup/restore, agent fleet, LiteLLM control, local inference, Anthropic proxy, filesystem browse, browser extension health, and Telegram push.",
+      "tags": ["documentation", "api-schema", "api-handler", "monitoring"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/03g-api-cloud-billing-kvark.md",
+      "type": "document",
+      "name": "03g-api-cloud-billing-kvark.md",
+      "filePath": "docs/backend-map/sections/03g-api-cloud-billing-kvark.md",
+      "summary": "API reference for the cloud/multi-tenant server vs local sidecar architecture, Stripe billing integration with webhook handling and tier resolution, enterprise KVARK client with resilience contract, WebSocket channels (local relay and cloud team chat), and the full route-plugin registration map.",
+      "tags": ["documentation", "api-schema", "api-handler", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/04-feature-map.md",
+      "type": "document",
+      "name": "04-feature-map.md",
+      "filePath": "docs/backend-map/sections/04-feature-map.md",
+      "summary": "Master frontend-to-backend feature map documenting the API client contract (adapter.ts), all 20 endpoint groups covering every route in the application, dock app to backend endpoint mappings, global provider/state tree, tier billing gating, and a rebuild checklist for the UI.",
+      "tags": ["documentation", "api-schema", "configuration", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/05a-subsystem-agent-runtime.md",
+      "type": "document",
+      "name": "05a-subsystem-agent-runtime.md",
+      "filePath": "docs/backend-map/sections/05a-subsystem-agent-runtime.md",
+      "summary": "Deep-dive reference for the agent runtime subsystem covering the runAgentLoop execution loop, tool execution with LoopGuard, the Orchestrator (buildSystemPrompt/recallMemory/buildAssembledPrompt), all 22 built-in personas, tool filtering, PromptAssembler sixth layer, behavioral spec, cost tracking, and production wiring to the chat route.",
+      "tags": ["documentation", "api-handler", "configuration", "monitoring"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/05b-subsystem-memory.md",
+      "type": "document",
+      "name": "05b-subsystem-memory.md",
+      "filePath": "docs/backend-map/sections/05b-subsystem-memory.md",
+      "summary": "Technical reference for the persistent memory engine (the platform moat) covering FrameStore (read/write/compaction/dedup), HybridSearch (vector+keyword fusion with actual constants), relevance scoring, KnowledgeGraph, CognifyPipeline write path, embedding provider chain, CombinedRetrieval recall path, reconciliation, and SessionStore.",
+      "tags": ["documentation", "database", "schema-definition", "api-schema"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/05c-subsystem-harvest.md",
+      "type": "document",
+      "name": "05c-subsystem-harvest.md",
+      "filePath": "docs/backend-map/sections/05c-subsystem-harvest.md",
+      "summary": "Technical reference for the conversation and file ingestion (Harvest) pipeline including all core data shapes (UniversalImportItem, HarvestSource, HarvestRun), source adapters for external AI exports (ChatGPT/Claude/Gemini/PDF/etc.), the 4-pass distillation pipeline, production commit flow, dedup logic, and HTTP API endpoints.",
+      "tags": ["documentation", "data-pipeline", "api-schema", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/backend-map/sections/05d-subsystem-evolution.md",
+      "type": "document",
+      "name": "05d-subsystem-evolution.md",
+      "filePath": "docs/backend-map/sections/05d-subsystem-evolution.md",
+      "summary": "Technical reference for the self-evolution loop subsystem covering the full closed-loop pipeline (EvalDatasetBuilder → EvolveSchema → IterativeGEPA → ComposeEvolution → LLMJudge → EvolutionGates), all HTTP endpoints for triggering/inspecting runs, accept/reject mechanics, data shapes, and the deploy flow when a proposal is accepted.",
+      "tags": ["documentation", "api-schema", "api-handler", "monitoring"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/05e-subsystem-waggledance-aios.md",
+      "type": "document",
+      "name": "05e-subsystem-waggledance-aios.md",
+      "filePath": "docs/backend-map/sections/05e-subsystem-waggledance-aios.md",
+      "complexity": "complex",
+      "summary": "Technical reference for the WaggleDance multi-agent coordination protocol and AI-OS arc, covering WaggleMessage protocol, SignalBus v2 ring buffer, legacy streaming endpoints, the bridge from v2 to legacy, AI tool detection for 7 tools, the launcher/hook-installer, shim-core emitter, sub-agent spawning, cross-workspace messaging, and skill diffusion.",
+      "tags": ["documentation", "api-schema", "api-handler", "data-pipeline"]
+    },
+    {
+      "id": "document:docs/backend-map/sections/05f-subsystem-capabilities-tiers.md",
+      "type": "document",
+      "name": "05f-subsystem-capabilities-tiers.md",
+      "filePath": "docs/backend-map/sections/05f-subsystem-capabilities-tiers.md",
+      "summary": "Technical reference for the capabilities, connectors, trust and tier-gating subsystem including CapabilityRouter resolution order, capability acquisition scoring, trust model, permissions sandbox, autonomy-tier confirmation gates (Normal/Autonomous/YOLO), connector SDK/registry, KVARK enterprise tools, tier-assertion patterns, MCP catalog, and credential pool.",
+      "tags": ["documentation", "security", "api-schema", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/backend-map/sections/05g-subsystem-skills-marketplace-wiki.md",
+      "type": "document",
+      "name": "05g-subsystem-skills-marketplace-wiki.md",
+      "filePath": "docs/backend-map/sections/05g-subsystem-skills-marketplace-wiki.md",
+      "summary": "Technical reference for the skills lifecycle (creation/recommendation/usage tracking/retirement/hot-reload), marketplace data model with all 5 SQLite tables, SecurityGate install validation, marketplace sync, and the wiki-compiler including page/watermark tables, compilation algorithm, health report, synthesizer, and all HTTP API routes for each subsystem.",
+      "tags": ["documentation", "api-schema", "api-handler", "data-pipeline"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": []
+}

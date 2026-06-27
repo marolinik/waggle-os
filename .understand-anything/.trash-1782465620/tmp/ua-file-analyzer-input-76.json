@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "apps/web/src/components/os/apps/BenchmarkApp.test.tsx", "language": "typescript", "sizeLines": 76, "fileCategory": "code"},
+    {"path": "apps/web/src/components/os/apps/BenchmarkApp.tsx", "language": "typescript", "sizeLines": 411, "fileCategory": "code"},
+    {"path": "apps/web/src/routes/BenchmarkRoute.tsx", "language": "typescript", "sizeLines": 11, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "apps/web/src/components/os/apps/BenchmarkApp.test.tsx": ["apps/web/src/components/os/apps/BenchmarkApp.tsx"],
+    "apps/web/src/components/os/apps/BenchmarkApp.tsx": [],
+    "apps/web/src/routes/BenchmarkRoute.tsx": ["apps/web/src/components/os/apps/BenchmarkApp.tsx", "apps/web/src/routes/SurfaceBoundary.tsx"]
+  },
+  "neighborMap": {
+    "apps/web/src/routes/BenchmarkRoute.tsx": [{"path": "apps/web/src/routes/SurfaceBoundary.tsx", "batchIndex": 16, "symbols": []}]
+  }
+}

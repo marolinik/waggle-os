@@ -1,0 +1,1006 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "type": "file",
+      "name": "adapter.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "summary": "Defines the Hermes hook adapter that extracts session data (cwd, session ID, prompt, response, parent) from raw Hermes event payloads and exposes the canonical hermesAdapter object and event name constants.",
+      "tags": ["adapter", "event-handler", "middleware", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "type": "file",
+      "name": "hermes-hooks.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "summary": "CLI entry point for the hermes-hooks binary providing install, uninstall, and verify sub-commands with argument parsing and human-readable summary output.",
+      "tags": ["entry-point", "cli", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "type": "file",
+      "name": "compact-on-stop.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "summary": "Implements optional memory compaction logic triggered on session stop, with configurable time-window gating and persistent last-compact timestamp tracking to avoid redundant compactions.",
+      "tags": ["event-handler", "utility", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "type": "file",
+      "name": "session-start.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "summary": "Implements the SessionStart hook handler for Hermes, reading stdin payload and invoking memory recall on first-turn detection to inject context into the session.",
+      "tags": ["event-handler", "hook", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "type": "file",
+      "name": "stop.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "summary": "Implements the Stop hook handler for Hermes, persisting session memory and optionally triggering compact-on-stop after the base stop handler completes.",
+      "tags": ["event-handler", "hook", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "type": "file",
+      "name": "user-prompt-submit.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "summary": "Implements the UserPromptSubmit hook handler for Hermes, saving user prompt context to hive-mind memory via the hook bridge.",
+      "tags": ["event-handler", "hook", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "type": "file",
+      "name": "install.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/install.ts",
+      "summary": "Handles patching the Hermes ~/.hermes/config.yaml to register hive-mind hook entries, creating a byte-identical backup and writing an install pointer for reversible uninstall.",
+      "tags": ["service", "installation", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "type": "file",
+      "name": "paths.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/paths.ts",
+      "summary": "Resolves and exports canonical filesystem paths for the Hermes hooks integration including config file, hooks directory, backup paths, and hook command construction helpers.",
+      "tags": ["utility", "configuration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "type": "file",
+      "name": "uninstall.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "summary": "Reverses the Hermes hook installation by restoring the byte-identical pre-install config.yaml backup or removing the config file if it was created by the installer.",
+      "tags": ["service", "installation", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "type": "file",
+      "name": "verify.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/verify.ts",
+      "summary": "Smoke-checks the Hermes hook install by verifying config file presence, hook registration in YAML, hook script readability, and hive-mind-cli binary reachability via probing its version output.",
+      "tags": ["service", "validation", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "type": "file",
+      "name": "yaml-merger.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "summary": "Provides idempotent YAML config merge/unmerge logic for adding and removing hive-mind hook entries in the Hermes config.yaml, with safe serialization and hive-entry detection.",
+      "tags": ["utility", "serialization", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/adapter.test.ts",
+      "type": "file",
+      "name": "adapter.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/adapter.test.ts",
+      "summary": "Unit tests for the Hermes adapter module, verifying event name constants and payload extraction functions for session data fields.",
+      "tags": ["test", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/compact-on-stop.test.ts",
+      "type": "file",
+      "name": "compact-on-stop.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/compact-on-stop.test.ts",
+      "summary": "Unit tests for the compact-on-stop module, verifying compaction gating logic, time-window resolution, and last-compact timestamp persistence.",
+      "tags": ["test", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "type": "file",
+      "name": "_test-helpers.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "summary": "Shared test utilities providing mock bridge factory and hook capture helpers used across hook handler test suites.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/hooks/session-start.test.ts",
+      "type": "file",
+      "name": "session-start.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/hooks/session-start.test.ts",
+      "summary": "Unit tests for the session-start hook handler, verifying first-turn detection, memory recall invocation, and hook exit behavior.",
+      "tags": ["test", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/hooks/stop.test.ts",
+      "type": "file",
+      "name": "stop.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/hooks/stop.test.ts",
+      "summary": "Unit tests for the stop hook handler, covering memory save, compact-on-stop triggering, and conditional compaction window enforcement.",
+      "tags": ["test", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/hooks/user-prompt-submit.test.ts",
+      "type": "file",
+      "name": "user-prompt-submit.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/hooks/user-prompt-submit.test.ts",
+      "summary": "Unit tests for the user-prompt-submit hook handler, verifying prompt capture and memory save behavior.",
+      "tags": ["test", "unit-test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/install.test.ts",
+      "type": "file",
+      "name": "install.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/install.test.ts",
+      "summary": "Integration tests for the install function, exercising config.yaml creation, patching, backup creation, hook entry registration, and install pointer writing.",
+      "tags": ["test", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/paths.test.ts",
+      "type": "file",
+      "name": "paths.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/paths.test.ts",
+      "summary": "Unit tests for the paths module, verifying path resolution for config, backup, and hook script locations.",
+      "tags": ["test", "unit-test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/register.test.ts",
+      "type": "file",
+      "name": "register.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/register.test.ts",
+      "summary": "Unit tests for the YAML registration logic in yaml-merger, verifying idempotent hook entry merging, deduplication, and event key handling.",
+      "tags": ["test", "unit-test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/uninstall.test.ts",
+      "type": "file",
+      "name": "uninstall.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/uninstall.test.ts",
+      "summary": "Integration tests for the uninstall function, verifying config restoration from backup and file cleanup when no pre-existing config was present.",
+      "tags": ["test", "integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-hermes/tests/verify.test.ts",
+      "type": "file",
+      "name": "verify.test.ts",
+      "filePath": "packages/hive-mind-hooks-hermes/tests/verify.test.ts",
+      "summary": "Integration tests for the verify function, checking config file presence, hook entry detection, hook script readability, and CLI probe behavior with a mock spawn implementation.",
+      "tags": ["test", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "lineRange": [134, 181],
+      "summary": "CLI main function dispatching to install, uninstall, or verify sub-commands based on parsed args, with exit code propagation.",
+      "tags": ["entry-point", "cli"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:parseArgs",
+      "type": "function",
+      "name": "parseArgs",
+      "filePath": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "lineRange": [20, 45],
+      "summary": "Parses CLI argv into a structured options object supporting command selection and flag overrides for hooks-dir, hook-timeout, no-auto-accept, and cli-path.",
+      "tags": ["utility", "cli"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:printInstallSummary",
+      "type": "function",
+      "name": "printInstallSummary",
+      "filePath": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "lineRange": [73, 104],
+      "summary": "Formats and prints the install result summary including installed hooks, registered events, and config file status.",
+      "tags": ["utility", "cli"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:printUninstallSummary",
+      "type": "function",
+      "name": "printUninstallSummary",
+      "filePath": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "lineRange": [106, 119],
+      "summary": "Formats and prints the uninstall result summary indicating whether config was restored from backup or removed.",
+      "tags": ["utility", "cli"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:printVerifySummary",
+      "type": "function",
+      "name": "printVerifySummary",
+      "filePath": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "lineRange": [121, 132],
+      "summary": "Formats and prints the verify result summary with pass/fail status for each health check.",
+      "tags": ["utility", "cli"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:maybeCompactOnStop",
+      "type": "function",
+      "name": "maybeCompactOnStop",
+      "filePath": "packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "lineRange": [108, 126],
+      "summary": "Conditionally triggers memory compaction via the bridge if the compact flag is enabled and the configured time window has elapsed since the last compaction.",
+      "tags": ["event-handler", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:resolveWindowMs",
+      "type": "function",
+      "name": "resolveWindowMs",
+      "filePath": "packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "lineRange": [56, 67],
+      "summary": "Resolves the compaction time window in milliseconds from an env variable override or falls back to a provided override or the default window constant.",
+      "tags": ["utility", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:readLastCompactTs",
+      "type": "function",
+      "name": "readLastCompactTs",
+      "filePath": "packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "lineRange": [73, 81],
+      "summary": "Reads and parses the persisted last-compact timestamp from disk, returning null if the file is missing or unreadable.",
+      "tags": ["utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts:runSessionStart",
+      "type": "function",
+      "name": "runSessionStart",
+      "filePath": "packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "lineRange": [49, 77],
+      "summary": "Runs the session-start hook by reading stdin payload, detecting first-turn vs continuation, and invoking the hive-mind session-start handler for memory recall injection.",
+      "tags": ["event-handler", "hook"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/hooks/stop.ts:runStop",
+      "type": "function",
+      "name": "runStop",
+      "filePath": "packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "lineRange": [35, 55],
+      "summary": "Runs the stop hook by delegating to the base stop handler for memory persistence and then optionally triggering compact-on-stop.",
+      "tags": ["event-handler", "hook"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts:runUserPromptSubmit",
+      "type": "function",
+      "name": "runUserPromptSubmit",
+      "filePath": "packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "lineRange": [25, 31],
+      "summary": "Runs the user-prompt-submit hook by invoking the hive-mind handler to capture and persist the user prompt to memory.",
+      "tags": ["event-handler", "hook"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "type": "function",
+      "name": "install",
+      "filePath": "packages/hive-mind-hooks-hermes/src/install.ts",
+      "lineRange": [119, 200],
+      "summary": "Main install orchestrator that reads or creates the Hermes config.yaml, creates a backup, registers hive-mind hook entries via yaml-merger, and writes an install pointer for future uninstall.",
+      "tags": ["service", "installation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/install.ts:buildEntries",
+      "type": "function",
+      "name": "buildEntries",
+      "filePath": "packages/hive-mind-hooks-hermes/src/install.ts",
+      "lineRange": [102, 117],
+      "summary": "Constructs the three hook entry objects (session-start, stop, user-prompt-submit) with their event keys, commands, and timeout values for registration into the Hermes config.",
+      "tags": ["factory", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/paths.ts:resolvePaths",
+      "type": "function",
+      "name": "resolvePaths",
+      "filePath": "packages/hive-mind-hooks-hermes/src/paths.ts",
+      "lineRange": [61, 78],
+      "summary": "Resolves all canonical filesystem paths needed for the Hermes hooks integration from user home, overridable hooks directory, and CLI path options.",
+      "tags": ["utility", "configuration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/uninstall.ts:uninstall",
+      "type": "function",
+      "name": "uninstall",
+      "filePath": "packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "lineRange": [42, 79],
+      "summary": "Reverses the Hermes hook installation by reading the install pointer, restoring the backed-up config.yaml, or removing the config file if it was freshly created.",
+      "tags": ["service", "installation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "type": "function",
+      "name": "verify",
+      "filePath": "packages/hive-mind-hooks-hermes/src/verify.ts",
+      "lineRange": [88, 162],
+      "summary": "Performs a comprehensive smoke-check of the Hermes hook installation, running checks for config file existence, hook entries, hook script readability, and CLI binary reachability.",
+      "tags": ["validation", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/verify.ts:probeCliVersion",
+      "type": "function",
+      "name": "probeCliVersion",
+      "filePath": "packages/hive-mind-hooks-hermes/src/verify.ts",
+      "lineRange": [51, 86],
+      "summary": "Spawns the hive-mind CLI with a timeout to probe its version output, collecting stdout/stderr and returning a result object with version string and any error details.",
+      "tags": ["utility", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlRegister",
+      "type": "function",
+      "name": "yamlRegister",
+      "filePath": "packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "lineRange": [116, 147],
+      "summary": "Idempotently merges hive-mind hook entries into a parsed Hermes config object, deduplicating by command and preserving existing non-hive entries.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlUnregister",
+      "type": "function",
+      "name": "yamlUnregister",
+      "filePath": "packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "lineRange": [157, 175],
+      "summary": "Removes all hive-mind-marked entries from the Hermes config hooks, preserving third-party hook entries intact.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:parseConfig",
+      "type": "function",
+      "name": "parseConfig",
+      "filePath": "packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "lineRange": [85, 101],
+      "summary": "Parses a raw YAML string into a typed Hermes config object, handling empty input and normalizing the hooks section into a record of event key arrays.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/adapter.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/compact-on-stop.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/compact-on-stop.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/hooks/session-start.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/hooks/session-start.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/hooks/stop.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/hooks/stop.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/hooks/user-prompt-submit.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/hooks/user-prompt-submit.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/install.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/install.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/paths.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/register.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/uninstall.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/uninstall.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/verify.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/tests/verify.test.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:parseArgs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:printInstallSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:printUninstallSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:printVerifySummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:maybeCompactOnStop",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:resolveWindowMs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:readLastCompactTs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts:runSessionStart",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/hooks/stop.ts:runStop",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts:runUserPromptSubmit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/install.ts:buildEntries",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/paths.ts:resolvePaths",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/uninstall.ts:uninstall",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/verify.ts:probeCliVersion",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlRegister",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlUnregister",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:parseConfig",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:maybeCompactOnStop",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:resolveWindowMs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:readLastCompactTs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts:runSessionStart",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/hooks/stop.ts:runStop",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts:runUserPromptSubmit",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/paths.ts:resolvePaths",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/uninstall.ts:uninstall",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlRegister",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlUnregister",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:parseConfig",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/adapter.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/compact-on-stop.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/session-start.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/stop.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/hooks/user-prompt-submit.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/install.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/install.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/paths.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/paths.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/uninstall.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/verify.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/verify.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "target": "file:packages/hive-mind-hooks-hermes/tests/register.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:main",
+      "target": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:main",
+      "target": "function:packages/hive-mind-hooks-hermes/src/uninstall.ts:uninstall",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts:main",
+      "target": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/hooks/stop.ts:runStop",
+      "target": "function:packages/hive-mind-hooks-hermes/src/compact-on-stop.ts:maybeCompactOnStop",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "target": "function:packages/hive-mind-hooks-hermes/src/paths.ts:resolvePaths",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:yamlRegister",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/install.ts:install",
+      "target": "function:packages/hive-mind-hooks-hermes/src/install.ts:buildEntries",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/uninstall.ts:uninstall",
+      "target": "function:packages/hive-mind-hooks-hermes/src/paths.ts:resolvePaths",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "target": "function:packages/hive-mind-hooks-hermes/src/paths.ts:resolvePaths",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "target": "function:packages/hive-mind-hooks-hermes/src/verify.ts:probeCliVersion",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/hive-mind-hooks-hermes/src/verify.ts:verify",
+      "target": "function:packages/hive-mind-hooks-hermes/src/yaml-merger.ts:parseConfig",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

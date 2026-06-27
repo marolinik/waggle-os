@@ -1,0 +1,530 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/addiction-features/01-memory-streak.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 92,
+      "nonEmptyLines": 67,
+      "sections": [
+        {
+          "heading": "01 — Memory Streak Counter",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 86
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/addiction-features/02-daily-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 118,
+      "nonEmptyLines": 93,
+      "sections": [
+        {
+          "heading": "02 — Daily Brief Notification",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Server-side generator",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 111
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/addiction-features/03-continuity-banner.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 65,
+      "sections": [
+        {
+          "heading": "03 — Continuity Moments (Auto-Resume Banner)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 81
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/addiction-features/04-weekly-wins-digest.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 126,
+      "nonEmptyLines": 99,
+      "sections": [
+        {
+          "heading": "04 — Memory Wins Digest (Weekly)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Server-side generator",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 119
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/addiction-features/05-milestone-cards.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 109,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "05 — First-Time Milestone Cards",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/addiction-features/06-tour-replay.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 80,
+      "nonEmptyLines": 57,
+      "sections": [
+        {
+          "heading": "06 — Tour Replay Button",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/addiction-features/07-pending-imports-reminder.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 93,
+      "nonEmptyLines": 70,
+      "sections": [
+        {
+          "heading": "07 — \"Pending Imports\" Reminder Banner",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "User story",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "UI sketch",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Data model",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "Implementation notes",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "Estimate",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "Risks + open questions",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Out of scope (v1)",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "PM decisions needed",
+          "level": 2,
+          "line": 87
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/addiction-features/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 122,
+      "nonEmptyLines": 85,
+      "sections": [
+        {
+          "heading": "Addiction Features — Block B Design Docs (2026-05-01)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Index",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Cross-feature decisions Marko needs to make once",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Ratification checklist",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "Build order recommendation (assuming all GO)",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "Out of scope for this design pass",
+          "level": 2,
+          "line": 104
+        },
+        {
+          "heading": "Implementation contract",
+          "level": 2,
+          "line": 113
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    }
+  ]
+}

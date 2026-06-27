@@ -1,0 +1,14 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/core/src/install-audit.ts", "language": "typescript", "sizeLines": 221, "fileCategory": "code"},
+    {"path": "packages/core/tests/install-audit-check-parity.test.ts", "language": "typescript", "sizeLines": 44, "fileCategory": "code"},
+    {"path": "packages/core/tests/install-audit.test.ts", "language": "typescript", "sizeLines": 479, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/core/src/install-audit.ts": [],
+    "packages/core/tests/install-audit-check-parity.test.ts": ["packages/core/src/install-audit.ts"],
+    "packages/core/tests/install-audit.test.ts": ["packages/core/src/install-audit.ts"]
+  },
+  "neighborMap": {}
+}

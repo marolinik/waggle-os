@@ -1,94 +1,140 @@
 /**
- * 9G-4: Visual Regression Tests — Screenshot baselines for all 7 views.
+ * Legacy Visual Regression suite for the current AppShell.
  *
- * Each view is tested in both dark and light mode = 14 baselines total.
- * The server must be running at localhost:3333 before running these tests.
- *
- * To generate baselines:
- *   npx playwright test --update-snapshots
- *
- * To verify:
- *   npx playwright test
+ * Keeps the original 7-view snapshot names, but routes directly to the modern
+ * surfaces instead of clicking retired positional sidebar items.
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
-// The 7 views in Waggle and their sidebar navigation indices
+const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&skipBriefing=true&tier=power';
+
 const VIEWS = [
-  { name: 'chat', navIndex: 0, label: 'Chat' },
-  { name: 'memory', navIndex: 1, label: 'Memory' },
-  { name: 'events', navIndex: 2, label: 'Events' },
-  { name: 'capabilities', navIndex: 3, label: 'Capabilities' },
-  { name: 'cockpit', navIndex: 4, label: 'Cockpit' },
-  { name: 'mission-control', navIndex: 5, label: 'Mission Control' },
-  { name: 'settings', navIndex: 6, label: 'Settings' },
+  { name: 'chat', route: 'chat' },
+  { name: 'memory', route: '/memory' },
+  { name: 'events', route: '/settings/events' },
+  { name: 'capabilities', route: '/skills' },
+  { name: 'cockpit', route: '/home' },
+  { name: 'mission-control', route: '/settings/mission-control' },
+  { name: 'settings', route: '/settings?tab=models' },
 ] as const;
 
-// Wait for the app to fully load (SPA hydration + data fetches)
-async function waitForAppReady(page: import('@playwright/test').Page) {
-  // Wait for the main app shell to render
-  await page.waitForSelector('[data-testid="app-shell"], .app-shell, main', {
-    timeout: 10_000,
-  }).catch(() => {
-    // Fallback: just wait for any content
-  });
-  // Let React settle
-  await page.waitForTimeout(1000);
+function routeWithSkip(route: string) {
+  const sep = route.includes('?') ? '&' : '?';
+  return `${route}${sep}${SKIP_PARAMS}`;
 }
 
-// Navigate to a specific view by clicking the sidebar nav item
-async function navigateToView(page: import('@playwright/test').Page, navIndex: number) {
-  // Sidebar nav buttons — try data-testid first, then positional
-  const navButtons = page.locator('nav button, [role="navigation"] button, .sidebar button');
-  const count = await navButtons.count();
+async function firstWorkspaceChatRoute(page: Page) {
+  const res = await page.request.get('/api/workspaces');
+  const workspaces = await res.json();
+  const workspaceId = Array.isArray(workspaces) ? workspaces[0]?.id : null;
+  return workspaceId ? `/workspaces/${workspaceId}/chat` : '/home';
+}
 
-  if (count > navIndex) {
-    await navButtons.nth(navIndex).click();
-    await page.waitForTimeout(500); // Let view transition complete
+async function applyTheme(page: Page, theme: 'dark' | 'light') {
+  await page.addInitScript((mode) => {
+    localStorage.setItem('waggle-theme', mode);
+    localStorage.setItem('waggle:onboarding', JSON.stringify({
+      completed: true,
+      step: 7,
+      tier: 'power',
+      tooltipsDismissed: true,
+    }));
+    if (mode === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }, theme);
+}
+
+async function gotoVisualView(page: Page, view: typeof VIEWS[number], theme: 'dark' | 'light') {
+  await applyTheme(page, theme);
+  const route = view.route === 'chat' ? await firstWorkspaceChatRoute(page) : view.route;
+  await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.waggle-sidebar, [role="navigation"], main', { timeout: 15_000 });
+  await page.waitForLoadState('domcontentloaded');
+  await waitForVisualReady(page, view.name);
+  await page.evaluate((mode) => {
+    localStorage.setItem('waggle-theme', mode);
+    if (mode === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else document.documentElement.removeAttribute('data-theme');
+  }, theme);
+  await page.waitForTimeout(800);
+  await stabilizeVisuals(page);
+}
+
+async function waitForVisualReady(page: Page, viewName: typeof VIEWS[number]['name']) {
+  await page.waitForFunction(() => !document.body.innerText.includes('Loading workspace'), null, { timeout: 15_000 }).catch(() => {});
+
+  if (viewName === 'chat') {
+    await expect(page.locator('textarea').first()).toBeVisible({ timeout: 15_000 });
+    return;
+  }
+  if (viewName === 'memory') {
+    await expect(page.getByTestId('memory-center-app')).toBeVisible({ timeout: 15_000 });
+    return;
+  }
+  if (viewName === 'cockpit') {
+    await expect(page.locator('[data-testid="home-cockpit"], [data-testid="home-cockpit-empty"]').first()).toBeVisible({ timeout: 15_000 });
+    return;
+  }
+  if (viewName === 'settings') {
+    await expect(page.getByRole('tablist', { name: 'Settings sections' })).toBeVisible({ timeout: 15_000 });
+    return;
+  }
+  if (viewName === 'capabilities') {
+    await expect(page.locator('body')).toContainText(/skill|capabilit|marketplace/i, { timeout: 15_000 });
+    return;
+  }
+  if (viewName === 'events') {
+    await expect(page.locator('body')).toContainText(/event|timeline|agent/i, { timeout: 15_000 });
+    return;
+  }
+  if (viewName === 'mission-control') {
+    await expect(page.locator('body')).toContainText(/cockpit|health|cost/i, { timeout: 15_000 });
   }
 }
 
-// Set theme mode
-async function setTheme(page: import('@playwright/test').Page, mode: 'dark' | 'light') {
-  await page.evaluate((m) => {
-    document.documentElement.classList.remove('dark', 'light');
-    document.documentElement.classList.add(m);
-    // Also try setting the data attribute pattern
-    document.documentElement.setAttribute('data-theme', m);
-  }, mode);
-  await page.waitForTimeout(300); // Let CSS transitions settle
+async function stabilizeVisuals(page: Page) {
+  await page.addStyleTag({
+    content: `
+      [aria-label="Notifications"],
+      [data-testid="statusbar-memory-count"],
+      [data-testid="statusbar-tokens"],
+      [data-testid="statusbar-cost"],
+      [data-testid="import-reminder-banner"],
+      [data-testid="import-reminder-banner-cc"] {
+        visibility: hidden !important;
+      }
+    `,
+  });
+  await page.evaluate(() => {
+    const dynamicText = [
+      /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun),\s/i,
+      /^\d{1,2}:\d{2}$/,
+      /^Last active:/i,
+      /^just now$/i,
+      /^\d+[mhdw] ago$/i,
+      /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\b/i,
+      /^Upcoming:/i,
+    ];
+    for (const el of Array.from(document.querySelectorAll('span, p, button, time, div'))) {
+      const text = (el.textContent ?? '').trim();
+      if (dynamicText.some(pattern => pattern.test(text)) && (el.children.length === 0 || el.tagName === 'BUTTON')) {
+        (el as HTMLElement).style.visibility = 'hidden';
+      }
+    }
+  });
+  await page.waitForTimeout(200);
 }
 
-test.describe('Visual Regression — Dark Mode', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await waitForAppReady(page);
-    await setTheme(page, 'dark');
-  });
-
-  for (const view of VIEWS) {
-    test(`${view.name} view — dark`, async ({ page }) => {
-      await navigateToView(page, view.navIndex);
-      await expect(page).toHaveScreenshot(`${view.name}-dark.png`, {
-        fullPage: false,
+for (const theme of ['dark', 'light'] as const) {
+  test.describe(`Visual Regression - ${theme === 'dark' ? 'Dark' : 'Light'} Mode`, () => {
+    for (const view of VIEWS) {
+      test(`${view.name} view - ${theme}`, async ({ page }) => {
+        await gotoVisualView(page, view, theme);
+        await expect(page).toHaveScreenshot(`${view.name}-${theme}.png`, {
+          fullPage: false,
+        });
       });
-    });
-  }
-});
-
-test.describe('Visual Regression — Light Mode', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await waitForAppReady(page);
-    await setTheme(page, 'light');
+    }
   });
-
-  for (const view of VIEWS) {
-    test(`${view.name} view — light`, async ({ page }) => {
-      await navigateToView(page, view.navIndex);
-      await expect(page).toHaveScreenshot(`${view.name}-light.png`, {
-        fullPage: false,
-      });
-    });
-  }
-});
+}

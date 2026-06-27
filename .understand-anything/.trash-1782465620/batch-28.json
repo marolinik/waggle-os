@@ -1,0 +1,1086 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/web/src/App.tsx",
+      "type": "file",
+      "name": "App.tsx",
+      "filePath": "apps/web/src/App.tsx",
+      "summary": "Root React application component that composes the full provider hierarchy (theme, Clerk auth, services, install state) and wraps the router-driven route tree with global toast and tooltip infrastructure.",
+      "tags": ["entry-point", "component", "provider"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/boot-connect.ts",
+      "type": "file",
+      "name": "boot-connect.ts",
+      "filePath": "apps/web/src/boot-connect.ts",
+      "summary": "Eagerly calls adapter.connect() during application boot to establish the connection to the local sidecar before the React tree mounts, ensuring the auth token is attached before any UI requests fire.",
+      "tags": ["utility", "boot", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/AppShell.tsx",
+      "type": "file",
+      "name": "AppShell.tsx",
+      "filePath": "apps/web/src/components/os/AppShell.tsx",
+      "summary": "Top-level OS shell that manages the boot sequence, workspace state, keyboard shortcuts, dock configuration, overlay visibility, and the full layout composition of Sidebar, StatusBar, ChatHost and all overlay panels for the Waggle desktop UI.",
+      "tags": ["component", "entry-point", "event-handler", "middleware"],
+      "complexity": "complex",
+      "languageNotes": "ShellLayout is a large single-component orchestrator (~370 lines) that wires together the entire shell UX; IndexRedirect is a separate exported utility for route initialization."
+    },
+    {
+      "id": "function:apps/web/src/components/os/AppShell.tsx:ShellLayout",
+      "type": "function",
+      "name": "ShellLayout",
+      "filePath": "apps/web/src/components/os/AppShell.tsx",
+      "lineRange": [68, 434],
+      "summary": "Core shell layout component that wires workspace selection, dock tier config, command catalog, persona switching, keyboard shortcuts, and all overlay panels into a unified desktop-OS-style UI surface.",
+      "tags": ["component", "event-handler", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/AppShell.tsx:AppShell",
+      "type": "function",
+      "name": "AppShell",
+      "filePath": "apps/web/src/components/os/AppShell.tsx",
+      "lineRange": [443, 473],
+      "summary": "Boot orchestrator component that manages the BootScreen→ShellLayout transition, persisting boot state in localStorage and conditionally rendering the shell post-boot.",
+      "tags": ["component", "boot"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/components/os/AppShell.tsx:IndexRedirect",
+      "type": "function",
+      "name": "IndexRedirect",
+      "filePath": "apps/web/src/components/os/AppShell.tsx",
+      "lineRange": [485, 489],
+      "summary": "Exported utility component that computes and redirects to the correct landing route based on window state migration logic.",
+      "tags": ["component", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/BootScreen.tsx",
+      "type": "file",
+      "name": "BootScreen.tsx",
+      "filePath": "apps/web/src/components/os/BootScreen.tsx",
+      "summary": "Animated boot/splash screen that plays a multi-phase startup animation with timed phase transitions and a keyboard skip hint, calling onComplete when the sequence finishes.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/components/os/BootScreen.tsx:BootScreen",
+      "type": "function",
+      "name": "BootScreen",
+      "filePath": "apps/web/src/components/os/BootScreen.tsx",
+      "lineRange": [20, 182],
+      "summary": "Animated splash screen component with phase-based progression, keyboard skip support, and theme-aware styling that calls onComplete when the animation concludes.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/components/os/ErrorBoundary.tsx",
+      "type": "file",
+      "name": "ErrorBoundary.tsx",
+      "filePath": "apps/web/src/components/os/ErrorBoundary.tsx",
+      "summary": "React class-based error boundary that catches unhandled render errors and displays a styled fallback UI with a reload button instead of crashing the entire application.",
+      "tags": ["component", "error-handler", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:apps/web/src/components/os/ErrorBoundary.tsx:AppErrorBoundary",
+      "type": "class",
+      "name": "AppErrorBoundary",
+      "filePath": "apps/web/src/components/os/ErrorBoundary.tsx",
+      "lineRange": [15, 50],
+      "summary": "React class error boundary implementing getDerivedStateFromError and componentDidCatch to catch and display render-time errors with a user-facing fallback and console logging.",
+      "tags": ["component", "error-handler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/Sidebar.tsx",
+      "type": "file",
+      "name": "Sidebar.tsx",
+      "filePath": "apps/web/src/components/os/Sidebar.tsx",
+      "summary": "Persistent navigation sidebar component rendering the Hive DS calm spine nav items, pinned actions, workspace avatar, tier label, and user avatar with active-route highlighting and navigation callbacks.",
+      "tags": ["component", "navigation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/components/os/Sidebar.tsx:Sidebar",
+      "type": "function",
+      "name": "Sidebar",
+      "filePath": "apps/web/src/components/os/Sidebar.tsx",
+      "lineRange": [49, 186],
+      "summary": "Sidebar navigation component rendering workspace avatar, spine items, pinned items, and user profile area with active-route awareness and action callbacks.",
+      "tags": ["component", "navigation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/components/os/StatusBar.tsx",
+      "type": "file",
+      "name": "StatusBar.tsx",
+      "filePath": "apps/web/src/components/os/StatusBar.tsx",
+      "summary": "Bottom status bar component displaying real-time clock, memory frame count (polled from adapter), LLM model/cost/token usage, offline indicator, trial status, and notification bell.",
+      "tags": ["component", "ui-ux", "monitoring"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/components/os/StatusBar.tsx:StatusBar",
+      "type": "function",
+      "name": "StatusBar",
+      "filePath": "apps/web/src/components/os/StatusBar.tsx",
+      "lineRange": [29, 176],
+      "summary": "Status bar component that polls memory stats from the adapter, maintains a live clock via setInterval, and renders usage metrics, connection status, and notification count.",
+      "tags": ["component", "monitoring"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/components/os/auth/AccountlessNotice.tsx",
+      "type": "file",
+      "name": "AccountlessNotice.tsx",
+      "filePath": "apps/web/src/components/os/auth/AccountlessNotice.tsx",
+      "summary": "Inline notice component rendered in the accountless (no-auth) mode, informing users they are in local-only mode and offering a navigation link to the auth screen.",
+      "tags": ["component", "auth"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/auth/AuthBrandPanel.tsx",
+      "type": "file",
+      "name": "AuthBrandPanel.tsx",
+      "filePath": "apps/web/src/components/os/auth/AuthBrandPanel.tsx",
+      "summary": "Decorative brand/marketing side panel shown on the auth screen, displaying the Waggle OS wordmark, tagline, and feature highlight list.",
+      "tags": ["component", "auth", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/auth/AuthScreen.tsx",
+      "type": "file",
+      "name": "AuthScreen.tsx",
+      "filePath": "apps/web/src/components/os/auth/AuthScreen.tsx",
+      "summary": "Auth screen layout shell that composes the AuthBrandPanel alongside a children slot, providing the two-column structure for the sign-in and sign-up flows.",
+      "tags": ["component", "auth"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/auth/ClerkAuthForm.tsx",
+      "type": "file",
+      "name": "ClerkAuthForm.tsx",
+      "filePath": "apps/web/src/components/os/auth/ClerkAuthForm.tsx",
+      "summary": "Clerk-powered authentication form component that toggles between SignIn and SignUp modes using Clerk's themed prebuilt components, alongside an enterprise CTA link.",
+      "tags": ["component", "auth"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/auth/EnterpriseCTA.tsx",
+      "type": "file",
+      "name": "EnterpriseCTA.tsx",
+      "filePath": "apps/web/src/components/os/auth/EnterpriseCTA.tsx",
+      "summary": "Small call-to-action component linking users to the KVARK enterprise product page (kvark.ai), shown at the bottom of the auth forms.",
+      "tags": ["component", "auth", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/model-gate/NoModelBanner.test.tsx",
+      "type": "file",
+      "name": "NoModelBanner.test.tsx",
+      "filePath": "apps/web/src/components/os/model-gate/NoModelBanner.test.tsx",
+      "summary": "Vitest unit test file for the NoModelBanner component, verifying render states when no working model is configured via mock of useHasWorkingModel.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/model-gate/NoModelBanner.tsx",
+      "type": "file",
+      "name": "NoModelBanner.tsx",
+      "filePath": "apps/web/src/components/os/model-gate/NoModelBanner.tsx",
+      "summary": "Banner component displayed on the Home screen when no working LLM model is configured, prompting users to set up a model via the Settings screen.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "type": "file",
+      "name": "CommandCenter.tsx",
+      "filePath": "apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "summary": "Full-featured Cmd+K command palette overlay that provides fuzzy search over recent commands, AI suggestions, catalog actions, and project-wide search results with permission-gated execution flow.",
+      "tags": ["component", "event-handler", "api-handler"],
+      "complexity": "complex",
+      "languageNotes": "Large component (~360 lines of render logic) with debounced async search, category grouping, permission prompts, and dual result modes (catalog navigation vs. AI action execution)."
+    },
+    {
+      "id": "function:apps/web/src/components/os/overlays/CommandCenter.tsx:CommandCenter",
+      "type": "function",
+      "name": "CommandCenter",
+      "filePath": "apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "lineRange": [245, 606],
+      "summary": "Main command palette component managing search state, debounced async API calls, fuzzy filtering of catalog and search results, and permission-gated execution of selected commands.",
+      "tags": ["component", "event-handler", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/KeyboardShortcutsHelp.tsx",
+      "type": "file",
+      "name": "KeyboardShortcutsHelp.tsx",
+      "filePath": "apps/web/src/components/os/overlays/KeyboardShortcutsHelp.tsx",
+      "summary": "Modal overlay component rendering a categorized reference table of keyboard shortcuts available in the Waggle OS shell.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/NotificationInbox.tsx",
+      "type": "file",
+      "name": "NotificationInbox.tsx",
+      "filePath": "apps/web/src/components/os/overlays/NotificationInbox.tsx",
+      "summary": "Slide-in notification inbox overlay that renders a list of system/agent notifications with mark-as-read and mark-all-read actions.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/OnboardingTooltips.tsx",
+      "type": "file",
+      "name": "OnboardingTooltips.tsx",
+      "filePath": "apps/web/src/components/os/overlays/OnboardingTooltips.tsx",
+      "summary": "Contextual onboarding tooltip overlay that shows template-specific UI hints sequentially, persisting dismissal state in localStorage to avoid re-showing after the user proceeds.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "type": "file",
+      "name": "OnboardingWizard.tsx",
+      "filePath": "apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "summary": "Multi-step onboarding wizard that guides new users through welcome, profile collection (WhoAreYouStep), model setup gate, memory import, workspace template selection, first task prompt, and a ready screen with PostHog telemetry capture.",
+      "tags": ["component", "event-handler"],
+      "complexity": "complex",
+      "languageNotes": "Uses a step-index navigation model via STEP_NAMES array and goToName/goToStep callbacks; integrates adapter calls for profile save, workspace create, harvest preview/commit, and Claude Code detection."
+    },
+    {
+      "id": "function:apps/web/src/components/os/overlays/OnboardingWizard.tsx:OnboardingWizard",
+      "type": "function",
+      "name": "OnboardingWizard",
+      "filePath": "apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "lineRange": [51, 406],
+      "summary": "Core onboarding wizard component managing step navigation, profile state, import flow, workspace creation, and telemetry for the 6-step new-user onboarding sequence.",
+      "tags": ["component", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.test.tsx",
+      "type": "file",
+      "name": "FirstTaskStep.test.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/FirstTaskStep.test.tsx",
+      "summary": "Vitest unit tests for the FirstTaskStep onboarding step component, verifying the task input and suggestion selection interactions.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.tsx",
+      "type": "file",
+      "name": "FirstTaskStep.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/FirstTaskStep.tsx",
+      "summary": "Onboarding step component for entering the user's first task message, displaying suggestion chips from the selected workspace template for quick-start prompts.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.test.tsx",
+      "type": "file",
+      "name": "ModelGateStep.test.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/ModelGateStep.test.tsx",
+      "summary": "Vitest unit tests for the ModelGateStep onboarding step component, verifying rendering in configured and unconfigured model states via mocked useHasWorkingModel and ModelGate.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "type": "file",
+      "name": "ModelGateStep.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "summary": "Onboarding step that gates progression until a working LLM model is configured, embedding the ModelGate component and offering continue/back/later navigation.",
+      "tags": ["component", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/ReadyStep.tsx",
+      "type": "file",
+      "name": "ReadyStep.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/ReadyStep.tsx",
+      "summary": "Final onboarding step confirming setup completion, displaying a themed success indicator and the primary 'Let's Go' call-to-action to launch into the workspace.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.test.tsx",
+      "type": "file",
+      "name": "TemplateStep.test.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/TemplateStep.test.tsx",
+      "summary": "Vitest unit tests for the TemplateStep onboarding step component, verifying template card rendering and selection callbacks.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.tsx",
+      "type": "file",
+      "name": "TemplateStep.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/TemplateStep.tsx",
+      "summary": "Onboarding step presenting curated workspace templates as selectable cards, triggering workspace creation in the parent wizard on selection.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/WelcomeStep.tsx",
+      "type": "file",
+      "name": "WelcomeStep.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/WelcomeStep.tsx",
+      "summary": "First onboarding step displaying a themed welcome splash with the Waggle OS brand, prompting any interaction to proceed to the next step.",
+      "tags": ["component", "ui-ux"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/overlays/onboarding/WhoAreYouStep.tsx",
+      "type": "file",
+      "name": "WhoAreYouStep.tsx",
+      "filePath": "apps/web/src/components/os/overlays/onboarding/WhoAreYouStep.tsx",
+      "summary": "Profile collection onboarding step with role, industry, work-type, team-size, and goals fields, building a profile preview from selected values for the identity/memory system.",
+      "tags": ["component", "validation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/components/os/AppShell.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/components/os/ErrorBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/components/ui/sonner.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/components/ui/toaster.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/pages/NotFound.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/providers/ThemeProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/providers/WaggleClerkProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/App.tsx",
+      "target": "file:apps/web/src/routes/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/boot-connect.ts",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/BootScreen.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/ChatHost.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/ErrorBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/ContextRail.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/CreateWorkspaceDialog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/KeyboardShortcutsHelp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/LoginBriefing.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/NotificationInbox.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/OnboardingTooltips.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/PersonaSwitcher.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/SpawnAgentDialog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/TrialExpiredModal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/UpgradeModal.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/overlays/WorkspaceSwitcher.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/Sidebar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/components/os/StatusBar.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/hooks/useChatWidgetState.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/hooks/useDockLabels.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/hooks/useDockNudge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/hooks/useKeyboardShortcuts.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/hooks/useWaggleDance.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/command-catalog.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/dock-tiers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/login-briefing.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/routes.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/lib/window-state-migration.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/BootScreen.tsx",
+      "target": "file:apps/web/src/hooks/useIsLightTheme.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/Sidebar.tsx",
+      "target": "file:apps/web/src/lib/platform.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/StatusBar.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/StatusBar.tsx",
+      "target": "file:apps/web/src/hooks/useDeveloperMode.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/StatusBar.tsx",
+      "target": "file:apps/web/src/hooks/useIsLightTheme.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/StatusBar.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/auth/AuthScreen.tsx",
+      "target": "file:apps/web/src/components/os/auth/AuthBrandPanel.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/auth/ClerkAuthForm.tsx",
+      "target": "file:apps/web/src/components/os/auth/EnterpriseCTA.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/model-gate/NoModelBanner.test.tsx",
+      "target": "file:apps/web/src/components/os/model-gate/NoModelBanner.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/model-gate/NoModelBanner.tsx",
+      "target": "file:apps/web/src/hooks/useHasWorkingModel.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/components/ui/command.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/components/ui/dialog.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/lib/command-catalog.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/lib/fuzzy-match.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/lib/platform.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/NotificationInbox.tsx",
+      "target": "file:apps/web/src/components/ui/hint-tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/NotificationInbox.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/hooks/useOfflineStatus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/hooks/useOnboarding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/lib/posthog.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.test.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.test.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "target": "file:apps/web/src/components/os/model-gate/ModelGate.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "target": "file:apps/web/src/hooks/useHasWorkingModel.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ReadyStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ReadyStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ReadyStep.tsx",
+      "target": "file:apps/web/src/hooks/useIsLightTheme.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.test.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/WelcomeStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/WelcomeStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/WelcomeStep.tsx",
+      "target": "file:apps/web/src/hooks/useIsLightTheme.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/WhoAreYouStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/WhoAreYouStep.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/WhoAreYouStep.tsx",
+      "target": "file:apps/web/src/lib/onboarding-profile.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "function:apps/web/src/components/os/AppShell.tsx:ShellLayout",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "function:apps/web/src/components/os/AppShell.tsx:AppShell",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "function:apps/web/src/components/os/AppShell.tsx:IndexRedirect",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/AppShell.tsx",
+      "target": "function:apps/web/src/components/os/AppShell.tsx:IndexRedirect",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/components/os/BootScreen.tsx",
+      "target": "function:apps/web/src/components/os/BootScreen.tsx:BootScreen",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/ErrorBoundary.tsx",
+      "target": "class:apps/web/src/components/os/ErrorBoundary.tsx:AppErrorBoundary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/Sidebar.tsx",
+      "target": "function:apps/web/src/components/os/Sidebar.tsx:Sidebar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/StatusBar.tsx",
+      "target": "function:apps/web/src/components/os/StatusBar.tsx:StatusBar",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "target": "function:apps/web/src/components/os/overlays/CommandCenter.tsx:CommandCenter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/OnboardingWizard.tsx",
+      "target": "function:apps/web/src/components/os/overlays/OnboardingWizard.tsx:OnboardingWizard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/model-gate/NoModelBanner.test.tsx",
+      "target": "file:apps/web/src/components/os/model-gate/NoModelBanner.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.test.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/FirstTaskStep.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.test.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/ModelGateStep.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.test.tsx",
+      "target": "file:apps/web/src/components/os/overlays/onboarding/TemplateStep.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

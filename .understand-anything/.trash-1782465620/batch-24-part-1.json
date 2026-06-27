@@ -1,0 +1,935 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/workflow-composer.ts",
+      "type": "file",
+      "name": "workflow-composer.ts",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "summary": "Composes multi-step agent workflows by selecting an execution mode (solo, orchestrated, or harness) based on task shape, building plan steps, and assembling a validated workflow template with cycle detection.",
+      "tags": ["service", "workflow", "factory", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-composer.ts:composeWorkflow",
+      "type": "function",
+      "name": "composeWorkflow",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "lineRange": [66, 91],
+      "summary": "Main entry point that selects execution mode, builds plan steps and explanation, then assembles a complete workflow template with optional harness matching.",
+      "tags": ["factory", "workflow", "entry-point"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-composer.ts:selectExecutionMode",
+      "type": "function",
+      "name": "selectExecutionMode",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "lineRange": [95, 135],
+      "summary": "Determines whether a task should run solo, via the subagent orchestrator, or via a harness, based on task shape confidence and available skills.",
+      "tags": ["utility", "workflow", "routing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-composer.ts:validateTemplate",
+      "type": "function",
+      "name": "validateTemplate",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "lineRange": [340, 376],
+      "summary": "Validates a workflow template structure, checking for required fields, valid aggregation mode, unique step names, and absence of dependency cycles.",
+      "tags": ["validation", "workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-composer.ts:buildShapeSteps",
+      "type": "function",
+      "name": "buildShapeSteps",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "lineRange": [192, 242],
+      "summary": "Generates ordered workflow step descriptors for a given task shape type (research, code, review, write, plan, analysis), optionally injecting a matched skill.",
+      "tags": ["factory", "workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-composer.ts:buildExplanation",
+      "type": "function",
+      "name": "buildExplanation",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "lineRange": [299, 331],
+      "summary": "Builds a human-readable explanation of the composed workflow, describing each step and any parallel phases, for display to the agent and user.",
+      "tags": ["utility", "workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-composer.ts:hasCycle",
+      "type": "function",
+      "name": "hasCycle",
+      "filePath": "packages/agent/src/workflow-composer.ts",
+      "lineRange": [378, 403],
+      "summary": "Performs DFS cycle detection on the dependency graph of workflow steps to ensure the template forms a DAG.",
+      "tags": ["validation", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/workflow-harness.ts",
+      "type": "file",
+      "name": "workflow-harness.ts",
+      "filePath": "packages/agent/src/workflow-harness.ts",
+      "summary": "Implements the stateful multi-phase workflow harness runtime: creates runs, advances phases through gate validation, provides phase instructions, and generates run summaries with checkpoint tracking.",
+      "tags": ["service", "workflow", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-harness.ts:createHarnessRun",
+      "type": "function",
+      "name": "createHarnessRun",
+      "filePath": "packages/agent/src/workflow-harness.ts",
+      "lineRange": [135, 161],
+      "summary": "Initializes a new harness run state with all phases set to pending status and emits a run-started event.",
+      "tags": ["factory", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-harness.ts:advancePhase",
+      "type": "function",
+      "name": "advancePhase",
+      "filePath": "packages/agent/src/workflow-harness.ts",
+      "lineRange": [213, 374],
+      "summary": "Core state-machine function that validates gate conditions for the current phase, records a checkpoint, and transitions to the next phase (or completes/fails the run) based on gate results.",
+      "tags": ["service", "workflow", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-harness.ts:getCurrentPhaseInstruction",
+      "type": "function",
+      "name": "getCurrentPhaseInstruction",
+      "filePath": "packages/agent/src/workflow-harness.ts",
+      "lineRange": [377, 407],
+      "summary": "Returns formatted instructions for the active harness phase, incorporating any failed gate feedback from the last checkpoint.",
+      "tags": ["utility", "workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-harness.ts:canRetry",
+      "type": "function",
+      "name": "canRetry",
+      "filePath": "packages/agent/src/workflow-harness.ts",
+      "lineRange": [410, 417],
+      "summary": "Determines whether the current failed phase has remaining retry attempts based on checkpoint history vs harness-configured max retries.",
+      "tags": ["utility", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-harness.ts:getRunSummary",
+      "type": "function",
+      "name": "getRunSummary",
+      "filePath": "packages/agent/src/workflow-harness.ts",
+      "lineRange": [420, 470],
+      "summary": "Generates a markdown-formatted run summary including phase status, elapsed time, failed gate details, and the current blocked phase when applicable.",
+      "tags": ["utility", "workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/workflow-templates.ts",
+      "type": "file",
+      "name": "workflow-templates.ts",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "summary": "Defines five built-in named workflow template factories (research team, review pair, plan-execute, ticket resolve, content pipeline) and a registry/listing utility for use by the workflow tools layer.",
+      "tags": ["factory", "workflow", "configuration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-templates.ts:createResearchTeamTemplate",
+      "type": "function",
+      "name": "createResearchTeamTemplate",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "lineRange": [8, 38],
+      "summary": "Creates a research team workflow template with search, analyze, and synthesize phases using concatenate aggregation.",
+      "tags": ["factory", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-templates.ts:createReviewPairTemplate",
+      "type": "function",
+      "name": "createReviewPairTemplate",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "lineRange": [40, 70],
+      "summary": "Creates a review pair workflow template with implement and review phases using last aggregation.",
+      "tags": ["factory", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-templates.ts:createPlanExecuteTemplate",
+      "type": "function",
+      "name": "createPlanExecuteTemplate",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "lineRange": [72, 102],
+      "summary": "Creates a plan-execute workflow template with planning and execution phases using last aggregation.",
+      "tags": ["factory", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-templates.ts:createTicketResolveTemplate",
+      "type": "function",
+      "name": "createTicketResolveTemplate",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "lineRange": [104, 134],
+      "summary": "Creates a ticket resolution workflow template with triage, fix, and verify phases and sequential dependency chaining.",
+      "tags": ["factory", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-templates.ts:createContentPipelineTemplate",
+      "type": "function",
+      "name": "createContentPipelineTemplate",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "lineRange": [136, 166],
+      "summary": "Creates a content pipeline workflow template with draft, review, and publish phases using synthesize aggregation.",
+      "tags": ["factory", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-templates.ts:listWorkflowTemplates",
+      "type": "function",
+      "name": "listWorkflowTemplates",
+      "filePath": "packages/agent/src/workflow-templates.ts",
+      "lineRange": [178, 180],
+      "summary": "Returns an array of registered workflow template names from the WORKFLOW_TEMPLATES registry.",
+      "tags": ["utility", "workflow"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/workflow-tools.ts",
+      "type": "file",
+      "name": "workflow-tools.ts",
+      "filePath": "packages/agent/src/workflow-tools.ts",
+      "summary": "Exposes the agent-facing workflow tool set (compose, run, get status, start/advance harness) as callable tool definitions, wiring together the workflow composer, templates, harness runtime, and subagent orchestrator.",
+      "tags": ["service", "workflow", "api-handler", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/workflow-tools.ts:createWorkflowTools",
+      "type": "function",
+      "name": "createWorkflowTools",
+      "filePath": "packages/agent/src/workflow-tools.ts",
+      "lineRange": [24, 350],
+      "summary": "Factory that creates all workflow-related agent tools (compose_workflow, run_workflow, get_workflow_status, start_harness, advance_harness), managing active harness run state and wiring orchestrator event hooks.",
+      "tags": ["factory", "workflow", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/workspace.ts",
+      "type": "file",
+      "name": "workspace.ts",
+      "filePath": "packages/agent/src/workspace.ts",
+      "summary": "Provides the Workspace class for per-workspace filesystem management: initializing the .waggle directory, reading/writing config, and appending JSONL session and audit log entries.",
+      "tags": ["service", "data-model", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/agent/src/workspace.ts:Workspace",
+      "type": "class",
+      "name": "Workspace",
+      "filePath": "packages/agent/src/workspace.ts",
+      "lineRange": [16, 98],
+      "summary": "Manages the on-disk state of a single agent workspace: directory initialization, config persistence, session numbering, and append-only JSONL audit logging.",
+      "tags": ["data-model", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/agent-loop-network-retry.test.ts",
+      "type": "file",
+      "name": "agent-loop-network-retry.test.ts",
+      "filePath": "packages/agent/tests/agent-loop-network-retry.test.ts",
+      "summary": "Unit tests for the agent loop's network error retry behavior, verifying backoff and retry-limit enforcement via mocked fetch responses.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/agent-loop-tracing.test.ts",
+      "type": "file",
+      "name": "agent-loop-tracing.test.ts",
+      "filePath": "packages/agent/tests/agent-loop-tracing.test.ts",
+      "summary": "Unit tests verifying the agent loop emits correct trace records via TraceRecorder across tool calls and LLM turns.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/agent-loop.test.ts",
+      "type": "file",
+      "name": "agent-loop.test.ts",
+      "filePath": "packages/agent/tests/agent-loop.test.ts",
+      "summary": "Comprehensive unit test suite for the core agent loop covering multi-step reasoning, tool dispatch, capability routing, early termination, and edge cases with mocked fetch and tool callables.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/agent-message-bus.test.ts",
+      "type": "file",
+      "name": "agent-message-bus.test.ts",
+      "filePath": "packages/agent/tests/agent-message-bus.test.ts",
+      "summary": "Unit tests for AgentMessageBus publish/subscribe semantics, message routing between agents, and comms tool integration.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/audit-tools.test.ts",
+      "type": "file",
+      "name": "audit-tools.test.ts",
+      "filePath": "packages/agent/tests/audit-tools.test.ts",
+      "summary": "Unit tests for audit tool functionality, verifying that audit events are logged correctly and retrieval queries return expected records.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/background-bash.test.ts",
+      "type": "file",
+      "name": "background-bash.test.ts",
+      "filePath": "packages/agent/tests/background-bash.test.ts",
+      "summary": "Unit tests for the background bash execution tool, verifying async task spawning, output capture, and task status polling.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/background-task-cleanup.test.ts",
+      "type": "file",
+      "name": "background-task-cleanup.test.ts",
+      "filePath": "packages/agent/tests/background-task-cleanup.test.ts",
+      "summary": "Unit tests for stale background task cleanup logic, verifying that expired tasks are pruned based on the STALE_TASK_THRESHOLD_MS constant.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/bash-sandboxing.test.ts",
+      "type": "file",
+      "name": "bash-sandboxing.test.ts",
+      "filePath": "packages/agent/tests/bash-sandboxing.test.ts",
+      "summary": "Unit tests for bash command sandboxing including binary denylist enforcement, sensitive environment variable scrubbing, and path traversal prevention.",
+      "tags": ["test", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/browser-tools.test.ts",
+      "type": "file",
+      "name": "browser-tools.test.ts",
+      "filePath": "packages/agent/tests/browser-tools.test.ts",
+      "summary": "Unit tests for browser automation tools covering navigation, element interaction, screenshot capture, and state reset behavior.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/capability-router.test.ts",
+      "type": "file",
+      "name": "capability-router.test.ts",
+      "filePath": "packages/agent/tests/capability-router.test.ts",
+      "summary": "Unit tests for CapabilityRouter, verifying that capabilities are correctly routed to their handlers and tier-based access controls are enforced.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/cli-tools.test.ts",
+      "type": "file",
+      "name": "cli-tools.test.ts",
+      "filePath": "packages/agent/tests/cli-tools.test.ts",
+      "summary": "Unit tests for CLI tool definitions verifying argument parsing, help text generation, and expected execution behavior.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "file:packages/agent/src/builtin-harnesses.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "file:packages/agent/src/feature-flags.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "file:packages/agent/src/prompt-loader.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "file:packages/agent/src/subagent-orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "file:packages/agent/src/workflow-harness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "file:packages/agent/src/subagent-orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/builtin-harnesses.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/hooks.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/prompt-loader.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/subagent-orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/task-shape.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/workflow-composer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/workflow-harness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/src/workflow-templates.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop-network-retry.test.ts",
+      "target": "file:packages/agent/src/agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop-network-retry.test.ts",
+      "target": "file:packages/agent/src/retry-policy.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop-tracing.test.ts",
+      "target": "file:packages/agent/src/agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop-tracing.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop-tracing.test.ts",
+      "target": "file:packages/agent/src/trace-recorder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop.test.ts",
+      "target": "file:packages/agent/src/agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop.test.ts",
+      "target": "file:packages/agent/src/capability-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-loop.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-message-bus.test.ts",
+      "target": "file:packages/agent/src/agent-comms-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/agent-message-bus.test.ts",
+      "target": "file:packages/agent/src/agent-message-bus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/audit-tools.test.ts",
+      "target": "file:packages/agent/src/audit-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/background-bash.test.ts",
+      "target": "file:packages/agent/src/system-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/background-bash.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/background-task-cleanup.test.ts",
+      "target": "file:packages/agent/src/system-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/bash-sandboxing.test.ts",
+      "target": "file:packages/agent/src/system-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/bash-sandboxing.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/browser-tools.test.ts",
+      "target": "file:packages/agent/src/browser-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/browser-tools.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/capability-router.test.ts",
+      "target": "file:packages/agent/src/capability-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/cli-tools.test.ts",
+      "target": "file:packages/agent/src/cli-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:composeWorkflow",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:selectExecutionMode",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:validateTemplate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:buildShapeSteps",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:buildExplanation",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:hasCycle",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:createHarnessRun",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:advancePhase",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:getCurrentPhaseInstruction",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:canRetry",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:getRunSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createResearchTeamTemplate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createReviewPairTemplate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createPlanExecuteTemplate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createTicketResolveTemplate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createContentPipelineTemplate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:listWorkflowTemplates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "function:packages/agent/src/workflow-tools.ts:createWorkflowTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workspace.ts",
+      "target": "class:packages/agent/src/workspace.ts:Workspace",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:executeScenario",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:verifyScenario",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:composeWorkflow",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-composer.ts",
+      "target": "function:packages/agent/src/workflow-composer.ts:validateTemplate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:createHarnessRun",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:advancePhase",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:getCurrentPhaseInstruction",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:canRetry",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-harness.ts",
+      "target": "function:packages/agent/src/workflow-harness.ts:getRunSummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createResearchTeamTemplate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createReviewPairTemplate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createPlanExecuteTemplate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createTicketResolveTemplate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:createContentPipelineTemplate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-templates.ts",
+      "target": "function:packages/agent/src/workflow-templates.ts:listWorkflowTemplates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "function:packages/agent/src/workflow-tools.ts:createWorkflowTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/workspace.ts",
+      "target": "class:packages/agent/src/workspace.ts:Workspace",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:executeScenario",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:verifyScenario",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/tests/agent-loop-network-retry.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/tests/agent-loop-tracing.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/tests/agent-loop.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/agent-message-bus.ts",
+      "target": "file:packages/agent/tests/agent-message-bus.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/audit-tools.ts",
+      "target": "file:packages/agent/tests/audit-tools.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/system-tools.ts",
+      "target": "file:packages/agent/tests/background-bash.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/system-tools.ts",
+      "target": "file:packages/agent/tests/background-task-cleanup.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/system-tools.ts",
+      "target": "file:packages/agent/tests/bash-sandboxing.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/browser-tools.ts",
+      "target": "file:packages/agent/tests/browser-tools.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/capability-router.ts",
+      "target": "file:packages/agent/tests/capability-router.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/cli-tools.ts",
+      "target": "file:packages/agent/tests/cli-tools.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/core/src/vault.ts",
+      "type": "file",
+      "name": "vault.ts",
+      "filePath": "packages/core/src/vault.ts",
+      "summary": "Implements the VaultStore class, which provides AES-256-GCM encrypted persistent storage for API keys and connector credentials, with atomic file writes, key management, and migration support.",
+      "tags": ["security", "service", "singleton", "encryption"],
+      "complexity": "complex",
+      "languageNotes": "Uses Node.js crypto (AES-256-GCM with per-entry IV and auth tag) and atomic rename-based writes for safe concurrent access. File permissions are restricted via execFileSync chmod calls on Unix."
+    },
+    {
+      "id": "class:packages/core/src/vault.ts:VaultStore",
+      "type": "class",
+      "name": "VaultStore",
+      "filePath": "packages/core/src/vault.ts",
+      "lineRange": [34, 299],
+      "summary": "Encrypted key-value store that persists secrets to disk using AES-256-GCM encryption; provides typed helpers for connector credentials and migrations from legacy config formats.",
+      "tags": ["security", "encryption", "service", "singleton"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/core/tests/vault-concurrency.test.ts",
+      "type": "file",
+      "name": "vault-concurrency.test.ts",
+      "filePath": "packages/core/tests/vault-concurrency.test.ts",
+      "summary": "Vitest tests validating VaultStore's behavior under concurrent read/write operations, ensuring data integrity when multiple operations race.",
+      "tags": ["test", "concurrency", "security", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/vault-edge-cases.test.ts",
+      "type": "file",
+      "name": "vault-edge-cases.test.ts",
+      "filePath": "packages/core/tests/vault-edge-cases.test.ts",
+      "summary": "Vitest tests covering boundary and edge-case scenarios for VaultStore, including corrupt vault files, missing keys, empty values, and large payloads.",
+      "tags": ["test", "edge-cases", "security", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/core/tests/vault.test.ts",
+      "type": "file",
+      "name": "vault.test.ts",
+      "filePath": "packages/core/tests/vault.test.ts",
+      "summary": "Primary Vitest test suite for VaultStore covering CRUD operations, encryption/decryption correctness, connector credential helpers, key migration, and list/has functionality.",
+      "tags": ["test", "security", "encryption", "validation"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/core/src/vault.ts",
+      "target": "class:packages/core/src/vault.ts:VaultStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/core/src/vault.ts",
+      "target": "class:packages/core/src/vault.ts:VaultStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/core/tests/vault-concurrency.test.ts",
+      "target": "file:packages/core/src/vault.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/vault-edge-cases.test.ts",
+      "target": "file:packages/core/src/vault.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/tests/vault.test.ts",
+      "target": "file:packages/core/src/vault.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/core/src/vault.ts",
+      "target": "file:packages/core/tests/vault-concurrency.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/vault.ts",
+      "target": "file:packages/core/tests/vault-edge-cases.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/core/src/vault.ts",
+      "target": "file:packages/core/tests/vault.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/shared/src/types.ts",
+      "type": "file",
+      "name": "types.ts",
+      "filePath": "packages/shared/src/types.ts",
+      "summary": "Canonical domain type definitions for the entire waggle-os monorepo, declaring 30+ interfaces and type aliases covering User, Team, AgentDef, Task, WaggleMessage, Connector, Memory, Artifact, Command, and Automation entities, plus runtime const-tuple exports (AGENT_RUN_STATES, EXTENSION_TYPES) used to keep Zod schema enums in sync with TypeScript types.",
+      "tags": ["type-definition", "data-model", "shared", "domain-types"],
+      "complexity": "complex",
+      "languageNotes": "Uses 'as const' tuple pattern (e.g. AGENT_RUN_STATES) so z.enum() in schemas.ts derives the enum from the runtime array, preventing drift between TypeScript types and Zod validators."
+    },
+    {
+      "id": "file:packages/shared/src/schemas.ts",
+      "type": "file",
+      "name": "schemas.ts",
+      "filePath": "packages/shared/src/schemas.ts",
+      "summary": "Zod validation schemas for all API request bodies in the waggle-os platform, exporting 13 schema objects covering team creation, member management, task CRUD, WaggleDance messages, agent and agent-group creation, knowledge graph entities, resources, cron schedules, and job queuing.",
+      "tags": ["validation", "schema-definition", "api-handler", "shared"],
+      "complexity": "moderate",
+      "languageNotes": "Derives agentStatusEnum from the AGENT_RUN_STATES const tuple in types.ts via z.enum(), ensuring a single source of truth for agent lifecycle state vocabulary across runtime validation and TypeScript types."
+    },
+    {
+      "id": "file:packages/shared/tests/schemas.test.ts",
+      "type": "file",
+      "name": "schemas.test.ts",
+      "filePath": "packages/shared/tests/schemas.test.ts",
+      "summary": "Vitest unit tests for the shared Zod schemas, covering valid and invalid inputs for team, task, WaggleDance message, agent, and agent-group schemas, including default value verification.",
+      "tags": ["test", "validation", "unit-test", "schema-definition"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/shared/src/schemas.ts",
+      "target": "file:packages/shared/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/shared/tests/schemas.test.ts",
+      "target": "file:packages/shared/src/schemas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/shared/src/schemas.ts",
+      "target": "file:packages/shared/tests/schemas.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

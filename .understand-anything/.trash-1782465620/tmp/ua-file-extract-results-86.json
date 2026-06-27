@@ -1,0 +1,125 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/shared/src/schemas.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 138,
+      "nonEmptyLines": 122,
+      "exports": [
+        {
+          "name": "createTeamSchema",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "inviteMemberSchema",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "updateMemberSchema",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "createTaskSchema",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "updateTaskSchema",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "sendMessageSchema",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "createAgentSchema",
+          "line": 63,
+          "isDefault": false
+        },
+        {
+          "name": "createAgentGroupSchema",
+          "line": 93,
+          "isDefault": false
+        },
+        {
+          "name": "createEntitySchema",
+          "line": 104,
+          "isDefault": false
+        },
+        {
+          "name": "createRelationSchema",
+          "line": 112,
+          "isDefault": false
+        },
+        {
+          "name": "createResourceSchema",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "createCronSchema",
+          "line": 127,
+          "isDefault": false
+        },
+        {
+          "name": "queueJobSchema",
+          "line": 134,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 13,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/shared/src/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 634,
+      "nonEmptyLines": 578,
+      "exports": [
+        {
+          "name": "AGENT_RUN_STATES",
+          "line": 367,
+          "isDefault": false
+        },
+        {
+          "name": "EXTENSION_TYPES",
+          "line": 375,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/shared/tests/schemas.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 89,
+      "nonEmptyLines": 80,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

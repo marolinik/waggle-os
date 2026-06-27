@@ -1,0 +1,6040 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 32,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 299,
+      "nonEmptyLines": 269,
+      "functions": [
+        {
+          "name": "generateUuid",
+          "startLine": 296,
+          "endLine": 299,
+          "params": []
+        }
+      ],
+      "classes": [
+        {
+          "name": "EvolutionRunStore",
+          "startLine": 111,
+          "endLine": 293,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "create",
+            "accept",
+            "reject",
+            "markDeployed",
+            "markFailed",
+            "getByUuid",
+            "get",
+            "list",
+            "statusCounts",
+            "delete",
+            "clear"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "EVOLUTION_RUNS_TABLE_SQL",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunStore",
+          "line": 111,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 116
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 121
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n        \"SELECT name FROM sqlite_master WHERE type='table' AND name='evolution_runs'\",\r\n      ).get",
+          "lineNumber": 122
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 122
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(stmt).run",
+          "lineNumber": 127
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 127
+        },
+        {
+          "caller": "create",
+          "callee": "generateUuid",
+          "lineNumber": 136
+        },
+        {
+          "caller": "create",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 137
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(`\r\n      INSERT INTO evolution_runs (\r\n        run_uuid, target_kind, target_name,\r\n        baseline_text, winner_text, winner_schema_json,\r\n        delta_accuracy, gate_verdict, gate_reasons_json,\r\n        status, artifacts_json\r\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'proposed', ?)\r\n    `).run",
+          "lineNumber": 139
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 139
+        },
+        {
+          "caller": "create",
+          "callee": "JSON.stringify",
+          "lineNumber": 152
+        },
+        {
+          "caller": "create",
+          "callee": "JSON.stringify",
+          "lineNumber": 155
+        },
+        {
+          "caller": "create",
+          "callee": "JSON.stringify",
+          "lineNumber": 156
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(\r\n      'SELECT * FROM evolution_runs WHERE run_uuid = ?',\r\n    ).get",
+          "lineNumber": 159
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 159
+        },
+        {
+          "caller": "accept",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 167
+        },
+        {
+          "caller": "accept",
+          "callee": "raw.prepare(`\r\n      UPDATE evolution_runs\r\n      SET status = 'accepted',\r\n          user_note = COALESCE(?, user_note),\r\n          decided_at = datetime('now')\r\n      WHERE run_uuid = ? AND status = 'proposed'\r\n    `).run",
+          "lineNumber": 168
+        },
+        {
+          "caller": "accept",
+          "callee": "raw.prepare",
+          "lineNumber": 168
+        },
+        {
+          "caller": "accept",
+          "callee": "this.getByUuid",
+          "lineNumber": 175
+        },
+        {
+          "caller": "reject",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 180
+        },
+        {
+          "caller": "reject",
+          "callee": "raw.prepare(`\r\n      UPDATE evolution_runs\r\n      SET status = 'rejected',\r\n          user_note = COALESCE(?, user_note),\r\n          decided_at = datetime('now')\r\n      WHERE run_uuid = ? AND status = 'proposed'\r\n    `).run",
+          "lineNumber": 181
+        },
+        {
+          "caller": "reject",
+          "callee": "raw.prepare",
+          "lineNumber": 181
+        },
+        {
+          "caller": "reject",
+          "callee": "this.getByUuid",
+          "lineNumber": 188
+        },
+        {
+          "caller": "markDeployed",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 193
+        },
+        {
+          "caller": "markDeployed",
+          "callee": "raw.prepare(`\r\n      UPDATE evolution_runs\r\n      SET status = 'deployed',\r\n          deployed_at = datetime('now')\r\n      WHERE run_uuid = ? AND status = 'accepted'\r\n    `).run",
+          "lineNumber": 194
+        },
+        {
+          "caller": "markDeployed",
+          "callee": "raw.prepare",
+          "lineNumber": 194
+        },
+        {
+          "caller": "markDeployed",
+          "callee": "this.getByUuid",
+          "lineNumber": 200
+        },
+        {
+          "caller": "markFailed",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 205
+        },
+        {
+          "caller": "markFailed",
+          "callee": "raw.prepare(`\r\n      UPDATE evolution_runs\r\n      SET status = 'failed',\r\n          failure_reason = ?,\r\n          deployed_at = datetime('now')\r\n      WHERE run_uuid = ? AND status = 'accepted'\r\n    `).run",
+          "lineNumber": 206
+        },
+        {
+          "caller": "markFailed",
+          "callee": "raw.prepare",
+          "lineNumber": 206
+        },
+        {
+          "caller": "markFailed",
+          "callee": "this.getByUuid",
+          "lineNumber": 213
+        },
+        {
+          "caller": "getByUuid",
+          "callee": "this.db.getDatabase()\r\n      .prepare('SELECT * FROM evolution_runs WHERE run_uuid = ?')\r\n      .get",
+          "lineNumber": 217
+        },
+        {
+          "caller": "getByUuid",
+          "callee": "this.db.getDatabase()\r\n      .prepare",
+          "lineNumber": 217
+        },
+        {
+          "caller": "getByUuid",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 217
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase()\r\n      .prepare('SELECT * FROM evolution_runs WHERE id = ?')\r\n      .get",
+          "lineNumber": 223
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase()\r\n      .prepare",
+          "lineNumber": 223
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 223
+        },
+        {
+          "caller": "list",
+          "callee": "Array.isArray",
+          "lineNumber": 233
+        },
+        {
+          "caller": "list",
+          "callee": "clauses.push",
+          "lineNumber": 234
+        },
+        {
+          "caller": "list",
+          "callee": "statuses.map(() => '?').join",
+          "lineNumber": 234
+        },
+        {
+          "caller": "list",
+          "callee": "statuses.map",
+          "lineNumber": 234
+        },
+        {
+          "caller": "list",
+          "callee": "params.push",
+          "lineNumber": 235
+        },
+        {
+          "caller": "list",
+          "callee": "clauses.push",
+          "lineNumber": 238
+        },
+        {
+          "caller": "list",
+          "callee": "params.push",
+          "lineNumber": 239
+        },
+        {
+          "caller": "list",
+          "callee": "clauses.push",
+          "lineNumber": 242
+        },
+        {
+          "caller": "list",
+          "callee": "params.push",
+          "lineNumber": 243
+        },
+        {
+          "caller": "list",
+          "callee": "clauses.push",
+          "lineNumber": 246
+        },
+        {
+          "caller": "list",
+          "callee": "params.push",
+          "lineNumber": 247
+        },
+        {
+          "caller": "list",
+          "callee": "clauses.join",
+          "lineNumber": 250
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase().prepare(\r\n      `SELECT * FROM evolution_runs ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,\r\n    ).all",
+          "lineNumber": 253
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 253
+        },
+        {
+          "caller": "list",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 253
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "clauses.push",
+          "lineNumber": 267
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "params.push",
+          "lineNumber": 267
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "clauses.push",
+          "lineNumber": 268
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "params.push",
+          "lineNumber": 268
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "clauses.push",
+          "lineNumber": 269
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "params.push",
+          "lineNumber": 269
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "clauses.join",
+          "lineNumber": 270
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "this.db.getDatabase().prepare(\r\n      `SELECT status, COUNT(*) as cnt FROM evolution_runs ${where} GROUP BY status`,\r\n    ).all",
+          "lineNumber": 272
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 272
+        },
+        {
+          "caller": "statusCounts",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 272
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase()\r\n      .prepare('DELETE FROM evolution_runs WHERE run_uuid = ?')\r\n      .run",
+          "lineNumber": 284
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase()\r\n      .prepare",
+          "lineNumber": 284
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 284
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM evolution_runs').run",
+          "lineNumber": 291
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 291
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 291
+        },
+        {
+          "caller": "rand",
+          "callee": "Math.floor(Math.random() * 0x10000).toString(16).padStart",
+          "lineNumber": 297
+        },
+        {
+          "caller": "rand",
+          "callee": "Math.floor(Math.random() * 0x10000).toString",
+          "lineNumber": 297
+        },
+        {
+          "caller": "rand",
+          "callee": "Math.floor",
+          "lineNumber": 297
+        },
+        {
+          "caller": "rand",
+          "callee": "Math.random",
+          "lineNumber": 297
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand().slice",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        },
+        {
+          "caller": "generateUuid",
+          "callee": "rand",
+          "lineNumber": 298
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/execution-traces.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 446,
+      "nonEmptyLines": 401,
+      "functions": [
+        {
+          "name": "parsePayload",
+          "startLine": 416,
+          "endLine": 441,
+          "params": [
+            "json"
+          ]
+        },
+        {
+          "name": "toParsed",
+          "startLine": 443,
+          "endLine": 446,
+          "params": [
+            "row"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ExecutionTraceStore",
+          "startLine": 166,
+          "endLine": 414,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "start",
+            "append",
+            "finalize",
+            "markCorrected",
+            "get",
+            "getParsed",
+            "query",
+            "queryParsed",
+            "outcomeCounts",
+            "delete",
+            "clear",
+            "count"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "EXECUTION_TRACES_TABLE_SQL",
+          "line": 164,
+          "isDefault": false
+        },
+        {
+          "name": "ExecutionTraceStore",
+          "line": 166,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 171
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 177
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n        \"SELECT name FROM sqlite_master WHERE type='table' AND name='execution_traces'\",\r\n      ).get",
+          "lineNumber": 178
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 178
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(stmt).run",
+          "lineNumber": 183
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 183
+        },
+        {
+          "caller": "start",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 192
+        },
+        {
+          "caller": "start",
+          "callee": "raw.prepare(`\r\n      INSERT INTO execution_traces\r\n        (session_id, persona_id, workspace_id, model, task_shape, outcome, trace_json)\r\n      VALUES (?, ?, ?, ?, ?, 'pending', ?)\r\n    `).run",
+          "lineNumber": 203
+        },
+        {
+          "caller": "start",
+          "callee": "raw.prepare",
+          "lineNumber": 203
+        },
+        {
+          "caller": "start",
+          "callee": "JSON.stringify",
+          "lineNumber": 213
+        },
+        {
+          "caller": "start",
+          "callee": "Number",
+          "lineNumber": 216
+        },
+        {
+          "caller": "append",
+          "callee": "this.get",
+          "lineNumber": 231
+        },
+        {
+          "caller": "append",
+          "callee": "parsePayload",
+          "lineNumber": 234
+        },
+        {
+          "caller": "append",
+          "callee": "seen.has",
+          "lineNumber": 240
+        },
+        {
+          "caller": "append",
+          "callee": "payload.artifacts.push",
+          "lineNumber": 241
+        },
+        {
+          "caller": "append",
+          "callee": "seen.add",
+          "lineNumber": 242
+        },
+        {
+          "caller": "append",
+          "callee": "this.db.getDatabase()\r\n      .prepare('UPDATE execution_traces SET trace_json = ? WHERE id = ?')\r\n      .run",
+          "lineNumber": 247
+        },
+        {
+          "caller": "append",
+          "callee": "this.db.getDatabase()\r\n      .prepare",
+          "lineNumber": 247
+        },
+        {
+          "caller": "append",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 247
+        },
+        {
+          "caller": "append",
+          "callee": "JSON.stringify",
+          "lineNumber": 249
+        },
+        {
+          "caller": "finalize",
+          "callee": "this.get",
+          "lineNumber": 254
+        },
+        {
+          "caller": "finalize",
+          "callee": "parsePayload",
+          "lineNumber": 257
+        },
+        {
+          "caller": "finalize",
+          "callee": "Date.parse",
+          "lineNumber": 270
+        },
+        {
+          "caller": "finalize",
+          "callee": "Date.now",
+          "lineNumber": 271
+        },
+        {
+          "caller": "finalize",
+          "callee": "Number.isFinite",
+          "lineNumber": 272
+        },
+        {
+          "caller": "finalize",
+          "callee": "Math.max",
+          "lineNumber": 272
+        },
+        {
+          "caller": "finalize",
+          "callee": "this.db.getDatabase().prepare(`\r\n      UPDATE execution_traces\r\n      SET outcome = ?,\r\n          trace_json = ?,\r\n          cost_usd = ?,\r\n          duration_ms = ?,\r\n          finalized_at = datetime('now')\r\n      WHERE id = ?\r\n    `).run",
+          "lineNumber": 274
+        },
+        {
+          "caller": "finalize",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 274
+        },
+        {
+          "caller": "finalize",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 274
+        },
+        {
+          "caller": "finalize",
+          "callee": "JSON.stringify",
+          "lineNumber": 284
+        },
+        {
+          "caller": "finalize",
+          "callee": "this.get",
+          "lineNumber": 290
+        },
+        {
+          "caller": "markCorrected",
+          "callee": "this.get",
+          "lineNumber": 298
+        },
+        {
+          "caller": "markCorrected",
+          "callee": "parsePayload",
+          "lineNumber": 301
+        },
+        {
+          "caller": "markCorrected",
+          "callee": "this.db.getDatabase().prepare(`\r\n      UPDATE execution_traces\r\n      SET outcome = 'corrected',\r\n          trace_json = ?\r\n      WHERE id = ?\r\n    `).run",
+          "lineNumber": 304
+        },
+        {
+          "caller": "markCorrected",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 304
+        },
+        {
+          "caller": "markCorrected",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 304
+        },
+        {
+          "caller": "markCorrected",
+          "callee": "JSON.stringify",
+          "lineNumber": 309
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase()\r\n      .prepare('SELECT * FROM execution_traces WHERE id = ?')\r\n      .get",
+          "lineNumber": 313
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase()\r\n      .prepare",
+          "lineNumber": 313
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 313
+        },
+        {
+          "caller": "getParsed",
+          "callee": "this.get",
+          "lineNumber": 319
+        },
+        {
+          "caller": "getParsed",
+          "callee": "toParsed",
+          "lineNumber": 320
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 329
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 330
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 333
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 334
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 337
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 338
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 341
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 342
+        },
+        {
+          "caller": "query",
+          "callee": "Array.isArray",
+          "lineNumber": 345
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 346
+        },
+        {
+          "caller": "query",
+          "callee": "outcomes.map(() => '?').join",
+          "lineNumber": 346
+        },
+        {
+          "caller": "query",
+          "callee": "outcomes.map",
+          "lineNumber": 346
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 347
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 350
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 351
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.push",
+          "lineNumber": 354
+        },
+        {
+          "caller": "query",
+          "callee": "params.push",
+          "lineNumber": 355
+        },
+        {
+          "caller": "query",
+          "callee": "clauses.join",
+          "lineNumber": 358
+        },
+        {
+          "caller": "query",
+          "callee": "this.db.getDatabase().prepare(\r\n      `SELECT * FROM execution_traces ${where} ORDER BY created_at DESC, id DESC LIMIT ?`,\r\n    ).all",
+          "lineNumber": 361
+        },
+        {
+          "caller": "query",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 361
+        },
+        {
+          "caller": "query",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 361
+        },
+        {
+          "caller": "queryParsed",
+          "callee": "this.query(filter).map",
+          "lineNumber": 368
+        },
+        {
+          "caller": "queryParsed",
+          "callee": "this.query",
+          "lineNumber": 368
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "clauses.push",
+          "lineNumber": 382
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "params.push",
+          "lineNumber": 382
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "clauses.push",
+          "lineNumber": 383
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "params.push",
+          "lineNumber": 383
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "clauses.push",
+          "lineNumber": 384
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "params.push",
+          "lineNumber": 384
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "clauses.push",
+          "lineNumber": 385
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "params.push",
+          "lineNumber": 385
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "clauses.push",
+          "lineNumber": 386
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "params.push",
+          "lineNumber": 386
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "clauses.join",
+          "lineNumber": 388
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "this.db.getDatabase().prepare(\r\n      `SELECT outcome, COUNT(*) as cnt FROM execution_traces ${where} GROUP BY outcome`,\r\n    ).all",
+          "lineNumber": 389
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 389
+        },
+        {
+          "caller": "outcomeCounts",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 389
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM execution_traces WHERE id = ?').run",
+          "lineNumber": 401
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 401
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 401
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM execution_traces').run",
+          "lineNumber": 406
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 406
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 406
+        },
+        {
+          "caller": "count",
+          "callee": "this.query",
+          "lineNumber": 411
+        },
+        {
+          "caller": "parsePayload",
+          "callee": "JSON.parse",
+          "lineNumber": 418
+        },
+        {
+          "caller": "toParsed",
+          "callee": "parsePayload",
+          "lineNumber": 445
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/frames.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 467,
+      "nonEmptyLines": 410,
+      "functions": [
+        {
+          "name": "isValidIsoTimestamp",
+          "startLine": 16,
+          "endLine": 21,
+          "params": [
+            "value"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "FrameStore",
+          "startLine": 63,
+          "endLine": 467,
+          "methods": [
+            "constructor",
+            "createIFrame",
+            "createPFrame",
+            "createBFrame",
+            "getById",
+            "getLatestIFrame",
+            "getPFramesSinceLastI",
+            "getGopFrames",
+            "reconstructState",
+            "touch",
+            "getImportanceMultiplier",
+            "list",
+            "getRecent",
+            "getRecentFiltered",
+            "getBFrameReferences",
+            "findDuplicate",
+            "update",
+            "setMetadata",
+            "delete",
+            "deleteByContentPrefix",
+            "compact",
+            "getStats",
+            "nextT",
+            "indexFts"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "stripHmPrefix",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "FrameStore",
+          "line": 63,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isValidIsoTimestamp",
+          "callee": "/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})$/.test",
+          "lineNumber": 17
+        },
+        {
+          "caller": "isValidIsoTimestamp",
+          "callee": "Number.isFinite",
+          "lineNumber": 20
+        },
+        {
+          "caller": "isValidIsoTimestamp",
+          "callee": "Date.parse",
+          "lineNumber": 20
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "this.findDuplicate",
+          "lineNumber": 91
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "this.nextT",
+          "lineNumber": 94
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 95
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "isValidIsoTimestamp",
+          "lineNumber": 102
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "hashFrameContent",
+          "lineNumber": 103
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "raw.prepare(`\r\n          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, content_hash, created_at, last_accessed)\r\n          VALUES ('I', ?, ?, NULL, ?, ?, ?, ?, ?, ?)\r\n        `).run",
+          "lineNumber": 105
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 105
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "raw.prepare(`\r\n          INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, content_hash)\r\n          VALUES ('I', ?, ?, NULL, ?, ?, ?, ?)\r\n        `).run",
+          "lineNumber": 109
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 109
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get",
+          "lineNumber": 114
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 114
+        },
+        {
+          "caller": "createIFrame",
+          "callee": "this.indexFts",
+          "lineNumber": 115
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "this.nextT",
+          "lineNumber": 120
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 121
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "raw.prepare(`\r\n      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, source, content_hash)\r\n      VALUES ('P', ?, ?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 122
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 122
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "hashFrameContent",
+          "lineNumber": 125
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get",
+          "lineNumber": 127
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 127
+        },
+        {
+          "caller": "createPFrame",
+          "callee": "this.indexFts",
+          "lineNumber": 128
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "this.nextT",
+          "lineNumber": 133
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "JSON.stringify",
+          "lineNumber": 135
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 139
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "raw.prepare(`\r\n      INSERT INTO memory_frames (frame_type, gop_id, t, base_frame_id, content, importance, content_hash)\r\n      VALUES ('B', ?, ?, ?, ?, 'normal', ?)\r\n    `).run",
+          "lineNumber": 140
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 140
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "hashFrameContent",
+          "lineNumber": 143
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "raw.prepare('SELECT * FROM memory_frames WHERE id = ?').get",
+          "lineNumber": 145
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 145
+        },
+        {
+          "caller": "createBFrame",
+          "callee": "this.indexFts",
+          "lineNumber": 146
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase().prepare('SELECT * FROM memory_frames WHERE id = ?').get",
+          "lineNumber": 151
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 151
+        },
+        {
+          "caller": "getById",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 151
+        },
+        {
+          "caller": "getLatestIFrame",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT * FROM memory_frames\r\n      WHERE gop_id = ? AND frame_type = 'I'\r\n      ORDER BY t DESC LIMIT 1\r\n    `).get",
+          "lineNumber": 155
+        },
+        {
+          "caller": "getLatestIFrame",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 155
+        },
+        {
+          "caller": "getLatestIFrame",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 155
+        },
+        {
+          "caller": "getPFramesSinceLastI",
+          "callee": "this.getLatestIFrame",
+          "lineNumber": 163
+        },
+        {
+          "caller": "getPFramesSinceLastI",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT * FROM memory_frames\r\n      WHERE gop_id = ? AND frame_type = 'P' AND t > ?\r\n      ORDER BY t ASC\r\n    `).all",
+          "lineNumber": 165
+        },
+        {
+          "caller": "getPFramesSinceLastI",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 165
+        },
+        {
+          "caller": "getPFramesSinceLastI",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 165
+        },
+        {
+          "caller": "getGopFrames",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT * FROM memory_frames WHERE gop_id = ? ORDER BY t ASC\r\n    `).all",
+          "lineNumber": 173
+        },
+        {
+          "caller": "getGopFrames",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 173
+        },
+        {
+          "caller": "getGopFrames",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 173
+        },
+        {
+          "caller": "reconstructState",
+          "callee": "this.getLatestIFrame",
+          "lineNumber": 179
+        },
+        {
+          "caller": "reconstructState",
+          "callee": "this.getPFramesSinceLastI",
+          "lineNumber": 180
+        },
+        {
+          "caller": "touch",
+          "callee": "this.db.getDatabase().prepare(`\r\n      UPDATE memory_frames SET access_count = access_count + 1, last_accessed = datetime('now')\r\n      WHERE id = ?\r\n      RETURNING access_count AS accessCount\r\n    `).get",
+          "lineNumber": 185
+        },
+        {
+          "caller": "touch",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 185
+        },
+        {
+          "caller": "touch",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 185
+        },
+        {
+          "caller": "list",
+          "callee": "this.getRecent",
+          "lineNumber": 199
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT * FROM memory_frames ORDER BY id DESC LIMIT ?\r\n    `).all",
+          "lineNumber": 204
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 204
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 204
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "conditions.push",
+          "lineNumber": 220
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "params.push",
+          "lineNumber": 221
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "conditions.push",
+          "lineNumber": 224
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "params.push",
+          "lineNumber": 225
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "conditions.join",
+          "lineNumber": 228
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "params.push",
+          "lineNumber": 229
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT * FROM memory_frames ${where} ORDER BY id DESC LIMIT ?\r\n    `).all",
+          "lineNumber": 231
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 231
+        },
+        {
+          "caller": "getRecentFiltered",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 231
+        },
+        {
+          "caller": "getBFrameReferences",
+          "callee": "this.getById",
+          "lineNumber": 237
+        },
+        {
+          "caller": "getBFrameReferences",
+          "callee": "JSON.parse",
+          "lineNumber": 240
+        },
+        {
+          "caller": "findDuplicate",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT * FROM memory_frames WHERE content_hash = ? ORDER BY id DESC LIMIT 1\r\n    `).get",
+          "lineNumber": 265
+        },
+        {
+          "caller": "findDuplicate",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 265
+        },
+        {
+          "caller": "findDuplicate",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 265
+        },
+        {
+          "caller": "findDuplicate",
+          "callee": "hashFrameContent",
+          "lineNumber": 267
+        },
+        {
+          "caller": "findDuplicate",
+          "callee": "this.touch",
+          "lineNumber": 270
+        },
+        {
+          "caller": "update",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 282
+        },
+        {
+          "caller": "update",
+          "callee": "this.getById",
+          "lineNumber": 283
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare(`\r\n      UPDATE memory_frames SET content = ?, importance = ?, content_hash = ? WHERE id = ?\r\n    `).run",
+          "lineNumber": 289
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare",
+          "lineNumber": 289
+        },
+        {
+          "caller": "update",
+          "callee": "hashFrameContent",
+          "lineNumber": 291
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 294
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare",
+          "lineNumber": 294
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare('INSERT INTO memory_frames_fts (rowid, content) VALUES (?, ?)').run",
+          "lineNumber": 295
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare",
+          "lineNumber": 295
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run",
+          "lineNumber": 298
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare",
+          "lineNumber": 298
+        },
+        {
+          "caller": "update",
+          "callee": "this.getById",
+          "lineNumber": 300
+        },
+        {
+          "caller": "setMetadata",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 312
+        },
+        {
+          "caller": "setMetadata",
+          "callee": "this.getById",
+          "lineNumber": 313
+        },
+        {
+          "caller": "setMetadata",
+          "callee": "raw.prepare('UPDATE memory_frames SET metadata = ? WHERE id = ?').run",
+          "lineNumber": 314
+        },
+        {
+          "caller": "setMetadata",
+          "callee": "raw.prepare",
+          "lineNumber": 314
+        },
+        {
+          "caller": "setMetadata",
+          "callee": "this.getById",
+          "lineNumber": 315
+        },
+        {
+          "caller": "delete",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 322
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare('UPDATE memory_frames SET base_frame_id = NULL WHERE base_frame_id = ?').run",
+          "lineNumber": 324
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare",
+          "lineNumber": 324
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run",
+          "lineNumber": 326
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare",
+          "lineNumber": 326
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 328
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare",
+          "lineNumber": 328
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare('DELETE FROM kg_entity_frames WHERE frame_id = ?').run",
+          "lineNumber": 330
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare",
+          "lineNumber": 330
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare('DELETE FROM memory_frames WHERE id = ?').run",
+          "lineNumber": 332
+        },
+        {
+          "caller": "delete",
+          "callee": "raw.prepare",
+          "lineNumber": 332
+        },
+        {
+          "caller": "deleteByContentPrefix",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 344
+        },
+        {
+          "caller": "deleteByContentPrefix",
+          "callee": "prefix.replace",
+          "lineNumber": 345
+        },
+        {
+          "caller": "deleteByContentPrefix",
+          "callee": "raw.prepare(\r\n      `SELECT id FROM memory_frames WHERE content LIKE ? ESCAPE '\\\\'`\r\n    ).all",
+          "lineNumber": 346
+        },
+        {
+          "caller": "deleteByContentPrefix",
+          "callee": "raw.prepare",
+          "lineNumber": 346
+        },
+        {
+          "caller": "deleteByContentPrefix",
+          "callee": "this.delete",
+          "lineNumber": 351
+        },
+        {
+          "caller": "compact",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 371
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare(`\r\n      DELETE FROM memory_frames\r\n      WHERE importance = 'temporary'\r\n        AND created_at < datetime('now', '-' || ? || ' days')\r\n    `).run",
+          "lineNumber": 377
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 377
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare(`\r\n      DELETE FROM memory_frames\r\n      WHERE importance = 'deprecated'\r\n        AND created_at < datetime('now', '-' || ? || ' days')\r\n    `).run",
+          "lineNumber": 385
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 385
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare(`\r\n      SELECT gop_id, COUNT(*) as cnt FROM memory_frames\r\n      WHERE frame_type = 'P'\r\n      GROUP BY gop_id\r\n      HAVING cnt > 10\r\n    `).all",
+          "lineNumber": 395
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 395
+        },
+        {
+          "caller": "compact",
+          "callee": "this.getLatestIFrame",
+          "lineNumber": 403
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare(`\r\n        SELECT * FROM memory_frames\r\n        WHERE gop_id = ? AND frame_type = 'P' AND t > ?\r\n        ORDER BY t ASC\r\n      `).all",
+          "lineNumber": 406
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 406
+        },
+        {
+          "caller": "compact",
+          "callee": "pframes.slice",
+          "lineNumber": 415
+        },
+        {
+          "caller": "compact",
+          "callee": "[latestI.content, ...toMerge.map(p => p.content)].join",
+          "lineNumber": 416
+        },
+        {
+          "caller": "compact",
+          "callee": "toMerge.map",
+          "lineNumber": 416
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare('UPDATE memory_frames SET content = ?, content_hash = ? WHERE id = ?')\r\n        .run",
+          "lineNumber": 419
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 419
+        },
+        {
+          "caller": "compact",
+          "callee": "hashFrameContent",
+          "lineNumber": 420
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 422
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 422
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare('INSERT INTO memory_frames_fts (rowid, content) VALUES (?, ?)').run",
+          "lineNumber": 423
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 423
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 427
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 427
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run",
+          "lineNumber": 428
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 428
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare('DELETE FROM memory_frames WHERE id = ?').run",
+          "lineNumber": 429
+        },
+        {
+          "caller": "compact",
+          "callee": "raw.prepare",
+          "lineNumber": 429
+        },
+        {
+          "caller": "getStats",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 439
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get",
+          "lineNumber": 440
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare",
+          "lineNumber": 440
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare('SELECT frame_type, COUNT(*) as cnt FROM memory_frames GROUP BY frame_type').all",
+          "lineNumber": 443
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare",
+          "lineNumber": 443
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare('SELECT importance, COUNT(*) as cnt FROM memory_frames GROUP BY importance').all",
+          "lineNumber": 448
+        },
+        {
+          "caller": "getStats",
+          "callee": "raw.prepare",
+          "lineNumber": 448
+        },
+        {
+          "caller": "nextT",
+          "callee": "this.db.getDatabase().prepare(`\r\n      SELECT COALESCE(MAX(t), -1) + 1 AS next_t FROM memory_frames WHERE gop_id = ?\r\n    `).get",
+          "lineNumber": 456
+        },
+        {
+          "caller": "nextT",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 456
+        },
+        {
+          "caller": "nextT",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 456
+        },
+        {
+          "caller": "indexFts",
+          "callee": "this.db.getDatabase().prepare(`\r\n      INSERT INTO memory_frames_fts (rowid, content) VALUES (?, ?)\r\n    `).run",
+          "lineNumber": 463
+        },
+        {
+          "caller": "indexFts",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 463
+        },
+        {
+          "caller": "indexFts",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 463
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/identity.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 80,
+      "nonEmptyLines": 67,
+      "classes": [
+        {
+          "name": "IdentityLayer",
+          "startLine": 25,
+          "endLine": 80,
+          "methods": [
+            "constructor",
+            "create",
+            "get",
+            "exists",
+            "update",
+            "toContext"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "IdentityLayer",
+          "line": 25,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "create",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 33
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(`\r\n      INSERT INTO identity (id, name, role, department, personality, capabilities, system_prompt)\r\n      VALUES (1, ?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 34
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 34
+        },
+        {
+          "caller": "create",
+          "callee": "this.get",
+          "lineNumber": 38
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 42
+        },
+        {
+          "caller": "get",
+          "callee": "raw.prepare('SELECT * FROM identity WHERE id = 1').get",
+          "lineNumber": 43
+        },
+        {
+          "caller": "get",
+          "callee": "raw.prepare",
+          "lineNumber": 43
+        },
+        {
+          "caller": "exists",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 49
+        },
+        {
+          "caller": "exists",
+          "callee": "raw.prepare('SELECT 1 FROM identity WHERE id = 1').get",
+          "lineNumber": 50
+        },
+        {
+          "caller": "exists",
+          "callee": "raw.prepare",
+          "lineNumber": 50
+        },
+        {
+          "caller": "update",
+          "callee": "this.exists",
+          "lineNumber": 55
+        },
+        {
+          "caller": "update",
+          "callee": "Object.entries(changes).filter",
+          "lineNumber": 57
+        },
+        {
+          "caller": "update",
+          "callee": "Object.entries",
+          "lineNumber": 57
+        },
+        {
+          "caller": "update",
+          "callee": "UPDATABLE_COLUMNS.has",
+          "lineNumber": 57
+        },
+        {
+          "caller": "update",
+          "callee": "this.get",
+          "lineNumber": 58
+        },
+        {
+          "caller": "update",
+          "callee": "fields.map(([k]) => `${k} = ?`).join",
+          "lineNumber": 60
+        },
+        {
+          "caller": "update",
+          "callee": "fields.map",
+          "lineNumber": 60
+        },
+        {
+          "caller": "update",
+          "callee": "fields.map",
+          "lineNumber": 61
+        },
+        {
+          "caller": "update",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 63
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare(`UPDATE identity SET ${sets}, updated_at = datetime('now') WHERE id = 1`).run",
+          "lineNumber": 64
+        },
+        {
+          "caller": "update",
+          "callee": "raw.prepare",
+          "lineNumber": 64
+        },
+        {
+          "caller": "update",
+          "callee": "this.get",
+          "lineNumber": 65
+        },
+        {
+          "caller": "toContext",
+          "callee": "this.get",
+          "lineNumber": 69
+        },
+        {
+          "caller": "toContext",
+          "callee": "[\r\n      `Name: ${id.name}`,\r\n      id.role && `Role: ${id.role}`,\r\n      id.department && `Department: ${id.department}`,\r\n      id.personality && `Personality: ${id.personality}`,\r\n      id.capabilities && `Capabilities: ${id.capabilities}`,\r\n      id.system_prompt && `System Prompt: ${id.system_prompt}`,\r\n    ].filter",
+          "lineNumber": 70
+        },
+        {
+          "caller": "toContext",
+          "callee": "parts.join",
+          "lineNumber": 78
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 174,
+      "nonEmptyLines": 151,
+      "functions": [
+        {
+          "name": "parseMetadata",
+          "startLine": 168,
+          "endLine": 174,
+          "params": [
+            "json"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ImprovementSignalStore",
+          "startLine": 38,
+          "endLine": 166,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "record",
+            "getByCategory",
+            "getActionable",
+            "markSurfaced",
+            "get",
+            "getByKey",
+            "clear"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ImprovementSignalStore",
+          "line": 38,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 43
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 49
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n        \"SELECT name FROM sqlite_master WHERE type='table' AND name='improvement_signals'\",\r\n      ).get",
+          "lineNumber": 50
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 50
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 54
+        },
+        {
+          "caller": "record",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 86
+        },
+        {
+          "caller": "record",
+          "callee": "JSON.stringify",
+          "lineNumber": 87
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare(`\r\n      INSERT INTO improvement_signals (category, pattern_key, detail, metadata)\r\n      VALUES (?, ?, ?, ?)\r\n      ON CONFLICT (category, pattern_key) DO UPDATE SET\r\n        count = count + 1,\r\n        last_seen = datetime('now'),\r\n        detail = CASE WHEN excluded.detail != '' THEN excluded.detail ELSE detail END,\r\n        metadata = CASE WHEN excluded.metadata != '{}' THEN excluded.metadata ELSE metadata END\r\n    `).run",
+          "lineNumber": 89
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare",
+          "lineNumber": 89
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare(\r\n      'SELECT * FROM improvement_signals WHERE category = ? AND pattern_key = ?',\r\n    ).get",
+          "lineNumber": 99
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare",
+          "lineNumber": 99
+        },
+        {
+          "caller": "getByCategory",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM improvement_signals WHERE category = ? ORDER BY count DESC',\r\n    ).all",
+          "lineNumber": 106
+        },
+        {
+          "caller": "getByCategory",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 106
+        },
+        {
+          "caller": "getByCategory",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 106
+        },
+        {
+          "caller": "getActionable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 118
+        },
+        {
+          "caller": "getActionable",
+          "callee": "Object.entries",
+          "lineNumber": 123
+        },
+        {
+          "caller": "getActionable",
+          "callee": "raw.prepare(`\r\n        SELECT * FROM improvement_signals\r\n        WHERE category = ? AND count >= ? AND surfaced = 0\r\n        ORDER BY count DESC\r\n      `).all",
+          "lineNumber": 124
+        },
+        {
+          "caller": "getActionable",
+          "callee": "raw.prepare",
+          "lineNumber": 124
+        },
+        {
+          "caller": "getActionable",
+          "callee": "results.push",
+          "lineNumber": 129
+        },
+        {
+          "caller": "getActionable",
+          "callee": "results.sort",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getActionable",
+          "callee": "results.slice(0, MAX_ACTIONABLE).map",
+          "lineNumber": 135
+        },
+        {
+          "caller": "getActionable",
+          "callee": "results.slice",
+          "lineNumber": 135
+        },
+        {
+          "caller": "getActionable",
+          "callee": "parseMetadata",
+          "lineNumber": 137
+        },
+        {
+          "caller": "markSurfaced",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"UPDATE improvement_signals SET surfaced = 1, surfaced_at = datetime('now') WHERE id = ?\",\r\n    ).run",
+          "lineNumber": 143
+        },
+        {
+          "caller": "markSurfaced",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 143
+        },
+        {
+          "caller": "markSurfaced",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 143
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM improvement_signals WHERE id = ?',\r\n    ).get",
+          "lineNumber": 150
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 150
+        },
+        {
+          "caller": "get",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 150
+        },
+        {
+          "caller": "getByKey",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM improvement_signals WHERE category = ? AND pattern_key = ?',\r\n    ).get",
+          "lineNumber": 157
+        },
+        {
+          "caller": "getByKey",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 157
+        },
+        {
+          "caller": "getByKey",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 157
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM improvement_signals').run",
+          "lineNumber": 164
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 164
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 164
+        },
+        {
+          "caller": "parseMetadata",
+          "callee": "JSON.parse",
+          "lineNumber": 170
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 67,
+      "nonEmptyLines": 55,
+      "functions": [
+        {
+          "name": "normalizeDimensions",
+          "startLine": 22,
+          "endLine": 28,
+          "params": [
+            "embedding",
+            "targetDims"
+          ]
+        },
+        {
+          "name": "createInProcessEmbedder",
+          "startLine": 30,
+          "endLine": 67,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "normalizeDimensions",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "createInProcessEmbedder",
+          "line": 30,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "normalizeDimensions",
+          "callee": "Math.min",
+          "lineNumber": 25
+        },
+        {
+          "caller": "normalizeDimensions",
+          "callee": "result.set",
+          "lineNumber": 26
+        },
+        {
+          "caller": "normalizeDimensions",
+          "callee": "embedding.subarray",
+          "lineNumber": 26
+        },
+        {
+          "caller": "createInProcessEmbedder",
+          "callee": "path.join",
+          "lineNumber": 32
+        },
+        {
+          "caller": "createInProcessEmbedder",
+          "callee": "os.homedir",
+          "lineNumber": 32
+        },
+        {
+          "caller": "createInProcessEmbedder",
+          "callee": "log.info",
+          "lineNumber": 35
+        },
+        {
+          "caller": "createInProcessEmbedder",
+          "callee": "import",
+          "lineNumber": 37
+        },
+        {
+          "caller": "createInProcessEmbedder",
+          "callee": "pipeline",
+          "lineNumber": 41
+        },
+        {
+          "caller": "createInProcessEmbedder",
+          "callee": "log.info",
+          "lineNumber": 44
+        },
+        {
+          "caller": "embed",
+          "callee": "extractor",
+          "lineNumber": 50
+        },
+        {
+          "caller": "embed",
+          "callee": "normalizeDimensions",
+          "lineNumber": 52
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "extractor",
+          "lineNumber": 60
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "results.push",
+          "lineNumber": 62
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "normalizeDimensions",
+          "lineNumber": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 129,
+      "nonEmptyLines": 115,
+      "functions": [
+        {
+          "name": "createInProcessReranker",
+          "startLine": 51,
+          "endLine": 129,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createInProcessReranker",
+          "line": 51,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createInProcessReranker",
+          "callee": "path.join",
+          "lineNumber": 55
+        },
+        {
+          "caller": "createInProcessReranker",
+          "callee": "os.homedir",
+          "lineNumber": 55
+        },
+        {
+          "caller": "createInProcessReranker",
+          "callee": "log.info",
+          "lineNumber": 57
+        },
+        {
+          "caller": "createInProcessReranker",
+          "callee": "import",
+          "lineNumber": 59
+        },
+        {
+          "caller": "createInProcessReranker",
+          "callee": "AutoTokenizer.from_pretrained",
+          "lineNumber": 69
+        },
+        {
+          "caller": "createInProcessReranker",
+          "callee": "AutoModelForSequenceClassification.from_pretrained",
+          "lineNumber": 70
+        },
+        {
+          "caller": "createInProcessReranker",
+          "callee": "log.info",
+          "lineNumber": 72
+        },
+        {
+          "caller": "scorePair",
+          "callee": "tokenizer",
+          "lineNumber": 76
+        },
+        {
+          "caller": "scorePair",
+          "callee": "seqModel",
+          "lineNumber": 82
+        },
+        {
+          "caller": "scorePair",
+          "callee": "Number",
+          "lineNumber": 89
+        },
+        {
+          "caller": "scorePair",
+          "callee": "Number",
+          "lineNumber": 89
+        },
+        {
+          "caller": "scorePair",
+          "callee": "Number",
+          "lineNumber": 91
+        },
+        {
+          "caller": "score",
+          "callee": "scorePair",
+          "lineNumber": 96
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "docs.map",
+          "lineNumber": 103
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "tokenizer",
+          "lineNumber": 104
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "seqModel",
+          "lineNumber": 110
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "scores.push",
+          "lineNumber": 119
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "Number",
+          "lineNumber": 119
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "Number",
+          "lineNumber": 119
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "scores.push",
+          "lineNumber": 123
+        },
+        {
+          "caller": "scoreBatch",
+          "callee": "Number",
+          "lineNumber": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/knowledge.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 377,
+      "nonEmptyLines": 329,
+      "functions": [
+        {
+          "name": "safeParseProps",
+          "startLine": 6,
+          "endLine": 13,
+          "params": [
+            "json"
+          ]
+        },
+        {
+          "name": "escapeLikeTerm",
+          "startLine": 50,
+          "endLine": 52,
+          "params": [
+            "term"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "KnowledgeGraph",
+          "startLine": 54,
+          "endLine": 377,
+          "methods": [
+            "constructor",
+            "setValidationSchema",
+            "createEntity",
+            "getEntity",
+            "updateEntity",
+            "retireEntity",
+            "getEntitiesByType",
+            "getEntities",
+            "getEntityTypeCounts",
+            "getEntityCount",
+            "searchEntities",
+            "findEntityByName",
+            "getEntitiesValidAt",
+            "createRelation",
+            "getRelation",
+            "getRelationsFrom",
+            "getRelationsTo",
+            "retireRelation",
+            "dedupeByName",
+            "traverse",
+            "bfsDistances",
+            "validateEntityProperties",
+            "validateRelation"
+          ],
+          "properties": [
+            "db",
+            "schema"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "KnowledgeGraph",
+          "line": 54,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "safeParseProps",
+          "callee": "JSON.parse",
+          "lineNumber": 8
+        },
+        {
+          "caller": "escapeLikeTerm",
+          "callee": "term.replace",
+          "lineNumber": 51
+        },
+        {
+          "caller": "createEntity",
+          "callee": "this.validateEntityProperties",
+          "lineNumber": 69
+        },
+        {
+          "caller": "createEntity",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 70
+        },
+        {
+          "caller": "createEntity",
+          "callee": "new Date().toISOString",
+          "lineNumber": 73
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare(`\r\n        INSERT INTO knowledge_entities (entity_type, name, properties, valid_from, valid_to)\r\n        VALUES (?, ?, ?, ?, ?)\r\n      `).run",
+          "lineNumber": 75
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare",
+          "lineNumber": 75
+        },
+        {
+          "caller": "createEntity",
+          "callee": "JSON.stringify",
+          "lineNumber": 78
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare('SELECT * FROM knowledge_entities WHERE id = ?').get",
+          "lineNumber": 79
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare",
+          "lineNumber": 79
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare(`\r\n      INSERT INTO knowledge_entities (entity_type, name, properties)\r\n      VALUES (?, ?, ?)\r\n    `).run",
+          "lineNumber": 82
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare",
+          "lineNumber": 82
+        },
+        {
+          "caller": "createEntity",
+          "callee": "JSON.stringify",
+          "lineNumber": 85
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare('SELECT * FROM knowledge_entities WHERE id = ?').get",
+          "lineNumber": 86
+        },
+        {
+          "caller": "createEntity",
+          "callee": "raw.prepare",
+          "lineNumber": 86
+        },
+        {
+          "caller": "getEntity",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_entities WHERE id = ?'\r\n    ).get",
+          "lineNumber": 90
+        },
+        {
+          "caller": "getEntity",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 90
+        },
+        {
+          "caller": "getEntity",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 90
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 96
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "sets.push",
+          "lineNumber": 101
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "values.push",
+          "lineNumber": 102
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "sets.push",
+          "lineNumber": 105
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "values.push",
+          "lineNumber": 106
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "JSON.stringify",
+          "lineNumber": 106
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "sets.push",
+          "lineNumber": 110
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "raw.prepare(`UPDATE knowledge_entities SET ${sets.join(', ')} WHERE id = ?`).run",
+          "lineNumber": 111
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "raw.prepare",
+          "lineNumber": 111
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "sets.join",
+          "lineNumber": 111
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "raw.prepare('SELECT * FROM knowledge_entities WHERE id = ?').get",
+          "lineNumber": 113
+        },
+        {
+          "caller": "updateEntity",
+          "callee": "raw.prepare",
+          "lineNumber": 113
+        },
+        {
+          "caller": "retireEntity",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"UPDATE knowledge_entities SET valid_to = datetime('now') WHERE id = ?\"\r\n    ).run",
+          "lineNumber": 117
+        },
+        {
+          "caller": "retireEntity",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 117
+        },
+        {
+          "caller": "retireEntity",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 117
+        },
+        {
+          "caller": "getEntitiesByType",
+          "callee": "this.getEntities",
+          "lineNumber": 124
+        },
+        {
+          "caller": "getEntitiesByType",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_entities WHERE entity_type = ? AND valid_to IS NULL ORDER BY name LIMIT ?'\r\n    ).all",
+          "lineNumber": 126
+        },
+        {
+          "caller": "getEntitiesByType",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 126
+        },
+        {
+          "caller": "getEntitiesByType",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 126
+        },
+        {
+          "caller": "getEntities",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_entities WHERE valid_to IS NULL ORDER BY name LIMIT ? OFFSET ?'\r\n    ).all",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getEntities",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getEntities",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 133
+        },
+        {
+          "caller": "getEntityTypeCounts",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT entity_type as type, COUNT(*) as count FROM knowledge_entities WHERE valid_to IS NULL GROUP BY entity_type ORDER BY count DESC'\r\n    ).all",
+          "lineNumber": 140
+        },
+        {
+          "caller": "getEntityTypeCounts",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 140
+        },
+        {
+          "caller": "getEntityTypeCounts",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 140
+        },
+        {
+          "caller": "getEntityCount",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT COUNT(*) as cnt FROM knowledge_entities WHERE valid_to IS NULL'\r\n    ).get",
+          "lineNumber": 147
+        },
+        {
+          "caller": "getEntityCount",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 147
+        },
+        {
+          "caller": "getEntityCount",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 147
+        },
+        {
+          "caller": "searchEntities",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"SELECT * FROM knowledge_entities WHERE name LIKE ? ESCAPE '\\\\' AND valid_to IS NULL ORDER BY name LIMIT ?\"\r\n    ).all",
+          "lineNumber": 154
+        },
+        {
+          "caller": "searchEntities",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 154
+        },
+        {
+          "caller": "searchEntities",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 154
+        },
+        {
+          "caller": "searchEntities",
+          "callee": "escapeLikeTerm",
+          "lineNumber": 156
+        },
+        {
+          "caller": "findEntityByName",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_entities WHERE name = ? AND valid_to IS NULL LIMIT 1'\r\n    ).get",
+          "lineNumber": 173
+        },
+        {
+          "caller": "findEntityByName",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 173
+        },
+        {
+          "caller": "findEntityByName",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 173
+        },
+        {
+          "caller": "getEntitiesValidAt",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_entities WHERE valid_from <= ? AND (valid_to IS NULL OR valid_to > ?) LIMIT ?'\r\n    ).all",
+          "lineNumber": 179
+        },
+        {
+          "caller": "getEntitiesValidAt",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 179
+        },
+        {
+          "caller": "getEntitiesValidAt",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 179
+        },
+        {
+          "caller": "createRelation",
+          "callee": "this.validateRelation",
+          "lineNumber": 187
+        },
+        {
+          "caller": "createRelation",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 188
+        },
+        {
+          "caller": "createRelation",
+          "callee": "raw.prepare(`\r\n      INSERT INTO knowledge_relations (source_id, target_id, relation_type, confidence, properties)\r\n      VALUES (?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 189
+        },
+        {
+          "caller": "createRelation",
+          "callee": "raw.prepare",
+          "lineNumber": 189
+        },
+        {
+          "caller": "createRelation",
+          "callee": "JSON.stringify",
+          "lineNumber": 192
+        },
+        {
+          "caller": "createRelation",
+          "callee": "raw.prepare('SELECT * FROM knowledge_relations WHERE id = ?').get",
+          "lineNumber": 193
+        },
+        {
+          "caller": "createRelation",
+          "callee": "raw.prepare",
+          "lineNumber": 193
+        },
+        {
+          "caller": "getRelation",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_relations WHERE id = ?'\r\n    ).get",
+          "lineNumber": 197
+        },
+        {
+          "caller": "getRelation",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 197
+        },
+        {
+          "caller": "getRelation",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 197
+        },
+        {
+          "caller": "getRelationsFrom",
+          "callee": "this.db.getDatabase().prepare(\r\n        'SELECT * FROM knowledge_relations WHERE source_id = ? AND relation_type = ? AND valid_to IS NULL'\r\n      ).all",
+          "lineNumber": 204
+        },
+        {
+          "caller": "getRelationsFrom",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 204
+        },
+        {
+          "caller": "getRelationsFrom",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 204
+        },
+        {
+          "caller": "getRelationsFrom",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_relations WHERE source_id = ? AND valid_to IS NULL'\r\n    ).all",
+          "lineNumber": 208
+        },
+        {
+          "caller": "getRelationsFrom",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 208
+        },
+        {
+          "caller": "getRelationsFrom",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 208
+        },
+        {
+          "caller": "getRelationsTo",
+          "callee": "this.db.getDatabase().prepare(\r\n        'SELECT * FROM knowledge_relations WHERE target_id = ? AND relation_type = ? AND valid_to IS NULL'\r\n      ).all",
+          "lineNumber": 215
+        },
+        {
+          "caller": "getRelationsTo",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 215
+        },
+        {
+          "caller": "getRelationsTo",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 215
+        },
+        {
+          "caller": "getRelationsTo",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM knowledge_relations WHERE target_id = ? AND valid_to IS NULL'\r\n    ).all",
+          "lineNumber": 219
+        },
+        {
+          "caller": "getRelationsTo",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 219
+        },
+        {
+          "caller": "getRelationsTo",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 219
+        },
+        {
+          "caller": "retireRelation",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"UPDATE knowledge_relations SET valid_to = datetime('now') WHERE id = ?\"\r\n    ).run",
+          "lineNumber": 225
+        },
+        {
+          "caller": "retireRelation",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 225
+        },
+        {
+          "caller": "retireRelation",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 225
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 242
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.getEntities",
+          "lineNumber": 244
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "normalizeEntityName",
+          "lineNumber": 245
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "e.entity_type.toLowerCase",
+          "lineNumber": 245
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "grouped.get",
+          "lineNumber": 246
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "grouped.set",
+          "lineNumber": 249
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "g.push",
+          "lineNumber": 251
+        },
+        {
+          "caller": "relCount",
+          "callee": "this.getRelationsFrom",
+          "lineNumber": 257
+        },
+        {
+          "caller": "relCount",
+          "callee": "this.getRelationsTo",
+          "lineNumber": 257
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "raw.transaction",
+          "lineNumber": 259
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "grouped.values",
+          "lineNumber": 260
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "[...group].sort",
+          "lineNumber": 264
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "relCount",
+          "lineNumber": 264
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "relCount",
+          "lineNumber": 264
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "sorted.slice",
+          "lineNumber": 267
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.getRelationsFrom",
+          "lineNumber": 269
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.createRelation",
+          "lineNumber": 271
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "safeParseProps",
+          "lineNumber": 271
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.retireRelation",
+          "lineNumber": 275
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.getRelationsTo",
+          "lineNumber": 277
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.createRelation",
+          "lineNumber": 279
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "safeParseProps",
+          "lineNumber": 279
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.retireRelation",
+          "lineNumber": 283
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "safeParseProps",
+          "lineNumber": 287
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "safeParseProps",
+          "lineNumber": 288
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "Number",
+          "lineNumber": 291
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "Number",
+          "lineNumber": 291
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.updateEntity",
+          "lineNumber": 292
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "this.retireEntity",
+          "lineNumber": 293
+        },
+        {
+          "caller": "dedupeByName",
+          "callee": "tx",
+          "lineNumber": 298
+        },
+        {
+          "caller": "traverse",
+          "callee": "this.getRelationsFrom",
+          "lineNumber": 312
+        },
+        {
+          "caller": "traverse",
+          "callee": "visited.has",
+          "lineNumber": 314
+        },
+        {
+          "caller": "traverse",
+          "callee": "visited.add",
+          "lineNumber": 315
+        },
+        {
+          "caller": "traverse",
+          "callee": "this.getEntity",
+          "lineNumber": 316
+        },
+        {
+          "caller": "traverse",
+          "callee": "result.push",
+          "lineNumber": 318
+        },
+        {
+          "caller": "traverse",
+          "callee": "nextFrontier.push",
+          "lineNumber": 319
+        },
+        {
+          "caller": "bfsDistances",
+          "callee": "this.getRelationsFrom",
+          "lineNumber": 338
+        },
+        {
+          "caller": "bfsDistances",
+          "callee": "visited.has",
+          "lineNumber": 340
+        },
+        {
+          "caller": "bfsDistances",
+          "callee": "visited.add",
+          "lineNumber": 341
+        },
+        {
+          "caller": "bfsDistances",
+          "callee": "distances.set",
+          "lineNumber": 342
+        },
+        {
+          "caller": "bfsDistances",
+          "callee": "nextFrontier.push",
+          "lineNumber": 343
+        },
+        {
+          "caller": "validateRelation",
+          "callee": "this.getEntity",
+          "lineNumber": 368
+        },
+        {
+          "caller": "validateRelation",
+          "callee": "typeSchema.allowedRelations.includes",
+          "lineNumber": 373
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 93,
+      "nonEmptyLines": 79,
+      "functions": [
+        {
+          "name": "mockEmbed",
+          "startLine": 20,
+          "endLine": 27,
+          "params": [
+            "text",
+            "dims"
+          ]
+        },
+        {
+          "name": "createLiteLLMEmbedder",
+          "startLine": 29,
+          "endLine": 93,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createLiteLLMEmbedder",
+          "line": 29,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockEmbed",
+          "callee": "new TextEncoder().encode",
+          "lineNumber": 22
+        },
+        {
+          "caller": "mockEmbed",
+          "callee": "Math.min",
+          "lineNumber": 23
+        },
+        {
+          "caller": "createLiteLLMEmbedder",
+          "callee": "litellmUrl.replace",
+          "lineNumber": 40
+        },
+        {
+          "caller": "callApi",
+          "callee": "JSON.stringify",
+          "lineNumber": 51
+        },
+        {
+          "caller": "callApi",
+          "callee": "fetchFn",
+          "lineNumber": 55
+        },
+        {
+          "caller": "callApi",
+          "callee": "Array.isArray",
+          "lineNumber": 58
+        },
+        {
+          "caller": "callApi",
+          "callee": "texts.map",
+          "lineNumber": 59
+        },
+        {
+          "caller": "callApi",
+          "callee": "mockEmbed",
+          "lineNumber": 59
+        },
+        {
+          "caller": "callApi",
+          "callee": "Array.isArray",
+          "lineNumber": 66
+        },
+        {
+          "caller": "callApi",
+          "callee": "texts.map",
+          "lineNumber": 67
+        },
+        {
+          "caller": "callApi",
+          "callee": "mockEmbed",
+          "lineNumber": 67
+        },
+        {
+          "caller": "callApi",
+          "callee": "response.text",
+          "lineNumber": 69
+        },
+        {
+          "caller": "callApi",
+          "callee": "response.json",
+          "lineNumber": 73
+        },
+        {
+          "caller": "callApi",
+          "callee": "json.data.map",
+          "lineNumber": 77
+        },
+        {
+          "caller": "embed",
+          "callee": "callApi",
+          "lineNumber": 84
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "callApi",
+          "lineNumber": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 58,
+      "nonEmptyLines": 48,
+      "functions": [
+        {
+          "name": "createOllamaEmbedder",
+          "startLine": 15,
+          "endLine": 58,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createOllamaEmbedder",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "callOllama",
+          "callee": "setTimeout",
+          "lineNumber": 23
+        },
+        {
+          "caller": "callOllama",
+          "callee": "controller.abort",
+          "lineNumber": 23
+        },
+        {
+          "caller": "callOllama",
+          "callee": "fetch",
+          "lineNumber": 26
+        },
+        {
+          "caller": "callOllama",
+          "callee": "JSON.stringify",
+          "lineNumber": 29
+        },
+        {
+          "caller": "callOllama",
+          "callee": "response.text",
+          "lineNumber": 34
+        },
+        {
+          "caller": "callOllama",
+          "callee": "response.json",
+          "lineNumber": 38
+        },
+        {
+          "caller": "callOllama",
+          "callee": "json.embeddings.map",
+          "lineNumber": 39
+        },
+        {
+          "caller": "callOllama",
+          "callee": "normalizeDimensions",
+          "lineNumber": 39
+        },
+        {
+          "caller": "callOllama",
+          "callee": "clearTimeout",
+          "lineNumber": 41
+        },
+        {
+          "caller": "embed",
+          "callee": "callOllama",
+          "lineNumber": 49
+        },
+        {
+          "caller": "embedBatch",
+          "callee": "callOllama",
+          "lineNumber": 55
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 205,
+      "nonEmptyLines": 189,
+      "functions": [
+        {
+          "name": "rawTurnBody",
+          "startLine": 59,
+          "endLine": 62,
+          "params": [
+            "content"
+          ]
+        },
+        {
+          "name": "ftsOrQuery",
+          "startLine": 75,
+          "endLine": 82,
+          "params": [
+            "query"
+          ]
+        },
+        {
+          "name": "ftsPool",
+          "startLine": 85,
+          "endLine": 100,
+          "params": [
+            "db",
+            "query",
+            "limit"
+          ]
+        },
+        {
+          "name": "windowPool",
+          "startLine": 103,
+          "endLine": 110,
+          "params": [
+            "db",
+            "since",
+            "until"
+          ]
+        },
+        {
+          "name": "convTurnMap",
+          "startLine": 113,
+          "endLine": 127,
+          "params": [
+            "db",
+            "conv"
+          ]
+        },
+        {
+          "name": "fetchRawDetailLane",
+          "startLine": 134,
+          "endLine": 205,
+          "params": [
+            "db",
+            "query",
+            "reranker",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "RAW_DETAIL_K",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnBody",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "fetchRawDetailLane",
+          "line": 134,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "rawTurnBody",
+          "callee": "content.indexOf",
+          "lineNumber": 60
+        },
+        {
+          "caller": "rawTurnBody",
+          "callee": "content.slice(nl + 1).trim",
+          "lineNumber": 61
+        },
+        {
+          "caller": "rawTurnBody",
+          "callee": "content.slice",
+          "lineNumber": 61
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "query\r\n    .split(/\\s+/)\r\n    .map(w => w.replace(/[^\\w]/g, ''))\r\n    .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))\r\n    .map(w => `\"${w}\"`)\r\n    .join",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "query\r\n    .split(/\\s+/)\r\n    .map(w => w.replace(/[^\\w]/g, ''))\r\n    .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))\r\n    .map",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "query\r\n    .split(/\\s+/)\r\n    .map(w => w.replace(/[^\\w]/g, ''))\r\n    .filter",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "query\r\n    .split(/\\s+/)\r\n    .map",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "query\r\n    .split",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "w.replace",
+          "lineNumber": 78
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "FTS_STOP_WORDS.has",
+          "lineNumber": 79
+        },
+        {
+          "caller": "ftsOrQuery",
+          "callee": "w.toLowerCase",
+          "lineNumber": 79
+        },
+        {
+          "caller": "ftsPool",
+          "callee": "ftsOrQuery",
+          "lineNumber": 86
+        },
+        {
+          "caller": "ftsPool",
+          "callee": "db.prepare(\r\n      `SELECT mf.id, mf.content, mf.source, mf.created_at\r\n       FROM memory_frames_fts fts\r\n       JOIN memory_frames mf ON mf.id = fts.rowid\r\n       WHERE fts.content MATCH ? AND mf.content LIKE '${MIND_RAWTURN_PREFIX} %'\r\n       ORDER BY rank\r\n       LIMIT ?`\r\n    ).all",
+          "lineNumber": 89
+        },
+        {
+          "caller": "ftsPool",
+          "callee": "db.prepare",
+          "lineNumber": 89
+        },
+        {
+          "caller": "windowPool",
+          "callee": "db.prepare(\r\n    `SELECT id, content, source, created_at FROM memory_frames\r\n     WHERE content LIKE '${MIND_RAWTURN_PREFIX} %'\r\n       AND substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ?\r\n     ORDER BY id ASC`\r\n  ).all",
+          "lineNumber": 104
+        },
+        {
+          "caller": "windowPool",
+          "callee": "db.prepare",
+          "lineNumber": 104
+        },
+        {
+          "caller": "convTurnMap",
+          "callee": "db.prepare(\r\n    `SELECT id, content, source, created_at FROM memory_frames\r\n     WHERE content LIKE ?`\r\n  ).all",
+          "lineNumber": 117
+        },
+        {
+          "caller": "convTurnMap",
+          "callee": "db.prepare",
+          "lineNumber": 117
+        },
+        {
+          "caller": "convTurnMap",
+          "callee": "parseRawTurnHeader",
+          "lineNumber": 123
+        },
+        {
+          "caller": "convTurnMap",
+          "callee": "map.set",
+          "lineNumber": 124
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "windowPool",
+          "lineNumber": 146
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool.map",
+          "lineNumber": 150
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "ftsPool(db, query, 200).filter(t => winIds.has(t.id)).slice",
+          "lineNumber": 151
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "ftsPool(db, query, 200).filter",
+          "lineNumber": 151
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "ftsPool",
+          "lineNumber": 151
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "winIds.has",
+          "lineNumber": 151
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool.slice",
+          "lineNumber": 152
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "ftsPool",
+          "lineNumber": 156
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "ftsPool",
+          "lineNumber": 158
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool.map",
+          "lineNumber": 163
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "rawTurnBody",
+          "lineNumber": 163
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "reranker.scoreBatch",
+          "lineNumber": 166
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool\r\n    .map((t, i) => ({ t, s: scores[i] ?? -Infinity }))\r\n    .sort((a, b) => b.s - a.s)\r\n    .slice(0, k)\r\n    .map",
+          "lineNumber": 170
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool\r\n    .map((t, i) => ({ t, s: scores[i] ?? -Infinity }))\r\n    .sort((a, b) => b.s - a.s)\r\n    .slice",
+          "lineNumber": 170
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool\r\n    .map((t, i) => ({ t, s: scores[i] ?? -Infinity }))\r\n    .sort",
+          "lineNumber": 170
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "pool\r\n    .map",
+          "lineNumber": 170
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "parseRawTurnHeader",
+          "lineNumber": 180
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "convMaps.get",
+          "lineNumber": 182
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "convTurnMap",
+          "lineNumber": 184
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "convMaps.set",
+          "lineNumber": 185
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "turns.get",
+          "lineNumber": 188
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "excludeIds.has",
+          "lineNumber": 189
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "keptById.set",
+          "lineNumber": 189
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "keptById.values",
+          "lineNumber": 195
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "parseRawTurnHeader",
+          "lineNumber": 196
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "hits.push",
+          "lineNumber": 198
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "hits.sort",
+          "lineNumber": 200
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "String(a.created_at).localeCompare",
+          "lineNumber": 201
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "String",
+          "lineNumber": 201
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "String",
+          "lineNumber": 201
+        },
+        {
+          "caller": "fetchRawDetailLane",
+          "callee": "a.conv.localeCompare",
+          "lineNumber": 202
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 3,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/reconcile.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 168,
+      "nonEmptyLines": 139,
+      "functions": [
+        {
+          "name": "reconcileFtsIndex",
+          "startLine": 23,
+          "endLine": 47,
+          "params": [
+            "db"
+          ]
+        },
+        {
+          "name": "reconcileVecIndex",
+          "startLine": 54,
+          "endLine": 94,
+          "params": [
+            "db",
+            "embedder"
+          ]
+        },
+        {
+          "name": "cleanOrphanVectors",
+          "startLine": 100,
+          "endLine": 125,
+          "params": [
+            "db"
+          ]
+        },
+        {
+          "name": "cleanOrphanFts",
+          "startLine": 130,
+          "endLine": 148,
+          "params": [
+            "db"
+          ]
+        },
+        {
+          "name": "reconcileIndexes",
+          "startLine": 155,
+          "endLine": 168,
+          "params": [
+            "db",
+            "embedder"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "reconcileFtsIndex",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileVecIndex",
+          "line": 54,
+          "isDefault": false
+        },
+        {
+          "name": "cleanOrphanVectors",
+          "line": 100,
+          "isDefault": false
+        },
+        {
+          "name": "cleanOrphanFts",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileIndexes",
+          "line": 155,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "db.getDatabase",
+          "lineNumber": 24
+        },
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "raw.prepare(`\r\n    SELECT f.id, f.content FROM memory_frames f\r\n    WHERE f.id NOT IN (SELECT rowid FROM memory_frames_fts)\r\n  `).all",
+          "lineNumber": 28
+        },
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "raw.prepare",
+          "lineNumber": 28
+        },
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "raw.prepare",
+          "lineNumber": 35
+        },
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "raw.transaction",
+          "lineNumber": 39
+        },
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "insertFts.run",
+          "lineNumber": 41
+        },
+        {
+          "caller": "reconcileFtsIndex",
+          "callee": "insertAll",
+          "lineNumber": 44
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "db.getDatabase",
+          "lineNumber": 55
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.prepare(\r\n    \"SELECT name FROM sqlite_master WHERE type='table' AND name='memory_frames_vec'\",\r\n  ).get",
+          "lineNumber": 58
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.prepare",
+          "lineNumber": 58
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.prepare(`\r\n    SELECT f.id, f.content FROM memory_frames f\r\n    WHERE f.id NOT IN (SELECT rowid FROM memory_frames_vec)\r\n  `).all",
+          "lineNumber": 63
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.prepare",
+          "lineNumber": 63
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "missingVec.slice",
+          "lineNumber": 73
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "batch.map",
+          "lineNumber": 74
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "embedder.embedBatch",
+          "lineNumber": 75
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.transaction",
+          "lineNumber": 77
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "Math.trunc",
+          "lineNumber": 79
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.prepare(\r\n          `INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${id}, ?)`,\r\n        ).run",
+          "lineNumber": 85
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "raw.prepare",
+          "lineNumber": 85
+        },
+        {
+          "caller": "reconcileVecIndex",
+          "callee": "insertBatch",
+          "lineNumber": 90
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "db.getDatabase",
+          "lineNumber": 101
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.prepare(\r\n    \"SELECT name FROM sqlite_master WHERE type='table' AND name='memory_frames_vec'\",\r\n  ).get",
+          "lineNumber": 104
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.prepare",
+          "lineNumber": 104
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.prepare(`\r\n    SELECT v.rowid FROM memory_frames_vec v\r\n    WHERE v.rowid NOT IN (SELECT id FROM memory_frames)\r\n  `).all",
+          "lineNumber": 110
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.prepare",
+          "lineNumber": 110
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.transaction",
+          "lineNumber": 117
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run",
+          "lineNumber": 119
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "raw.prepare",
+          "lineNumber": 119
+        },
+        {
+          "caller": "cleanOrphanVectors",
+          "callee": "deleteTx",
+          "lineNumber": 122
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "db.getDatabase",
+          "lineNumber": 131
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "raw.prepare(`\r\n    SELECT rowid FROM memory_frames_fts\r\n    WHERE rowid NOT IN (SELECT id FROM memory_frames)\r\n  `).all",
+          "lineNumber": 133
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "raw.prepare",
+          "lineNumber": 133
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "raw.transaction",
+          "lineNumber": 140
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 142
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "raw.prepare",
+          "lineNumber": 142
+        },
+        {
+          "caller": "cleanOrphanFts",
+          "callee": "deleteTx",
+          "lineNumber": 145
+        },
+        {
+          "caller": "reconcileIndexes",
+          "callee": "reconcileFtsIndex",
+          "lineNumber": 160
+        },
+        {
+          "caller": "reconcileIndexes",
+          "callee": "reconcileVecIndex",
+          "lineNumber": 161
+        },
+        {
+          "caller": "reconcileIndexes",
+          "callee": "cleanOrphanFts",
+          "lineNumber": 164
+        },
+        {
+          "caller": "reconcileIndexes",
+          "callee": "cleanOrphanVectors",
+          "lineNumber": 165
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/schema.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 323,
+      "nonEmptyLines": 302,
+      "functions": [
+        {
+          "name": "vecTableSqlForDim",
+          "startLine": 297,
+          "endLine": 304,
+          "params": [
+            "dim"
+          ]
+        },
+        {
+          "name": "chunksVecTableSqlForDim",
+          "startLine": 313,
+          "endLine": 320,
+          "params": [
+            "dim"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SCHEMA_VERSION",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "SCHEMA_SQL",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "vecTableSqlForDim",
+          "line": 297,
+          "isDefault": false
+        },
+        {
+          "name": "VEC_TABLE_SQL",
+          "line": 307,
+          "isDefault": false
+        },
+        {
+          "name": "chunksVecTableSqlForDim",
+          "line": 313,
+          "isDefault": false
+        },
+        {
+          "name": "CHUNKS_VEC_TABLE_SQL",
+          "line": 323,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "vecTableSqlForDim",
+          "callee": "Math.trunc",
+          "lineNumber": 298
+        },
+        {
+          "caller": "chunksVecTableSqlForDim",
+          "callee": "Math.trunc",
+          "lineNumber": 314
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/scoring.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 108,
+      "nonEmptyLines": 93,
+      "functions": [
+        {
+          "name": "computeTemporalScore",
+          "startLine": 52,
+          "endLine": 63,
+          "params": [
+            "lastAccessedIso"
+          ]
+        },
+        {
+          "name": "computePopularityScore",
+          "startLine": 65,
+          "endLine": 67,
+          "params": [
+            "accessCount"
+          ]
+        },
+        {
+          "name": "computeContextualScore",
+          "startLine": 69,
+          "endLine": 80,
+          "params": [
+            "frameId",
+            "graphDistances"
+          ]
+        },
+        {
+          "name": "computeImportanceScore",
+          "startLine": 82,
+          "endLine": 84,
+          "params": [
+            "importance"
+          ]
+        },
+        {
+          "name": "computeRelevance",
+          "startLine": 86,
+          "endLine": 108,
+          "params": [
+            "frame",
+            "weights",
+            "context"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SCORING_PROFILES",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "computeTemporalScore",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "computePopularityScore",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "computeContextualScore",
+          "line": 69,
+          "isDefault": false
+        },
+        {
+          "name": "computeImportanceScore",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "computeRelevance",
+          "line": 86,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "computeTemporalScore",
+          "callee": "Date.now",
+          "lineNumber": 53
+        },
+        {
+          "caller": "computeTemporalScore",
+          "callee": "new Date(lastAccessedIso).getTime",
+          "lineNumber": 54
+        },
+        {
+          "caller": "computeTemporalScore",
+          "callee": "Math.pow",
+          "lineNumber": 62
+        },
+        {
+          "caller": "computePopularityScore",
+          "callee": "Math.log10",
+          "lineNumber": 66
+        },
+        {
+          "caller": "computeContextualScore",
+          "callee": "graphDistances.has",
+          "lineNumber": 73
+        },
+        {
+          "caller": "computeContextualScore",
+          "callee": "graphDistances.get",
+          "lineNumber": 74
+        },
+        {
+          "caller": "computeRelevance",
+          "callee": "computeTemporalScore",
+          "lineNumber": 97
+        },
+        {
+          "caller": "computeRelevance",
+          "callee": "computePopularityScore",
+          "lineNumber": 98
+        },
+        {
+          "caller": "computeRelevance",
+          "callee": "computeContextualScore",
+          "lineNumber": 99
+        },
+        {
+          "caller": "computeRelevance",
+          "callee": "computeImportanceScore",
+          "lineNumber": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/search.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 637,
+      "nonEmptyLines": 574,
+      "functions": [
+        {
+          "name": "chunkRetrievalEnabled",
+          "startLine": 63,
+          "endLine": 65,
+          "params": []
+        },
+        {
+          "name": "f32ToBlob",
+          "startLine": 67,
+          "endLine": 69,
+          "params": [
+            "f32"
+          ]
+        },
+        {
+          "name": "escapeLikeTerm",
+          "startLine": 75,
+          "endLine": 77,
+          "params": [
+            "term"
+          ]
+        },
+        {
+          "name": "rechunkAllFrames",
+          "startLine": 613,
+          "endLine": 637,
+          "params": [
+            "db",
+            "search"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "HybridSearch",
+          "startLine": 79,
+          "endLine": 596,
+          "methods": [
+            "constructor",
+            "ensureFingerprint",
+            "search",
+            "keywordSearch",
+            "likeFallbackSearch",
+            "vectorSearch",
+            "indexFrame",
+            "indexFramesBatch",
+            "indexChunksForFrame",
+            "vectorSearchChunks"
+          ],
+          "properties": [
+            "db",
+            "embedder",
+            "fingerprintChecked"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "chunkRetrievalEnabled",
+          "line": 63,
+          "isDefault": false
+        },
+        {
+          "name": "HybridSearch",
+          "line": 79,
+          "isDefault": false
+        },
+        {
+          "name": "rechunkAllFrames",
+          "line": 613,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "escapeLikeTerm",
+          "callee": "term.replace",
+          "lineNumber": 76
+        },
+        {
+          "caller": "ensureFingerprint",
+          "callee": "e.getActiveProvider",
+          "lineNumber": 103
+        },
+        {
+          "caller": "ensureFingerprint",
+          "callee": "e.getStatus",
+          "lineNumber": 104
+        },
+        {
+          "caller": "ensureFingerprint",
+          "callee": "this.db.ensureEmbeddingFingerprint",
+          "lineNumber": 105
+        },
+        {
+          "caller": "ensureFingerprint",
+          "callee": "log.warn",
+          "lineNumber": 109
+        },
+        {
+          "caller": "search",
+          "callee": "chunkRetrievalEnabled",
+          "lineNumber": 137
+        },
+        {
+          "caller": "search",
+          "callee": "this.vectorSearchChunks",
+          "lineNumber": 138
+        },
+        {
+          "caller": "search",
+          "callee": "Promise.all",
+          "lineNumber": 140
+        },
+        {
+          "caller": "search",
+          "callee": "this.keywordSearch",
+          "lineNumber": 141
+        },
+        {
+          "caller": "search",
+          "callee": "Promise.resolve",
+          "lineNumber": 143
+        },
+        {
+          "caller": "search",
+          "callee": "this.vectorSearch",
+          "lineNumber": 144
+        },
+        {
+          "caller": "search",
+          "callee": "keywordResults.forEach",
+          "lineNumber": 150
+        },
+        {
+          "caller": "search",
+          "callee": "rrfScores.set",
+          "lineNumber": 151
+        },
+        {
+          "caller": "search",
+          "callee": "rrfScores.get",
+          "lineNumber": 151
+        },
+        {
+          "caller": "search",
+          "callee": "vectorResults.forEach",
+          "lineNumber": 154
+        },
+        {
+          "caller": "search",
+          "callee": "rrfScores.set",
+          "lineNumber": 155
+        },
+        {
+          "caller": "search",
+          "callee": "rrfScores.get",
+          "lineNumber": 155
+        },
+        {
+          "caller": "search",
+          "callee": "rrfScores.keys",
+          "lineNumber": 159
+        },
+        {
+          "caller": "search",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 163
+        },
+        {
+          "caller": "search",
+          "callee": "frameIds.map(() => '?').join",
+          "lineNumber": 164
+        },
+        {
+          "caller": "search",
+          "callee": "frameIds.map",
+          "lineNumber": 164
+        },
+        {
+          "caller": "search",
+          "callee": "temporalConditions.push",
+          "lineNumber": 176
+        },
+        {
+          "caller": "search",
+          "callee": "temporalConditions.push",
+          "lineNumber": 178
+        },
+        {
+          "caller": "search",
+          "callee": "temporalParams.push",
+          "lineNumber": 180
+        },
+        {
+          "caller": "search",
+          "callee": "temporalConditions.push",
+          "lineNumber": 184
+        },
+        {
+          "caller": "search",
+          "callee": "temporalConditions.push",
+          "lineNumber": 186
+        },
+        {
+          "caller": "search",
+          "callee": "temporalParams.push",
+          "lineNumber": 188
+        },
+        {
+          "caller": "search",
+          "callee": "temporalConditions.join",
+          "lineNumber": 192
+        },
+        {
+          "caller": "search",
+          "callee": "raw.prepare(\r\n      `SELECT * FROM memory_frames WHERE id IN (${placeholders})${whereExtra}`\r\n    ).all",
+          "lineNumber": 195
+        },
+        {
+          "caller": "search",
+          "callee": "raw.prepare",
+          "lineNumber": 195
+        },
+        {
+          "caller": "search",
+          "callee": "frames.map",
+          "lineNumber": 199
+        },
+        {
+          "caller": "search",
+          "callee": "frameMap.get",
+          "lineNumber": 204
+        },
+        {
+          "caller": "search",
+          "callee": "computeRelevance",
+          "lineNumber": 207
+        },
+        {
+          "caller": "search",
+          "callee": "results.push",
+          "lineNumber": 220
+        },
+        {
+          "caller": "search",
+          "callee": "results.sort",
+          "lineNumber": 228
+        },
+        {
+          "caller": "search",
+          "callee": "Math.min",
+          "lineNumber": 236
+        },
+        {
+          "caller": "search",
+          "callee": "results.slice",
+          "lineNumber": 237
+        },
+        {
+          "caller": "search",
+          "callee": "pool.map",
+          "lineNumber": 239
+        },
+        {
+          "caller": "search",
+          "callee": "reranker.scoreBatch",
+          "lineNumber": 240
+        },
+        {
+          "caller": "search",
+          "callee": "pool.map",
+          "lineNumber": 243
+        },
+        {
+          "caller": "search",
+          "callee": "reranked.sort",
+          "lineNumber": 244
+        },
+        {
+          "caller": "search",
+          "callee": "reranked.concat(results.slice(poolSize)).slice",
+          "lineNumber": 247
+        },
+        {
+          "caller": "search",
+          "callee": "reranked.concat",
+          "lineNumber": 247
+        },
+        {
+          "caller": "search",
+          "callee": "results.slice",
+          "lineNumber": 247
+        },
+        {
+          "caller": "search",
+          "callee": "results.slice",
+          "lineNumber": 255
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 259
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "query.includes",
+          "lineNumber": 273
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "query\r\n          .split(/\\s+/)\r\n          .map(w => w.replace(/[^\\w]/g, '')) // strip punctuation\r\n          .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))\r\n          .map(w => `\"${w.replace(/\"/g, '')}\"`)\r\n          .join",
+          "lineNumber": 275
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "query\r\n          .split(/\\s+/)\r\n          .map(w => w.replace(/[^\\w]/g, '')) // strip punctuation\r\n          .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))\r\n          .map",
+          "lineNumber": 275
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "query\r\n          .split(/\\s+/)\r\n          .map(w => w.replace(/[^\\w]/g, '')) // strip punctuation\r\n          .filter",
+          "lineNumber": 275
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "query\r\n          .split(/\\s+/)\r\n          .map",
+          "lineNumber": 275
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "query\r\n          .split",
+          "lineNumber": 275
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "w.replace",
+          "lineNumber": 277
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "FTS_STOP_WORDS.has",
+          "lineNumber": 278
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "w.toLowerCase",
+          "lineNumber": 278
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "w.replace",
+          "lineNumber": 279
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "raw.prepare(sql).all",
+          "lineNumber": 307
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 307
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "rows.map",
+          "lineNumber": 308
+        },
+        {
+          "caller": "keywordSearch",
+          "callee": "this.likeFallbackSearch",
+          "lineNumber": 313
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 329
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "query\r\n      .split(/\\s+/)\r\n      .map(w => w.replace(/[^\\w]/g, '')) // strip punctuation (incl. FTS5 operators)\r\n      .filter",
+          "lineNumber": 331
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "query\r\n      .split(/\\s+/)\r\n      .map",
+          "lineNumber": 331
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "query\r\n      .split",
+          "lineNumber": 331
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "w.replace",
+          "lineNumber": 333
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "(tokens.length > 0 ? tokens : [query]).map",
+          "lineNumber": 335
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "escapeLikeTerm",
+          "lineNumber": 335
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "terms.map(() => `content LIKE ? ESCAPE '\\\\'`).join",
+          "lineNumber": 337
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "terms.map",
+          "lineNumber": 337
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "raw.prepare(\r\n          `SELECT id FROM memory_frames\r\n           WHERE (${likeClause}) AND gop_id = ?\r\n           ORDER BY created_at DESC LIMIT ?`\r\n        ).all",
+          "lineNumber": 341
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 341
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "rows.map",
+          "lineNumber": 346
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "raw.prepare(\r\n        `SELECT id FROM memory_frames\r\n         WHERE (${likeClause})\r\n         ORDER BY created_at DESC LIMIT ?`\r\n      ).all",
+          "lineNumber": 348
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 348
+        },
+        {
+          "caller": "likeFallbackSearch",
+          "callee": "rows.map",
+          "lineNumber": 353
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "this.ensureFingerprint",
+          "lineNumber": 360
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "this.embedder.embed",
+          "lineNumber": 361
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "f32ToBlob",
+          "lineNumber": 362
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 363
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "raw.prepare(`\r\n          SELECT v.rowid as id FROM memory_frames_vec v\r\n          WHERE v.embedding MATCH ? AND k = ?\r\n          ORDER BY distance\r\n        `).all",
+          "lineNumber": 368
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 368
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "rows.map(() => '?').join",
+          "lineNumber": 376
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "rows.map",
+          "lineNumber": 376
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "raw.prepare(`\r\n          SELECT id FROM memory_frames WHERE id IN (${placeholders}) AND gop_id = ?\r\n        `).all",
+          "lineNumber": 377
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 377
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "rows.map",
+          "lineNumber": 379
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "filtered.map(r => r.id).slice",
+          "lineNumber": 381
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "filtered.map",
+          "lineNumber": 381
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "raw.prepare(`\r\n          SELECT rowid as id FROM memory_frames_vec\r\n          WHERE embedding MATCH ? AND k = ?\r\n          ORDER BY distance\r\n        `).all",
+          "lineNumber": 387
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 387
+        },
+        {
+          "caller": "vectorSearch",
+          "callee": "rows.map",
+          "lineNumber": 392
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "this.ensureFingerprint",
+          "lineNumber": 400
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "Number.isFinite",
+          "lineNumber": 401
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "this.embedder.embed",
+          "lineNumber": 404
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 405
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "Math.trunc",
+          "lineNumber": 407
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "raw.prepare(\r\n      `INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${id}, ?)`\r\n    ).run",
+          "lineNumber": 408
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 408
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "f32ToBlob",
+          "lineNumber": 410
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "chunkRetrievalEnabled",
+          "lineNumber": 415
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "this.indexChunksForFrame",
+          "lineNumber": 417
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "log.warn",
+          "lineNumber": 419
+        },
+        {
+          "caller": "indexFrame",
+          "callee": "String",
+          "lineNumber": 421
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "this.ensureFingerprint",
+          "lineNumber": 429
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "Number.isFinite",
+          "lineNumber": 431
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "frames.map",
+          "lineNumber": 435
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "this.embedder.embedBatch",
+          "lineNumber": 436
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 437
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "raw.transaction",
+          "lineNumber": 439
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "Math.trunc",
+          "lineNumber": 441
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "raw.prepare(\r\n          `INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${id}, ?)`\r\n        ).run",
+          "lineNumber": 442
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "raw.prepare",
+          "lineNumber": 442
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "f32ToBlob",
+          "lineNumber": 444
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "insertAll",
+          "lineNumber": 447
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "chunkRetrievalEnabled",
+          "lineNumber": 452
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "this.indexChunksForFrame",
+          "lineNumber": 455
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "log.warn",
+          "lineNumber": 457
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "Math.trunc",
+          "lineNumber": 458
+        },
+        {
+          "caller": "indexFramesBatch",
+          "callee": "String",
+          "lineNumber": 459
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "Number.isFinite",
+          "lineNumber": 487
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "this.ensureFingerprint",
+          "lineNumber": 490
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 491
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "Math.trunc",
+          "lineNumber": 492
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "chunkText",
+          "lineNumber": 494
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "chunks.map",
+          "lineNumber": 498
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "this.embedder.embedBatch",
+          "lineNumber": 499
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw.transaction",
+          "lineNumber": 503
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw\r\n        .prepare('SELECT id FROM memory_frame_chunks WHERE frame_id = ?')\r\n        .all",
+          "lineNumber": 508
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw\r\n        .prepare",
+          "lineNumber": 508
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw.prepare(`DELETE FROM memory_frame_chunks_vec WHERE rowid = ${Math.trunc(row.id)}`).run",
+          "lineNumber": 513
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 513
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "Math.trunc",
+          "lineNumber": 513
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw.prepare('DELETE FROM memory_frame_chunks WHERE frame_id = ?').run",
+          "lineNumber": 515
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 515
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw.prepare",
+          "lineNumber": 517
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "insertChunk.run",
+          "lineNumber": 522
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "Math.trunc",
+          "lineNumber": 523
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "Number",
+          "lineNumber": 523
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw\r\n          .prepare(`INSERT INTO memory_frame_chunks_vec (rowid, embedding) VALUES (${chunkId}, ?)`)\r\n          .run",
+          "lineNumber": 524
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "raw\r\n          .prepare",
+          "lineNumber": 524
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "f32ToBlob",
+          "lineNumber": 526
+        },
+        {
+          "caller": "indexChunksForFrame",
+          "callee": "tx",
+          "lineNumber": 529
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "this.ensureFingerprint",
+          "lineNumber": 540
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 541
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "raw.prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks').get",
+          "lineNumber": 545
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "raw.prepare",
+          "lineNumber": 545
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "this.embedder.embed",
+          "lineNumber": 554
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "f32ToBlob",
+          "lineNumber": 555
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "raw\r\n        .prepare(\r\n          `SELECT v.rowid AS chunk_id, c.frame_id\r\n             FROM memory_frame_chunks_vec v\r\n             JOIN memory_frame_chunks c ON c.id = v.rowid\r\n            WHERE v.embedding MATCH ? AND k = ?\r\n            ORDER BY distance`\r\n        )\r\n        .all",
+          "lineNumber": 560
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "raw\r\n        .prepare",
+          "lineNumber": 560
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "Math.max",
+          "lineNumber": 568
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "seen.has",
+          "lineNumber": 576
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "seen.add",
+          "lineNumber": 577
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "frameIds.push",
+          "lineNumber": 578
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "frameIds.map(() => '?').join",
+          "lineNumber": 583
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "frameIds.map",
+          "lineNumber": 583
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "raw\r\n          .prepare(\r\n            `SELECT id FROM memory_frames WHERE id IN (${placeholders}) AND gop_id = ?`\r\n          )\r\n          .all",
+          "lineNumber": 584
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "raw\r\n          .prepare",
+          "lineNumber": 584
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "filtered.map((r) => r.id).slice",
+          "lineNumber": 589
+        },
+        {
+          "caller": "vectorSearchChunks",
+          "callee": "filtered.map",
+          "lineNumber": 589
+        },
+        {
+          "caller": "rechunkAllFrames",
+          "callee": "db.getDatabase",
+          "lineNumber": 614
+        },
+        {
+          "caller": "rechunkAllFrames",
+          "callee": "raw\r\n    .prepare(\"SELECT id, content FROM memory_frames WHERE importance != 'deprecated' ORDER BY id ASC\")\r\n    .all",
+          "lineNumber": 615
+        },
+        {
+          "caller": "rechunkAllFrames",
+          "callee": "raw\r\n    .prepare",
+          "lineNumber": 615
+        },
+        {
+          "caller": "rechunkAllFrames",
+          "callee": "search.indexChunksForFrame",
+          "lineNumber": 625
+        },
+        {
+          "caller": "rechunkAllFrames",
+          "callee": "log.warn",
+          "lineNumber": 630
+        },
+        {
+          "caller": "rechunkAllFrames",
+          "callee": "String",
+          "lineNumber": 631
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 3,
+        "functionCount": 4,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/sessions.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 107,
+      "nonEmptyLines": 96,
+      "classes": [
+        {
+          "name": "SessionStore",
+          "startLine": 13,
+          "endLine": 107,
+          "methods": [
+            "constructor",
+            "create",
+            "close",
+            "archive",
+            "getByProject",
+            "getActive",
+            "ensureActive",
+            "getByGopId",
+            "ensure"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SessionStore",
+          "line": 13,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "create",
+          "callee": "new Date().toISOString",
+          "lineNumber": 21
+        },
+        {
+          "caller": "create",
+          "callee": "Math.random().toString(36).slice",
+          "lineNumber": 21
+        },
+        {
+          "caller": "create",
+          "callee": "Math.random().toString",
+          "lineNumber": 21
+        },
+        {
+          "caller": "create",
+          "callee": "Math.random",
+          "lineNumber": 21
+        },
+        {
+          "caller": "create",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 22
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare(`\r\n      INSERT INTO sessions (gop_id, project_id, status, started_at)\r\n      VALUES (?, ?, 'active', datetime('now'))\r\n    `).run",
+          "lineNumber": 23
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 23
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare('SELECT * FROM sessions WHERE id = ?').get",
+          "lineNumber": 27
+        },
+        {
+          "caller": "create",
+          "callee": "raw.prepare",
+          "lineNumber": 27
+        },
+        {
+          "caller": "close",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 31
+        },
+        {
+          "caller": "close",
+          "callee": "raw.prepare(`\r\n      UPDATE sessions SET status = 'closed', ended_at = datetime('now'), summary = ?\r\n      WHERE gop_id = ?\r\n    `).run",
+          "lineNumber": 32
+        },
+        {
+          "caller": "close",
+          "callee": "raw.prepare",
+          "lineNumber": 32
+        },
+        {
+          "caller": "close",
+          "callee": "raw.prepare('SELECT * FROM sessions WHERE gop_id = ?').get",
+          "lineNumber": 36
+        },
+        {
+          "caller": "close",
+          "callee": "raw.prepare",
+          "lineNumber": 36
+        },
+        {
+          "caller": "archive",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 40
+        },
+        {
+          "caller": "archive",
+          "callee": "raw.prepare(\"UPDATE sessions SET status = 'archived' WHERE gop_id = ?\").run",
+          "lineNumber": 41
+        },
+        {
+          "caller": "archive",
+          "callee": "raw.prepare",
+          "lineNumber": 41
+        },
+        {
+          "caller": "archive",
+          "callee": "raw.prepare('SELECT * FROM sessions WHERE gop_id = ?').get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "archive",
+          "callee": "raw.prepare",
+          "lineNumber": 42
+        },
+        {
+          "caller": "getByProject",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM sessions WHERE project_id = ? ORDER BY started_at DESC'\r\n    ).all",
+          "lineNumber": 46
+        },
+        {
+          "caller": "getByProject",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 46
+        },
+        {
+          "caller": "getByProject",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 46
+        },
+        {
+          "caller": "getActive",
+          "callee": "this.db.getDatabase().prepare(\r\n      \"SELECT * FROM sessions WHERE status = 'active' ORDER BY started_at DESC\"\r\n    ).all",
+          "lineNumber": 52
+        },
+        {
+          "caller": "getActive",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 52
+        },
+        {
+          "caller": "getActive",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 52
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 63
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.transaction",
+          "lineNumber": 64
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.prepare(\r\n        \"SELECT * FROM sessions WHERE status = 'active' ORDER BY started_at DESC, id DESC LIMIT 1\"\r\n      ).get",
+          "lineNumber": 68
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.prepare",
+          "lineNumber": 68
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "new Date().toISOString",
+          "lineNumber": 72
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "Math.random().toString(36).slice",
+          "lineNumber": 72
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "Math.random().toString",
+          "lineNumber": 72
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "Math.random",
+          "lineNumber": 72
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.prepare(`\r\n        INSERT INTO sessions (gop_id, project_id, status, started_at)\r\n        VALUES (?, ?, 'active', datetime('now'))\r\n      `).run",
+          "lineNumber": 73
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.prepare",
+          "lineNumber": 73
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.prepare('SELECT * FROM sessions WHERE id = ?').get",
+          "lineNumber": 77
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "raw.prepare",
+          "lineNumber": 77
+        },
+        {
+          "caller": "ensureActive",
+          "callee": "txn",
+          "lineNumber": 79
+        },
+        {
+          "caller": "getByGopId",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM sessions WHERE gop_id = ?'\r\n    ).get",
+          "lineNumber": 83
+        },
+        {
+          "caller": "getByGopId",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 83
+        },
+        {
+          "caller": "getByGopId",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 83
+        },
+        {
+          "caller": "ensure",
+          "callee": "this.getByGopId",
+          "lineNumber": 98
+        },
+        {
+          "caller": "ensure",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 100
+        },
+        {
+          "caller": "ensure",
+          "callee": "raw.prepare(`\r\n      INSERT INTO sessions (gop_id, project_id, status, summary, started_at)\r\n      VALUES (?, ?, 'active', ?, datetime('now'))\r\n    `).run",
+          "lineNumber": 101
+        },
+        {
+          "caller": "ensure",
+          "callee": "raw.prepare",
+          "lineNumber": 101
+        },
+        {
+          "caller": "ensure",
+          "callee": "this.getByGopId",
+          "lineNumber": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/multi-mind-cache.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 133,
+      "nonEmptyLines": 117,
+      "classes": [
+        {
+          "name": "MultiMindCache",
+          "startLine": 28,
+          "endLine": 133,
+          "methods": [
+            "constructor",
+            "getOrOpen",
+            "getIfOpen",
+            "has",
+            "close",
+            "closeAll",
+            "size",
+            "keys",
+            "evictLRU"
+          ],
+          "properties": [
+            "cache",
+            "maxOpen",
+            "getMindPath",
+            "allowedRoot"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MultiMindCache",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "path.resolve",
+          "lineNumber": 37
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "this.cache.get",
+          "lineNumber": 41
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "Date.now",
+          "lineNumber": 43
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "this.getMindPath",
+          "lineNumber": 47
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "path.resolve",
+          "lineNumber": 54
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "resolved.startsWith",
+          "lineNumber": 55
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "log.warn",
+          "lineNumber": 56
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "this.evictLRU",
+          "lineNumber": 68
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "this.cache.get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "Date.now",
+          "lineNumber": 72
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "this.cache.set",
+          "lineNumber": 76
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "Date.now",
+          "lineNumber": 76
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "log.warn",
+          "lineNumber": 79
+        },
+        {
+          "caller": "getOrOpen",
+          "callee": "String",
+          "lineNumber": 79
+        },
+        {
+          "caller": "getIfOpen",
+          "callee": "this.cache.get",
+          "lineNumber": 85
+        },
+        {
+          "caller": "getIfOpen",
+          "callee": "Date.now",
+          "lineNumber": 87
+        },
+        {
+          "caller": "has",
+          "callee": "this.cache.has",
+          "lineNumber": 94
+        },
+        {
+          "caller": "close",
+          "callee": "this.cache.get",
+          "lineNumber": 98
+        },
+        {
+          "caller": "close",
+          "callee": "entry.db.close",
+          "lineNumber": 100
+        },
+        {
+          "caller": "close",
+          "callee": "log.warn",
+          "lineNumber": 100
+        },
+        {
+          "caller": "close",
+          "callee": "String",
+          "lineNumber": 100
+        },
+        {
+          "caller": "close",
+          "callee": "this.cache.delete",
+          "lineNumber": 101
+        },
+        {
+          "caller": "closeAll",
+          "callee": "entry.db.close",
+          "lineNumber": 107
+        },
+        {
+          "caller": "closeAll",
+          "callee": "log.warn",
+          "lineNumber": 107
+        },
+        {
+          "caller": "closeAll",
+          "callee": "String",
+          "lineNumber": 107
+        },
+        {
+          "caller": "closeAll",
+          "callee": "this.cache.clear",
+          "lineNumber": 109
+        },
+        {
+          "caller": "keys",
+          "callee": "this.cache.keys",
+          "lineNumber": 117
+        },
+        {
+          "caller": "evictLRU",
+          "callee": "this.close",
+          "lineNumber": 130
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/multi-mind.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 207,
+      "nonEmptyLines": 181,
+      "classes": [
+        {
+          "name": "MultiMind",
+          "startLine": 21,
+          "endLine": 207,
+          "methods": [
+            "constructor",
+            "searchAll",
+            "search",
+            "getIdentity",
+            "hasIdentity",
+            "getAwareness",
+            "switchWorkspace",
+            "setWorkspace",
+            "close",
+            "getFrameStore",
+            "getAwarenessLayer",
+            "getIdentityLayer",
+            "ftsSearch"
+          ],
+          "properties": [
+            "personal",
+            "workspace",
+            "personalFrames",
+            "workspaceFrames",
+            "personalIdentity",
+            "personalAwareness",
+            "workspaceAwareness"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MultiMind",
+          "line": 21,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "searchAll",
+          "callee": "this.search",
+          "lineNumber": 53
+        },
+        {
+          "caller": "search",
+          "callee": "this.ftsSearch",
+          "lineNumber": 63
+        },
+        {
+          "caller": "search",
+          "callee": "results.push",
+          "lineNumber": 64
+        },
+        {
+          "caller": "search",
+          "callee": "personalResults.map",
+          "lineNumber": 64
+        },
+        {
+          "caller": "search",
+          "callee": "this.ftsSearch",
+          "lineNumber": 68
+        },
+        {
+          "caller": "search",
+          "callee": "results.push",
+          "lineNumber": 69
+        },
+        {
+          "caller": "search",
+          "callee": "workspaceResults.map",
+          "lineNumber": 69
+        },
+        {
+          "caller": "search",
+          "callee": "results.sort",
+          "lineNumber": 74
+        },
+        {
+          "caller": "search",
+          "callee": "b.created_at.localeCompare",
+          "lineNumber": 74
+        },
+        {
+          "caller": "search",
+          "callee": "results.slice",
+          "lineNumber": 76
+        },
+        {
+          "caller": "getIdentity",
+          "callee": "this.personalIdentity.get",
+          "lineNumber": 83
+        },
+        {
+          "caller": "hasIdentity",
+          "callee": "this.personalIdentity.exists",
+          "lineNumber": 90
+        },
+        {
+          "caller": "getAwareness",
+          "callee": "this.personalAwareness.getAll",
+          "lineNumber": 98
+        },
+        {
+          "caller": "getAwareness",
+          "callee": "this.workspaceAwareness?.getAll",
+          "lineNumber": 99
+        },
+        {
+          "caller": "getAwareness",
+          "callee": "[...personalItems, ...workspaceItems]\r\n      .sort",
+          "lineNumber": 102
+        },
+        {
+          "caller": "switchWorkspace",
+          "callee": "this.workspace.close",
+          "lineNumber": 119
+        },
+        {
+          "caller": "close",
+          "callee": "this.personal?.close",
+          "lineNumber": 142
+        },
+        {
+          "caller": "close",
+          "callee": "log.warn",
+          "lineNumber": 142
+        },
+        {
+          "caller": "close",
+          "callee": "this.workspace?.close",
+          "lineNumber": 143
+        },
+        {
+          "caller": "close",
+          "callee": "log.warn",
+          "lineNumber": 143
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "query\r\n      .split(/\\s+/)\r\n      .map(w => w.replace(/[^\\w]/g, ''))\r\n      .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))\r\n      .map(w => `\"${w.replace(/\"/g, '')}\"`)\r\n      .join",
+          "lineNumber": 184
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "query\r\n      .split(/\\s+/)\r\n      .map(w => w.replace(/[^\\w]/g, ''))\r\n      .filter(w => w.length > 2 && !FTS_STOP_WORDS.has(w.toLowerCase()))\r\n      .map",
+          "lineNumber": 184
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "query\r\n      .split(/\\s+/)\r\n      .map(w => w.replace(/[^\\w]/g, ''))\r\n      .filter",
+          "lineNumber": 184
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "query\r\n      .split(/\\s+/)\r\n      .map",
+          "lineNumber": 184
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "query\r\n      .split",
+          "lineNumber": 184
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "w.replace",
+          "lineNumber": 186
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "FTS_STOP_WORDS.has",
+          "lineNumber": 187
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "w.toLowerCase",
+          "lineNumber": 187
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "w.replace",
+          "lineNumber": 188
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "db.getDatabase",
+          "lineNumber": 193
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "raw.prepare(`\r\n        SELECT mf.* FROM memory_frames_fts fts\r\n        JOIN memory_frames mf ON mf.id = fts.rowid\r\n        WHERE fts.content MATCH ?\r\n        ORDER BY rank\r\n        LIMIT ?\r\n      `).all",
+          "lineNumber": 195
+        },
+        {
+          "caller": "ftsSearch",
+          "callee": "raw.prepare",
+          "lineNumber": 195
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/entity-normalizer.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 33,
+      "nonEmptyLines": 30,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 133,
+      "nonEmptyLines": 126,
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/claude-adapter.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 159,
+      "nonEmptyLines": 148,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 167,
+      "nonEmptyLines": 147,
+      "functions": [
+        {
+          "name": "staticLLM",
+          "startLine": 23,
+          "endLine": 25,
+          "params": [
+            "response"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 141,
+      "nonEmptyLines": 124,
+      "callGraph": [
+        {
+          "caller": "mockLLM",
+          "callee": "prompt.includes",
+          "lineNumber": 24
+        },
+        {
+          "caller": "mockLLM",
+          "callee": "prompt.includes",
+          "lineNumber": 25
+        },
+        {
+          "caller": "mockLLM",
+          "callee": "prompt.includes",
+          "lineNumber": 26
+        },
+        {
+          "caller": "llm",
+          "callee": "prompt.includes",
+          "lineNumber": 61
+        },
+        {
+          "caller": "llm",
+          "callee": "prompt.includes",
+          "lineNumber": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/perplexity-adapter.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 135,
+      "nonEmptyLines": 125,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/pipeline-injection.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 115,
+      "nonEmptyLines": 108,
+      "callGraph": [
+        {
+          "caller": "canaryLlm",
+          "callee": "prompt.includes",
+          "lineNumber": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/pipeline-progress.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 51,
+      "nonEmptyLines": 47,
+      "callGraph": [
+        {
+          "caller": "llm",
+          "callee": "/knowledge classifier/i.test",
+          "lineNumber": 27
+        },
+        {
+          "caller": "llm",
+          "callee": "[...prompt.matchAll(/id:\\s*([a-z0-9-]+)/gi)].map",
+          "lineNumber": 28
+        },
+        {
+          "caller": "llm",
+          "callee": "prompt.matchAll",
+          "lineNumber": 28
+        },
+        {
+          "caller": "llm",
+          "callee": "JSON.stringify",
+          "lineNumber": 29
+        },
+        {
+          "caller": "llm",
+          "callee": "ids.map",
+          "lineNumber": 29
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 147,
+      "nonEmptyLines": 130,
+      "functions": [
+        {
+          "name": "makeItem",
+          "startLine": 17,
+          "endLine": 33,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "allRawTurns",
+          "callee": "db.getDatabase().prepare(\r\n      `SELECT id, content, created_at FROM memory_frames\r\n       WHERE content LIKE '${MIND_RAWTURN_PREFIX} %' ORDER BY id ASC`\r\n    ).all",
+          "lineNumber": 49
+        },
+        {
+          "caller": "allRawTurns",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 49
+        },
+        {
+          "caller": "allRawTurns",
+          "callee": "db.getDatabase",
+          "lineNumber": 49
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/run-store.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 196,
+      "nonEmptyLines": 172,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/harvest/set-hash.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 41,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/logger.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 48,
+      "nonEmptyLines": 42,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/awareness-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 168,
+      "nonEmptyLines": 141,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/awareness.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 195,
+      "nonEmptyLines": 164,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/server/.mcp.json", "language": "json", "sizeLines": 2, "fileCategory": "config"},
+    {"path": "packages/server/package.json", "language": "json", "sizeLines": 46, "fileCategory": "config"},
+    {"path": "packages/server/tsconfig.json", "language": "json", "sizeLines": 24, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "packages/server/.mcp.json": [],
+    "packages/server/package.json": [],
+    "packages/server/tsconfig.json": []
+  },
+  "neighborMap": {}
+}

@@ -89,6 +89,32 @@ export async function executeToolCall(
     return { content: policyMsg, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
   }
 
+  const existingTool = toolMap.get(fnName);
+  if (!existingTool) {
+    let result: string;
+    if (capabilityRouter) {
+      const routes = capabilityRouter.resolve(fnName);
+      const routeInfo = routes
+        .map(r => `- [${r.source}] ${r.name}: ${r.description} (${r.available ? 'available' : 'not wired yet'})`)
+        .join('\n');
+      const ACQUIRE_TOOL = 'acquire_capability';
+      const hasMissing = routes.some(r => r.source === 'missing');
+      const acquireHint = hasMissing && toolMap.has(ACQUIRE_TOOL)
+        ? `\n\nTip: Use ${ACQUIRE_TOOL} to search for installable skills that might help.`
+        : '';
+      result = `Tool "${fnName}" not found. Here are alternatives:\n${routeInfo}${acquireHint}\n\nAvailable tools: ${Array.from(toolMap.keys()).join(', ')}`;
+    } else {
+      result = `Error: Unknown tool "${fnName}". Available tools: ${Array.from(toolMap.keys()).join(', ')}`;
+    }
+
+    const scanResult = scanForInjection(result, 'tool_output');
+    if (!scanResult.safe) {
+      result = `[SECURITY] Tool output flagged (${scanResult.flags.join(', ')}). Content sanitized.`;
+    }
+    if (onToolResult) onToolResult(fnName, fnArgs, result);
+    return { content: result, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
+  }
+
   // ── Step 4: pre:tool hook ──
   if (hooks) {
     const hookResult = await hooks.fire('pre:tool', { toolName: fnName, args: fnArgs });

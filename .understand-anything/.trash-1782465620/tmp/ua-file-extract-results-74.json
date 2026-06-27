@@ -1,0 +1,110 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "vitest.aliases.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 35,
+      "nonEmptyLines": 34,
+      "functions": [
+        {
+          "name": "waggleSrcAliases",
+          "startLine": 25,
+          "endLine": 35,
+          "params": [
+            "repoRoot"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "waggleSrcAliases",
+          "line": 25,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "waggleSrcAliases",
+          "callee": "resolve",
+          "lineNumber": 26
+        },
+        {
+          "caller": "waggleSrcAliases",
+          "callee": "readdirSync",
+          "lineNumber": 28
+        },
+        {
+          "caller": "waggleSrcAliases",
+          "callee": "join",
+          "lineNumber": 29
+        },
+        {
+          "caller": "waggleSrcAliases",
+          "callee": "existsSync",
+          "lineNumber": 30
+        },
+        {
+          "caller": "waggleSrcAliases",
+          "callee": "join",
+          "lineNumber": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "vitest.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 47,
+      "nonEmptyLines": 46,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "vitest.infra-suites.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 35,
+      "nonEmptyLines": 35,
+      "exports": [
+        {
+          "name": "INFRA_TEST_SUITES",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "vitest.infra.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 28,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

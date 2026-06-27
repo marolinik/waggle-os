@@ -125,7 +125,7 @@ export const knowledgeRoutes: FastifyPluginAsync = async (server) => {
       assertSafeSegment(workspaceId, 'workspace');
       const wsDb = server.agentState.getWorkspaceMindDb(workspaceId);
       if (!wsDb) {
-        return reply.status(404).send({ error: 'Workspace not found' });
+        return { nodes: [], edges: [] };
       }
       return projectKG(extractKGFromMind(wsDb));
     }

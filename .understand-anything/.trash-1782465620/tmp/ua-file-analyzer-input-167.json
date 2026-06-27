@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-hooks-codex-desktop/README.md", "language": "markdown", "sizeLines": 73, "fileCategory": "docs"},
+    {"path": "packages/hive-mind-hooks-codex-desktop/package.json", "language": "json", "sizeLines": 62, "fileCategory": "config"},
+    {"path": "packages/hive-mind-hooks-codex-desktop/tsconfig.json", "language": "json", "sizeLines": 14, "fileCategory": "config"},
+    {"path": "packages/hive-mind-hooks-codex-desktop/tsconfig.test.json", "language": "json", "sizeLines": 12, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-hooks-codex-desktop/README.md": [],
+    "packages/hive-mind-hooks-codex-desktop/package.json": [],
+    "packages/hive-mind-hooks-codex-desktop/tsconfig.json": [],
+    "packages/hive-mind-hooks-codex-desktop/tsconfig.test.json": []
+  },
+  "neighborMap": {}
+}

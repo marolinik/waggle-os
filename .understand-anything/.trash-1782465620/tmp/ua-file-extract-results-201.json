@@ -1,0 +1,1996 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/sdk/tests/wave-g-capability-surface.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 124,
+      "nonEmptyLines": 111,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/sdk/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 21,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "packages/sdk/vitest.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 9,
+      "nonEmptyLines": 8,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/drizzle.config.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 10,
+      "nonEmptyLines": 9,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/drizzle/0000_wild_glorian.sql",
+      "language": "sql",
+      "fileCategory": "data",
+      "totalLines": 229,
+      "nonEmptyLines": 229,
+      "definitions": [
+        {
+          "name": "agent_audit_log",
+          "kind": "table",
+          "fields": [
+            "id",
+            "user_id",
+            "team_id",
+            "agent_name",
+            "action_type",
+            "description",
+            "before_state",
+            "after_state",
+            "requires_approval",
+            "approved",
+            "approved_by",
+            "created_at"
+          ],
+          "startLine": 1,
+          "endLine": 14
+        },
+        {
+          "name": "agent_group_members",
+          "kind": "table",
+          "fields": [
+            "group_id",
+            "agent_id",
+            "role_in_group",
+            "execution_order"
+          ],
+          "startLine": 16,
+          "endLine": 22
+        },
+        {
+          "name": "agent_groups",
+          "kind": "table",
+          "fields": [
+            "id",
+            "user_id",
+            "name",
+            "description",
+            "strategy",
+            "created_at"
+          ],
+          "startLine": 24,
+          "endLine": 31
+        },
+        {
+          "name": "agent_jobs",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "user_id",
+            "job_type",
+            "status",
+            "input",
+            "output",
+            "started_at",
+            "completed_at",
+            "created_at"
+          ],
+          "startLine": 33,
+          "endLine": 44
+        },
+        {
+          "name": "agents",
+          "kind": "table",
+          "fields": [
+            "id",
+            "user_id",
+            "team_id",
+            "name",
+            "role",
+            "system_prompt",
+            "model",
+            "tools",
+            "config",
+            "created_at"
+          ],
+          "startLine": 46,
+          "endLine": 57
+        },
+        {
+          "name": "cron_schedules",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "created_by",
+            "name",
+            "cron_expr",
+            "job_type",
+            "job_config",
+            "enabled",
+            "last_run_at",
+            "next_run_at",
+            "created_at"
+          ],
+          "startLine": 59,
+          "endLine": 71
+        },
+        {
+          "name": "messages",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "sender_id",
+            "type",
+            "subtype",
+            "content",
+            "reference_id",
+            "routing",
+            "created_at"
+          ],
+          "startLine": 73,
+          "endLine": 83
+        },
+        {
+          "name": "proactive_patterns",
+          "kind": "table",
+          "fields": [
+            "id",
+            "name",
+            "trigger",
+            "suggestion_type",
+            "template",
+            "enabled"
+          ],
+          "startLine": 85,
+          "endLine": 92
+        },
+        {
+          "name": "scout_findings",
+          "kind": "table",
+          "fields": [
+            "id",
+            "user_id",
+            "team_id",
+            "source",
+            "category",
+            "title",
+            "summary",
+            "relevance_score",
+            "url",
+            "status",
+            "created_at"
+          ],
+          "startLine": 94,
+          "endLine": 106
+        },
+        {
+          "name": "suggestions_log",
+          "kind": "table",
+          "fields": [
+            "id",
+            "user_id",
+            "pattern_id",
+            "context",
+            "status",
+            "created_at"
+          ],
+          "startLine": 108,
+          "endLine": 115
+        },
+        {
+          "name": "tasks",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "created_by",
+            "assigned_to",
+            "parent_task_id",
+            "created_at",
+            "updated_at"
+          ],
+          "startLine": 117,
+          "endLine": 129
+        },
+        {
+          "name": "team_entities",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "entity_type",
+            "name",
+            "properties",
+            "shared_by",
+            "valid_from",
+            "valid_to",
+            "created_at"
+          ],
+          "startLine": 131,
+          "endLine": 141
+        },
+        {
+          "name": "team_members",
+          "kind": "table",
+          "fields": [
+            "team_id",
+            "user_id",
+            "role",
+            "role_description",
+            "interests",
+            "joined_at"
+          ],
+          "startLine": 143,
+          "endLine": 151
+        },
+        {
+          "name": "team_relations",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "source_id",
+            "target_id",
+            "relation_type",
+            "confidence",
+            "properties",
+            "created_at"
+          ],
+          "startLine": 153,
+          "endLine": 162
+        },
+        {
+          "name": "team_resources",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "resource_type",
+            "name",
+            "description",
+            "config",
+            "shared_by",
+            "rating",
+            "use_count",
+            "created_at"
+          ],
+          "startLine": 164,
+          "endLine": 175
+        },
+        {
+          "name": "teams",
+          "kind": "table",
+          "fields": [
+            "id",
+            "name",
+            "slug",
+            "owner_id",
+            "created_at"
+          ],
+          "startLine": 177,
+          "endLine": 184
+        },
+        {
+          "name": "users",
+          "kind": "table",
+          "fields": [
+            "id",
+            "clerk_id",
+            "display_name",
+            "email",
+            "avatar_url",
+            "mind_path",
+            "created_at",
+            "updated_at"
+          ],
+          "startLine": 186,
+          "endLine": 197
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "definitionCount": 17
+      }
+    },
+    {
+      "path": "packages/server/drizzle/0001_redundant_sauron.sql",
+      "language": "sql",
+      "fileCategory": "data",
+      "totalLines": 45,
+      "nonEmptyLines": 45,
+      "definitions": [
+        {
+          "name": "team_capability_overrides",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "capability_name",
+            "capability_type",
+            "decision",
+            "reason",
+            "decided_by",
+            "created_at",
+            "decided_at"
+          ],
+          "startLine": 1,
+          "endLine": 11
+        },
+        {
+          "name": "team_capability_policies",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "role",
+            "allowed_sources",
+            "blocked_tools",
+            "approval_threshold",
+            "updated_by",
+            "created_at",
+            "updated_at"
+          ],
+          "startLine": 13,
+          "endLine": 23
+        },
+        {
+          "name": "team_capability_requests",
+          "kind": "table",
+          "fields": [
+            "id",
+            "team_id",
+            "requested_by",
+            "capability_name",
+            "capability_type",
+            "justification",
+            "status",
+            "decided_by",
+            "decision_reason",
+            "created_at",
+            "decided_at"
+          ],
+          "startLine": 25,
+          "endLine": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "definitionCount": 3
+      }
+    },
+    {
+      "path": "packages/server/src/benchmarks/aggregate.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 432,
+      "nonEmptyLines": 404,
+      "functions": [
+        {
+          "name": "projectVerdict6",
+          "startLine": 86,
+          "endLine": 102,
+          "params": [
+            "r"
+          ]
+        },
+        {
+          "name": "emptyVerdictMap",
+          "startLine": 134,
+          "endLine": 138,
+          "params": [
+            "fill"
+          ]
+        },
+        {
+          "name": "perCellRollup",
+          "startLine": 140,
+          "endLine": 173,
+          "params": [
+            "records"
+          ]
+        },
+        {
+          "name": "perCategoryRollup",
+          "startLine": 189,
+          "endLine": 217,
+          "params": [
+            "records"
+          ]
+        },
+        {
+          "name": "crossCellDeltaMatrix",
+          "startLine": 232,
+          "endLine": 246,
+          "params": [
+            "perCell"
+          ]
+        },
+        {
+          "name": "costSummary",
+          "startLine": 267,
+          "endLine": 313,
+          "params": [
+            "records"
+          ]
+        },
+        {
+          "name": "buildReport",
+          "startLine": 326,
+          "endLine": 353,
+          "params": [
+            "records",
+            "opts"
+          ]
+        },
+        {
+          "name": "pct",
+          "startLine": 355,
+          "endLine": 357,
+          "params": [
+            "n"
+          ]
+        },
+        {
+          "name": "fmtUsd",
+          "startLine": 359,
+          "endLine": 361,
+          "params": [
+            "n"
+          ]
+        },
+        {
+          "name": "renderMarkdown",
+          "startLine": 363,
+          "endLine": 432,
+          "params": [
+            "report"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "projectVerdict6",
+          "line": 86,
+          "isDefault": false
+        },
+        {
+          "name": "VERDICT6_VALUES",
+          "line": 104,
+          "isDefault": false
+        },
+        {
+          "name": "WEIGHTS",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "perCellRollup",
+          "line": 140,
+          "isDefault": false
+        },
+        {
+          "name": "perCategoryRollup",
+          "line": 189,
+          "isDefault": false
+        },
+        {
+          "name": "crossCellDeltaMatrix",
+          "line": 232,
+          "isDefault": false
+        },
+        {
+          "name": "costSummary",
+          "line": 267,
+          "isDefault": false
+        },
+        {
+          "name": "buildReport",
+          "line": 326,
+          "isDefault": false
+        },
+        {
+          "name": "renderMarkdown",
+          "line": 363,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "perCellRollup",
+          "callee": "byCell.get",
+          "lineNumber": 143
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "arr.push",
+          "lineNumber": 144
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "byCell.set",
+          "lineNumber": 145
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "CELL_NAMES.filter",
+          "lineNumber": 150
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "byCell.has",
+          "lineNumber": 150
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "[...byCell.keys()].filter",
+          "lineNumber": 151
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "byCell.keys",
+          "lineNumber": 151
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "CELL_NAMES.includes",
+          "lineNumber": 151
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "byCell.get",
+          "lineNumber": 154
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "emptyVerdictMap",
+          "lineNumber": 155
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "projectVerdict6",
+          "lineNumber": 156
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "emptyVerdictMap",
+          "lineNumber": 159
+        },
+        {
+          "caller": "perCellRollup",
+          "callee": "rows.push",
+          "lineNumber": 170
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "byCat.get",
+          "lineNumber": 193
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "arr.push",
+          "lineNumber": 194
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "byCat.set",
+          "lineNumber": 195
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "byCat.get",
+          "lineNumber": 199
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "emptyVerdictMap",
+          "lineNumber": 201
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "projectVerdict6",
+          "lineNumber": 202
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "emptyVerdictMap",
+          "lineNumber": 204
+        },
+        {
+          "caller": "perCategoryRollup",
+          "callee": "rows.push",
+          "lineNumber": 208
+        },
+        {
+          "caller": "crossCellDeltaMatrix",
+          "callee": "perCell.find",
+          "lineNumber": 233
+        },
+        {
+          "caller": "crossCellDeltaMatrix",
+          "callee": "perCell.find",
+          "lineNumber": 234
+        },
+        {
+          "caller": "crossCellDeltaMatrix",
+          "callee": "out.push",
+          "lineNumber": 238
+        },
+        {
+          "caller": "costSummary",
+          "callee": "judgeLatencies.push",
+          "lineNumber": 278
+        },
+        {
+          "caller": "costSummary",
+          "callee": "records.filter",
+          "lineNumber": 289
+        },
+        {
+          "caller": "costSummary",
+          "callee": "(() => {\r\n        const s = [...judgeLatencies].sort((a, b) => a - b);\r\n        const mid = Math.floor(s.length / 2);\r\n        return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];\r\n      })",
+          "lineNumber": 297
+        },
+        {
+          "caller": "costSummary",
+          "callee": "[...judgeLatencies].sort",
+          "lineNumber": 298
+        },
+        {
+          "caller": "costSummary",
+          "callee": "Math.floor",
+          "lineNumber": 299
+        },
+        {
+          "caller": "buildReport",
+          "callee": "perCellRollup",
+          "lineNumber": 330
+        },
+        {
+          "caller": "buildReport",
+          "callee": "perCategoryRollup",
+          "lineNumber": 331
+        },
+        {
+          "caller": "buildReport",
+          "callee": "crossCellDeltaMatrix",
+          "lineNumber": 332
+        },
+        {
+          "caller": "buildReport",
+          "callee": "costSummary",
+          "lineNumber": 333
+        },
+        {
+          "caller": "buildReport",
+          "callee": "records.filter",
+          "lineNumber": 340
+        },
+        {
+          "caller": "buildReport",
+          "callee": "new Date().toISOString",
+          "lineNumber": 346
+        },
+        {
+          "caller": "pct",
+          "callee": "(n * 100).toFixed",
+          "lineNumber": 356
+        },
+        {
+          "caller": "fmtUsd",
+          "callee": "n.toFixed",
+          "lineNumber": 360
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 365
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 366
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 367
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 368
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 369
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 370
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 371
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 372
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 373
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 375
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 376
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 377
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 378
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 379
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 380
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 381
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 382
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "row.weightedScore.toFixed",
+          "lineNumber": 383
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 386
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 388
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 389
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 390
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 391
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 393
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 394
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 395
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 399
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 402
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 403
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 404
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 405
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 408
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 408
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 408
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "pct",
+          "lineNumber": 408
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 410
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 412
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 413
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 414
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "fmtUsd",
+          "lineNumber": 414
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 415
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "fmtUsd",
+          "lineNumber": 415
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 417
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "report.cost.medianJudgeMs.toFixed",
+          "lineNumber": 417
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "Object.keys",
+          "lineNumber": 419
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 420
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "Object.entries",
+          "lineNumber": 421
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 422
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "fmtUsd",
+          "lineNumber": 422
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.push",
+          "lineNumber": 426
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "fmtUsd",
+          "lineNumber": 428
+        },
+        {
+          "caller": "renderMarkdown",
+          "callee": "lines.join",
+          "lineNumber": 431
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 10,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/src/kvark/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 23,
+      "nonEmptyLines": 23,
+      "exports": [
+        {
+          "name": "KvarkClient",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkAuth",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "getKvarkConfig",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "VaultLike",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkClientConfig",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkLoginRequest",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkLoginResponse",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkUser",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkSearchResult",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkSearchResponse",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkAskRequest",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkAskResponse",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkChatEvent",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkTokenUsage",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkErrorResponse",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkAuthError",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkNotFoundError",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkNotImplementedError",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkServerError",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "KvarkUnavailableError",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 20,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/src/local/approval-grants.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 211,
+      "nonEmptyLines": 192,
+      "functions": [
+        {
+          "name": "keyForTool",
+          "startLine": 45,
+          "endLine": 67,
+          "params": [
+            "toolName",
+            "args"
+          ]
+        },
+        {
+          "name": "describeGrant",
+          "startLine": 73,
+          "endLine": 88,
+          "params": [
+            "toolName",
+            "targetKey",
+            "sourceWorkspaceId"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "ApprovalGrantStore",
+          "startLine": 90,
+          "endLine": 211,
+          "methods": [
+            "constructor",
+            "load",
+            "save",
+            "isValidGrant",
+            "has",
+            "grant",
+            "revoke",
+            "list",
+            "clear"
+          ],
+          "properties": [
+            "grants",
+            "filePath"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "keyForTool",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "describeGrant",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "ApprovalGrantStore",
+          "line": 90,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "keyForTool",
+          "callee": "String(args.path ?? args.file_path ?? '').trim",
+          "lineNumber": 49
+        },
+        {
+          "caller": "keyForTool",
+          "callee": "String",
+          "lineNumber": 49
+        },
+        {
+          "caller": "keyForTool",
+          "callee": "String(args.target_workspace_id ?? '').trim",
+          "lineNumber": 54
+        },
+        {
+          "caller": "keyForTool",
+          "callee": "String",
+          "lineNumber": 54
+        },
+        {
+          "caller": "describeGrant",
+          "callee": "toolName.startsWith",
+          "lineNumber": 86
+        },
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 95
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.load",
+          "lineNumber": 96
+        },
+        {
+          "caller": "load",
+          "callee": "fs.existsSync",
+          "lineNumber": 100
+        },
+        {
+          "caller": "load",
+          "callee": "fs.readFileSync",
+          "lineNumber": 102
+        },
+        {
+          "caller": "load",
+          "callee": "JSON.parse",
+          "lineNumber": 103
+        },
+        {
+          "caller": "load",
+          "callee": "Array.isArray",
+          "lineNumber": 104
+        },
+        {
+          "caller": "load",
+          "callee": "parsed.grants.filter",
+          "lineNumber": 105
+        },
+        {
+          "caller": "load",
+          "callee": "this.isValidGrant",
+          "lineNumber": 105
+        },
+        {
+          "caller": "save",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 116
+        },
+        {
+          "caller": "save",
+          "callee": "path.dirname",
+          "lineNumber": 116
+        },
+        {
+          "caller": "save",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 117
+        },
+        {
+          "caller": "save",
+          "callee": "JSON.stringify",
+          "lineNumber": 117
+        },
+        {
+          "caller": "has",
+          "callee": "Date.now",
+          "lineNumber": 138
+        },
+        {
+          "caller": "has",
+          "callee": "keyForTool",
+          "lineNumber": 139
+        },
+        {
+          "caller": "has",
+          "callee": "this.grants.filter",
+          "lineNumber": 143
+        },
+        {
+          "caller": "has",
+          "callee": "Date.parse",
+          "lineNumber": 144
+        },
+        {
+          "caller": "has",
+          "callee": "this.save",
+          "lineNumber": 155
+        },
+        {
+          "caller": "grant",
+          "callee": "keyForTool",
+          "lineNumber": 166
+        },
+        {
+          "caller": "grant",
+          "callee": "describeGrant",
+          "lineNumber": 167
+        },
+        {
+          "caller": "grant",
+          "callee": "new Date().toISOString",
+          "lineNumber": 168
+        },
+        {
+          "caller": "grant",
+          "callee": "new Date(Date.now() + opts.ttlMs).toISOString",
+          "lineNumber": 169
+        },
+        {
+          "caller": "grant",
+          "callee": "Date.now",
+          "lineNumber": 169
+        },
+        {
+          "caller": "grant",
+          "callee": "randomUUID",
+          "lineNumber": 172
+        },
+        {
+          "caller": "grant",
+          "callee": "this.grants.filter",
+          "lineNumber": 182
+        },
+        {
+          "caller": "grant",
+          "callee": "this.grants.push",
+          "lineNumber": 187
+        },
+        {
+          "caller": "grant",
+          "callee": "this.save",
+          "lineNumber": 188
+        },
+        {
+          "caller": "revoke",
+          "callee": "this.grants.filter",
+          "lineNumber": 195
+        },
+        {
+          "caller": "revoke",
+          "callee": "this.save",
+          "lineNumber": 197
+        },
+        {
+          "caller": "list",
+          "callee": "[...this.grants].sort",
+          "lineNumber": 203
+        },
+        {
+          "caller": "list",
+          "callee": "b.grantedAt.localeCompare",
+          "lineNumber": 203
+        },
+        {
+          "caller": "clear",
+          "callee": "this.save",
+          "lineNumber": 209
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/server/src/services/agent-group-executor.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 93,
+      "nonEmptyLines": 82,
+      "functions": [
+        {
+          "name": "buildWorkflowFromGroup",
+          "startLine": 37,
+          "endLine": 93,
+          "params": [
+            "group",
+            "task"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "buildWorkflowFromGroup",
+          "line": 37,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildWorkflowFromGroup",
+          "callee": "group.members\r\n    .sort((a, b) => (a.executionOrder ?? 0) - (b.executionOrder ?? 0))\r\n    .map",
+          "lineNumber": 40
+        },
+        {
+          "caller": "buildWorkflowFromGroup",
+          "callee": "group.members\r\n    .sort",
+          "lineNumber": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/benchmarks/aggregate.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 311,
+      "nonEmptyLines": 285,
+      "functions": [
+        {
+          "name": "mkRecord",
+          "startLine": 33,
+          "endLine": 62,
+          "params": [
+            "turnId",
+            "cell",
+            "verdict",
+            "failureMode",
+            "category",
+            "usd"
+          ]
+        },
+        {
+          "name": "fixture12",
+          "startLine": 67,
+          "endLine": 78,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fixture12",
+          "callee": "recs.push",
+          "lineNumber": 72
+        },
+        {
+          "caller": "fixture12",
+          "callee": "mkRecord",
+          "lineNumber": 72
+        },
+        {
+          "caller": "fixture12",
+          "callee": "recs.push",
+          "lineNumber": 73
+        },
+        {
+          "caller": "fixture12",
+          "callee": "mkRecord",
+          "lineNumber": 73
+        },
+        {
+          "caller": "fixture12",
+          "callee": "recs.push",
+          "lineNumber": 74
+        },
+        {
+          "caller": "fixture12",
+          "callee": "mkRecord",
+          "lineNumber": 74
+        },
+        {
+          "caller": "fixture12",
+          "callee": "recs.push",
+          "lineNumber": 75
+        },
+        {
+          "caller": "fixture12",
+          "callee": "mkRecord",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/deployment.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 95,
+      "nonEmptyLines": 83,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/agent-run.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 70,
+      "nonEmptyLines": 61,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/connector-registry-integration.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 129,
+      "nonEmptyLines": 111,
+      "functions": [
+        {
+          "name": "createMockVault",
+          "startLine": 41,
+          "endLine": 56,
+          "params": [
+            "credentials"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "TestConnector",
+          "startLine": 10,
+          "endLine": 39,
+          "methods": [
+            "connect",
+            "healthCheck",
+            "execute"
+          ],
+          "properties": [
+            "id",
+            "name",
+            "description",
+            "service",
+            "authType",
+            "substrate",
+            "actions"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "healthCheck",
+          "callee": "new Date().toISOString",
+          "lineNumber": 34
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 43
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 49
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 50
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 51
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 52
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/server/tests/local/connectors.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 72,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/gepa-optimization.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 196,
+      "nonEmptyLines": 175,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/marketplace-dev.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 226,
+      "nonEmptyLines": 189,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/marketplace-security.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 283,
+      "nonEmptyLines": 230,
+      "functions": [
+        {
+          "name": "getRepoRoot",
+          "startLine": 20,
+          "endLine": 22,
+          "params": []
+        },
+        {
+          "name": "mockPackage",
+          "startLine": 25,
+          "endLine": 55,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "createTestGate",
+          "startLine": 58,
+          "endLine": 65,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getRepoRoot",
+          "callee": "path.resolve",
+          "lineNumber": 21
+        },
+        {
+          "caller": "mockPackage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 51
+        },
+        {
+          "caller": "mockPackage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 52
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/marketplace-sources.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 459,
+      "nonEmptyLines": 394,
+      "functions": [
+        {
+          "name": "createEmptyTempDb",
+          "startLine": 21,
+          "endLine": 153,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 22
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "path.join",
+          "lineNumber": 22
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "os.tmpdir",
+          "lineNumber": 22
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "path.join",
+          "lineNumber": 23
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "raw.pragma",
+          "lineNumber": 26
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "raw.pragma",
+          "lineNumber": 27
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "raw.exec",
+          "lineNumber": 29
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "raw.prepare(`\r\n    INSERT INTO sources (name, display_name, url, source_type, platform, total_packages, is_custom)\r\n    VALUES ('builtin-source', 'Built-in Source', 'https://example.com', 'marketplace', 'waggle', 5, 0)\r\n  `).run",
+          "lineNumber": 144
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "raw.prepare",
+          "lineNumber": 144
+        },
+        {
+          "caller": "createEmptyTempDb",
+          "callee": "raw.close",
+          "lineNumber": 149
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/marketplace-sync.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 274,
+      "nonEmptyLines": 219,
+      "functions": [
+        {
+          "name": "getRepoRoot",
+          "startLine": 16,
+          "endLine": 18,
+          "params": []
+        },
+        {
+          "name": "getMarketplaceDbPath",
+          "startLine": 20,
+          "endLine": 23,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getRepoRoot",
+          "callee": "path.resolve",
+          "lineNumber": 17
+        },
+        {
+          "caller": "getMarketplaceDbPath",
+          "callee": "path.join",
+          "lineNumber": 21
+        },
+        {
+          "caller": "getMarketplaceDbPath",
+          "callee": "getRepoRoot",
+          "lineNumber": 21
+        },
+        {
+          "caller": "getMarketplaceDbPath",
+          "callee": "fs.existsSync",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/marketplace.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 321,
+      "nonEmptyLines": 265,
+      "functions": [
+        {
+          "name": "getRepoRoot",
+          "startLine": 22,
+          "endLine": 24,
+          "params": []
+        },
+        {
+          "name": "getMarketplaceDbPath",
+          "startLine": 26,
+          "endLine": 29,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getRepoRoot",
+          "callee": "path.resolve",
+          "lineNumber": 23
+        },
+        {
+          "caller": "getMarketplaceDbPath",
+          "callee": "path.join",
+          "lineNumber": 27
+        },
+        {
+          "caller": "getMarketplaceDbPath",
+          "callee": "getRepoRoot",
+          "lineNumber": 27
+        },
+        {
+          "caller": "getMarketplaceDbPath",
+          "callee": "fs.existsSync",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/notifications.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 41,
+      "nonEmptyLines": 37,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/onboarding-flag-shape.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 43,
+      "nonEmptyLines": 39,
+      "functions": [
+        {
+          "name": "importMockBinding",
+          "startLine": 41,
+          "endLine": 43,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/persona-tool-filtering.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 179,
+      "nonEmptyLines": 155,
+      "functions": [
+        {
+          "name": "filterToolsForPersona",
+          "startLine": 14,
+          "endLine": 31,
+          "params": [
+            "allToolNames",
+            "personaId"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "filterToolsForPersona",
+          "callee": "getPersona",
+          "lineNumber": 24
+        },
+        {
+          "caller": "filterToolsForPersona",
+          "callee": "allToolNames.filter",
+          "lineNumber": 30
+        },
+        {
+          "caller": "filterToolsForPersona",
+          "callee": "allowedNames.has",
+          "lineNumber": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/local/phase5-agent-run-provider.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 78,
+      "nonEmptyLines": 68,
+      "functions": [
+        {
+          "name": "makeServerWithRuntimeFallback",
+          "startLine": 20,
+          "endLine": 32,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

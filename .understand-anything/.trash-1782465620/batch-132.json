@@ -1,0 +1,59 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/guides/capabilities.md",
+      "type": "document",
+      "name": "capabilities.md",
+      "filePath": "docs/guides/capabilities.md",
+      "summary": "Comprehensive user guide covering the Waggle capabilities system including built-in packs (Research, Writing, Planning, Team, Decision), custom skill creation, Marketplace installation with security scanning, the trust model with audit trail and hash verification, and plugin management.",
+      "tags": ["documentation", "capabilities", "skills", "marketplace", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/guides/connectors.md",
+      "type": "document",
+      "name": "connectors.md",
+      "filePath": "docs/guides/connectors.md",
+      "summary": "User guide for Waggle's connector system covering Vault setup for secret management, native connector catalog, connecting/disconnecting services via UI and API, connector health checks, approval gates (including YOLO mode), the Composio bridge, enterprise KVARK connectors, and troubleshooting common connector errors.",
+      "tags": ["documentation", "connectors", "integration", "security", "vault"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/guides/getting-started.md",
+      "type": "document",
+      "name": "getting-started.md",
+      "filePath": "docs/guides/getting-started.md",
+      "summary": "Entry-point onboarding guide for new Waggle users covering installation options (desktop app, CLI/web, CLI REPL), API key setup, first workspace creation, first conversation, memory system introduction (personal and workspace minds, memory frames), and keyboard shortcuts.",
+      "tags": ["documentation", "onboarding", "entry-point", "getting-started", "installation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/guides/team-mode.md",
+      "type": "document",
+      "name": "team-mode.md",
+      "filePath": "docs/guides/team-mode.md",
+      "summary": "Guide for configuring and using Waggle's TEAMS tier collaborative features including Docker and Render cloud deployment setup, connecting to team servers, shared workspace memory sync, task board management, WebSocket presence, admin dashboard with capability governance, and the capability governance API.",
+      "tags": ["documentation", "team-collaboration", "deployment", "administration", "waggle-dance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/guides/troubleshooting.md",
+      "type": "document",
+      "name": "troubleshooting.md",
+      "filePath": "docs/guides/troubleshooting.md",
+      "summary": "Comprehensive troubleshooting reference covering API key issues, server startup and SQLite errors, memory saving and search problems, connector vault and authentication errors, desktop app issues (sidecar, white screen, notifications), team mode connectivity and sync problems, common error codes, and a FAQ section.",
+      "tags": ["documentation", "troubleshooting", "debugging", "error-reference", "support"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/guides/workspaces.md",
+      "type": "document",
+      "name": "workspaces.md",
+      "filePath": "docs/guides/workspaces.md",
+      "summary": "User guide for Waggle workspaces covering creation, personal vs team workspace types, the home screen, session management (create, rename, search, export), workspace switching, persona configuration with tool presets, directory association, workspace memory browser, and deletion.",
+      "tags": ["documentation", "workspaces", "sessions", "personas", "memory"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": []
+}

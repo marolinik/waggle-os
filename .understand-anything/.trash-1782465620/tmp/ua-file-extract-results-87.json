@@ -1,0 +1,414 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/weaver/src/consolidation.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 255,
+      "nonEmptyLines": 210,
+      "classes": [
+        {
+          "name": "MemoryWeaver",
+          "startLine": 9,
+          "endLine": 255,
+          "methods": [
+            "constructor",
+            "consolidateGop",
+            "decayFrames",
+            "strengthenFrames",
+            "createDailySummary",
+            "archiveClosedSessions",
+            "decayByAge",
+            "linkRelatedFrames",
+            "distillSessionContent",
+            "consolidateProject"
+          ],
+          "properties": [
+            "db",
+            "frames",
+            "sessions"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MemoryWeaver",
+          "line": 9,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "consolidateGop",
+          "callee": "this.frames.reconstructState",
+          "lineNumber": 21
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "state.pframes.map",
+          "lineNumber": 25
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "parts.join",
+          "lineNumber": 26
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "this.frames.createIFrame",
+          "lineNumber": 29
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 32
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "state.pframes.map",
+          "lineNumber": 33
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "pframeIds.map(() => '?').join",
+          "lineNumber": 34
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "pframeIds.map",
+          "lineNumber": 34
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "raw.prepare(\r\n      `UPDATE memory_frames SET importance = 'deprecated' WHERE id IN (${placeholders})`\r\n    ).run",
+          "lineNumber": 35
+        },
+        {
+          "caller": "consolidateGop",
+          "callee": "raw.prepare",
+          "lineNumber": 35
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 43
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "raw.prepare(\r\n      \"SELECT id FROM memory_frames WHERE importance = 'deprecated' AND access_count = 0\"\r\n    ).all",
+          "lineNumber": 47
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 47
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "toDelete.map",
+          "lineNumber": 53
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "ids.map(() => '?').join",
+          "lineNumber": 54
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "ids.map",
+          "lineNumber": 54
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "raw.prepare(\r\n      `DELETE FROM memory_frames_fts WHERE rowid IN (${placeholders})`\r\n    ).run",
+          "lineNumber": 57
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 57
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "raw.prepare(\r\n      `DELETE FROM memory_frames WHERE id IN (${placeholders})`\r\n    ).run",
+          "lineNumber": 62
+        },
+        {
+          "caller": "decayFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 62
+        },
+        {
+          "caller": "strengthenFrames",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 70
+        },
+        {
+          "caller": "strengthenFrames",
+          "callee": "raw.prepare(`\r\n      UPDATE memory_frames SET importance = 'normal'\r\n      WHERE importance = 'temporary' AND access_count >= ?\r\n    `).run",
+          "lineNumber": 74
+        },
+        {
+          "caller": "strengthenFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 74
+        },
+        {
+          "caller": "strengthenFrames",
+          "callee": "raw.prepare(`\r\n      UPDATE memory_frames SET importance = 'important'\r\n      WHERE importance = 'normal' AND access_count >= ?\r\n    `).run",
+          "lineNumber": 81
+        },
+        {
+          "caller": "strengthenFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 81
+        },
+        {
+          "caller": "createDailySummary",
+          "callee": "this.frames.getGopFrames",
+          "lineNumber": 95
+        },
+        {
+          "caller": "createDailySummary",
+          "callee": "allContent.push",
+          "lineNumber": 98
+        },
+        {
+          "caller": "createDailySummary",
+          "callee": "this.sessions.create",
+          "lineNumber": 106
+        },
+        {
+          "caller": "createDailySummary",
+          "callee": "allContent.join",
+          "lineNumber": 107
+        },
+        {
+          "caller": "createDailySummary",
+          "callee": "this.frames.createIFrame",
+          "lineNumber": 108
+        },
+        {
+          "caller": "archiveClosedSessions",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 112
+        },
+        {
+          "caller": "archiveClosedSessions",
+          "callee": "raw.prepare(\r\n      \"UPDATE sessions SET status = 'archived' WHERE status = 'closed'\"\r\n    ).run",
+          "lineNumber": 113
+        },
+        {
+          "caller": "archiveClosedSessions",
+          "callee": "raw.prepare",
+          "lineNumber": 113
+        },
+        {
+          "caller": "decayByAge",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 124
+        },
+        {
+          "caller": "decayByAge",
+          "callee": "raw.prepare(`\r\n      UPDATE memory_frames SET importance = 'deprecated'\r\n      WHERE importance = 'temporary'\r\n        AND access_count <= ?\r\n        AND created_at <= datetime('now', '-' || ? || ' days')\r\n    `).run",
+          "lineNumber": 125
+        },
+        {
+          "caller": "decayByAge",
+          "callee": "raw.prepare",
+          "lineNumber": 125
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 140
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "raw.prepare(\r\n      'SELECT id, name FROM knowledge_entities WHERE valid_to IS NULL'\r\n    ).all",
+          "lineNumber": 143
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 143
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "raw.prepare(\r\n      \"SELECT id, gop_id, content FROM memory_frames WHERE importance != 'deprecated' AND frame_type != 'B'\"\r\n    ).all",
+          "lineNumber": 150
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "raw.prepare",
+          "lineNumber": 150
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "entity.name.toLowerCase",
+          "lineNumber": 159
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "frame.content.toLowerCase().includes",
+          "lineNumber": 162
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "frame.content.toLowerCase",
+          "lineNumber": 162
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "matchingFrameIds.add",
+          "lineNumber": 163
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "entityToFrames.set",
+          "lineNumber": 167
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "Array.from",
+          "lineNumber": 177
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "Math.min",
+          "lineNumber": 180
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "Math.max",
+          "lineNumber": 180
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "linkedPairs.has",
+          "lineNumber": 181
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "linkedPairs.add",
+          "lineNumber": 182
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "allFrames.find",
+          "lineNumber": 185
+        },
+        {
+          "caller": "linkRelatedFrames",
+          "callee": "this.frames.createBFrame",
+          "lineNumber": 188
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "parts.push",
+          "lineNumber": 210
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "keyPoints.join",
+          "lineNumber": 210
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "parts.join",
+          "lineNumber": 212
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "this.frames.deleteByContentPrefix",
+          "lineNumber": 218
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "this.sessions.getActive",
+          "lineNumber": 221
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "this.sessions.create",
+          "lineNumber": 226
+        },
+        {
+          "caller": "distillSessionContent",
+          "callee": "this.frames.createIFrame",
+          "lineNumber": 229
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "this.sessions.getByProject",
+          "lineNumber": 233
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "projectSessions.filter",
+          "lineNumber": 234
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "this.frames.getLatestIFrame",
+          "lineNumber": 240
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "allContent.push",
+          "lineNumber": 242
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "this.sessions.create",
+          "lineNumber": 248
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "this.frames.createIFrame",
+          "lineNumber": 249
+        },
+        {
+          "caller": "consolidateProject",
+          "callee": "allContent.join",
+          "lineNumber": 251
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/weaver/tests/consolidation-enhanced.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 167,
+      "nonEmptyLines": 130,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/weaver/tests/consolidation.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 254,
+      "nonEmptyLines": 209,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

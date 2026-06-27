@@ -1,0 +1,243 @@
+{
+  "nodes": [
+    {
+      "id": "config:app/src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+      "type": "config",
+      "name": "ic_launcher.xml",
+      "filePath": "app/src-tauri/icons/android/mipmap-anydpi-v26/ic_launcher.xml",
+      "summary": "Android adaptive icon launcher XML for the Tauri desktop app, referencing foreground and background drawables for API 26+ devices.",
+      "tags": ["configuration", "android", "infrastructure", "containerization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:app/src-tauri/icons/android/values/ic_launcher_background.xml",
+      "type": "config",
+      "name": "ic_launcher_background.xml",
+      "filePath": "app/src-tauri/icons/android/values/ic_launcher_background.xml",
+      "summary": "Android color resource XML defining the background color for the adaptive launcher icon.",
+      "tags": ["configuration", "android", "infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/icons/icon.icns",
+      "type": "file",
+      "name": "icon.icns",
+      "filePath": "app/src-tauri/icons/icon.icns",
+      "summary": "macOS application icon bundle (ICNS format) used by the Tauri desktop binary for the dock and window title bar.",
+      "tags": ["infrastructure", "deployment", "containerization"],
+      "complexity": "simple",
+      "languageNotes": "Binary ICNS format; multi-resolution icon container for macOS."
+    },
+    {
+      "id": "file:app/src-tauri/nsis/installer.nsi",
+      "type": "file",
+      "name": "installer.nsi",
+      "filePath": "app/src-tauri/nsis/installer.nsi",
+      "summary": "NSIS installer script for the Windows Waggle OS desktop binary, defining installation pages, file copying, registry entries, and uninstaller logic.",
+      "tags": ["infrastructure", "deployment", "build-system", "containerization"],
+      "complexity": "moderate",
+      "languageNotes": "NSIS (Nullsoft Scriptable Install System) script controlling the Windows installer wizard flow."
+    },
+    {
+      "id": "file:app/src-tauri/resources/.gitkeep",
+      "type": "file",
+      "name": ".gitkeep",
+      "filePath": "app/src-tauri/resources/.gitkeep",
+      "summary": "Empty placeholder file to track the resources directory in git for Tauri bundled resource assets.",
+      "tags": ["infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/resources/native/.gitkeep",
+      "type": "file",
+      "name": ".gitkeep",
+      "filePath": "app/src-tauri/resources/native/.gitkeep",
+      "summary": "Empty placeholder file to track the native resources directory in git for platform-specific native binaries.",
+      "tags": ["infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/resources/native/onnxruntime/.gitkeep",
+      "type": "file",
+      "name": ".gitkeep",
+      "filePath": "app/src-tauri/resources/native/onnxruntime/.gitkeep",
+      "summary": "Empty placeholder file reserving the ONNX Runtime native library directory for ML inference support in the Tauri desktop app.",
+      "tags": ["infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/src/main.rs",
+      "type": "file",
+      "name": "main.rs",
+      "filePath": "app/src-tauri/src/main.rs",
+      "summary": "Rust entry point for the Tauri desktop application; delegates all logic to the waggle_lib crate's run() function.",
+      "tags": ["entry-point", "infrastructure", "deployment"],
+      "complexity": "simple",
+      "languageNotes": "Minimal Rust main.rs pattern: all Tauri setup is in a library crate (waggle_lib), keeping the binary thin."
+    },
+    {
+      "id": "file:app/tailwind.config.ts",
+      "type": "file",
+      "name": "tailwind.config.ts",
+      "filePath": "app/tailwind.config.ts",
+      "summary": "Tailwind CSS configuration for the Tauri desktop app shell, setting content paths for purging unused styles.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/tests/auto-update.test.ts",
+      "type": "file",
+      "name": "auto-update.test.ts",
+      "filePath": "app/tests/auto-update.test.ts",
+      "summary": "Test suite validating the Tauri auto-update flow, verifying package versions, update manifests, and installer artifact integrity across platforms.",
+      "tags": ["test", "infrastructure", "deployment"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:app/tests/cockpit-agent-intelligence.test.ts",
+      "type": "file",
+      "name": "cockpit-agent-intelligence.test.ts",
+      "filePath": "app/tests/cockpit-agent-intelligence.test.ts",
+      "summary": "Test suite for the cockpit agent intelligence display logic, verifying status formatting, reason label rendering, and activity indicator behavior.",
+      "tags": ["test", "component", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:app/vite.config.ts",
+      "type": "file",
+      "name": "vite.config.ts",
+      "filePath": "app/vite.config.ts",
+      "summary": "Vite build configuration for the Tauri desktop shell, defining manual chunk splitting for vendor code (React, Tauri APIs) to optimize bundle size.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "Uses manualChunks to separate react-vendor and tauri-api into distinct bundles, reducing main chunk size for the desktop binary."
+    },
+    {
+      "id": "file:apps/browser-ext/background.js",
+      "type": "file",
+      "name": "background.js",
+      "filePath": "apps/browser-ext/background.js",
+      "summary": "Browser extension service worker handling authentication header retrieval, health checks against the Waggle sidecar API, and memory save operations via Chrome extension message passing.",
+      "tags": ["service", "api-handler", "event-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/browser-ext/content.js",
+      "type": "file",
+      "name": "content.js",
+      "filePath": "apps/browser-ext/content.js",
+      "summary": "Browser extension content script injected into web pages to extract page text and title for memory capture.",
+      "tags": ["service", "event-handler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/browser-ext/popup.js",
+      "type": "file",
+      "name": "popup.js",
+      "filePath": "apps/browser-ext/popup.js",
+      "summary": "Browser extension popup UI controller managing connection status display, active tab content reading, and triggered memory save operations (page, link, selection) via Chrome runtime messaging.",
+      "tags": ["component", "event-handler", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/eslint.config.js",
+      "type": "file",
+      "name": "eslint.config.js",
+      "filePath": "apps/web/eslint.config.js",
+      "summary": "ESLint flat config for the apps/web React frontend, enabling TypeScript and React Hooks rules with browser globals.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/playwright-fixture.ts",
+      "type": "file",
+      "name": "playwright-fixture.ts",
+      "filePath": "apps/web/playwright-fixture.ts",
+      "summary": "Minimal Playwright test fixture barrel that re-exports test and expect from @playwright/test for use across E2E test files.",
+      "tags": ["test", "barrel"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/playwright.config.ts",
+      "type": "file",
+      "name": "playwright.config.ts",
+      "filePath": "apps/web/playwright.config.ts",
+      "summary": "Playwright E2E configuration for the apps/web frontend, setting the base URL and browser project targets.",
+      "tags": ["configuration", "test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/postcss.config.js",
+      "type": "file",
+      "name": "postcss.config.js",
+      "filePath": "apps/web/postcss.config.js",
+      "summary": "PostCSS configuration for the apps/web frontend, enabling Tailwind CSS processing.",
+      "tags": ["configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:apps/web/public/robots.txt",
+      "type": "document",
+      "name": "robots.txt",
+      "filePath": "apps/web/public/robots.txt",
+      "summary": "Robots.txt directive file for the Waggle OS web app, controlling crawler access to the deployed frontend.",
+      "tags": ["documentation", "configuration", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:apps/web/src/assets/personas/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "apps/web/src/assets/personas/README.md",
+      "summary": "Developer guide for the persona bee sprite assets, documenting style guidelines, regeneration commands using AI image generation, and per-persona prompt actions for updating the 13+ persona icons.",
+      "tags": ["documentation", "development"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/VoiceApp.tsx",
+      "type": "file",
+      "name": "VoiceApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/VoiceApp.tsx",
+      "summary": "Placeholder React component for the Voice app OS shell, rendering a coming-soon UI stub within the Waggle desktop workspace.",
+      "tags": ["component", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/ui/aspect-ratio.tsx",
+      "type": "file",
+      "name": "aspect-ratio.tsx",
+      "filePath": "apps/web/src/components/ui/aspect-ratio.tsx",
+      "summary": "Thin re-export wrapper around the @radix-ui/react-aspect-ratio primitive, exposing AspectRatio as a named Hive DS UI component.",
+      "tags": ["component", "barrel", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/ui/collapsible.tsx",
+      "type": "file",
+      "name": "collapsible.tsx",
+      "filePath": "apps/web/src/components/ui/collapsible.tsx",
+      "summary": "Re-export barrel for the @radix-ui/react-collapsible primitives, exposing Collapsible, CollapsibleTrigger, and CollapsibleContent as named Hive DS UI components.",
+      "tags": ["component", "barrel", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/index.css",
+      "type": "file",
+      "name": "index.css",
+      "filePath": "apps/web/src/index.css",
+      "summary": "Global CSS stylesheet for the Waggle OS web app defining the Hive design system tokens (honey, hive-950, accent/violet), typography scale, dark/light theme CSS variables, component utility classes, and base resets.",
+      "tags": ["configuration", "component", "build-system"],
+      "complexity": "complex",
+      "languageNotes": "Uses CSS custom properties (variables) for Hive DS semantic tokens; structured with @layer base/components/utilities for Tailwind compatibility."
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/index.css",
+      "target": "file:apps/web/src/main.tsx",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

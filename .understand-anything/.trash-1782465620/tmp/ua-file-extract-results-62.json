@@ -1,0 +1,901 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/server/src/stripe/checkout.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 57,
+      "nonEmptyLines": 49,
+      "functions": [
+        {
+          "name": "checkoutRoutes",
+          "startLine": 13,
+          "endLine": 57,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "checkoutRoutes",
+          "line": 13,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "checkoutRoutes",
+          "callee": "server.post",
+          "lineNumber": 14
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "getStripe",
+          "lineNumber": 17
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code(503).send",
+          "lineNumber": 19
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code",
+          "lineNumber": 19
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 26
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code",
+          "lineNumber": 26
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "priceIdForTier",
+          "lineNumber": 29
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 31
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code",
+          "lineNumber": 31
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "stripe.checkout.sessions.create",
+          "lineNumber": 39
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code(502).send",
+          "lineNumber": 54
+        },
+        {
+          "caller": "checkoutRoutes",
+          "callee": "reply.code",
+          "lineNumber": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/src/stripe/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 146,
+      "nonEmptyLines": 129,
+      "functions": [
+        {
+          "name": "getStripe",
+          "startLine": 25,
+          "endLine": 43,
+          "params": []
+        },
+        {
+          "name": "readPriceEnvs",
+          "startLine": 48,
+          "endLine": 55,
+          "params": [
+            "...keys"
+          ]
+        },
+        {
+          "name": "tierFromPriceId",
+          "startLine": 71,
+          "endLine": 87,
+          "params": [
+            "priceId"
+          ]
+        },
+        {
+          "name": "priceIdForTier",
+          "startLine": 91,
+          "endLine": 113,
+          "params": [
+            "tier",
+            "billingPeriod"
+          ]
+        },
+        {
+          "name": "statusRoutes",
+          "startLine": 121,
+          "endLine": 123,
+          "params": [
+            "server"
+          ]
+        },
+        {
+          "name": "stripeRoutes",
+          "startLine": 131,
+          "endLine": 146,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "checkoutRoutes",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "webhookRoutes",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "portalRoutes",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "syncRoutes",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "getStripe",
+          "line": 25,
+          "isDefault": false
+        },
+        {
+          "name": "tierFromPriceId",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "priceIdForTier",
+          "line": 91,
+          "isDefault": false
+        },
+        {
+          "name": "statusRoutes",
+          "line": 121,
+          "isDefault": false
+        },
+        {
+          "name": "stripeRoutes",
+          "line": 131,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getStripe",
+          "callee": "import",
+          "lineNumber": 25
+        },
+        {
+          "caller": "getStripe",
+          "callee": "require",
+          "lineNumber": 35
+        },
+        {
+          "caller": "getStripe",
+          "callee": "require",
+          "lineNumber": 35
+        },
+        {
+          "caller": "readPriceEnvs",
+          "callee": "out.push",
+          "lineNumber": 52
+        },
+        {
+          "caller": "tierFromPriceId",
+          "callee": "readPriceEnvs",
+          "lineNumber": 72
+        },
+        {
+          "caller": "tierFromPriceId",
+          "callee": "readPriceEnvs",
+          "lineNumber": 78
+        },
+        {
+          "caller": "tierFromPriceId",
+          "callee": "proPrices.includes",
+          "lineNumber": 84
+        },
+        {
+          "caller": "tierFromPriceId",
+          "callee": "teamsPrices.includes",
+          "lineNumber": 85
+        },
+        {
+          "caller": "statusRoutes",
+          "callee": "server.get",
+          "lineNumber": 122
+        },
+        {
+          "caller": "statusRoutes",
+          "callee": "getStripe",
+          "lineNumber": 122
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "server.register",
+          "lineNumber": 133
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "import",
+          "lineNumber": 134
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "webhookScope.register",
+          "lineNumber": 135
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "import",
+          "lineNumber": 139
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "import",
+          "lineNumber": 140
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "import",
+          "lineNumber": 141
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "server.register",
+          "lineNumber": 142
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "server.register",
+          "lineNumber": 143
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "server.register",
+          "lineNumber": 144
+        },
+        {
+          "caller": "stripeRoutes",
+          "callee": "server.register",
+          "lineNumber": 145
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 9,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/src/stripe/portal.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 51,
+      "nonEmptyLines": 45,
+      "functions": [
+        {
+          "name": "portalRoutes",
+          "startLine": 14,
+          "endLine": 51,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "portalRoutes",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "portalRoutes",
+          "callee": "server.post",
+          "lineNumber": 15
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "requireTier",
+          "lineNumber": 15
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "getStripe",
+          "lineNumber": 16
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "reply.code(503).send",
+          "lineNumber": 18
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "reply.code",
+          "lineNumber": 18
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "path.join",
+          "lineNumber": 25
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "fs.existsSync",
+          "lineNumber": 26
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "JSON.parse",
+          "lineNumber": 27
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "fs.readFileSync",
+          "lineNumber": 27
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 33
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "reply.code",
+          "lineNumber": 33
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "stripe.billingPortal.sessions.create",
+          "lineNumber": 41
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "reply.code(502).send",
+          "lineNumber": 48
+        },
+        {
+          "caller": "portalRoutes",
+          "callee": "reply.code",
+          "lineNumber": 48
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/src/stripe/sync.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 77,
+      "functions": [
+        {
+          "name": "syncRoutes",
+          "startLine": 18,
+          "endLine": 90,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "syncRoutes",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "syncRoutes",
+          "callee": "server.post",
+          "lineNumber": 19
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "getStripe",
+          "lineNumber": 22
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code(503).send",
+          "lineNumber": 24
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code",
+          "lineNumber": 24
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 29
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code",
+          "lineNumber": 29
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code(500).send",
+          "lineNumber": 34
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code",
+          "lineNumber": 34
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "stripe.checkout.sessions.retrieve",
+          "lineNumber": 38
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code(402).send",
+          "lineNumber": 48
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code",
+          "lineNumber": 48
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "tierFromPriceId",
+          "lineNumber": 64
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "parseTier",
+          "lineNumber": 72
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 77
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code",
+          "lineNumber": 77
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "updateUserTier",
+          "lineNumber": 80
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "server.log.info",
+          "lineNumber": 81
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "server.log.error",
+          "lineNumber": 86
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code(502).send",
+          "lineNumber": 87
+        },
+        {
+          "caller": "syncRoutes",
+          "callee": "reply.code",
+          "lineNumber": 87
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/src/stripe/webhook.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 172,
+      "nonEmptyLines": 155,
+      "functions": [
+        {
+          "name": "atomicWriteJson",
+          "startLine": 25,
+          "endLine": 29,
+          "params": [
+            "filePath",
+            "data"
+          ]
+        },
+        {
+          "name": "serializeWebhook",
+          "startLine": 41,
+          "endLine": 45,
+          "params": [
+            "fn"
+          ]
+        },
+        {
+          "name": "updateUserTier",
+          "startLine": 52,
+          "endLine": 62,
+          "params": [
+            "dataDir",
+            "tier",
+            "customerId"
+          ]
+        },
+        {
+          "name": "webhookRoutes",
+          "startLine": 64,
+          "endLine": 170,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "webhookRoutes",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "updateUserTier",
+          "line": 172,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "atomicWriteJson",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 27
+        },
+        {
+          "caller": "atomicWriteJson",
+          "callee": "JSON.stringify",
+          "lineNumber": 27
+        },
+        {
+          "caller": "atomicWriteJson",
+          "callee": "fs.renameSync",
+          "lineNumber": 28
+        },
+        {
+          "caller": "serializeWebhook",
+          "callee": "__webhookTail.then",
+          "lineNumber": 42
+        },
+        {
+          "caller": "serializeWebhook",
+          "callee": "fn",
+          "lineNumber": 42
+        },
+        {
+          "caller": "serializeWebhook",
+          "callee": "result.then",
+          "lineNumber": 43
+        },
+        {
+          "caller": "updateUserTier",
+          "callee": "path.join",
+          "lineNumber": 53
+        },
+        {
+          "caller": "updateUserTier",
+          "callee": "fs.existsSync",
+          "lineNumber": 56
+        },
+        {
+          "caller": "updateUserTier",
+          "callee": "JSON.parse",
+          "lineNumber": 57
+        },
+        {
+          "caller": "updateUserTier",
+          "callee": "fs.readFileSync",
+          "lineNumber": 57
+        },
+        {
+          "caller": "updateUserTier",
+          "callee": "atomicWriteJson",
+          "lineNumber": 61
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "server.addContentTypeParser",
+          "lineNumber": 66
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "done",
+          "lineNumber": 70
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "server.post",
+          "lineNumber": 74
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "getStripe",
+          "lineNumber": 75
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code(503).send",
+          "lineNumber": 78
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code",
+          "lineNumber": 78
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 83
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code",
+          "lineNumber": 83
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "stripe.webhooks.constructEvent",
+          "lineNumber": 88
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code(400).send",
+          "lineNumber": 94
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code",
+          "lineNumber": 94
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code(500).send",
+          "lineNumber": 99
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.code",
+          "lineNumber": 99
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "path.join",
+          "lineNumber": 105
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "await serializeWebhook",
+          "lineNumber": 106
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "JSON.parse",
+          "lineNumber": 108
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "fs.readFileSync",
+          "lineNumber": 108
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "processedIds.includes",
+          "lineNumber": 109
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "server.log.info",
+          "lineNumber": 110
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "parseTier",
+          "lineNumber": 125
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "updateUserTier",
+          "lineNumber": 128
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "server.log.info",
+          "lineNumber": 129
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "tierFromPriceId",
+          "lineNumber": 139
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "updateUserTier",
+          "lineNumber": 142
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "server.log.info",
+          "lineNumber": 143
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "updateUserTier",
+          "lineNumber": 150
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "server.log.info",
+          "lineNumber": 151
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "processedIds.push",
+          "lineNumber": 161
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "processedIds.splice",
+          "lineNumber": 162
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "atomicWriteJson",
+          "lineNumber": 163
+        },
+        {
+          "caller": "webhookRoutes",
+          "callee": "reply.send",
+          "lineNumber": 167
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/stripe/checkout.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 144,
+      "nonEmptyLines": 116,
+      "callGraph": [
+        {
+          "caller": "postCheckout",
+          "callee": "server.inject",
+          "lineNumber": 76
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/stripe/status.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 33,
+      "nonEmptyLines": 28,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/server/tests/stripe/webhook.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 353,
+      "nonEmptyLines": 295,
+      "callGraph": [
+        {
+          "caller": "buildServer",
+          "callee": "import",
+          "lineNumber": 211
+        },
+        {
+          "caller": "buildServer",
+          "callee": "Fastify",
+          "lineNumber": 212
+        },
+        {
+          "caller": "buildServer",
+          "callee": "app.decorate",
+          "lineNumber": 213
+        },
+        {
+          "caller": "buildServer",
+          "callee": "app.register",
+          "lineNumber": 214
+        },
+        {
+          "caller": "buildServer",
+          "callee": "app.ready",
+          "lineNumber": 215
+        },
+        {
+          "caller": "postEvent",
+          "callee": "app.inject",
+          "lineNumber": 220
+        },
+        {
+          "caller": "postEvent",
+          "callee": "Buffer.from",
+          "lineNumber": 224
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

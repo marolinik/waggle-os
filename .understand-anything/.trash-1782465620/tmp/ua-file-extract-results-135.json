@@ -1,0 +1,2262 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/plans/AI-OS-EXPLORATION-2026-05-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 298,
+      "nonEmptyLines": 224,
+      "sections": [
+        {
+          "heading": "AI-OS Architecture Exploration — WaggleDance Evolution + Unified Memory Launcher",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Executive summary (read this first)",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "1. WaggleDance — what it actually does today",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "2. WaggleDance — evolution options (no code, just shape)",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "2a. Status quo — keep as team-internal",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "2b. Promote to **cross-tool nervous system** ★ recommended",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "2c. Add provenance + trust",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "2d. Topology-aware routing (deferred)",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "3. \"OS for AI\" — the **surprise finding**",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "3a. What's already in `packages/` (verified by `find`)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "3b. The integration pattern — already production-grade",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "3c. What this means",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "4. Gap analysis — what's missing for \"real OS feel\"",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Tier 0 — must-have for the OS metaphor to land",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "Tier 1 — strongly increases OS feel",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "Tier 2 — nice-to-have, not launch-blocking",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "5. Three architectural paths",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "Path A — \"Memory bus only\"",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "Path B — \"Hub launcher\"",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Path C — \"Embedded shells\"",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "**Path D — recommended: B + WaggleDance v2 as the unifying bus**",
+          "level": 3,
+          "line": 174
+        },
+        {
+          "heading": "6. Suggested phasing (no code yet — for ratification)",
+          "level": 2,
+          "line": 186
+        },
+        {
+          "heading": "7. Open questions for you (PM-level decisions)",
+          "level": 2,
+          "line": 221
+        },
+        {
+          "heading": "8. Risks / non-goals",
+          "level": 2,
+          "line": 231
+        },
+        {
+          "heading": "9. What I'd ratify before any code",
+          "level": 2,
+          "line": 241
+        },
+        {
+          "heading": "10. Appendix — surface map (verified file inventory)",
+          "level": 2,
+          "line": 254
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 26
+      }
+    },
+    {
+      "path": "docs/plans/APP-DIR-AUDIT-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 132,
+      "nonEmptyLines": 104,
+      "sections": [
+        {
+          "heading": "`app/` Directory Audit — 2026-04-19 (L-15 findings)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What's alive",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "What shipped broken",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1. `app/src/` frontend was deleted but build hooks remained",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "2. `app/package.json` still defines broken scripts",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "What's orphaned (your call needed)",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "`packages/ui/` + `app/public/brand/` — 159M of unused brand assets — ✅ DELETED 2026-04-20",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/BACKLOG-CONSOLIDATED-2026-04-17.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 360,
+      "nonEmptyLines": 268,
+      "sections": [
+        {
+          "heading": "Consolidated Backlog — MILESTONE 2026-04-17",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "✅ DONE — PromptAssembler v4 PoC (2026-04-17 session)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "🔜 NEXT SESSION — EXPLORING MILESTONE (TBD — briefed at fresh-context start)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "📋 MAIN PLAN CONTINUATION (after exploring milestone)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Legend",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Snapshot: What shifted since 2026-04-16",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "P0 — Launch Blockers (must-have)",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Block 1: Marko External Actions ⏳",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "Block 2: Phase 1 — Harvest Marko's Real Data 🟢 (blocked on M1-M4)",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "Block 5: Phase 4 — Memory Proof Test 🟢",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Block 6: Phase 5 — GEPA Full-System Proof 🟢",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "Block 7: Phase 5b — Combined Effect Proof 🟢",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "Block 8: Phase 6 — Write Papers 🟢",
+          "level": 3,
+          "line": 124
+        },
+        {
+          "heading": "Block 9: Phase 7 — Launch Prep",
+          "level": 3,
+          "line": 128
+        },
+        {
+          "heading": "Block 10: Launch Day 🔴 (gated)",
+          "level": 3,
+          "line": 141
+        },
+        {
+          "heading": "P1 — Ship Quality (do before launch)",
+          "level": 2,
+          "line": 147
+        },
+        {
+          "heading": "Block 3c Quick Wins 🟢 (<1 hr each, ~5 hr total)",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "Block 3d: CLAUDE.md Open Work",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "Block 3b: Compliance Report UX + Template System 🟢 (3.5 days)",
+          "level": 3,
+          "line": 166
+        },
+        {
+          "heading": "Block 3e: Cross-Reference Items",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "Block 3da: Installer Flow (deferred from Task 6)",
+          "level": 3,
+          "line": 190
+        },
+        {
+          "heading": "P2 — Polish (can ship without, do soon after)",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "Block 3c Medium UX Fixes 🟢 (1-4 hr each)",
+          "level": 3,
+          "line": 202
+        },
+        {
+          "heading": "Block 3c Engagement Features 🟢 (half-day each)",
+          "level": 3,
+          "line": 213
+        },
+        {
+          "heading": "Block 3: Wiki Compiler v2 🟢 (5 days)",
+          "level": 3,
+          "line": 225
+        },
+        {
+          "heading": "Block 4: Phase 3 — Harvest UX Full Polish 🟢 (5 days)",
+          "level": 3,
+          "line": 235
+        },
+        {
+          "heading": "Block 3c-R: Responsive Gaps 🟢",
+          "level": 3,
+          "line": 246
+        },
+        {
+          "heading": "PDF E2E — Deferred 21 items (🟠) from 2026-04-17",
+          "level": 2,
+          "line": 258
+        },
+        {
+          "heading": "hive-mind Integration 🟢 (7 days)",
+          "level": 2,
+          "line": 288
+        },
+        {
+          "heading": "Accessibility 🟢 (1 day — post-launch OK)",
+          "level": 2,
+          "line": 294
+        },
+        {
+          "heading": "Strategic Decisions Pending ⏳",
+          "level": 2,
+          "line": 310
+        },
+        {
+          "heading": "Totals",
+          "level": 2,
+          "line": 323
+        },
+        {
+          "heading": "Critical Path",
+          "level": 2,
+          "line": 338
+        },
+        {
+          "heading": "Related docs",
+          "level": 2,
+          "line": 353
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/plans/BACKLOG-FULL-2026-04-18.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 385,
+      "nonEmptyLines": 293,
+      "sections": [
+        {
+          "heading": "FULL BACKLOG — 2026-04-18",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Polish Sprint 2026-04-18 — phased plan (this week)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Phase A — Quick Wins",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "Phase B — Core bugs + light mode finish (~1 day)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Phase C — OW-6 PersonaSwitcher two-tier (0.5 day)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Phase D — Feature polish (~10 days)",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Phase E — Infra polish (~6 days)",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "Phase F — Content polish (~1 day)",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "2. Marko — non-coding items",
+          "level": 2,
+          "line": 132
+        },
+        {
+          "heading": "Strategic decisions pending",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "3. P0 Launch Blockers (beyond polish)",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "Block 2 — Phase 1 Harvest Marko's real data (🔴 blocked on M1)",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Block 5-8 — proofs + papers",
+          "level": 3,
+          "line": 179
+        },
+        {
+          "heading": "Block 9 — Launch Prep",
+          "level": 3,
+          "line": 188
+        },
+        {
+          "heading": "Block 10 — Launch Day 🔴 (gated)",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "4. PDF E2E — deferred 21 items (🟠)",
+          "level": 2,
+          "line": 207
+        },
+        {
+          "heading": "5. GEPA Wiring Closure — NEW (4 items)",
+          "level": 2,
+          "line": 237
+        },
+        {
+          "heading": "G1 — No autonomous evolution service / scheduler 🟢",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "G2 — `loadSystemPrompt` ignores overrides 🟢",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "G3 — Running judge not end-to-end on all eval paths 🟢",
+          "level": 3,
+          "line": 275
+        },
+        {
+          "heading": "G4 — Traces rarely finalized with `success`/`verified`/`corrected` 🟢",
+          "level": 3,
+          "line": 292
+        },
+        {
+          "heading": "GEPA closure totals",
+          "level": 3,
+          "line": 310
+        },
+        {
+          "heading": "6. hive-mind OSS Integration 🟢 (7 days)",
+          "level": 2,
+          "line": 318
+        },
+        {
+          "heading": "7. Accessibility (🟢 1 day, post-launch OK)",
+          "level": 2,
+          "line": 324
+        },
+        {
+          "heading": "8. Totals",
+          "level": 2,
+          "line": 340
+        },
+        {
+          "heading": "9. Critical path",
+          "level": 2,
+          "line": 357
+        },
+        {
+          "heading": "10. Related docs",
+          "level": 2,
+          "line": 376
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 27
+      }
+    },
+    {
+      "path": "docs/plans/BACKLOG-MASTER-2026-04-18.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 919,
+      "nonEmptyLines": 733,
+      "sections": [
+        {
+          "heading": "MASTER BACKLOG — 2026-04-18 (v2 · SOTA-gated launch)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Three tiers · Test gate per step · Launch gated by benchmark proof",
+          "level": 3,
+          "line": 2
+        },
+        {
+          "heading": "Tier definitions",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Test-gate principle",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Marko-side queue (non-coding, non-external)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "HIGH tier — ship-blocking (~55 items · ~50 eng days)",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "Block H1 — Polish Phase A closure (1 item)",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "H-01 · QW-3 · Skip boot screen on return visits",
+          "level": 4,
+          "line": 70
+        },
+        {
+          "heading": "Block H2 — Polish Phase B core bugs (5 items)",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "H-02 · P35 · Spawn-agent \"no models available\"",
+          "level": 4,
+          "line": 78
+        },
+        {
+          "heading": "H-03 · P36 · Dock spawn-agent icon wiring",
+          "level": 4,
+          "line": 86
+        },
+        {
+          "heading": "H-04 · P40 · Light-mode BootScreen logo + animation",
+          "level": 4,
+          "line": 93
+        },
+        {
+          "heading": "H-05 · P41 · Light-mode \"Waggle AI\" header text",
+          "level": 4,
+          "line": 100
+        },
+        {
+          "heading": "H-06 · CR-2 · Residual `hive-950` → semantic token sweep",
+          "level": 4,
+          "line": 107
+        },
+        {
+          "heading": "Block H3 — GEPA wiring closure (4 items)",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "H-07 · G4 · Trace outcome audit + finalization coverage",
+          "level": 4,
+          "line": 117
+        },
+        {
+          "heading": "H-08 · G2 · Override-aware system prompt loader",
+          "level": 4,
+          "line": 126
+        },
+        {
+          "heading": "H-09 · G3 · Running-judge wiring audit",
+          "level": 4,
+          "line": 135
+        },
+        {
+          "heading": "H-10 · G1 · Evolution service + cron scheduler",
+          "level": 4,
+          "line": 143
+        },
+        {
+          "heading": "Block H4 — Phase 1 Harvest real data (9 items — mostly work we execute as M1 data arrives + concurrent)",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "H-11 · 1.3 · Re-harvest Claude Code fresh",
+          "level": 4,
+          "line": 154
+        },
+        {
+          "heading": "H-12 · 1.2 · Import Claude conversations (Anthropic export DONE per M2)",
+          "level": 4,
+          "line": 160
+        },
+        {
+          "heading": "H-13 · 1.4 · Import Gemini conversations (Google export DONE per M3)",
+          "level": 4,
+          "line": 165
+        },
+        {
+          "heading": "H-14 · 1.6 · Cursor adapter build",
+          "level": 4,
+          "line": 170
+        },
+        {
+          "heading": "H-15 · 1.5 · Import Perplexity (SKIPPED per user direction)",
+          "level": 4,
+          "line": 177
+        },
+        {
+          "heading": "H-16 · 1.1 · Import ChatGPT conversations (waits on M1)",
+          "level": 4,
+          "line": 182
+        },
+        {
+          "heading": "H-17 · 1.7 · Post-harvest cognify on imported frames",
+          "level": 4,
+          "line": 187
+        },
+        {
+          "heading": "H-18 · 1.8 · Identity auto-populate from harvest",
+          "level": 4,
+          "line": 193
+        },
+        {
+          "heading": "H-19 · 1.9 · Wiki compile from real data",
+          "level": 4,
+          "line": 199
+        },
+        {
+          "heading": "H-20 · GATE · Harvest dataset threshold",
+          "level": 4,
+          "line": 205
+        },
+        {
+          "heading": "Block H5 — Phase 4 Memory Proof (from MEMORY-HARVEST-TEST-PLAN.docx, 10 days, $300-500)",
+          "level": 3,
+          "line": 210
+        },
+        {
+          "heading": "H-21 · Phase 4 · Memory Proof execution",
+          "level": 4,
+          "line": 214
+        },
+        {
+          "heading": "Block H6 — Phase 5 GEPA Full-System Proof (from GEPA-EVOLUTION-TEST-PLAN.docx, 18 days, $1.5-2.5k)",
+          "level": 3,
+          "line": 223
+        },
+        {
+          "heading": "H-22 · Phase 5 · GEPA Proof execution",
+          "level": 4,
+          "line": 225
+        },
+        {
+          "heading": "Block H7 — Phase 5b Combined Effect Proof (6 days, ~$500)",
+          "level": 3,
+          "line": 232
+        },
+        {
+          "heading": "H-23 · Phase 5b · Combined proof",
+          "level": 4,
+          "line": 234
+        },
+        {
+          "heading": "Block H8 — Phase 6 Papers (5 days writing + Marko peer review)",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "H-24 · Paper 1 · Memory system paper draft",
+          "level": 4,
+          "line": 243
+        },
+        {
+          "heading": "H-25 · Paper 2 · GEPA + Combined paper draft",
+          "level": 4,
+          "line": 250
+        },
+        {
+          "heading": "Block H9 — Stripe integration (M7 decomposed — reconciliation 2026-04-18)",
+          "level": 3,
+          "line": 256
+        },
+        {
+          "heading": "H-26 · Stripe webhook endpoint — ✅ SHIPPED (pre-session)",
+          "level": 4,
+          "line": 260
+        },
+        {
+          "heading": "H-27 · Subscription → tier mapping — ✅ SHIPPED (pre-session)",
+          "level": 4,
+          "line": 267
+        },
+        {
+          "heading": "H-28 · Upgrade flow UI — ✅ SHIPPED (pre-session)",
+          "level": 4,
+          "line": 273
+        },
+        {
+          "heading": "H-29 · Billing portal link — ✅ SHIPPED (pre-session)",
+          "level": 4,
+          "line": 277
+        },
+        {
+          "heading": "H-30 · Trial-to-paid conversion path — ✅ SHIPPED (pre-session)",
+          "level": 4,
+          "line": 281
+        },
+        {
+          "heading": "H-31 · Tier enforcement audit — 🟢 OPEN (small)",
+          "level": 4,
+          "line": 285
+        },
+        {
+          "heading": "H-32 · Embedding quota enforcement — ✅ SHIPPED (pre-session)",
+          "level": 4,
+          "line": 290
+        },
+        {
+          "heading": "H-33 · Stripe test-mode smoke — ✅ DONE this session",
+          "level": 4,
+          "line": 295
+        },
+        {
+          "heading": "Block H10 — Launch prep (infra) (7 items)",
+          "level": 3,
+          "line": 300
+        },
+        {
+          "heading": "H-34 · hive-mind source extraction (CR-6)",
+          "level": 4,
+          "line": 302
+        },
+        {
+          "heading": "H-35 · Binary build + clean Windows VM smoke (CR-8)",
+          "level": 4,
+          "line": 309
+        },
+        {
+          "heading": "H-36 · Clerk auth integration",
+          "level": 4,
+          "line": 316
+        },
+        {
+          "heading": "H-37 · Onboarding finalized (harvest-first per [M]-08)",
+          "level": 4,
+          "line": 323
+        },
+        {
+          "heading": "H-38 · Landing page final polish (apps/www)",
+          "level": 4,
+          "line": 329
+        },
+        {
+          "heading": "H-39 · Windows code-signing integration (scaffolding ready for cert)",
+          "level": 4,
+          "line": 336
+        },
+        {
+          "heading": "H-40 · Mac notarization integration (scaffolding ready for Apple Dev acct)",
+          "level": 4,
+          "line": 343
+        },
+        {
+          "heading": "Block H11 — Auto-updater signing (1 item)",
+          "level": 3,
+          "line": 350
+        },
+        {
+          "heading": "H-41 · Auto-updater keypair + latest.json signing",
+          "level": 4,
+          "line": 352
+        },
+        {
+          "heading": "Block H12 — Public Benchmark Runs · LAUNCH GATING (3 items)",
+          "level": 3,
+          "line": 359
+        },
+        {
+          "heading": "H-42 · LoCoMo benchmark run (LAUNCH GATING)",
+          "level": 4,
+          "line": 370
+        },
+        {
+          "heading": "H-43 · LongMemEval benchmark run (LAUNCH GATING)",
+          "level": 4,
+          "line": 380
+        },
+        {
+          "heading": "H-44 · SWE-ContextBench run (STRATEGIC DIFFERENTIATOR)",
+          "level": 4,
+          "line": 388
+        },
+        {
+          "heading": "MEDIUM tier — ship-quality polish (~50 items · ~25 eng days)",
+          "level": 2,
+          "line": 403
+        },
+        {
+          "heading": "Block M1 — Polish Phase C · PersonaSwitcher two-tier (OW-6)",
+          "level": 3,
+          "line": 405
+        },
+        {
+          "heading": "M-01 · PersonaSwitcher two-tier redesign",
+          "level": 4,
+          "line": 407
+        },
+        {
+          "heading": "Block M2 — Compliance UX (3.5 days, 5 items)",
+          "level": 3,
+          "line": 415
+        },
+        {
+          "heading": "M-02 · 3b.1 · PDF export route",
+          "level": 4,
+          "line": 417
+        },
+        {
+          "heading": "M-03 · 3b.2 · Template system JSON schema",
+          "level": 4,
+          "line": 424
+        },
+        {
+          "heading": "M-04 · 3b.3 · Full-page ComplianceReport viewer",
+          "level": 4,
+          "line": 430
+        },
+        {
+          "heading": "M-05 · 3b.4 · Custom branding",
+          "level": 4,
+          "line": 436
+        },
+        {
+          "heading": "M-06 · 3b.5 · KVARK template (enterprise variant)",
+          "level": 4,
+          "line": 442
+        },
+        {
+          "heading": "Block M3 — Harvest UX Polish (5 days, 4 open items)",
+          "level": 3,
+          "line": 447
+        },
+        {
+          "heading": "M-07 · 3.3 · SSE live progress streaming",
+          "level": 4,
+          "line": 449
+        },
+        {
+          "heading": "M-08 · 3.4 · Resumable harvests",
+          "level": 4,
+          "line": 455
+        },
+        {
+          "heading": "M-09 · 3.5 · Identity auto-populate screen",
+          "level": 4,
+          "line": 461
+        },
+        {
+          "heading": "M-10 · 3.6 · Harvest-first onboarding tile",
+          "level": 4,
+          "line": 466
+        },
+        {
+          "heading": "Block M4 — Wiki Compiler v2 (5 days, 4 open items)",
+          "level": 3,
+          "line": 471
+        },
+        {
+          "heading": "M-11 · 2.2 · Incremental recompilation",
+          "level": 4,
+          "line": 473
+        },
+        {
+          "heading": "M-12 · 2.3 · Obsidian vault adapter",
+          "level": 4,
+          "line": 478
+        },
+        {
+          "heading": "M-13 · 2.4 · Notion structured export",
+          "level": 4,
+          "line": 483
+        },
+        {
+          "heading": "M-14 · 2.5 · Wiki health report dashboard UI",
+          "level": 4,
+          "line": 489
+        },
+        {
+          "heading": "Block M5 — Installer / Ollama (INST-1/2/3 — 2 days)",
+          "level": 3,
+          "line": 494
+        },
+        {
+          "heading": "M-15 · INST-1 · Ollama bundled installer",
+          "level": 4,
+          "line": 496
+        },
+        {
+          "heading": "M-16 · INST-2 · Hardware scan + model fit",
+          "level": 4,
+          "line": 502
+        },
+        {
+          "heading": "M-17 · INST-3 · Ollama daemon auto-start",
+          "level": 4,
+          "line": 508
+        },
+        {
+          "heading": "Block M6 — Medium UX fixes (6 items, 6-10 hr total)",
+          "level": 3,
+          "line": 513
+        },
+        {
+          "heading": "M-18 · UX-1 · Reduce onboarding decisions (default Blank + General Purpose path)",
+          "level": 4,
+          "line": 515
+        },
+        {
+          "heading": "M-19 · UX-4 · Dock text labels first 7d / 20 sessions",
+          "level": 4,
+          "line": 520
+        },
+        {
+          "heading": "M-20 · UX-5 · Hide token/cost behind dev mode",
+          "level": 4,
+          "line": 526
+        },
+        {
+          "heading": "M-21 · UX-6 · Chat header overflow menu",
+          "level": 4,
+          "line": 532
+        },
+        {
+          "heading": "Block M7 — Engagement features (ENG-1..7 — 4 days)",
+          "level": 3,
+          "line": 537
+        },
+        {
+          "heading": "M-22 · ENG-1 · \"I just remembered\" toast after 5th message",
+          "level": 4,
+          "line": 539
+        },
+        {
+          "heading": "M-23 · ENG-2 · WorkspaceBriefing collapsible sidebar",
+          "level": 4,
+          "line": 544
+        },
+        {
+          "heading": "M-24 · ENG-3 · Dock unlock nudge at 10/50 sessions",
+          "level": 4,
+          "line": 549
+        },
+        {
+          "heading": "M-25 · ENG-4 · LoginBriefing every launch",
+          "level": 4,
+          "line": 554
+        },
+        {
+          "heading": "M-26 · ENG-5 · Harvest-first onboarding (depends on [M]-08)",
+          "level": 4,
+          "line": 559
+        },
+        {
+          "heading": "M-27 · ENG-6 · Memory Score / Brain Health metric",
+          "level": 4,
+          "line": 562
+        },
+        {
+          "heading": "M-28 · ENG-7 · Suggested next actions after assistant response",
+          "level": 4,
+          "line": 568
+        },
+        {
+          "heading": "Block M8 — Infra polish (3 items)",
+          "level": 3,
+          "line": 574
+        },
+        {
+          "heading": "M-29 · CR-1 · MS Graph OAuth connector",
+          "level": 4,
+          "line": 576
+        },
+        {
+          "heading": "M-30 · CR-3 · KG Viewer top-5 demo gaps",
+          "level": 4,
+          "line": 583
+        },
+        {
+          "heading": "Block M9 — Content polish (2 items)",
+          "level": 3,
+          "line": 588
+        },
+        {
+          "heading": "M-31 · CR-4 · Demo video script (90s + 5min)",
+          "level": 4,
+          "line": 590
+        },
+        {
+          "heading": "M-32 · CR-5 · LinkedIn launch posts (3-post sequence)",
+          "level": 4,
+          "line": 596
+        },
+        {
+          "heading": "Block M11 — Strategic documentation (2 items, new from v2 brief)",
+          "level": 3,
+          "line": 603
+        },
+        {
+          "heading": "M-49 · KVARK model strategy documentation",
+          "level": 4,
+          "line": 605
+        },
+        {
+          "heading": "M-50 · Canonical \"cognitive layer\" thesis document",
+          "level": 4,
+          "line": 613
+        },
+        {
+          "heading": "Block M10 — PDF deferred items (21 items from PDF-E2E-ISSUES, non-P0 subset)",
+          "level": 3,
+          "line": 622
+        },
+        {
+          "heading": "LOW tier — post-launch OK (~40 items · ~15 eng days)",
+          "level": 2,
+          "line": 649
+        },
+        {
+          "heading": "Block L1 — Responsive gaps (5 items)",
+          "level": 3,
+          "line": 651
+        },
+        {
+          "heading": "L-01 · R-1 · Dock power tier overflow <768px",
+          "level": 4,
+          "line": 653
+        },
+        {
+          "heading": "L-02 · R-2 · StatusBar narrow-viewport",
+          "level": 4,
+          "line": 657
+        },
+        {
+          "heading": "L-03 · R-3 · ChatApp session sidebar collapse",
+          "level": 4,
+          "line": 662
+        },
+        {
+          "heading": "L-04 · R-4 · OnboardingWizard template grid responsive",
+          "level": 4,
+          "line": 667
+        },
+        {
+          "heading": "L-05 · R-5 · AppWindow default sizes for mobile",
+          "level": 4,
+          "line": 672
+        },
+        {
+          "heading": "Block L2 — Accessibility A11Y-1..9 (9 items, 1 day total)",
+          "level": 3,
+          "line": 677
+        },
+        {
+          "heading": "L-06 · A11Y-1 · BootScreen screen-reader skip announce — **Verify:** axe-core 0 violations · **Effort:** 30 min",
+          "level": 4,
+          "line": 679
+        },
+        {
+          "heading": "L-07 · A11Y-2 · Dock 44×44 touch targets — **Verify:** measure in Playwright · **Effort:** 1 hr",
+          "level": 4,
+          "line": 680
+        },
+        {
+          "heading": "L-08 · A11Y-3 · Window title-bar min/max button icons + labels — **Verify:** screen reader reads \"Minimize\"/\"Maximize\" · **Effort:** 30 min",
+          "level": 4,
+          "line": 681
+        },
+        {
+          "heading": "L-09 · A11Y-4 · PersonaSwitcher aria-disabled on locked cards — **Verify:** axe + keyboard skip · **Effort:** 30 min",
+          "level": 4,
+          "line": 682
+        },
+        {
+          "heading": "L-10 · A11Y-5 · Settings role=\"switch\" + aria-checked on toggles — **Verify:** axe · **Effort:** 1 hr",
+          "level": 4,
+          "line": 683
+        },
+        {
+          "heading": "L-11 · A11Y-6 · Dashboard health dots shape differentiation — **Verify:** colorblind simulation · **Effort:** 1 hr",
+          "level": 4,
+          "line": 684
+        },
+        {
+          "heading": "L-12 · A11Y-7 · Chat feedback dropdown focus trap + arrow keys — **Verify:** keyboard-only navigation · **Effort:** 1 hr",
+          "level": 4,
+          "line": 685
+        },
+        {
+          "heading": "L-13 · A11Y-8 · Global Search role=\"dialog\" — **Verify:** axe · **Effort:** 30 min",
+          "level": 4,
+          "line": 686
+        },
+        {
+          "heading": "L-14 · A11Y-9 · Memory importance slider aria-label — **Verify:** axe · **Effort:** 30 min",
+          "level": 4,
+          "line": 687
+        },
+        {
+          "heading": "Block L3 — Tech debt (from remaining-work memory)",
+          "level": 3,
+          "line": 689
+        },
+        {
+          "heading": "L-15 · Remove old `app/` frontend",
+          "level": 4,
+          "line": 691
+        },
+        {
+          "heading": "L-16 · ContextRail deeper integration",
+          "level": 4,
+          "line": 696
+        },
+        {
+          "heading": "L-17 · Scan for MOCK/stub/placeholder in production paths",
+          "level": 4,
+          "line": 701
+        },
+        {
+          "heading": "L-18 · Agent native file access tools",
+          "level": 4,
+          "line": 707
+        },
+        {
+          "heading": "L-19 · TeamStorageProvider real S3/MinIO impl",
+          "level": 4,
+          "line": 712
+        },
+        {
+          "heading": "L-20 · File indexing for semantic search",
+          "level": 4,
+          "line": 717
+        },
+        {
+          "heading": "L-21 · Cross-workspace file read",
+          "level": 4,
+          "line": 722
+        },
+        {
+          "heading": "Block L4 — Engagement advanced (from remaining-work P3)",
+          "level": 3,
+          "line": 728
+        },
+        {
+          "heading": "L-22 · Memory bragging window (richer LoginBriefing)",
+          "level": 4,
+          "line": 730
+        },
+        {
+          "heading": "Block L5 — Minor PDF items (1 item)",
+          "level": 3,
+          "line": 736
+        },
+        {
+          "heading": "L-23 · P39 · Status bar dynamic (moved here; Low priority tech-debt if not done in M)",
+          "level": 4,
+          "line": 738
+        },
+        {
+          "heading": "One-view master table (summary)",
+          "level": 2,
+          "line": 743
+        },
+        {
+          "heading": "Critical path (v2 — SOTA-gated)",
+          "level": 2,
+          "line": 809
+        },
+        {
+          "heading": "Sprint discipline",
+          "level": 2,
+          "line": 853
+        },
+        {
+          "heading": "Recommended execution sequence (v2 — SOTA-gated)",
+          "level": 2,
+          "line": 865
+        },
+        {
+          "heading": "Related docs (superseded)",
+          "level": 2,
+          "line": 910
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 142
+      }
+    },
+    {
+      "path": "docs/plans/BACKLOG-RECONCILIATION-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 116,
+      "nonEmptyLines": 84,
+      "sections": [
+        {
+          "heading": "Backlog Reconciliation — 2026-04-19",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verification method",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Block M6 — UX fixes (M-18..M-21) — 100% shipped",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Block M7 — Engagement features (M-22..M-28) — 6 of 7 shipped",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "What this changes for planning",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "Commits in this session so far",
+          "level": 2,
+          "line": 93
+        },
+        {
+          "heading": "Next",
+          "level": 2,
+          "line": 105
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/plans/BENCHMARK-LANDSCAPE-RESEARCH-2026-05-22.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 39,
+      "sections": [
+        {
+          "heading": "Benchmark Landscape Research — \"What most strongly shows Waggle capability?\"",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The reframe that matters",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Candidate benchmarks (2026 state)",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Story A — agentic / knowledge-work",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Story B — memory (the moat)",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "Recommendation",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Implication for the in-flight plan",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "Sources",
+          "level": 2,
+          "line": 57
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/COMPLIANCE-AUDIT-2026-04-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 61,
+      "nonEmptyLines": 46,
+      "sections": [
+        {
+          "heading": "Compliance PDF Audit — 2026-04-20 (M-02..06)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Sub-item disposition",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "What's cheap and high-value — ship this session",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "What's design territory — defer to follow-up session",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Recommended execution",
+          "level": 2,
+          "line": 49
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/plans/E-4-OSS-EXTRACTION-VERIFIED-2026-05-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 62,
+      "sections": [
+        {
+          "heading": "E-4 — OSS Subtree-Split Extraction Verified (2026-05-20)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Status: ✅ Verified-working, ready for Day 0 push",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Verified branches",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Regression guards added",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "What \"Day 0 push\" means",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "What's NOT done (deliberate)",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "How to re-verify in future sessions",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "CR-6 ✅ CLOSED",
+          "level": 2,
+          "line": 85
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/FILE-TOOLS-AUDIT-2026-04-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 77,
+      "nonEmptyLines": 59,
+      "sections": [
+        {
+          "heading": "Agent File Tools Audit — 2026-04-20 (L-18..21)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Sub-item disposition",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "What's cheap and safe — ship this session",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "What's architecturally risky — defer to follow-up session",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Recommended execution",
+          "level": 2,
+          "line": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/plans/H-AUDIT-1-DESIGN-DOC-2026-04-22.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 241,
+      "nonEmptyLines": 175,
+      "sections": [
+        {
+          "heading": "H-AUDIT-1 Design Doc — turnId Propagation + Stage 2 reasoning_content",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Executive summary",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "1. Current state audit (as of 2026-04-22, HEAD = e1ae0a4)",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "1.1 turnId generator",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "1.2 Propagation surface (verified grep + read)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "1.3 Persistence format in chat.ts",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "1.4 Tests already in place",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "1.5 Acceptance gate already satisfied",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "2. Net-new scope for Stage 2 on/64K — reasoning_content handling",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "2.1 Execution surface that sees reasoning_content",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "2.2 Persistence rule",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "2.3 Retention policy",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "2.4 Exclusion rule",
+          "level": 3,
+          "line": 106
+        },
+        {
+          "heading": "2.5 Invariant",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "3. Test scenario (sample code — not committed yet)",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "4. Acceptance criteria (updated against current state)",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "5. Open questions for PM ratification",
+          "level": 2,
+          "line": 190
+        },
+        {
+          "heading": "6. Implementation plan for A2 (after ratification)",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "7. Anti-patterns",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "8. Related",
+          "level": 2,
+          "line": 227
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/plans/HARNESS-BENCHMARK-GOAL-2026-05-22.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 99,
+      "nonEmptyLines": 67,
+      "sections": [
+        {
+          "heading": "GOAL STATEMENT — Agent Harness Benchmark (local-first, sovereign)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. LOCKED — Reading B: Waggle is the arena + governance layer (2026-05-22)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Objective — TWO co-equal product pillars (Marko, 2026-05-22)",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "2. Subject under test + comparison set",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "3. Environment constraint — local-first is itself a measured property",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "4. What to measure (harness quality is multi-dimensional)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "5. Two deliverable tiers (different bars — do not blur)",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "6. Success criteria (what counts as a win)",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "7. Non-goals / guardrails (honesty bar)",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "8. What already exists (starting point)",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "TL;DR for `/goal`",
+          "level": 2,
+          "line": 95
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/plans/HARNESS-BENCHMARK-PLAN-2026-05-22.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 202,
+      "nonEmptyLines": 141,
+      "sections": [
+        {
+          "heading": "Implementation Plan: Agent-Harness Comparison Benchmark Matrix",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "DIRECTION UPDATE (Marko, 2026-05-22 — \"positioning must prove strength on the agent harness\")",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "CONFIRMED adapter architecture (`waggle_worker`)",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "De-risk spike finding (2026-05-22) — the native-dep gate",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "TWO-PILLAR plan (Marko 2026-05-22: both proofs co-equal)",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "DECISIONS LOCKED (Marko, 2026-05-22)",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "Overview",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "Critical findings from the codebase (these reshape the matrix)",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "Phase 0 — Framing + Research Gate (BLOCKING, mostly external research)",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "Phase 1 — Judge Integrity (Tier-1 blocker; RUNNABLE NOW, no Phase 0 dep)",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "Phase 2 — Sovereignty Triple Proof (protagonist metric; RUNNABLE NOW)",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "Phase 3 — Metric Instrumentation (4 families; RUNNABLE NOW)",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "Phase 4 — 5-Error Floor: Fix or Document (RUNNABLE NOW)",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "Phase 5 — Matrix Execution (BLOCKED on Phase 0 verdict; gated by 1-4)",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "Phase 6 — Deliverables (Tier-1 + Tier-2)",
+          "level": 2,
+          "line": 169
+        },
+        {
+          "heading": "Blocked-on-research vs runnable-now",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "Effort",
+          "level": 2,
+          "line": 188
+        },
+        {
+          "heading": "Recommended execution order",
+          "level": 2,
+          "line": 193
+        },
+        {
+          "heading": "Three biggest risks",
+          "level": 2,
+          "line": 199
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/plans/HARVEST-AUDIT-2026-04-20.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 133,
+      "nonEmptyLines": 103,
+      "sections": [
+        {
+          "heading": "Harvest UX Audit — 2026-04-20 (M-07..10)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Sub-item disposition",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Detailed evidence",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "M-07 — SSE progress",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "M-08 — Resumable harvest",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "M-09 — Identity auto-populate",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "M-10 — Onboarding tile",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "Recommended execution order (smallest → largest, demo value first)",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "Why this order",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "Decision needed",
+          "level": 2,
+          "line": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/plans/HERMES-40-PREREG-2026-05-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 96,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "Pre-Registration — Hermes \"~40% faster\" closed-loop claim (R6)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Claim under test",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "2. Metrics (locked)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "3. Pre-registered success criterion (locked)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "4. Model (pinned)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "5. Arms (per task family `i`)",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "6. Grader (deterministic, code-based)",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "7. Task families (pre-specified; corpus = this repo @ `c87e5b7` + memory substrate)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "8. Cost governance (hard)",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "9. Gate — pilot → escalation (pre-registered, no discretion)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "10. Pre-registered outcomes (all valid; none hidden)",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "11. Anti-p-hacking",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Amendment 2 (2026-05-19 PM, post-pilot, user-directed)",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "Amendment 3 (2026-05-19 PM, post-Pilot-2, user-directed: option A)",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Amendment 4 (2026-05-19 PM, post-Pilot-3, user-directed: option B + harness-bug retraction)",
+          "level": 2,
+          "line": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/plans/HERMES-40-RESULTS-2026-05-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 113,
+      "nonEmptyLines": 71,
+      "sections": [
+        {
+          "heading": "Results — Hermes \"~40% faster\" closed-loop claim (R6 pilot)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What happened",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Honest reading",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Effect on the rubric",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Pre-registered amendment ask (manifest §10)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Pilot 3 — Amendment 3 (forcing corpus, qwen-thinking)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Decisive cross-pilot finding (half i of the Hermes claim) — RETRACTED, see banner above",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "Decision after Pilot 3 (user-decided; no autonomous re-run)",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "Pilot 4 — Amendment 4 (fixed two-phase harness + sonnet-4.6) — VALID RESULT, R6 CONCLUDES",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Conclusion (R6, valid, final under the locked manifest)",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "Pilot 2 — Amendment 2 (qwen-thinking, user-directed)",
+          "level": 2,
+          "line": 97
+        },
+        {
+          "heading": "Cross-pilot conclusion (binding)",
+          "level": 2,
+          "line": 109
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/plans/L-17-placeholder-audit-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 105,
+      "nonEmptyLines": 81,
+      "sections": [
+        {
+          "heading": "L-17 · MOCK / TODO / FIXME audit — 2026-04-19 (rev 2026-05-10)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Category A — RESOLVED 2026-05-08 (was 9 hits, now 0)",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Category B — RESOLVED 2026-05-08 (was 1 hit, now 0)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Category D — INTENTIONAL STUBS introduced 2026-05-10 (6 hits)",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Category C — Closed 2026-04-20 (4 hits resolved)",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Regression guard",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "2026-06-01 update — 6 → 1 (Wave 2/3 hook ports)",
+          "level": 2,
+          "line": 94
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/plans/LIVE-PREMIUM-VALIDATION-PREREG-2026-05-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 51,
+      "nonEmptyLines": 31,
+      "sections": [
+        {
+          "heading": "Pre-Registration — Live Premium Validation (LPV)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Why this exists",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "1. Model (pinned)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "2. Metrics (locked)",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "3. Pre-registered success (locked)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "4. Floundering corpus (LPV-B) — the one deliberate change vs R6",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "5. Cost governance (hard)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "6. T3 pilot → gate (pre-registered, no discretion)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "7. Pre-registered outcomes (all valid; none hidden)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "8. Anti-p-hacking",
+          "level": 2,
+          "line": 49
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/plans/LIVE-PREMIUM-VALIDATION-RESULTS-2026-05-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 67,
+      "sections": [
+        {
+          "heading": "Results — Live Premium Validation (LPV)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "LPV-B — D1 payoff on a floundering workload: `INCONCLUSIVE-STOPPED`",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "The bracketing finding (binding)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Effect on the rubric — NONE (the honest carve-out stands, now doubly-bracketed)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "LPV-A — partial",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "LPV-2 (calibrated) — `INCONCLUSIVE-STOPPED` — TERMINAL (binding stop clause)",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "Binding triple-bracket conclusion (3 pre-registered attempts)",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Rubric — UNCHANGED, honest",
+          "level": 3,
+          "line": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/plans/LPV2-PREREG-2026-05-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 34,
+      "nonEmptyLines": 22,
+      "sections": [
+        {
+          "heading": "Pre-Registration — LPV-2 (calibrated solvable-yet-wasteful corpus)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Why — the bracketing told us exactly what to fix",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "1. The single calibrated change (vs LPV-B `cebb25d`)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "2. UNCHANGED (no goalpost move)",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "3. Pre-registered outcomes + the binding stop clause",
+          "level": 2,
+          "line": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/optimizer/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/optimizer/README.md",
+      "summary": "Documentation for @waggle/optimizer, a thin wrapper around @ax-llm/ax that exposes typed one-shot LLM program primitives (summarizer, classifier, prompt_expander) consumed by the server's optimizer-service.ts. Clearly distinguishes this package from the evolution/GEPA stack in packages/agent/ and describes when to extend each system.",
+      "tags": ["documentation", "optimizer", "llm", "ax-programs"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/optimizer/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/optimizer/package.json",
+      "summary": "Package manifest for @waggle/optimizer (v0.1.0), declaring @ax-llm/ax as its sole dependency and exposing src/index.ts as the ESM entry point for one-shot Ax LLM programs.",
+      "tags": ["configuration", "package-manifest", "dependencies"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/optimizer/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/optimizer/tsconfig.json",
+      "summary": "TypeScript compiler configuration for @waggle/optimizer targeting ES2022 with composite project settings, strict mode, and bundler module resolution, compiling from src/ to dist/.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "Uses composite: true for TypeScript project references, enabling incremental builds and cross-package type checking in the monorepo."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/optimizer/README.md",
+      "target": "config:packages/optimizer/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

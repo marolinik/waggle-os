@@ -71,6 +71,8 @@ describe('POST /api/tier/start-trial', () => {
     const persisted = readConfig(tmpDir);
     expect(persisted.tier).toBe('TRIAL');
     expect(persisted.trialStartedAt).toBe(body.trialStartedAt);
+    expect(server.localConfig.tier).toBe('TRIAL');
+    expect(server.sessionManager.getMaxSessions()).toBe(100);
   });
 
   it('returns 409 TRIAL_ALREADY_STARTED if a trial timestamp is already on disk', async () => {
@@ -135,6 +137,15 @@ describe('POST /api/tier/start-trial', () => {
     const persisted = readConfig(tmpDir);
     expect(persisted.tier).toBe('PRO');
   });
+
+  it('applies a persisted paid tier to the runtime session cap on startup', async () => {
+    await server.close();
+    writeConfig(tmpDir, { tier: 'PRO' });
+    server = await buildLocalServer({ dataDir: tmpDir });
+
+    expect(server.localConfig.tier).toBe('PRO');
+    expect(server.sessionManager.getMaxSessions()).toBe(10);
+  });
 });
 
 // ── AV-3 — PATCH /api/tier is a dev-only override, disabled in production ──
@@ -172,6 +183,8 @@ describe('PATCH /api/tier override gate (AV-3)', () => {
     }));
     expect(res.statusCode).toBe(200);
     expect(readConfig(tmpDir).tier).toBe('PRO');
+    expect(server.localConfig.tier).toBe('PRO');
+    expect(server.sessionManager.getMaxSessions()).toBe(10);
   });
 });
 

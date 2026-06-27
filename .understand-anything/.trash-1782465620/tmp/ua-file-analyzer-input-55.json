@@ -1,0 +1,30 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-hooks-claude-code/src/bin/claude-code-hooks-cli.ts", "language": "typescript", "sizeLines": 159, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/src/install.ts", "language": "typescript", "sizeLines": 154, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/src/paths.ts", "language": "typescript", "sizeLines": 90, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/src/settings-merger.ts", "language": "typescript", "sizeLines": 130, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/src/uninstall.ts", "language": "typescript", "sizeLines": 98, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/src/verify.ts", "language": "typescript", "sizeLines": 175, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/tests/install.test.ts", "language": "typescript", "sizeLines": 150, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/tests/paths.test.ts", "language": "typescript", "sizeLines": 73, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/tests/settings-merger.test.ts", "language": "typescript", "sizeLines": 113, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/tests/uninstall.test.ts", "language": "typescript", "sizeLines": 100, "fileCategory": "code"},
+    {"path": "packages/hive-mind-hooks-claude-code/tests/verify.test.ts", "language": "typescript", "sizeLines": 145, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-hooks-claude-code/src/bin/claude-code-hooks-cli.ts": ["packages/hive-mind-hooks-claude-code/src/install.ts", "packages/hive-mind-hooks-claude-code/src/uninstall.ts", "packages/hive-mind-hooks-claude-code/src/verify.ts"],
+    "packages/hive-mind-hooks-claude-code/src/install.ts": ["packages/hive-mind-hooks-claude-code/src/paths.ts", "packages/hive-mind-hooks-claude-code/src/settings-merger.ts"],
+    "packages/hive-mind-hooks-claude-code/src/paths.ts": [],
+    "packages/hive-mind-hooks-claude-code/src/settings-merger.ts": ["packages/hive-mind-hooks-claude-code/src/paths.ts"],
+    "packages/hive-mind-hooks-claude-code/src/uninstall.ts": ["packages/hive-mind-hooks-claude-code/src/paths.ts"],
+    "packages/hive-mind-hooks-claude-code/src/verify.ts": ["packages/hive-mind-hooks-claude-code/src/paths.ts", "packages/hive-mind-hooks-claude-code/src/settings-merger.ts"],
+    "packages/hive-mind-hooks-claude-code/tests/install.test.ts": ["packages/hive-mind-hooks-claude-code/src/install.ts", "packages/hive-mind-hooks-claude-code/src/settings-merger.ts"],
+    "packages/hive-mind-hooks-claude-code/tests/paths.test.ts": ["packages/hive-mind-hooks-claude-code/src/paths.ts"],
+    "packages/hive-mind-hooks-claude-code/tests/settings-merger.test.ts": ["packages/hive-mind-hooks-claude-code/src/paths.ts", "packages/hive-mind-hooks-claude-code/src/settings-merger.ts"],
+    "packages/hive-mind-hooks-claude-code/tests/uninstall.test.ts": ["packages/hive-mind-hooks-claude-code/src/install.ts", "packages/hive-mind-hooks-claude-code/src/settings-merger.ts", "packages/hive-mind-hooks-claude-code/src/uninstall.ts"],
+    "packages/hive-mind-hooks-claude-code/tests/verify.test.ts": ["packages/hive-mind-hooks-claude-code/src/install.ts", "packages/hive-mind-hooks-claude-code/src/settings-merger.ts", "packages/hive-mind-hooks-claude-code/src/verify.ts"]
+  },
+  "neighborMap": {}
+}

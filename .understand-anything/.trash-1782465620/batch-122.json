@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/briefs/WAGGLE-RECONCILIATION-BRIEF-V2.txt",
+      "type": "document",
+      "name": "WAGGLE-RECONCILIATION-BRIEF-V2.txt",
+      "filePath": "docs/briefs/WAGGLE-RECONCILIATION-BRIEF-V2.txt",
+      "summary": "Updated version (v2) of the strategic reconciliation brief incorporating Marko's locked decisions, including Stripe pricing lock, SOTA-gated launch timing (LoCoMo 91.6% / LongMemEval 93.4% targets), and a revised 10-week critical path that makes benchmark proof the launch gate rather than a fixed date.",
+      "tags": ["documentation", "strategic-planning", "benchmark", "backlog"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/WAGGLE-RECONCILIATION-BRIEF.md",
+      "type": "document",
+      "name": "WAGGLE-RECONCILIATION-BRIEF.md",
+      "filePath": "docs/briefs/WAGGLE-RECONCILIATION-BRIEF.md",
+      "summary": "Strategic reconciliation brief (v1) that bridges Claude.ai strategic conversations with the Claude Code execution backlog, identifying overlaps, additions, and contradictions across benchmark portfolio planning, Stripe pricing, hive-mind OSS release timing, and the core thesis of memory+agent-harness as a new LLM layer.",
+      "tags": ["documentation", "strategic-planning", "backlog", "benchmark"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/hive-mind-ci-npm-publish-brief-2026-04-19.md",
+      "type": "document",
+      "name": "hive-mind-ci-npm-publish-brief-2026-04-19.md",
+      "filePath": "docs/briefs/hive-mind-ci-npm-publish-brief-2026-04-19.md",
+      "summary": "Session brief for shipping the hive-mind OSS repo from locally-green (282/282 tests) to publicly installable: establishing GitHub Actions CI, publishing all 4 packages to npm, creating a first-run smoke script, and authoring a GitHub Release — the last operational task before SOTA benchmark work becomes the critical-path blocker.",
+      "tags": ["documentation", "ci-cd", "deployment", "infrastructure"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/landing-auth-infra-brief-2026-04-18.md",
+      "type": "document",
+      "name": "landing-auth-infra-brief-2026-04-18.md",
+      "filePath": "docs/briefs/landing-auth-infra-brief-2026-04-18.md",
+      "summary": "Deep-inspection brief documenting seven gaps between the current landing/auth state and SOTA-gated launch readiness, covering P0 ship-blockers (Clerk webhook svix verification, Stripe→Clerk→desktop license handshake, beta signup capture) and P1/P2 items (i18n scaffolding, analytics instrumentation, persona-aware landing content).",
+      "tags": ["documentation", "infrastructure", "security", "deployment"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/track-b-benchmarks-brief-2026-04-19.md",
+      "type": "document",
+      "name": "track-b-benchmarks-brief-2026-04-19.md",
+      "filePath": "docs/briefs/track-b-benchmarks-brief-2026-04-19.md",
+      "summary": "Engineering session brief for Track B benchmark work: running v2 GEPA experiment rerun and the LoCoMo benchmark harness (H-42/43/44) to produce SOTA proof against the Mem0 91.6% target, with strict non-goals (no new features, no architecture changes) and a gated escalation protocol tied to judge model decision [M]-02.",
+      "tags": ["documentation", "benchmark", "research", "ci-cd"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": []
+}

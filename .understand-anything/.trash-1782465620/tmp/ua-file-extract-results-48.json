@@ -1,0 +1,1346 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 15,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-shim-core/src/cli-bridge.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 361,
+      "nonEmptyLines": 327,
+      "functions": [
+        {
+          "name": "buildSpawnTarget",
+          "startLine": 154,
+          "endLine": 159,
+          "params": [
+            "cliPath",
+            "args"
+          ]
+        },
+        {
+          "name": "spawnAndCollect",
+          "startLine": 161,
+          "endLine": 200,
+          "params": [
+            "cliPath",
+            "args",
+            "timeoutMs",
+            "spawnImpl"
+          ]
+        },
+        {
+          "name": "parseMcpCallOutput",
+          "startLine": 202,
+          "endLine": 216,
+          "params": [
+            "stdout"
+          ]
+        },
+        {
+          "name": "unwrapTextContent",
+          "startLine": 218,
+          "endLine": 222,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "tryParseJson",
+          "startLine": 224,
+          "endLine": 231,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "createCliBridge",
+          "startLine": 233,
+          "endLine": 361,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SaveMemorySource",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "createCliBridge",
+          "line": 233,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildSpawnTarget",
+          "callee": "cliPath.endsWith",
+          "lineNumber": 155
+        },
+        {
+          "caller": "buildSpawnTarget",
+          "callee": "cliPath.endsWith",
+          "lineNumber": 155
+        },
+        {
+          "caller": "buildSpawnTarget",
+          "callee": "cliPath.endsWith",
+          "lineNumber": 155
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "buildSpawnTarget",
+          "lineNumber": 169
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "spawnImpl",
+          "lineNumber": 170
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "setTimeout",
+          "lineNumber": 174
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "child.kill",
+          "lineNumber": 177
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "reject",
+          "lineNumber": 178
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "child.stdout?.on",
+          "lineNumber": 181
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "stdoutChunks.push",
+          "lineNumber": 181
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "child.stderr?.on",
+          "lineNumber": 182
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "stderrChunks.push",
+          "lineNumber": 182
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "child.on",
+          "lineNumber": 183
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "clearTimeout",
+          "lineNumber": 186
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "reject",
+          "lineNumber": 187
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "child.on",
+          "lineNumber": 189
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "clearTimeout",
+          "lineNumber": 192
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "resolve",
+          "lineNumber": 193
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "Buffer.concat(stdoutChunks).toString",
+          "lineNumber": 194
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "Buffer.concat",
+          "lineNumber": 194
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "Buffer.concat(stderrChunks).toString",
+          "lineNumber": 195
+        },
+        {
+          "caller": "spawnAndCollect",
+          "callee": "Buffer.concat",
+          "lineNumber": 195
+        },
+        {
+          "caller": "parseMcpCallOutput",
+          "callee": "stdout.trim",
+          "lineNumber": 203
+        },
+        {
+          "caller": "parseMcpCallOutput",
+          "callee": "JSON.parse",
+          "lineNumber": 208
+        },
+        {
+          "caller": "parseMcpCallOutput",
+          "callee": "String",
+          "lineNumber": 213
+        },
+        {
+          "caller": "unwrapTextContent",
+          "callee": "result.content.find",
+          "lineNumber": 220
+        },
+        {
+          "caller": "tryParseJson",
+          "callee": "JSON.parse",
+          "lineNumber": 227
+        },
+        {
+          "caller": "createCliBridge",
+          "callee": "createLogger",
+          "lineNumber": 237
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "withRetry",
+          "lineNumber": 253
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "JSON.stringify",
+          "lineNumber": 256
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "String",
+          "lineNumber": 258
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "log.debug",
+          "lineNumber": 260
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "spawnAndCollect",
+          "lineNumber": 261
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "log.warn",
+          "lineNumber": 268
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "stderr.slice",
+          "lineNumber": 268
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "stderr.slice",
+          "lineNumber": 269
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "parseMcpCallOutput",
+          "lineNumber": 271
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "unwrapTextContent",
+          "lineNumber": 276
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "unwrapTextContent",
+          "lineNumber": 278
+        },
+        {
+          "caller": "callMcpTool",
+          "callee": "tryParseJson",
+          "lineNumber": 279
+        },
+        {
+          "caller": "saveMemory",
+          "callee": "frameToSavePayload",
+          "lineNumber": 297
+        },
+        {
+          "caller": "saveMemory",
+          "callee": "await callMcpTool",
+          "lineNumber": 306
+        },
+        {
+          "caller": "saveMemory",
+          "callee": "String",
+          "lineNumber": 311
+        },
+        {
+          "caller": "recallMemory",
+          "callee": "await callMcpTool",
+          "lineNumber": 330
+        },
+        {
+          "caller": "recallMemory",
+          "callee": "Array.isArray",
+          "lineNumber": 331
+        },
+        {
+          "caller": "cleanupFrames",
+          "callee": "await callMcpTool",
+          "lineNumber": 349
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 2,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/src/frame-encoder.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 137,
+      "nonEmptyLines": 123,
+      "functions": [
+        {
+          "name": "pickString",
+          "startLine": 62,
+          "endLine": 68,
+          "params": [
+            "payload",
+            "keys"
+          ]
+        },
+        {
+          "name": "encodeFrame",
+          "startLine": 70,
+          "endLine": 95,
+          "params": [
+            "event",
+            "opts"
+          ]
+        },
+        {
+          "name": "buildPrefix",
+          "startLine": 110,
+          "endLine": 118,
+          "params": [
+            "frame"
+          ]
+        },
+        {
+          "name": "frameToSavePayload",
+          "startLine": 127,
+          "endLine": 137,
+          "params": [
+            "frame",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "encodeFrame",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "frameToSavePayload",
+          "line": 127,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "encodeFrame",
+          "callee": "pickString",
+          "lineNumber": 71
+        },
+        {
+          "caller": "encodeFrame",
+          "callee": "classifyImportance",
+          "lineNumber": 73
+        },
+        {
+          "caller": "encodeFrame",
+          "callee": "pickString",
+          "lineNumber": 74
+        },
+        {
+          "caller": "encodeFrame",
+          "callee": "pickString",
+          "lineNumber": 75
+        },
+        {
+          "caller": "encodeFrame",
+          "callee": "pickString",
+          "lineNumber": 76
+        },
+        {
+          "caller": "buildPrefix",
+          "callee": "tokens.push",
+          "lineNumber": 112
+        },
+        {
+          "caller": "buildPrefix",
+          "callee": "tokens.push",
+          "lineNumber": 113
+        },
+        {
+          "caller": "buildPrefix",
+          "callee": "tokens.push",
+          "lineNumber": 114
+        },
+        {
+          "caller": "buildPrefix",
+          "callee": "tokens.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "buildPrefix",
+          "callee": "tokens.push",
+          "lineNumber": 116
+        },
+        {
+          "caller": "buildPrefix",
+          "callee": "tokens.join",
+          "lineNumber": 117
+        },
+        {
+          "caller": "frameToSavePayload",
+          "callee": "buildPrefix",
+          "lineNumber": 131
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/src/hook-event-types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 61,
+      "nonEmptyLines": 54,
+      "functions": [
+        {
+          "name": "isEventType",
+          "startLine": 53,
+          "endLine": 56,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "isShimSource",
+          "startLine": 58,
+          "endLine": 61,
+          "params": [
+            "value"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ALL_EVENT_TYPES",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "ALL_SOURCES",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "isEventType",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "isShimSource",
+          "line": 58,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isEventType",
+          "callee": "(ALL_EVENT_TYPES as readonly string[]).includes",
+          "lineNumber": 55
+        },
+        {
+          "caller": "isShimSource",
+          "callee": "(ALL_SOURCES as readonly string[]).includes",
+          "lineNumber": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/src/importance-classifier.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 86,
+      "functions": [
+        {
+          "name": "compilePattern",
+          "startLine": 58,
+          "endLine": 60,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "applyRules",
+          "startLine": 62,
+          "endLine": 71,
+          "params": [
+            "content",
+            "rules",
+            "floor"
+          ]
+        },
+        {
+          "name": "classifyImportance",
+          "startLine": 73,
+          "endLine": 90,
+          "params": [
+            "content",
+            "context"
+          ]
+        },
+        {
+          "name": "classifyWithRules",
+          "startLine": 92,
+          "endLine": 99,
+          "params": [
+            "content",
+            "rules",
+            "fallback"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DEFAULT_RULES",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "classifyImportance",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "classifyWithRules",
+          "line": 92,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "applyRules",
+          "callee": "compilePattern",
+          "lineNumber": 65
+        },
+        {
+          "caller": "applyRules",
+          "callee": "re.test",
+          "lineNumber": 66
+        },
+        {
+          "caller": "classifyImportance",
+          "callee": "content.trim",
+          "lineNumber": 77
+        },
+        {
+          "caller": "classifyImportance",
+          "callee": "applyRules",
+          "lineNumber": 89
+        },
+        {
+          "caller": "classifyWithRules",
+          "callee": "content.trim",
+          "lineNumber": 97
+        },
+        {
+          "caller": "classifyWithRules",
+          "callee": "applyRules",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/src/logger.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 76,
+      "nonEmptyLines": 67,
+      "functions": [
+        {
+          "name": "isLogLevel",
+          "startLine": 18,
+          "endLine": 20,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "parseLevel",
+          "startLine": 22,
+          "endLine": 26,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "createLogger",
+          "startLine": 46,
+          "endLine": 76,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "createLogger",
+          "line": 46,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseLevel",
+          "callee": "value.toLowerCase",
+          "lineNumber": 24
+        },
+        {
+          "caller": "parseLevel",
+          "callee": "isLogLevel",
+          "lineNumber": 25
+        },
+        {
+          "caller": "createLogger",
+          "callee": "parseLevel",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createLogger",
+          "callee": "process.stderr.write",
+          "lineNumber": 51
+        },
+        {
+          "caller": "emit",
+          "callee": "now().toISOString",
+          "lineNumber": 57
+        },
+        {
+          "caller": "emit",
+          "callee": "now",
+          "lineNumber": 57
+        },
+        {
+          "caller": "emit",
+          "callee": "Object.keys",
+          "lineNumber": 63
+        },
+        {
+          "caller": "emit",
+          "callee": "write",
+          "lineNumber": 67
+        },
+        {
+          "caller": "emit",
+          "callee": "JSON.stringify",
+          "lineNumber": 67
+        },
+        {
+          "caller": "createLogger",
+          "callee": "emit",
+          "lineNumber": 71
+        },
+        {
+          "caller": "createLogger",
+          "callee": "emit",
+          "lineNumber": 72
+        },
+        {
+          "caller": "createLogger",
+          "callee": "emit",
+          "lineNumber": 73
+        },
+        {
+          "caller": "createLogger",
+          "callee": "emit",
+          "lineNumber": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/src/retry-bridge.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 88,
+      "nonEmptyLines": 81,
+      "functions": [
+        {
+          "name": "defaultDelay",
+          "startLine": 38,
+          "endLine": 40,
+          "params": [
+            "ms"
+          ]
+        },
+        {
+          "name": "withTimeout",
+          "startLine": 42,
+          "endLine": 52,
+          "params": [
+            "promise",
+            "ms"
+          ]
+        },
+        {
+          "name": "computeBackoff",
+          "startLine": 54,
+          "endLine": 65,
+          "params": [
+            "attempt",
+            "baseMs",
+            "maxMs",
+            "jitterFactor",
+            "random"
+          ]
+        },
+        {
+          "name": "withRetry",
+          "startLine": 67,
+          "endLine": 88,
+          "params": [
+            "fn",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "computeBackoff",
+          "line": 54,
+          "isDefault": false
+        },
+        {
+          "name": "withRetry",
+          "line": 67,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "defaultDelay",
+          "callee": "setTimeout",
+          "lineNumber": 39
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "setTimeout",
+          "lineNumber": 44
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "reject",
+          "lineNumber": 45
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "promise.then",
+          "lineNumber": 47
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "clearTimeout",
+          "lineNumber": 48
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "resolve",
+          "lineNumber": 48
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "clearTimeout",
+          "lineNumber": 49
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "reject",
+          "lineNumber": 49
+        },
+        {
+          "caller": "withTimeout",
+          "callee": "String",
+          "lineNumber": 49
+        },
+        {
+          "caller": "computeBackoff",
+          "callee": "Math.min",
+          "lineNumber": 61
+        },
+        {
+          "caller": "computeBackoff",
+          "callee": "Math.pow",
+          "lineNumber": 61
+        },
+        {
+          "caller": "computeBackoff",
+          "callee": "random",
+          "lineNumber": 63
+        },
+        {
+          "caller": "computeBackoff",
+          "callee": "Math.max",
+          "lineNumber": 64
+        },
+        {
+          "caller": "computeBackoff",
+          "callee": "Math.round",
+          "lineNumber": 64
+        },
+        {
+          "caller": "withRetry",
+          "callee": "withTimeout",
+          "lineNumber": 78
+        },
+        {
+          "caller": "withRetry",
+          "callee": "fn",
+          "lineNumber": 78
+        },
+        {
+          "caller": "withRetry",
+          "callee": "computeBackoff",
+          "lineNumber": 82
+        },
+        {
+          "caller": "withRetry",
+          "callee": "delay",
+          "lineNumber": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/src/signal-emitter.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 208,
+      "nonEmptyLines": 196,
+      "functions": [
+        {
+          "name": "resolveUrl",
+          "startLine": 112,
+          "endLine": 118,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "warn",
+          "startLine": 120,
+          "endLine": 130,
+          "params": [
+            "opts",
+            "message"
+          ]
+        },
+        {
+          "name": "emitSignalToWaggleDance",
+          "startLine": 139,
+          "endLine": 183,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "maybeEmitDiscovery",
+          "startLine": 194,
+          "endLine": 208,
+          "params": [
+            "eventType",
+            "importance",
+            "payload",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "emitSignalToWaggleDance",
+          "line": 139,
+          "isDefault": false
+        },
+        {
+          "name": "maybeEmitDiscovery",
+          "line": 194,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "warn",
+          "callee": "opts.onWarn",
+          "lineNumber": 122
+        },
+        {
+          "caller": "warn",
+          "callee": "process.stderr.write",
+          "lineNumber": 126
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "resolveUrl",
+          "lineNumber": 142
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "setTimeout",
+          "lineNumber": 157
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "controller.abort",
+          "lineNumber": 157
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "fetchFn",
+          "lineNumber": 160
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "JSON.stringify",
+          "lineNumber": 163
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "warn",
+          "lineNumber": 167
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "res.json",
+          "lineNumber": 170
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "warn",
+          "lineNumber": 172
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "String",
+          "lineNumber": 177
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "warn",
+          "lineNumber": 178
+        },
+        {
+          "caller": "emitSignalToWaggleDance",
+          "callee": "clearTimeout",
+          "lineNumber": 181
+        },
+        {
+          "caller": "maybeEmitDiscovery",
+          "callee": "emitSignalToWaggleDance",
+          "lineNumber": 202
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/cli-bridge.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 270,
+      "nonEmptyLines": 238,
+      "functions": [
+        {
+          "name": "mockChild",
+          "startLine": 21,
+          "endLine": 44,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "makeSpawnImpl",
+          "startLine": 46,
+          "endLine": 51,
+          "params": [
+            "records",
+            "childOpts"
+          ]
+        },
+        {
+          "name": "jsonResultEnvelope",
+          "startLine": 53,
+          "endLine": 61,
+          "params": [
+            "payload",
+            "opts"
+          ]
+        },
+        {
+          "name": "plainTextEnvelope",
+          "startLine": 63,
+          "endLine": 70,
+          "params": [
+            "text"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockChild",
+          "callee": "Readable.from",
+          "lineNumber": 23
+        },
+        {
+          "caller": "mockChild",
+          "callee": "Buffer.from",
+          "lineNumber": 23
+        },
+        {
+          "caller": "mockChild",
+          "callee": "Readable.from",
+          "lineNumber": 24
+        },
+        {
+          "caller": "mockChild",
+          "callee": "Buffer.from",
+          "lineNumber": 24
+        },
+        {
+          "caller": "mockChild",
+          "callee": "Object.assign",
+          "lineNumber": 25
+        },
+        {
+          "caller": "mockChild",
+          "callee": "vi.fn",
+          "lineNumber": 28
+        },
+        {
+          "caller": "mockChild",
+          "callee": "setImmediate",
+          "lineNumber": 31
+        },
+        {
+          "caller": "mockChild",
+          "callee": "emitter.emit",
+          "lineNumber": 33
+        },
+        {
+          "caller": "mockChild",
+          "callee": "setTimeout",
+          "lineNumber": 37
+        },
+        {
+          "caller": "mockChild",
+          "callee": "emitter.emit",
+          "lineNumber": 37
+        },
+        {
+          "caller": "mockChild",
+          "callee": "emitter.emit",
+          "lineNumber": 40
+        },
+        {
+          "caller": "makeSpawnImpl",
+          "callee": "records.push",
+          "lineNumber": 48
+        },
+        {
+          "caller": "makeSpawnImpl",
+          "callee": "mockChild",
+          "lineNumber": 49
+        },
+        {
+          "caller": "jsonResultEnvelope",
+          "callee": "JSON.stringify",
+          "lineNumber": 57
+        },
+        {
+          "caller": "jsonResultEnvelope",
+          "callee": "JSON.stringify",
+          "lineNumber": 60
+        },
+        {
+          "caller": "plainTextEnvelope",
+          "callee": "JSON.stringify",
+          "lineNumber": 64
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/frame-encoder.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 143,
+      "nonEmptyLines": 123,
+      "functions": [
+        {
+          "name": "event",
+          "startLine": 5,
+          "endLine": 14,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/hook-event-types.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 53,
+      "nonEmptyLines": 48,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/importance-classifier.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 74,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/integration/wire-roundtrip.integration.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 162,
+      "nonEmptyLines": 144,
+      "functions": [
+        {
+          "name": "resolveCliJsPath",
+          "startLine": 43,
+          "endLine": 49,
+          "params": []
+        },
+        {
+          "name": "probeCli",
+          "startLine": 54,
+          "endLine": 67,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolveCliJsPath",
+          "callee": "existsSync",
+          "lineNumber": 45
+        },
+        {
+          "caller": "resolveCliJsPath",
+          "callee": "resolve",
+          "lineNumber": 46
+        },
+        {
+          "caller": "resolveCliJsPath",
+          "callee": "process.cwd",
+          "lineNumber": 46
+        },
+        {
+          "caller": "resolveCliJsPath",
+          "callee": "existsSync",
+          "lineNumber": 47
+        },
+        {
+          "caller": "probeCli",
+          "callee": "spawnSync",
+          "lineNumber": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/logger.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 84,
+      "nonEmptyLines": 76,
+      "functions": [
+        {
+          "name": "captureLines",
+          "startLine": 4,
+          "endLine": 7,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "captureLines",
+          "callee": "lines.push",
+          "lineNumber": 6
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/retry-bridge.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 91,
+      "nonEmptyLines": 81,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-shim-core/tests/signal-emitter.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 272,
+      "nonEmptyLines": 253,
+      "functions": [
+        {
+          "name": "makeOkFetch",
+          "startLine": 20,
+          "endLine": 42,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeOkFetch",
+          "callee": "calls.push",
+          "lineNumber": 23
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "String",
+          "lineNumber": 23
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "Math.random().toString(36).slice",
+          "lineNumber": 25
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "Math.random().toString",
+          "lineNumber": 25
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "Math.random",
+          "lineNumber": 25
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "new Date().toISOString",
+          "lineNumber": 33
+        },
+        {
+          "caller": "makeOkFetch",
+          "callee": "JSON.stringify",
+          "lineNumber": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

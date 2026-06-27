@@ -1,0 +1,271 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/launch/drafts/2026-05-10-day-0-linkedin-post.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 123,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "CONT-02-day0 — Day-0 LinkedIn Launch Post (DRAFT)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Version A — Sovereignty-led (RECOMMENDED)",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Version B — Methodology-led (academic-leaning)",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "Version C — Founder-voice / honest (alternative)",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "Recommendation",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "Pre-publish checklist",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "Post-publish actions (Marko)",
+          "level": 2,
+          "line": 116
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/launch/drafts/2026-05-10-pavlukhin-evolveschema-arxiv-email.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 70,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "DAY0-CRED-05 / CONT-03 — Pavlukhin EVOLVESCHEMA arxiv submission email (DRAFT)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Subject line options (pick one)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Email body (DRAFT — Marko reviews + sends)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Tone calibration (for Marko's review)",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "Send mechanics",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Reply handling",
+          "level": 2,
+          "line": 65
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 239,
+      "nonEmptyLines": 180,
+      "sections": [
+        {
+          "heading": "apps/www Deployment Readiness — Day-0 Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why this matters",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Existing deploy automation: broken",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Recommended path: Vercel",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "Why Vercel",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Step 1 — Vercel project setup",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "Step 2 — Set production environment variables",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "Step 3 — First deploy (preview)",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "Step 4 — Preview smoke test",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "Step 5 — Promote to production at waggle-os.ai",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "Step 6 — Production smoke test",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "Step 7 — Update Day-0 ETA marker",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "Env var checklist (the 13)",
+          "level": 2,
+          "line": 153
+        },
+        {
+          "heading": "Alternative paths (if Vercel doesn't fit)",
+          "level": 2,
+          "line": 179
+        },
+        {
+          "heading": "Alt-A: Self-host via Docker + Render/Fly/Railway",
+          "level": 3,
+          "line": 181
+        },
+        {
+          "heading": "Alt-B: Cloudflare Pages with Functions",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "Alt-C: Existing GitHub Pages workflow + Next.js static export",
+          "level": 3,
+          "line": 204
+        },
+        {
+          "heading": "Day-0 readiness gate",
+          "level": 2,
+          "line": 212
+        },
+        {
+          "heading": "Disposition",
+          "level": 2,
+          "line": 231
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/launch/drafts/2026-05-12-egzakta-legal-text-drafts.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 398,
+      "nonEmptyLines": 281,
+      "sections": [
+        {
+          "heading": "Egzakta Legal Text Drafts — Day-0 Placeholder",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "How to use these drafts",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Block 1 — Privacy Policy",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Block 2 — Terms of Service",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "Block 3 — Cookie Policy",
+          "level": 2,
+          "line": 223
+        },
+        {
+          "heading": "Block 4 — EU AI Act Statement",
+          "level": 2,
+          "line": 289
+        },
+        {
+          "heading": "Marko-side TODOs before swapping these in",
+          "level": 2,
+          "line": 380
+        },
+        {
+          "heading": "Disposition options",
+          "level": 2,
+          "line": 390
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    }
+  ]
+}

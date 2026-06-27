@@ -1,0 +1,966 @@
+{
+  "nodes": [
+    {
+      "id": "file:app/src-tauri/src/commands/agent.rs",
+      "type": "file",
+      "name": "agent.rs",
+      "filePath": "app/src-tauri/src/commands/agent.rs",
+      "summary": "Tauri command module that bridges the desktop shell to the Fastify sidecar's streaming chat endpoint, forwarding SSE events to the React frontend via Tauri's event bus.",
+      "tags": ["api-handler", "streaming", "event-handler", "tauri-command"],
+      "complexity": "complex",
+      "languageNotes": "Uses tokio::spawn to run the streaming HTTP request asynchronously while immediately returning from the Tauri command, emitting incremental SSE events back through app.emit."
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/agent.rs:run_agent_query",
+      "type": "function",
+      "name": "run_agent_query",
+      "filePath": "app/src-tauri/src/commands/agent.rs",
+      "lineRange": [34, 70],
+      "summary": "Exported Tauri command that spawns an async task for streaming agent chat, returning immediately so the UI can listen for emitted events.",
+      "tags": ["api-handler", "tauri-command", "entry-point"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/agent.rs:stream_chat",
+      "type": "function",
+      "name": "stream_chat",
+      "filePath": "app/src-tauri/src/commands/agent.rs",
+      "lineRange": [73, 194],
+      "summary": "Performs an HTTP POST to the sidecar's chat endpoint and streams SSE chunks back to the frontend by emitting parsed events through the Tauri AppHandle.",
+      "tags": ["streaming", "event-handler", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/agent.rs:parse_sse_event",
+      "type": "function",
+      "name": "parse_sse_event",
+      "filePath": "app/src-tauri/src/commands/agent.rs",
+      "lineRange": [200, 227],
+      "summary": "Parses a raw SSE text block into its event type and JSON data payload, handling multiline data fields and optional leading space stripping.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:app/src-tauri/src/commands/http.rs",
+      "type": "file",
+      "name": "http.rs",
+      "filePath": "app/src-tauri/src/commands/http.rs",
+      "summary": "Shared HTTP utility module providing URL construction and async GET/POST helpers used by all Tauri command modules to communicate with the Fastify sidecar.",
+      "tags": ["utility", "service", "api-handler"],
+      "complexity": "simple",
+      "languageNotes": "All four functions are pub(crate) helpers; parse_json checks the HTTP status before attempting deserialization and returns a descriptive error string on non-2xx responses."
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "function",
+      "name": "sidecar_url",
+      "filePath": "app/src-tauri/src/commands/http.rs",
+      "lineRange": [11, 13],
+      "summary": "Constructs a localhost URL for the sidecar given a port and path segment.",
+      "tags": ["utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "function",
+      "name": "http_get",
+      "filePath": "app/src-tauri/src/commands/http.rs",
+      "lineRange": [15, 19],
+      "summary": "Async GET helper wrapping reqwest::get with a uniform error type.",
+      "tags": ["utility", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/http.rs:http_post",
+      "type": "function",
+      "name": "http_post",
+      "filePath": "app/src-tauri/src/commands/http.rs",
+      "lineRange": [21, 29],
+      "summary": "Async POST helper that serializes a JSON body via reqwest with a uniform error type.",
+      "tags": ["utility", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "function",
+      "name": "parse_json",
+      "filePath": "app/src-tauri/src/commands/http.rs",
+      "lineRange": [31, 43],
+      "summary": "Checks the HTTP response status and deserializes the body to serde_json::Value, returning an error string on non-2xx or parse failure.",
+      "tags": ["utility", "validation", "serialization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/src/commands/memory.rs",
+      "type": "file",
+      "name": "memory.rs",
+      "filePath": "app/src-tauri/src/commands/memory.rs",
+      "summary": "Tauri command module exposing memory substrate operations (recall, save, entity search, identity retrieval) to the React frontend by proxying requests to the Fastify sidecar.",
+      "tags": ["api-handler", "tauri-command", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/memory.rs:recall_memory",
+      "type": "function",
+      "name": "recall_memory",
+      "filePath": "app/src-tauri/src/commands/memory.rs",
+      "lineRange": [27, 51],
+      "summary": "Exported Tauri command that queries the sidecar's memory recall endpoint with optional scope, limit, and workspace_id query parameters.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/memory.rs:save_memory",
+      "type": "function",
+      "name": "save_memory",
+      "filePath": "app/src-tauri/src/commands/memory.rs",
+      "lineRange": [57, 78],
+      "summary": "Exported Tauri command that POSTs a new memory frame to the sidecar with content, workspace, importance, and source metadata.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/memory.rs:search_entities",
+      "type": "function",
+      "name": "search_entities",
+      "filePath": "app/src-tauri/src/commands/memory.rs",
+      "lineRange": [83, 103],
+      "summary": "Exported Tauri command that queries the knowledge-graph entities endpoint with optional workspace and scope filters.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/memory.rs:get_identity",
+      "type": "function",
+      "name": "get_identity",
+      "filePath": "app/src-tauri/src/commands/memory.rs",
+      "lineRange": [113, 120],
+      "summary": "Exported Tauri command that fetches the user identity from the sidecar, returning a placeholder object when the endpoint returns 404.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/src/commands/mod.rs",
+      "type": "file",
+      "name": "mod.rs",
+      "filePath": "app/src-tauri/src/commands/mod.rs",
+      "summary": "Rust module barrel that re-exports all five Tauri command sub-modules (agent, http, memory, onboarding, wiki) for consumption by lib.rs.",
+      "tags": ["barrel", "entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/src/commands/onboarding.rs",
+      "type": "file",
+      "name": "onboarding.rs",
+      "filePath": "app/src-tauri/src/commands/onboarding.rs",
+      "summary": "Tauri command module managing first-launch detection via a filesystem flag file stored in the user's home directory, with priority given to the WAGGLE_ONBOARDING_DIR environment variable.",
+      "tags": ["api-handler", "tauri-command", "service"],
+      "complexity": "moderate",
+      "languageNotes": "Uses USERPROFILE/HOME env-var resolution for cross-platform home directory detection, writing a completion flag file to persist onboarding state across app restarts."
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/onboarding.rs:is_first_launch",
+      "type": "function",
+      "name": "is_first_launch",
+      "filePath": "app/src-tauri/src/commands/onboarding.rs",
+      "lineRange": [48, 54],
+      "summary": "Exported Tauri command that checks whether the first-launch flag file is absent, indicating the user has not yet completed onboarding.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/onboarding.rs:mark_first_launch_complete",
+      "type": "function",
+      "name": "mark_first_launch_complete",
+      "filePath": "app/src-tauri/src/commands/onboarding.rs",
+      "lineRange": [59, 68],
+      "summary": "Exported Tauri command that writes the first-launch completion flag file, creating parent directories as needed.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/onboarding.rs:reset_first_launch",
+      "type": "function",
+      "name": "reset_first_launch",
+      "filePath": "app/src-tauri/src/commands/onboarding.rs",
+      "lineRange": [73, 80],
+      "summary": "Exported Tauri command that deletes the first-launch flag file, resetting onboarding state for testing or re-onboarding.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/src/commands/wiki.rs",
+      "type": "file",
+      "name": "wiki.rs",
+      "filePath": "app/src-tauri/src/commands/wiki.rs",
+      "summary": "Tauri command module that exposes wiki read and compile operations to the frontend by proxying HTTP requests to the Fastify sidecar's wiki endpoints.",
+      "tags": ["api-handler", "tauri-command", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_pages",
+      "type": "function",
+      "name": "get_wiki_pages",
+      "filePath": "app/src-tauri/src/commands/wiki.rs",
+      "lineRange": [28, 32],
+      "summary": "Exported Tauri command that retrieves the list of all wiki pages from the sidecar.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page",
+      "type": "function",
+      "name": "get_wiki_page",
+      "filePath": "app/src-tauri/src/commands/wiki.rs",
+      "lineRange": [37, 44],
+      "summary": "Exported Tauri command that fetches a single wiki page by slug from the sidecar.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page_content",
+      "type": "function",
+      "name": "get_wiki_page_content",
+      "filePath": "app/src-tauri/src/commands/wiki.rs",
+      "lineRange": [49, 59],
+      "summary": "Exported Tauri command that fetches the markdown content of a wiki page by slug.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/commands/wiki.rs:compile_wiki_section",
+      "type": "function",
+      "name": "compile_wiki_section",
+      "filePath": "app/src-tauri/src/commands/wiki.rs",
+      "lineRange": [64, 75],
+      "summary": "Exported Tauri command that triggers wiki compilation for a specific workspace section via a POST to the sidecar.",
+      "tags": ["api-handler", "tauri-command"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:app/src-tauri/src/lib.rs",
+      "type": "file",
+      "name": "lib.rs",
+      "filePath": "app/src-tauri/src/lib.rs",
+      "summary": "Tauri application entry point that registers all plugins (single-instance, notifications, updater, autostart, global shortcut), registers all Tauri IPC command handlers, sets up the system tray, starts the Node.js sidecar service on port 3333, and launches the service watchdog.",
+      "tags": ["entry-point", "service", "event-handler"],
+      "complexity": "complex",
+      "languageNotes": "Window close is intercepted to minimize to tray instead of quitting; Ctrl+Shift+W toggles window visibility via tauri_plugin_global_shortcut; update checks run non-blocking after a 5-second startup delay."
+    },
+    {
+      "id": "function:app/src-tauri/src/lib.rs:run",
+      "type": "function",
+      "name": "run",
+      "filePath": "app/src-tauri/src/lib.rs",
+      "lineRange": [24, 157],
+      "summary": "Main Tauri application builder that wires all plugins, IPC handlers, tray setup, sidecar spawn, watchdog, and update check into a single application runtime.",
+      "tags": ["entry-point", "service", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:app/src-tauri/src/service.rs",
+      "type": "file",
+      "name": "service.rs",
+      "filePath": "app/src-tauri/src/service.rs",
+      "summary": "Node.js sidecar lifecycle manager for the Tauri shell: resolves the Node binary path, builds the launch command with environment variables, spawns the process, exposes ensure/stop/port Tauri commands, and runs a watchdog loop that auto-restarts the sidecar on health-check failures.",
+      "tags": ["service", "api-handler", "singleton"],
+      "complexity": "complex",
+      "languageNotes": "ServiceState holds the child process in a Mutex<Option<Child>> for thread-safe lifecycle control; build_service_command resolves bundled vs dev-mode Node paths and configures sqlite-vec and ONNX native library paths via environment variables."
+    },
+    {
+      "id": "class:app/src-tauri/src/service.rs:ServiceState",
+      "type": "class",
+      "name": "ServiceState",
+      "filePath": "app/src-tauri/src/service.rs",
+      "lineRange": [6, 9],
+      "summary": "Tauri-managed state struct holding the sidecar's child process handle (behind a Mutex) and its port number.",
+      "tags": ["singleton", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "type": "function",
+      "name": "spawn_service_sync",
+      "filePath": "app/src-tauri/src/service.rs",
+      "lineRange": [134, 150],
+      "summary": "Synchronously spawns the Node.js sidecar process if not already running, storing the child handle in the shared Mutex.",
+      "tags": ["service", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/service.rs:ensure_service",
+      "type": "function",
+      "name": "ensure_service",
+      "filePath": "app/src-tauri/src/service.rs",
+      "lineRange": [153, 177],
+      "summary": "Exported Tauri command that checks sidecar health and spawns it if unreachable, polling for readiness with up to 30 seconds of retries.",
+      "tags": ["api-handler", "tauri-command", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:app/src-tauri/src/service.rs:start_watchdog",
+      "type": "function",
+      "name": "start_watchdog",
+      "filePath": "app/src-tauri/src/service.rs",
+      "lineRange": [194, 258],
+      "summary": "Starts an async watchdog loop that periodically health-checks the sidecar and restarts it on failure, emitting status events to the frontend and applying exponential-window backoff to prevent crash storms.",
+      "tags": ["service", "event-handler", "singleton"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:app/src-tauri/src/service.rs:build_service_command",
+      "type": "function",
+      "name": "build_service_command",
+      "filePath": "app/src-tauri/src/service.rs",
+      "lineRange": [62, 130],
+      "summary": "Constructs the OS Command for launching the Node.js sidecar, resolving bundled vs dev script paths and injecting port, sqlite-vec, and ONNX native library environment variables.",
+      "tags": ["service", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:app/src-tauri/src/tray.rs",
+      "type": "file",
+      "name": "tray.rs",
+      "filePath": "app/src-tauri/src/tray.rs",
+      "summary": "System tray setup module that programmatically generates a honeycomb tray icon and wires a five-item context menu (Open, Pause Agents, Settings, About, Quit) to Tauri event emissions for the React frontend.",
+      "tags": ["event-handler", "component", "service"],
+      "complexity": "moderate",
+      "languageNotes": "The tray icon is generated programmatically as an RGBA pixel array using a honeycomb circle pattern rather than loading an image file, avoiding asset bundling for a simple geometric icon."
+    },
+    {
+      "id": "function:app/src-tauri/src/tray.rs:setup_tray",
+      "type": "function",
+      "name": "setup_tray",
+      "filePath": "app/src-tauri/src/tray.rs",
+      "lineRange": [31, 85],
+      "summary": "Exported function that builds and registers the system tray icon with menu, wiring each menu item to a waggle:// event emission or window focus action.",
+      "tags": ["event-handler", "component"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:app/src-tauri/src/commands/agent.rs",
+      "target": "file:app/src-tauri/src/service.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "file:app/src-tauri/src/commands/http.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "file:app/src-tauri/src/service.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/mod.rs",
+      "target": "file:app/src-tauri/src/commands/agent.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/mod.rs",
+      "target": "file:app/src-tauri/src/commands/http.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/mod.rs",
+      "target": "file:app/src-tauri/src/commands/memory.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/mod.rs",
+      "target": "file:app/src-tauri/src/commands/onboarding.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/mod.rs",
+      "target": "file:app/src-tauri/src/commands/wiki.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "file:app/src-tauri/src/commands/http.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "file:app/src-tauri/src/service.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/lib.rs",
+      "target": "file:app/src-tauri/src/commands/mod.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/lib.rs",
+      "target": "file:app/src-tauri/src/service.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/lib.rs",
+      "target": "file:app/src-tauri/src/tray.rs",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/agent.rs",
+      "target": "function:app/src-tauri/src/commands/agent.rs:run_agent_query",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/agent.rs",
+      "target": "function:app/src-tauri/src/commands/agent.rs:stream_chat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/agent.rs",
+      "target": "function:app/src-tauri/src/commands/agent.rs:parse_sse_event",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/agent.rs",
+      "target": "function:app/src-tauri/src/commands/agent.rs:run_agent_query",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_post",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_post",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/http.rs",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:recall_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:save_memory",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:search_entities",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:get_identity",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:recall_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:save_memory",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:search_entities",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/memory.rs",
+      "target": "function:app/src-tauri/src/commands/memory.rs:get_identity",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/onboarding.rs",
+      "target": "function:app/src-tauri/src/commands/onboarding.rs:is_first_launch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/onboarding.rs",
+      "target": "function:app/src-tauri/src/commands/onboarding.rs:mark_first_launch_complete",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/onboarding.rs",
+      "target": "function:app/src-tauri/src/commands/onboarding.rs:reset_first_launch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/onboarding.rs",
+      "target": "function:app/src-tauri/src/commands/onboarding.rs:is_first_launch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/onboarding.rs",
+      "target": "function:app/src-tauri/src/commands/onboarding.rs:mark_first_launch_complete",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/onboarding.rs",
+      "target": "function:app/src-tauri/src/commands/onboarding.rs:reset_first_launch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_pages",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page_content",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:compile_wiki_section",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_pages",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page_content",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/commands/wiki.rs",
+      "target": "function:app/src-tauri/src/commands/wiki.rs:compile_wiki_section",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/lib.rs",
+      "target": "function:app/src-tauri/src/lib.rs:run",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/lib.rs",
+      "target": "function:app/src-tauri/src/lib.rs:run",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "class:app/src-tauri/src/service.rs:ServiceState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:ensure_service",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:start_watchdog",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:build_service_command",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "class:app/src-tauri/src/service.rs:ServiceState",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:ensure_service",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/service.rs",
+      "target": "function:app/src-tauri/src/service.rs:start_watchdog",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:app/src-tauri/src/tray.rs",
+      "target": "function:app/src-tauri/src/tray.rs:setup_tray",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:app/src-tauri/src/tray.rs",
+      "target": "function:app/src-tauri/src/tray.rs:setup_tray",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:recall_memory",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:recall_memory",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:save_memory",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:save_memory",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_post",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:save_memory",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:search_entities",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:search_entities",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:search_entities",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:get_identity",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:get_identity",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/memory.rs:get_identity",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_pages",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_pages",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_pages",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page_content",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page_content",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_get",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:get_wiki_page_content",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:compile_wiki_section",
+      "target": "function:app/src-tauri/src/commands/http.rs:sidecar_url",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:compile_wiki_section",
+      "target": "function:app/src-tauri/src/commands/http.rs:http_post",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/commands/wiki.rs:compile_wiki_section",
+      "target": "function:app/src-tauri/src/commands/http.rs:parse_json",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "target": "function:app/src-tauri/src/service.rs:build_service_command",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/service.rs:ensure_service",
+      "target": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/service.rs:start_watchdog",
+      "target": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/lib.rs:run",
+      "target": "function:app/src-tauri/src/service.rs:spawn_service_sync",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/lib.rs:run",
+      "target": "function:app/src-tauri/src/service.rs:start_watchdog",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:app/src-tauri/src/lib.rs:run",
+      "target": "function:app/src-tauri/src/tray.rs:setup_tray",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

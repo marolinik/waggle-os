@@ -1,0 +1,77 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/wiki-test/entities/egzakta-group.md",
+      "type": "document",
+      "name": "egzakta-group.md",
+      "filePath": "docs/wiki-test/entities/egzakta-group.md",
+      "summary": "Wiki entity profile for Egzakta Group, the parent company behind Waggle OS and KVARK, covering its strategic positioning, products, business model, and key relationships.",
+      "tags": ["documentation", "wiki", "entity-profile", "company"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/wiki-test/entities/kvark.md",
+      "type": "document",
+      "name": "kvark.md",
+      "filePath": "docs/wiki-test/entities/kvark.md",
+      "summary": "Wiki entity profile for KVARK, Egzakta Group's sovereign enterprise AI platform, detailing its funnel relationship with Waggle OS, enterprise pitch, and technical integration points.",
+      "tags": ["documentation", "wiki", "entity-profile", "enterprise"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/wiki-test/entities/marko-markovic.md",
+      "type": "document",
+      "name": "marko-markovic.md",
+      "filePath": "docs/wiki-test/entities/marko-markovic.md",
+      "summary": "Wiki entity profile for Marko Markovic, founder of Egzakta Group, documenting his background, what he is building, LinkedIn presence, and observed working patterns across 422 messages and 20 sessions.",
+      "tags": ["documentation", "wiki", "entity-profile", "founder"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/wiki-test/entities/waggle-os.md",
+      "type": "document",
+      "name": "waggle-os.md",
+      "filePath": "docs/wiki-test/entities/waggle-os.md",
+      "summary": "Wiki entity profile for Waggle OS describing the product's purpose, tech stack, built features, monetization tiers, development journey, remaining work, and known architectural decisions.",
+      "tags": ["documentation", "wiki", "entity-profile", "product"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/wiki-test/entities/egzakta-group.md",
+      "target": "document:docs/wiki-test/entities/kvark.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-test/entities/egzakta-group.md",
+      "target": "document:docs/wiki-test/entities/waggle-os.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-test/entities/egzakta-group.md",
+      "target": "document:docs/wiki-test/entities/marko-markovic.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-test/entities/kvark.md",
+      "target": "document:docs/wiki-test/entities/waggle-os.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/wiki-test/entities/marko-markovic.md",
+      "target": "document:docs/wiki-test/entities/waggle-os.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

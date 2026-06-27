@@ -1,0 +1,24 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md", "language": "markdown", "sizeLines": 64, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md", "language": "markdown", "sizeLines": 223, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md", "language": "markdown", "sizeLines": 164, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md", "language": "markdown", "sizeLines": 217, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md", "language": "markdown", "sizeLines": 221, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md", "language": "markdown", "sizeLines": 186, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md", "language": "markdown", "sizeLines": 277, "fileCategory": "docs"},
+    {"path": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md", "language": "markdown", "sizeLines": 160, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md": [],
+    "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md": []
+  },
+  "neighborMap": {}
+}

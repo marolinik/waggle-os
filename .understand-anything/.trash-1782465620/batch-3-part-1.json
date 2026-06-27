@@ -1,0 +1,1098 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/server/src/local/routes/oauth.ts",
+      "type": "file",
+      "name": "oauth.ts",
+      "filePath": "packages/server/src/local/routes/oauth.ts",
+      "summary": "Implements OAuth 2.0 PKCE authorization code flow for third-party connector integrations, handling state generation, authorization redirects, and token exchange with CSRF-escaped HTML responses.",
+      "tags": ["api-handler", "middleware", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/oauth.ts:oauthRoutes",
+      "type": "function",
+      "name": "oauthRoutes",
+      "filePath": "packages/server/src/local/routes/oauth.ts",
+      "lineRange": [77, 321],
+      "summary": "Registers OAuth provider listing, authorization initiation, and callback endpoints on the Fastify server, managing pending state map and vault credential storage.",
+      "tags": ["api-handler", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/offline.ts",
+      "type": "file",
+      "name": "offline.ts",
+      "filePath": "packages/server/src/local/routes/offline.ts",
+      "summary": "Provides offline message queue API routes for buffering messages when the agent is unavailable, supporting enqueue, list, dequeue, and clear operations.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/offline.ts:offlineRoutes",
+      "type": "function",
+      "name": "offlineRoutes",
+      "filePath": "packages/server/src/local/routes/offline.ts",
+      "lineRange": [13, 82],
+      "summary": "Registers offline queue management routes including status check, message enqueue, list pending, dequeue, and clear-all endpoints.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/onboarding.ts",
+      "type": "file",
+      "name": "onboarding.ts",
+      "filePath": "packages/server/src/local/routes/onboarding.ts",
+      "summary": "Manages onboarding state for new users by reading/writing completion flags on the filesystem and checking memory frames and workspace existence.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/onboarding.ts:onboardingRoutes",
+      "type": "function",
+      "name": "onboardingRoutes",
+      "filePath": "packages/server/src/local/routes/onboarding.ts",
+      "lineRange": [32, 82],
+      "summary": "Registers GET and POST endpoints for onboarding status checks and completion marking, coordinating with the memory frame store and workspace manager.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/personas.ts",
+      "type": "file",
+      "name": "personas.ts",
+      "filePath": "packages/server/src/local/routes/personas.ts",
+      "summary": "Handles CRUD API routes for agent personas including listing built-in personas, creating/editing/deleting custom personas, and AI-assisted persona generation with tier gating.",
+      "tags": ["api-handler", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/personas.ts:personaRoutes",
+      "type": "function",
+      "name": "personaRoutes",
+      "filePath": "packages/server/src/local/routes/personas.ts",
+      "lineRange": [10, 178],
+      "summary": "Registers persona management endpoints including GET list, POST create (tier-gated), PATCH update, POST AI-generate, and DELETE, enforcing restrictions on built-in personas.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/pins.ts",
+      "type": "file",
+      "name": "pins.ts",
+      "filePath": "packages/server/src/local/routes/pins.ts",
+      "summary": "Provides CRUD API routes for pinned workspace items, persisting pins as JSON files in the user's home directory per workspace.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/pins.ts:pinRoutes",
+      "type": "function",
+      "name": "pinRoutes",
+      "filePath": "packages/server/src/local/routes/pins.ts",
+      "lineRange": [59, 143],
+      "summary": "Registers GET list, POST create, PATCH update, and DELETE pin routes for per-workspace pinned items backed by JSON file storage.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/profile.ts",
+      "type": "file",
+      "name": "profile.ts",
+      "filePath": "packages/server/src/local/routes/profile.ts",
+      "summary": "Manages user profile data (name, role, company, bio, writing style) with JSON file persistence, memory frame integration, and AI-assisted profile field generation.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "complex",
+      "languageNotes": "Exports profile load/save helpers used by other routes (e.g. harvest routes) in addition to the route plugin itself."
+    },
+    {
+      "id": "function:packages/server/src/local/routes/profile.ts:profileRoutes",
+      "type": "function",
+      "name": "profileRoutes",
+      "filePath": "packages/server/src/local/routes/profile.ts",
+      "lineRange": [166, 457],
+      "summary": "Registers full profile CRUD endpoints plus AI-assisted writing-style analysis, bio generation, and role description inference, writing results to the memory identity layer.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/profile.ts:loadProfile",
+      "type": "function",
+      "name": "loadProfile",
+      "filePath": "packages/server/src/local/routes/profile.ts",
+      "lineRange": [149, 158],
+      "summary": "Reads user profile JSON from disk, returning an empty default profile object if none exists yet.",
+      "tags": ["utility", "data-model"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/providers.ts",
+      "type": "file",
+      "name": "providers.ts",
+      "filePath": "packages/server/src/local/routes/providers.ts",
+      "summary": "Exposes LLM and search provider catalog definitions and routes, including dynamic discovery of OpenRouter free models and locally running Ollama models.",
+      "tags": ["api-handler", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/providers.ts:fetchOpenRouterFreeModels",
+      "type": "function",
+      "name": "fetchOpenRouterFreeModels",
+      "filePath": "packages/server/src/local/routes/providers.ts",
+      "lineRange": [162, 200],
+      "summary": "Fetches and filters free-tier models from the OpenRouter API with timeout, returning normalized model descriptors sorted by context length.",
+      "tags": ["service", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/providers.ts:fetchOllamaModels",
+      "type": "function",
+      "name": "fetchOllamaModels",
+      "filePath": "packages/server/src/local/routes/providers.ts",
+      "lineRange": [203, 235],
+      "summary": "Queries the local Ollama instance API and maps running models into the provider model descriptor format.",
+      "tags": ["service", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/providers.ts:providerRoutes",
+      "type": "function",
+      "name": "providerRoutes",
+      "filePath": "packages/server/src/local/routes/providers.ts",
+      "lineRange": [237, 295],
+      "summary": "Registers provider catalog listing endpoints including a combined view that merges static catalog entries with dynamically fetched Ollama and OpenRouter models.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/session-utils.ts",
+      "type": "file",
+      "name": "session-utils.ts",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "summary": "Core session processing library providing LLM-based session summarization, metadata extraction, distillation tracking, progress/outcome extraction, thread classification, search, and timeline parsing used across session-related routes.",
+      "tags": ["utility", "service", "data-model"],
+      "complexity": "complex",
+      "languageNotes": "Over 1000 non-empty lines of session intelligence logic; the most substantial utility module in the routes layer."
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:generateSessionSummary",
+      "type": "function",
+      "name": "generateSessionSummary",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [91, 184],
+      "summary": "Calls an LLM to generate a structured markdown summary from session message history, returning title, key outcomes, and tags.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:readSessionMeta",
+      "type": "function",
+      "name": "readSessionMeta",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [191, 296],
+      "summary": "Reads and parses session metadata including messages, tool calls, and usage stats from the session storage directory.",
+      "tags": ["utility", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:findUndistilledSessions",
+      "type": "function",
+      "name": "findUndistilledSessions",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [305, 377],
+      "summary": "Scans session directories to find sessions that have not yet been processed through the memory distillation pipeline.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:extractProgressItems",
+      "type": "function",
+      "name": "extractProgressItems",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [439, 537],
+      "summary": "Extracts structured progress items from session messages by parsing tool call results and LLM-detected task completion signals.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:extractSessionOutcome",
+      "type": "function",
+      "name": "extractSessionOutcome",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [564, 654],
+      "summary": "Uses an LLM to extract structured outcome data (goals achieved, artifacts created, open questions) from a completed session.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:extractOpenQuestions",
+      "type": "function",
+      "name": "extractOpenQuestions",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [702, 766],
+      "summary": "Identifies unresolved questions and action items from session conversations using pattern matching and LLM extraction.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:classifyThreads",
+      "type": "function",
+      "name": "classifyThreads",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [787, 849],
+      "summary": "Groups and classifies sessions into topical threads with freshness scores, enabling the thread-based session browsing UI.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:searchSessions",
+      "type": "function",
+      "name": "searchSessions",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [875, 954],
+      "summary": "Full-text searches session content and metadata across workspaces, returning ranked results with context snippets.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:exportSessionToMarkdown",
+      "type": "function",
+      "name": "exportSessionToMarkdown",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [962, 1015],
+      "summary": "Converts session message history into a formatted markdown document for export, including tool use summaries and metadata.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/session-utils.ts:parseSessionTimeline",
+      "type": "function",
+      "name": "parseSessionTimeline",
+      "filePath": "packages/server/src/local/routes/session-utils.ts",
+      "lineRange": [1088, 1171],
+      "summary": "Parses a session's message stream into a structured timeline of events including tool calls, agent turns, and user messages.",
+      "tags": ["utility", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/sessions.ts",
+      "type": "file",
+      "name": "sessions.ts",
+      "filePath": "packages/server/src/local/routes/sessions.ts",
+      "summary": "Session management API routes providing CRUD, distillation, search, export, timeline, and thread classification endpoints for agent chat sessions, re-exporting session utility types.",
+      "tags": ["api-handler", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/sessions.ts:sessionRoutes",
+      "type": "function",
+      "name": "sessionRoutes",
+      "filePath": "packages/server/src/local/routes/sessions.ts",
+      "lineRange": [60, 424],
+      "summary": "Registers comprehensive session management endpoints: list, get, update, delete, summarize, distill, search, export, timeline, threads, and state extraction.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/settings.ts",
+      "type": "file",
+      "name": "settings.ts",
+      "filePath": "packages/server/src/local/routes/settings.ts",
+      "summary": "Manages application settings including LLM model selection, API key storage/validation with live probing, autonomy defaults, and multi-provider key management with tier enforcement.",
+      "tags": ["api-handler", "service", "config"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/settings.ts:settingsRoutes",
+      "type": "function",
+      "name": "settingsRoutes",
+      "filePath": "packages/server/src/local/routes/settings.ts",
+      "lineRange": [28, 516],
+      "summary": "Registers settings read/write endpoints with key masking, provider key validation via live probes, model selection, and tier-gated features like autonomy overrides.",
+      "tags": ["api-handler", "config"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/skills-aliases.ts",
+      "type": "file",
+      "name": "skills-aliases.ts",
+      "filePath": "packages/server/src/local/routes/skills-aliases.ts",
+      "summary": "Manages skill alias CRUD routes that allow users to create shorthand command aliases pointing to skills, with path validation.",
+      "tags": ["api-handler", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/skills.ts",
+      "type": "file",
+      "name": "skills.ts",
+      "filePath": "packages/server/src/local/routes/skills.ts",
+      "summary": "Comprehensive skill management routes handling skill discovery, CRUD, usage tracking, governance (autonomy/approval gates), AI-distillation, and marketplace integration across local and global skill directories.",
+      "tags": ["api-handler", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/skills.ts:skillRoutes",
+      "type": "function",
+      "name": "skillRoutes",
+      "filePath": "packages/server/src/local/routes/skills.ts",
+      "lineRange": [42, 934],
+      "summary": "Registers all skill-related endpoints including list, get, create, update, delete, distill, import, export, usage stats, and governance approval routes.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/tasks.ts",
+      "type": "file",
+      "name": "tasks.ts",
+      "filePath": "packages/server/src/local/routes/tasks.ts",
+      "summary": "Task board API routes enabling CRUD operations on workspace tasks with JSON file persistence and notification emission on task updates.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/tasks.ts:taskRoutes",
+      "type": "function",
+      "name": "taskRoutes",
+      "filePath": "packages/server/src/local/routes/tasks.ts",
+      "lineRange": [54, 204],
+      "summary": "Registers task list, create, update, and delete endpoints with notification events emitted on task status changes.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/team.ts",
+      "type": "file",
+      "name": "team.ts",
+      "filePath": "packages/server/src/local/routes/team.ts",
+      "summary": "Team management routes providing team creation, member invitation, role management, sync, and audit event tracking with SQLite persistence and tier enforcement for team features.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/team.ts:teamRoutes",
+      "type": "function",
+      "name": "teamRoutes",
+      "filePath": "packages/server/src/local/routes/team.ts",
+      "lineRange": [103, 787],
+      "summary": "Registers team CRUD, member management, invitation, role assignment, team sync, and leave/dissolve endpoints with audit event emission and tier gating.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/team.ts:getTeamsDb",
+      "type": "function",
+      "name": "getTeamsDb",
+      "filePath": "packages/server/src/local/routes/team.ts",
+      "lineRange": [43, 76],
+      "summary": "Initializes or returns the cached SQLite teams database handle, creating schema tables (teams, members, invitations) on first run.",
+      "tags": ["service", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/telegram.ts",
+      "type": "file",
+      "name": "telegram.ts",
+      "filePath": "packages/server/src/local/routes/telegram.ts",
+      "summary": "Telegram bot integration routes for storing bot credentials in vault and sending push notifications to configured chat IDs.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/telegram.ts:telegramRoutes",
+      "type": "function",
+      "name": "telegramRoutes",
+      "filePath": "packages/server/src/local/routes/telegram.ts",
+      "lineRange": [107, 192],
+      "summary": "Registers Telegram credential management and message-sending endpoints with vault integration for secure token storage.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/telegram.ts:pushTelegramMessage",
+      "type": "function",
+      "name": "pushTelegramMessage",
+      "filePath": "packages/server/src/local/routes/telegram.ts",
+      "lineRange": [90, 105],
+      "summary": "Exported helper that sends a notification message to the configured Telegram chat using stored vault credentials.",
+      "tags": ["utility", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/telemetry.ts",
+      "type": "file",
+      "name": "telemetry.ts",
+      "filePath": "packages/server/src/local/routes/telemetry.ts",
+      "summary": "Provides a telemetry ingestion endpoint for receiving and forwarding client-side usage events to the telemetry pipeline.",
+      "tags": ["api-handler", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/tools.ts",
+      "type": "file",
+      "name": "tools.ts",
+      "filePath": "packages/server/src/local/routes/tools.ts",
+      "summary": "AI tool detection and launcher routes for discovering installed AI tools (Claude, Cursor, Windsurf, etc.) and launching them with workspace context injection.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/validate.ts",
+      "type": "file",
+      "name": "validate.ts",
+      "filePath": "packages/server/src/local/routes/validate.ts",
+      "summary": "Shared path safety validation helpers and string clamping utilities used across route handlers to prevent path traversal and enforce input size limits.",
+      "tags": ["utility", "validation", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/vault.ts",
+      "type": "file",
+      "name": "vault.ts",
+      "filePath": "packages/server/src/local/routes/vault.ts",
+      "summary": "Secure vault API routes for storing and retrieving encrypted secrets (API keys, tokens) with origin validation restricting access to local requests only.",
+      "tags": ["api-handler", "service", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/vault.ts:vaultRoutes",
+      "type": "function",
+      "name": "vaultRoutes",
+      "filePath": "packages/server/src/local/routes/vault.ts",
+      "lineRange": [103, 188],
+      "summary": "Registers vault secret list, get, set, and delete endpoints restricted to local-origin requests only via origin guard middleware.",
+      "tags": ["api-handler", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "type": "file",
+      "name": "waggle-dance.ts",
+      "filePath": "packages/server/src/local/routes/waggle-dance.ts",
+      "summary": "WaggleDance multi-agent coordination routes for receiving discovery signals from external AI tools and querying the signal history.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/waggle-dance.ts:waggleDanceRoutesImpl",
+      "type": "function",
+      "name": "waggleDanceRoutesImpl",
+      "filePath": "packages/server/src/local/routes/waggle-dance.ts",
+      "lineRange": [88, 202],
+      "summary": "Registers WaggleDance signal ingestion and query endpoints, routing incoming signals through the SignalBus and forwarding to the legacy bridge for UI consumption.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "type": "file",
+      "name": "waggle-signals.ts",
+      "filePath": "packages/server/src/local/routes/waggle-signals.ts",
+      "summary": "Server-sent events (SSE) broadcast route for waggle signals consumed by the web UI, with CORS validation allowing cross-origin access from known AI tool origins.",
+      "tags": ["api-handler", "event-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/waggle-signals.ts:emitWaggleSignal",
+      "type": "function",
+      "name": "emitWaggleSignal",
+      "filePath": "packages/server/src/local/routes/waggle-signals.ts",
+      "lineRange": [35, 46],
+      "summary": "Broadcasts a waggle signal payload to all active SSE subscriber connections.",
+      "tags": ["utility", "event-handler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/waggle-signals.ts:waggleSignalRoutes",
+      "type": "function",
+      "name": "waggleSignalRoutes",
+      "filePath": "packages/server/src/local/routes/waggle-signals.ts",
+      "lineRange": [48, 123],
+      "summary": "Registers the SSE stream endpoint for waggle signals with origin validation, fan-out to connected clients, and graceful connection lifecycle management.",
+      "tags": ["api-handler", "event-handler"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/server/src/local/routes/oauth.ts",
+      "target": "function:packages/server/src/local/routes/oauth.ts:oauthRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/oauth.ts",
+      "target": "function:packages/server/src/local/routes/oauth.ts:oauthRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/oauth.ts",
+      "target": "file:packages/server/src/local/routes/harvest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/oauth.ts",
+      "target": "function:packages/server/src/local/routes/harvest.ts:escapeXml",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/offline.ts",
+      "target": "function:packages/server/src/local/routes/offline.ts:offlineRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/offline.ts",
+      "target": "function:packages/server/src/local/routes/offline.ts:offlineRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/onboarding.ts",
+      "target": "function:packages/server/src/local/routes/onboarding.ts:onboardingRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/onboarding.ts",
+      "target": "function:packages/server/src/local/routes/onboarding.ts:onboardingRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/personas.ts",
+      "target": "function:packages/server/src/local/routes/personas.ts:personaRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/personas.ts",
+      "target": "function:packages/server/src/local/routes/personas.ts:personaRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/personas.ts",
+      "target": "file:packages/server/src/middleware/assert-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/pins.ts",
+      "target": "function:packages/server/src/local/routes/pins.ts:pinRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/pins.ts",
+      "target": "function:packages/server/src/local/routes/pins.ts:pinRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/profile.ts",
+      "target": "function:packages/server/src/local/routes/profile.ts:profileRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/profile.ts",
+      "target": "function:packages/server/src/local/routes/profile.ts:loadProfile",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/profile.ts",
+      "target": "function:packages/server/src/local/routes/profile.ts:profileRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/profile.ts",
+      "target": "function:packages/server/src/local/routes/profile.ts:loadProfile",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/providers.ts",
+      "target": "function:packages/server/src/local/routes/providers.ts:fetchOpenRouterFreeModels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/providers.ts",
+      "target": "function:packages/server/src/local/routes/providers.ts:fetchOllamaModels",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/providers.ts",
+      "target": "function:packages/server/src/local/routes/providers.ts:providerRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/providers.ts",
+      "target": "function:packages/server/src/local/routes/providers.ts:providerRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/providers.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:generateSessionSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:readSessionMeta",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:findUndistilledSessions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:extractProgressItems",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:extractSessionOutcome",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:extractOpenQuestions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:classifyThreads",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:searchSessions",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:exportSessionToMarkdown",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:parseSessionTimeline",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:readSessionMeta",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:findUndistilledSessions",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:extractProgressItems",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:extractSessionOutcome",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:extractOpenQuestions",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:classifyThreads",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:searchSessions",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:exportSessionToMarkdown",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/session-utils.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:parseSessionTimeline",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "function:packages/server/src/local/routes/sessions.ts:sessionRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "function:packages/server/src/local/routes/sessions.ts:sessionRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "file:packages/server/src/local/routes/session-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:readSessionMeta",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:searchSessions",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:exportSessionToMarkdown",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/sessions.ts",
+      "target": "function:packages/server/src/local/routes/session-utils.ts:parseSessionTimeline",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/settings.ts",
+      "target": "function:packages/server/src/local/routes/settings.ts:settingsRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/settings.ts",
+      "target": "function:packages/server/src/local/routes/settings.ts:settingsRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/settings.ts",
+      "target": "file:packages/server/src/local/llm-key-probe.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/settings.ts",
+      "target": "file:packages/server/src/middleware/assert-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/skills-aliases.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/skills.ts",
+      "target": "function:packages/server/src/local/routes/skills.ts:skillRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/skills.ts",
+      "target": "function:packages/server/src/local/routes/skills.ts:skillRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/skills.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/tasks.ts",
+      "target": "function:packages/server/src/local/routes/tasks.ts:taskRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/tasks.ts",
+      "target": "function:packages/server/src/local/routes/tasks.ts:taskRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/tasks.ts",
+      "target": "file:packages/server/src/local/routes/notifications.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/tasks.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/team.ts",
+      "target": "function:packages/server/src/local/routes/team.ts:teamRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/team.ts",
+      "target": "function:packages/server/src/local/routes/team.ts:getTeamsDb",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/team.ts",
+      "target": "function:packages/server/src/local/routes/team.ts:teamRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/team.ts",
+      "target": "file:packages/server/src/local/routes/events.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/team.ts",
+      "target": "file:packages/server/src/local/routes/notifications.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/team.ts",
+      "target": "file:packages/server/src/middleware/assert-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/telegram.ts",
+      "target": "function:packages/server/src/local/routes/telegram.ts:telegramRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/telegram.ts",
+      "target": "function:packages/server/src/local/routes/telegram.ts:pushTelegramMessage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/telegram.ts",
+      "target": "function:packages/server/src/local/routes/telegram.ts:telegramRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/telegram.ts",
+      "target": "function:packages/server/src/local/routes/telegram.ts:pushTelegramMessage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/vault.ts",
+      "target": "function:packages/server/src/local/routes/vault.ts:vaultRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/vault.ts",
+      "target": "function:packages/server/src/local/routes/vault.ts:vaultRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/vault.ts",
+      "target": "file:packages/server/src/local/origin-guard.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "target": "function:packages/server/src/local/routes/waggle-dance.ts:waggleDanceRoutesImpl",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "target": "function:packages/server/src/local/routes/waggle-dance.ts:waggleDanceRoutesImpl",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "target": "file:packages/server/src/local/signal-bus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "target": "file:packages/server/src/local/waggle-dance-bridge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "target": "function:packages/server/src/local/routes/waggle-signals.ts:emitWaggleSignal",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "target": "function:packages/server/src/local/routes/waggle-signals.ts:waggleSignalRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "target": "function:packages/server/src/local/routes/waggle-signals.ts:emitWaggleSignal",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "target": "function:packages/server/src/local/routes/waggle-signals.ts:waggleSignalRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-signals.ts",
+      "target": "file:packages/server/src/local/cors-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

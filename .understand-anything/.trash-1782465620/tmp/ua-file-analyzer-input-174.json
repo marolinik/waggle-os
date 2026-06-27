@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-shim-core/README.md", "language": "markdown", "sizeLines": 61, "fileCategory": "docs"},
+    {"path": "packages/hive-mind-shim-core/package.json", "language": "json", "sizeLines": 46, "fileCategory": "config"},
+    {"path": "packages/hive-mind-shim-core/tsconfig.json", "language": "json", "sizeLines": 11, "fileCategory": "config"},
+    {"path": "packages/hive-mind-shim-core/tsconfig.test.json", "language": "json", "sizeLines": 12, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-shim-core/README.md": [],
+    "packages/hive-mind-shim-core/package.json": [],
+    "packages/hive-mind-shim-core/tsconfig.json": [],
+    "packages/hive-mind-shim-core/tsconfig.test.json": []
+  },
+  "neighborMap": {}
+}

@@ -1,0 +1,260 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/results/gepa-faza1/checkpoint-c/checkpoint-c-report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 252,
+      "nonEmptyLines": 186,
+      "sections": [
+        {
+          "heading": "Checkpoint C halt-and-PM report — 2/3 candidates PASS §F.5 overfitting bound; gpt::gen1-v2 EXPOSED as in-sample selection bias",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "§A — Run metadata",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "§B — Held-out instance selection (per pre-registration)",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "§C — Per-candidate analysis",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "C.1 — claude::gen1-v1: GENERALIZES PERFECTLY",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "C.2 — qwen-thinking::gen1-v1: PHASE 4.5 MECHANISM REPLICATES ON HELD-OUT",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "C.3 — gpt::gen1-v2: SELECTION BIAS EXPOSED",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "§D — §F.2 verdict confirmation status",
+          "level": 2,
+          "line": 126
+        },
+        {
+          "heading": "D.1 — Held-out delta vs NULL (does §F.2 still PASS without §F.5 caveat?)",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "D.2 — §F.5 condition_2 + §F.2 confirmation",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "§E — Faza 2 deployment authorization: PARTIAL",
+          "level": 2,
+          "line": 150
+        },
+        {
+          "heading": "§F — Anti-misattribution lock confirmation (Amendment 9 §qwen_baseline_anomaly_disposition)",
+          "level": 2,
+          "line": 163
+        },
+        {
+          "heading": "§G — Pending §F.3 (κ stability) recompute",
+          "level": 2,
+          "line": 180
+        },
+        {
+          "heading": "§H — Audit chain",
+          "level": 2,
+          "line": 194
+        },
+        {
+          "heading": "§I — HALT criteria status",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "§J — PM ratify path forward",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "J.1 — Option A (CC-2 weak rec): Standard closure with κ recompute",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "J.2 — Option B (~$2-4): Re-validate gpt::gen1-v2 at N=16",
+          "level": 3,
+          "line": 234
+        },
+        {
+          "heading": "J.3 — Option C (~$0): Hard close, no further action",
+          "level": 3,
+          "line": 241
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/checkpoint-c/checkpoint-c-summary.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 114,
+      "nonEmptyLines": 114,
+      "sections": [
+        {
+          "heading": "manifestAnchor",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "manifestShaAmendment11",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "generated_at",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "candidateIds",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "heldOutInstanceIds",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "totalEvals",
+          "level": 1,
+          "line": 17
+        },
+        {
+          "heading": "totalCostUsd",
+          "level": 1,
+          "line": 18
+        },
+        {
+          "heading": "perCandidate",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "f2_verdict_confirmation",
+          "level": 1,
+          "line": 105
+        },
+        {
+          "heading": "f2_verdict_detail",
+          "level": 1,
+          "line": 106
+        },
+        {
+          "heading": "f5_overfitting_bound_pp",
+          "level": 1,
+          "line": 107
+        },
+        {
+          "heading": "faza_2_deployment_authorization",
+          "level": 1,
+          "line": 108
+        },
+        {
+          "heading": "next_steps",
+          "level": 1,
+          "line": 109
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/checkpoint-c/final-kappa-audit.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 44,
+      "nonEmptyLines": 44,
+      "sections": [
+        {
+          "heading": "generated_at",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "inputs",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "pairwise_kappa",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "pairwise_raw_agreement",
+          "level": 1,
+          "line": 16
+        },
+        {
+          "heading": "per_judge_pass_rates",
+          "level": 1,
+          "line": 22
+        },
+        {
+          "heading": "canonical_kappa",
+          "level": 1,
+          "line": 27
+        },
+        {
+          "heading": "drift_band",
+          "level": 1,
+          "line": 28
+        },
+        {
+          "heading": "audit",
+          "level": 1,
+          "line": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    }
+  ]
+}
