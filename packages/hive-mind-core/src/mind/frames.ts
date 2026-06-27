@@ -22,7 +22,10 @@ function isValidIsoTimestamp(value: string): boolean {
 
 export type FrameType = 'I' | 'P' | 'B';
 export type Importance = 'critical' | 'important' | 'normal' | 'temporary' | 'deprecated';
-export type FrameSource = 'user_stated' | 'tool_verified' | 'agent_inferred' | 'import' | 'system' | 'personal' | 'workspace' | 'team_sync';
+// Must stay in sync with the memory_frames.source CHECK constraint (schema.ts).
+// ('personal'/'workspace' are MultiMind result labels, not DB sources; team-synced
+//  frames are stored as 'import' with provenance carried in the content prefix.)
+export type FrameSource = 'user_stated' | 'tool_verified' | 'agent_inferred' | 'import' | 'system';
 
 export interface MemoryFrame {
   id: number;

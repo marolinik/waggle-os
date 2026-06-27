@@ -80,8 +80,8 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
   }
 
-  function searchAllWorkspaces(srv: typeof server, query: string, limit: number): Array<MemoryFrame & { source?: string; _mind?: string; _workspace_name?: string }> {
-    const results: Array<MemoryFrame & { source?: string; _mind?: string; _workspace_name?: string }> = [];
+  function searchAllWorkspaces(srv: typeof server, query: string, limit: number): Array<Omit<MemoryFrame, 'source'> & { source?: string; _mind?: string; _workspace_name?: string }> {
+    const results: Array<Omit<MemoryFrame, 'source'> & { source?: string; _mind?: string; _workspace_name?: string }> = [];
 
     // Search personal mind
     const personalResults = srv.multiMind.search(query, 'personal', limit);
@@ -144,7 +144,10 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
 
     const maxResults = limit ? parseInt(limit, 10) : 20;
 
-    let rawResults: Array<MemoryFrame & { source?: string }>;
+    // `source` here may be the MultiMind mind label ('personal'/'workspace'), which
+    // is NOT a FrameSource — so omit the frame's source and re-add it as a plain
+    // string (see the mind-label handling below).
+    let rawResults: Array<Omit<MemoryFrame, 'source'> & { source?: string }>;
 
     if (searchScope === 'global') {
       rawResults = searchAllWorkspaces(server, q, maxResults);
