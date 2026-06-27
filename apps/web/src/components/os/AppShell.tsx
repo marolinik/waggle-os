@@ -81,15 +81,33 @@ const ShellLayout = () => {
 
   const { allSignals: waggleSignals } = useWaggleDance();
   const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
+  const effectiveActiveWorkspaceId =
+    activeWorkspaceId && activeWorkspaceId !== 'local-default'
+      ? activeWorkspaceId
+      : workspaces[0]?.id ?? null;
+  const effectiveActiveWorkspace =
+    activeWorkspace ?? workspaces.find(ws => ws.id === effectiveActiveWorkspaceId) ?? null;
+  const navigateToActiveChat = useCallback(() => {
+    if (effectiveActiveWorkspaceId && effectiveActiveWorkspaceId !== 'local-default') {
+      navigate(routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }));
+      return;
+    }
+    void adapter.getWorkspaces()
+      .then((rows) => {
+        const fallbackId = Array.isArray(rows) ? rows[0]?.id : null;
+        navigate(routeFor('chat', { activeWorkspaceId: fallbackId ?? null }));
+      })
+      .catch(() => navigate('/home'));
+  }, [effectiveActiveWorkspaceId, navigate]);
 
   // §4.2/§1.2: PersonaSwitcher (Ctrl+Shift+P) targets the ACTIVE workspace's
   // chat widget (focused-window resolution died with focus tracking, §4.3);
   // the patch-the-workspace-record fallback (Desktop.tsx:595-601) stays for
   // the no-real-workspace case. No defaultAutonomy option here — P4
   // inheritance is stamped only when ChatHost actually mounts the widget.
-  const hasRealActiveWorkspace = !!activeWorkspaceId && activeWorkspaceId !== 'local-default';
+  const hasRealActiveWorkspace = !!effectiveActiveWorkspaceId && effectiveActiveWorkspaceId !== 'local-default';
   const { entry: activeChatEntry, setPersona: setActiveChatPersona } =
-    useChatWidgetState(activeWorkspaceId ?? 'local-default');
+    useChatWidgetState(effectiveActiveWorkspaceId ?? 'local-default');
 
   // User display name for the sidebar user row (PR1 LOW #2). Best-effort via the
   // existing identity surface; re-fetched on connect-settle because the first
@@ -148,7 +166,7 @@ const ShellLayout = () => {
       if (!detail?.appId || detail.redispatch) return;
       stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId, filter: detail.filter });
       navigate(
-        routeFor(detail.appId, { activeWorkspaceId }) +
+        routeFor(detail.appId, { activeWorkspaceId: effectiveActiveWorkspaceId }) +
         queryString({ tab: detail.tab, automationId: detail.automationId, filter: detail.filter }),
       );
       // Two rAFs ≈ the tick after the navigated-to route has committed.
@@ -158,24 +176,24 @@ const ShellLayout = () => {
     };
     window.addEventListener('waggle:open-app', handler);
     return () => window.removeEventListener('waggle:open-app', handler);
-  }, [navigate, activeWorkspaceId]);
+  }, [navigate, effectiveActiveWorkspaceId]);
 
   // Keyboard shortcuts — every app shortcut is a navigate() now (§2.2).
   // Ctrl+W / Ctrl+Shift+M window handlers retire with the window manager
   // (§3.1); Ctrl+Shift+N navigates to the active workspace's chat tab (§4.2).
   useKeyboardShortcuts({
-    onOpenApp: (id) => navigate(routeFor(id, { activeWorkspaceId })),
+    onOpenApp: (id) => navigate(routeFor(id, { activeWorkspaceId: effectiveActiveWorkspaceId })),
     onToggleGlobalSearch: ov.toggleGlobalSearch,
     onTogglePersonaSwitcher: ov.togglePersonaSwitcher,
     onToggleWorkspaceSwitcher: ov.toggleWorkspaceSwitcher,
     onToggleKeyboardHelp: ov.toggleKeyboardHelp,
-    onNewChatWindow: () => navigate(routeFor('chat', { activeWorkspaceId })),
+    onNewChatWindow: navigateToActiveChat,
   });
 
   // §2.2 row 1: palette result clicks become pure URL navigation. The
   // workspace-selection side effect is parity with Desktop.tsx:258-288.
   const handleSearchNavigate = useCallback((type: string, id: string) => {
-    const route = routeForSearchResult(type, id, { activeWorkspaceId });
+    const route = routeForSearchResult(type, id, { activeWorkspaceId: effectiveActiveWorkspaceId });
     if (!route) return;
     if (type === 'workspace') {
       const bareId = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
@@ -185,7 +203,7 @@ const ShellLayout = () => {
       if (wsId) selectWorkspace(wsId);
     }
     navigate(route);
-  }, [activeWorkspaceId, selectWorkspace, navigate]);
+  }, [effectiveActiveWorkspaceId, selectWorkspace, navigate]);
 
   // Onboarding completion handlers (relocated from Desktop.tsx:290-313).
   const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
@@ -242,13 +260,13 @@ const ShellLayout = () => {
     // user picks a workspace to chat in.
     {
       key: 'chat', label: 'Chat', icon: MessageSquare,
-      to: routeFor('chat', { activeWorkspaceId }), match: ['/workspaces'],
+      to: routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }), match: ['/workspaces'],
       onClick: hasRealActiveWorkspace ? undefined : ov.toggleWorkspaceSwitcher,
     },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
     { key: 'agents', label: 'Agents & tasks', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
-  ], [activeWorkspaceId, waggleUnacknowledged, hasRealActiveWorkspace, ov.toggleWorkspaceSwitcher]);
+  ], [effectiveActiveWorkspaceId, waggleUnacknowledged, hasRealActiveWorkspace, ov.toggleWorkspaceSwitcher]);
   const pinned: SidebarNavItem[] = useMemo(() => {
     if (!isPro) return [];
     const items: SidebarNavItem[] = [
@@ -270,8 +288,8 @@ const ShellLayout = () => {
 
   // ⌘K curated catalog (Jump to / Do / Power tools + Pro "Pinned") → real routes.
   const commandCatalog = useMemo(
-    () => buildCommandCatalog({ chatHref: routeFor('chat', { activeWorkspaceId }), isPro, billingRank }),
-    [activeWorkspaceId, isPro, billingRank],
+    () => buildCommandCatalog({ chatHref: routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }), isPro, billingRank }),
+    [effectiveActiveWorkspaceId, isPro, billingRank],
   );
   const handleCatalogSelect = useCallback((cmd: CatalogCommand) => {
     if (cmd.action === 'spawn') { ov.setShowSpawnAgent(true); return; }
@@ -300,9 +318,9 @@ const ShellLayout = () => {
       <img src={theme === 'light' ? wallpaperLight : wallpaperDark} alt="" className="absolute inset-0 w-full h-full object-cover" width={1920} height={1080} />
       <div className="absolute inset-0 desktop-overlay" />
 
-      <StatusBar workspaceName={activeWorkspace?.name}
+      <StatusBar workspaceName={effectiveActiveWorkspace?.name}
         focusedWindowLabel={surfaceLabel}
-        model={agentStatus.model !== 'unknown' ? agentStatus.model : activeWorkspace?.model}
+        model={agentStatus.model !== 'unknown' ? agentStatus.model : effectiveActiveWorkspace?.model}
         tokensUsed={agentStatus.tokensUsed} costUsd={agentStatus.costUsd} offline={offline}
         unreadNotifications={unreadCount}
         trialDaysRemaining={trialInfo.trialDaysRemaining} trialExpired={trialInfo.trialExpired}
@@ -312,7 +330,7 @@ const ShellLayout = () => {
         {/* Warm-Hive calm spine (ia.html) — five places + workspace pill +
             ⌘K tile + user row; all remaining depth lives in ⌘K. */}
         <Sidebar
-          workspaceName={activeWorkspace?.name ?? null}
+          workspaceName={effectiveActiveWorkspace?.name ?? null}
           spine={spine}
           pinned={pinned}
           onOpenWorkspaceSwitcher={ov.toggleWorkspaceSwitcher}
@@ -344,7 +362,7 @@ const ShellLayout = () => {
           onClose={() => ov.setShowGlobalSearch(false)}
           onNavigate={handleSearchNavigate}
           onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
-          workspaceId={activeWorkspaceId ?? undefined}
+          workspaceId={effectiveActiveWorkspaceId ?? undefined}
           catalog={commandCatalog}
           onCatalogSelect={handleCatalogSelect}
         />
@@ -354,26 +372,26 @@ const ShellLayout = () => {
           (widget state, NOT the workspace record — acceptance check 7); the
           workspace-record patch survives as the no-real-workspace fallback. */}
       <PersonaSwitcher open={ov.showPersonaSwitcher} onClose={() => ov.setShowPersonaSwitcher(false)}
-        currentPersona={(hasRealActiveWorkspace ? activeChatEntry.personaId : undefined) ?? activeWorkspace?.persona}
-        currentGroupId={activeWorkspace?.agentGroupId}
-        currentTemplateId={activeWorkspace?.templateId}
+        currentPersona={(hasRealActiveWorkspace ? activeChatEntry.personaId : undefined) ?? effectiveActiveWorkspace?.persona}
+        currentGroupId={effectiveActiveWorkspace?.agentGroupId}
+        currentTemplateId={effectiveActiveWorkspace?.templateId}
         onSelect={(personaId) => {
           if (hasRealActiveWorkspace) {
             setActiveChatPersona(personaId);
-          } else if (activeWorkspaceId) {
-            patchWorkspace(activeWorkspaceId, { persona: personaId, agentGroupId: undefined });
+          } else if (effectiveActiveWorkspaceId) {
+            patchWorkspace(effectiveActiveWorkspaceId, { persona: personaId, agentGroupId: undefined });
           }
         }}
-        onSelectGroup={(groupId) => { if (activeWorkspaceId) patchWorkspace(activeWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
+        onSelectGroup={(groupId) => { if (effectiveActiveWorkspaceId) patchWorkspace(effectiveActiveWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
       <WorkspaceSwitcher open={ov.showWorkspaceSwitcher} onClose={() => ov.setShowWorkspaceSwitcher(false)}
-        workspaces={workspaces} activeWorkspaceId={activeWorkspaceId}
+        workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId}
         error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
         onCreateNew={() => ov.setShowCreateWorkspace(true)}
         onSelect={(id) => { selectWorkspace(id); navigate(`/workspaces/${id}`); }} />
       <NotificationInbox open={ov.showNotifications} onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />
       <SpawnAgentDialog open={ov.showSpawnAgent} onClose={() => ov.setShowSpawnAgent(false)}
-        workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)} />
+        workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)} />
       {onboardingState.completed && !onboardingState.tooltipsDismissed && (
         <OnboardingTooltips
           templateId={onboardingState.templateId}
@@ -449,7 +467,15 @@ const AppShell = () => {
   // always wins — acceptance check 2).
   useState(() => bootWindowStateMigration(window.location.pathname));
 
-  const initialBooted = localStorage.getItem(BOOT_KEY) !== null;
+  const [initialBooted] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shouldSkipBoot = params.get('skipOnboarding') === 'true' || params.get('skipBoot') === 'true';
+    if (shouldSkipBoot) {
+      localStorage.setItem(BOOT_KEY, 'true');
+      return true;
+    }
+    return localStorage.getItem(BOOT_KEY) !== null;
+  });
   const [booted, setBooted] = useState(initialBooted);
   const [showShell, setShowShell] = useState(initialBooted);
 

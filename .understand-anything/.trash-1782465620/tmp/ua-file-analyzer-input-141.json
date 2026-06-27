@@ -1,0 +1,18 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/redesign-warm-hive/pr35-recon/01-frame-source-server.md", "language": "markdown", "sizeLines": 301, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr35-recon/02-sse-step-path.md", "language": "markdown", "sizeLines": 215, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr35-recon/03-pr3-hooks-primitives.md", "language": "markdown", "sizeLines": 155, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr35-recon/04-design-screen19.md", "language": "markdown", "sizeLines": 317, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr35-recon/05-memory-store-api.md", "language": "markdown", "sizeLines": 249, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/redesign-warm-hive/pr35-recon/01-frame-source-server.md": [],
+    "docs/redesign-warm-hive/pr35-recon/02-sse-step-path.md": [],
+    "docs/redesign-warm-hive/pr35-recon/03-pr3-hooks-primitives.md": [],
+    "docs/redesign-warm-hive/pr35-recon/04-design-screen19.md": [],
+    "docs/redesign-warm-hive/pr35-recon/05-memory-store-api.md": []
+  },
+  "batchImportData": {}
+}

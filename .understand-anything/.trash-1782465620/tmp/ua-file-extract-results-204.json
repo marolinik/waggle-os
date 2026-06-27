@@ -1,0 +1,5902 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "scripts/read-pdf.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 20,
+      "nonEmptyLines": 18,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/read-wiki-pages.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 71,
+      "nonEmptyLines": 60,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/run-mini-locomo.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 619,
+      "nonEmptyLines": 577,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 63,
+          "endLine": 108,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 110,
+          "endLine": 135,
+          "params": []
+        },
+        {
+          "name": "parseManifestScalars",
+          "startLine": 144,
+          "endLine": 169,
+          "params": [
+            "yaml"
+          ]
+        },
+        {
+          "name": "hydrateFromManifest",
+          "startLine": 171,
+          "endLine": 200,
+          "params": [
+            "args"
+          ]
+        },
+        {
+          "name": "validateAliases",
+          "startLine": 207,
+          "endLine": 223,
+          "params": [
+            "requiredAliases"
+          ]
+        },
+        {
+          "name": "mapCell",
+          "startLine": 277,
+          "endLine": 285,
+          "params": [
+            "v3Name"
+          ]
+        },
+        {
+          "name": "rewriteJsonlCellField",
+          "startLine": 298,
+          "endLine": 321,
+          "params": [
+            "outputPath",
+            "v3Cell"
+          ]
+        },
+        {
+          "name": "harnessRootAbs",
+          "startLine": 325,
+          "endLine": 328,
+          "params": []
+        },
+        {
+          "name": "runOneCell",
+          "startLine": 340,
+          "endLine": 430,
+          "params": [
+            "v3Cell",
+            "args"
+          ]
+        },
+        {
+          "name": "runCellsWithConcurrency",
+          "startLine": 434,
+          "endLine": 449,
+          "params": [
+            "cells",
+            "concurrency",
+            "args"
+          ]
+        },
+        {
+          "name": "verifyFieldCoverage",
+          "startLine": 489,
+          "endLine": 514,
+          "params": [
+            "outputPath"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 518,
+          "endLine": 603,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseArgs",
+          "line": 63,
+          "isDefault": false
+        },
+        {
+          "name": "rewriteJsonlCellField",
+          "line": 298,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').split(',').map(s => s.trim()).filter",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').split(',').map",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').split",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "s.trim",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "Number",
+          "lineNumber": 85
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').split(',').map(s => s.trim()).filter",
+          "lineNumber": 86
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').split(',').map",
+          "lineNumber": 86
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').split",
+          "lineNumber": 86
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "s.trim",
+          "lineNumber": 86
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "Number",
+          "lineNumber": 88
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "Number",
+          "lineNumber": 93
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "printHelp",
+          "lineNumber": 97
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "process.exit",
+          "lineNumber": 98
+        },
+        {
+          "caller": "printHelp",
+          "callee": "console.log",
+          "lineNumber": 111
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "yaml.split",
+          "lineNumber": 146
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "rawLine.replace",
+          "lineNumber": 149
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "line.trim",
+          "lineNumber": 150
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "line.trim().startsWith",
+          "lineNumber": 150
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "line.trim",
+          "lineNumber": 150
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "line.search",
+          "lineNumber": 151
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "Math.floor",
+          "lineNumber": 152
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "stack.pop",
+          "lineNumber": 154
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "line.trim().match",
+          "lineNumber": 155
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "line.trim",
+          "lineNumber": 155
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "(match[2] ?? '').trim",
+          "lineNumber": 158
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "[...stack, key].join",
+          "lineNumber": 159
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "out.set",
+          "lineNumber": 162
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "value.replace",
+          "lineNumber": 162
+        },
+        {
+          "caller": "parseManifestScalars",
+          "callee": "stack.push",
+          "lineNumber": 165
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "path.isAbsolute",
+          "lineNumber": 173
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "path.resolve",
+          "lineNumber": 175
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "process.cwd",
+          "lineNumber": 175
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "fs.existsSync",
+          "lineNumber": 176
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "fs.readFileSync",
+          "lineNumber": 179
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "parseManifestScalars",
+          "lineNumber": 180
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 183
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 184
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "[\r\n      scalars.get('judge_primary.id'),\r\n      scalars.get('judge_secondary.id'),\r\n      scalars.get('judge_tie_breaker.id'),\r\n    ].filter",
+          "lineNumber": 186
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 187
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 188
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 189
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 193
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "Number",
+          "lineNumber": 193
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "scalars.get",
+          "lineNumber": 193
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "crypto.createHash('sha256').update(fs.readFileSync(absPath)).digest",
+          "lineNumber": 196
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "crypto.createHash('sha256').update",
+          "lineNumber": 196
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "crypto.createHash",
+          "lineNumber": 196
+        },
+        {
+          "caller": "hydrateFromManifest",
+          "callee": "fs.readFileSync",
+          "lineNumber": 196
+        },
+        {
+          "caller": "validateAliases",
+          "callee": "fetch",
+          "lineNumber": 212
+        },
+        {
+          "caller": "validateAliases",
+          "callee": "res.json",
+          "lineNumber": 218
+        },
+        {
+          "caller": "validateAliases",
+          "callee": "(data.data ?? []).map",
+          "lineNumber": 219
+        },
+        {
+          "caller": "validateAliases",
+          "callee": "requiredAliases.filter",
+          "lineNumber": 221
+        },
+        {
+          "caller": "validateAliases",
+          "callee": "liveSet.has",
+          "lineNumber": 221
+        },
+        {
+          "caller": "mapCell",
+          "callee": "Object.keys(V3_TO_V1_CELLS).join",
+          "lineNumber": 281
+        },
+        {
+          "caller": "mapCell",
+          "callee": "Object.keys",
+          "lineNumber": 281
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "fs.existsSync",
+          "lineNumber": 299
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "fs.readFileSync",
+          "lineNumber": 300
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "raw.split",
+          "lineNumber": 301
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "line.trim",
+          "lineNumber": 305
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "rewritten.push",
+          "lineNumber": 306
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "JSON.parse",
+          "lineNumber": 310
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "rewritten.push",
+          "lineNumber": 312
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "JSON.stringify",
+          "lineNumber": 312
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "rewritten.push",
+          "lineNumber": 316
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 319
+        },
+        {
+          "caller": "rewriteJsonlCellField",
+          "callee": "rewritten.join",
+          "lineNumber": 319
+        },
+        {
+          "caller": "harnessRootAbs",
+          "callee": "url.fileURLToPath",
+          "lineNumber": 326
+        },
+        {
+          "caller": "harnessRootAbs",
+          "callee": "path.resolve",
+          "lineNumber": 327
+        },
+        {
+          "caller": "harnessRootAbs",
+          "callee": "path.dirname",
+          "lineNumber": 327
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "mapCell",
+          "lineNumber": 341
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "path.join",
+          "lineNumber": 342
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "harnessRootAbs",
+          "lineNumber": 342
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "String",
+          "lineNumber": 349
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "String",
+          "lineNumber": 350
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "runnerArgs.push",
+          "lineNumber": 355
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "args.judgeEnsemble.join",
+          "lineNumber": 355
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "runnerArgs.push",
+          "lineNumber": 358
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "runnerArgs.push",
+          "lineNumber": 363
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "runnerArgs.push",
+          "lineNumber": 369
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "Date.now",
+          "lineNumber": 372
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "spawn",
+          "lineNumber": 377
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "process.cwd",
+          "lineNumber": 378
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "child.stdout.on",
+          "lineNumber": 382
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "chunk.toString",
+          "lineNumber": 383
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "process.stdout.write",
+          "lineNumber": 385
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "text.match",
+          "lineNumber": 388
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "match[1].replace",
+          "lineNumber": 389
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "child.stderr.on",
+          "lineNumber": 391
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "chunk.toString",
+          "lineNumber": 392
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "process.stderr.write",
+          "lineNumber": 394
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "child.on",
+          "lineNumber": 396
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "rewriteJsonlCellField",
+          "lineNumber": 404
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "console.log",
+          "lineNumber": 406
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "console.error",
+          "lineNumber": 412
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "String",
+          "lineNumber": 414
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "resolve",
+          "lineNumber": 419
+        },
+        {
+          "caller": "runOneCell",
+          "callee": "Date.now",
+          "lineNumber": 426
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "cells.slice",
+          "lineNumber": 441
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "console.log",
+          "lineNumber": 442
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "Math.floor",
+          "lineNumber": 443
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "Math.ceil",
+          "lineNumber": 443
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "batch.join",
+          "lineNumber": 443
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "Promise.all",
+          "lineNumber": 445
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "batch.map",
+          "lineNumber": 445
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "runOneCell",
+          "lineNumber": 445
+        },
+        {
+          "caller": "runCellsWithConcurrency",
+          "callee": "results.push",
+          "lineNumber": 446
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fs.existsSync",
+          "lineNumber": 494
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "EXPECTED_JSONL_FIELDS.slice",
+          "lineNumber": 495
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fs.readFileSync(outputPath, 'utf-8').split('\\n').filter",
+          "lineNumber": 497
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fs.readFileSync(outputPath, 'utf-8').split",
+          "lineNumber": 497
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fs.readFileSync",
+          "lineNumber": 497
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "l.trim",
+          "lineNumber": 497
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "EXPECTED_JSONL_FIELDS.slice",
+          "lineNumber": 499
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "JSON.parse",
+          "lineNumber": 505
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "Object.keys",
+          "lineNumber": 506
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fieldsSeen.add",
+          "lineNumber": 506
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "EXPECTED_JSONL_FIELDS.filter",
+          "lineNumber": 511
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fieldsSeen.has",
+          "lineNumber": 511
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "EXPECTED_JSONL_FIELDS.filter",
+          "lineNumber": 512
+        },
+        {
+          "caller": "verifyFieldCoverage",
+          "callee": "fieldsSeen.has",
+          "lineNumber": 512
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 519
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 519
+        },
+        {
+          "caller": "main",
+          "callee": "hydrateFromManifest",
+          "lineNumber": 520
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 524
+        },
+        {
+          "caller": "main",
+          "callee": "requiredAliases.push",
+          "lineNumber": 537
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 538
+        },
+        {
+          "caller": "main",
+          "callee": "requiredAliases.join",
+          "lineNumber": 538
+        },
+        {
+          "caller": "main",
+          "callee": "validateAliases",
+          "lineNumber": 539
+        },
+        {
+          "caller": "main",
+          "callee": "validation.missing.join",
+          "lineNumber": 542
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 545
+        },
+        {
+          "caller": "main",
+          "callee": "mapCell",
+          "lineNumber": 549
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "args.cells.map(c => `${c}→${mapCell(c)}`).join",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "args.cells.map",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "mapCell",
+          "lineNumber": 551
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 554
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 558
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 562
+        },
+        {
+          "caller": "main",
+          "callee": "args.manifestHash.slice",
+          "lineNumber": 562
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 565
+        },
+        {
+          "caller": "main",
+          "callee": "runCellsWithConcurrency",
+          "lineNumber": 566
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 571
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 574
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 581
+        },
+        {
+          "caller": "main",
+          "callee": "r.v3Cell.padEnd",
+          "lineNumber": 582
+        },
+        {
+          "caller": "main",
+          "callee": "r.v1Cell.padEnd",
+          "lineNumber": 582
+        },
+        {
+          "caller": "main",
+          "callee": "(r.durationMs / 1000).toFixed",
+          "lineNumber": 582
+        },
+        {
+          "caller": "main",
+          "callee": "verifyFieldCoverage",
+          "lineNumber": 585
+        },
+        {
+          "caller": "main",
+          "callee": "coverageReports.push",
+          "lineNumber": 586
+        },
+        {
+          "caller": "main",
+          "callee": "coverageReports.push",
+          "lineNumber": 590
+        },
+        {
+          "caller": "main",
+          "callee": "cov.absent.join",
+          "lineNumber": 591
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 596
+        },
+        {
+          "caller": "main",
+          "callee": "(totalMs / 1000).toFixed",
+          "lineNumber": 596
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 598
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 599
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 602
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 12,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/run-pilot-2026-04-26.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 951,
+      "nonEmptyLines": 849,
+      "functions": [
+        {
+          "name": "buildCells",
+          "startLine": 107,
+          "endLine": 114,
+          "params": [
+            "qwenAlias"
+          ]
+        },
+        {
+          "name": "logLine",
+          "startLine": 212,
+          "endLine": 216,
+          "params": [
+            "msg"
+          ]
+        },
+        {
+          "name": "parseArgs",
+          "startLine": 238,
+          "endLine": 265,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 267,
+          "endLine": 288,
+          "params": []
+        },
+        {
+          "name": "sha256File",
+          "startLine": 294,
+          "endLine": 297,
+          "params": [
+            "filepath"
+          ]
+        },
+        {
+          "name": "gitHead",
+          "startLine": 299,
+          "endLine": 305,
+          "params": []
+        },
+        {
+          "name": "preflight",
+          "startLine": 307,
+          "endLine": 314,
+          "params": []
+        },
+        {
+          "name": "loadTaskMaterials",
+          "startLine": 320,
+          "endLine": 358,
+          "params": [
+            "taskId"
+          ]
+        },
+        {
+          "name": "llmCall",
+          "startLine": 372,
+          "endLine": 430,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "runCellSolo",
+          "startLine": 436,
+          "endLine": 469,
+          "params": [
+            "cell",
+            "task"
+          ]
+        },
+        {
+          "name": "runCellMultiStep",
+          "startLine": 475,
+          "endLine": 539,
+          "params": [
+            "cell",
+            "task",
+            "embedder"
+          ]
+        },
+        {
+          "name": "buildJudgePrompt",
+          "startLine": 586,
+          "endLine": 591,
+          "params": [
+            "task",
+            "response"
+          ]
+        },
+        {
+          "name": "parseJudgeJson",
+          "startLine": 593,
+          "endLine": 613,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "runJudge",
+          "startLine": 620,
+          "endLine": 646,
+          "params": [
+            "judgeModel",
+            "prompt"
+          ]
+        },
+        {
+          "name": "judgeWithTrio",
+          "startLine": 648,
+          "endLine": 661,
+          "params": [
+            "task",
+            "response"
+          ]
+        },
+        {
+          "name": "stripJudge",
+          "startLine": 667,
+          "endLine": 673,
+          "params": [
+            "j"
+          ]
+        },
+        {
+          "name": "findJudge",
+          "startLine": 675,
+          "endLine": 679,
+          "params": [
+            "records",
+            "model"
+          ]
+        },
+        {
+          "name": "writeCellJsonl",
+          "startLine": 681,
+          "endLine": 714,
+          "params": [
+            "cell",
+            "judges",
+            "audit"
+          ]
+        },
+        {
+          "name": "writeSummary",
+          "startLine": 716,
+          "endLine": 761,
+          "params": [
+            "records",
+            "cumulativeCost",
+            "startTs",
+            "endTs"
+          ]
+        },
+        {
+          "name": "retryCellAMinimax",
+          "startLine": 767,
+          "endLine": 794,
+          "params": [
+            "audit"
+          ]
+        },
+        {
+          "name": "restartCells",
+          "startLine": 800,
+          "endLine": 835,
+          "params": [
+            "cellList",
+            "embedder",
+            "audit"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 841,
+          "endLine": 946,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "logLine",
+          "callee": "new Date().toISOString",
+          "lineNumber": 213
+        },
+        {
+          "caller": "logLine",
+          "callee": "fs.appendFileSync",
+          "lineNumber": 214
+        },
+        {
+          "caller": "logLine",
+          "callee": "process.stderr.write",
+          "lineNumber": 215
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "Number",
+          "lineNumber": 257
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "(next ?? '').toLowerCase",
+          "lineNumber": 258
+        },
+        {
+          "caller": "printHelp",
+          "callee": "console.log",
+          "lineNumber": 268
+        },
+        {
+          "caller": "sha256File",
+          "callee": "fs.readFileSync",
+          "lineNumber": 295
+        },
+        {
+          "caller": "sha256File",
+          "callee": "crypto.createHash('sha256').update(buf).digest",
+          "lineNumber": 296
+        },
+        {
+          "caller": "sha256File",
+          "callee": "crypto.createHash('sha256').update",
+          "lineNumber": 296
+        },
+        {
+          "caller": "sha256File",
+          "callee": "crypto.createHash",
+          "lineNumber": 296
+        },
+        {
+          "caller": "gitHead",
+          "callee": "execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT }).toString().trim",
+          "lineNumber": 301
+        },
+        {
+          "caller": "gitHead",
+          "callee": "execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT }).toString",
+          "lineNumber": 301
+        },
+        {
+          "caller": "gitHead",
+          "callee": "execFileSync",
+          "lineNumber": 301
+        },
+        {
+          "caller": "preflight",
+          "callee": "gitHead",
+          "lineNumber": 309
+        },
+        {
+          "caller": "preflight",
+          "callee": "sha256File",
+          "lineNumber": 310
+        },
+        {
+          "caller": "preflight",
+          "callee": "sha256File",
+          "lineNumber": 311
+        },
+        {
+          "caller": "preflight",
+          "callee": "sha256File",
+          "lineNumber": 312
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "fs.readFileSync",
+          "lineNumber": 323
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "raw.indexOf",
+          "lineNumber": 324
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "raw.slice(0, endIdx).trimEnd",
+          "lineNumber": 326
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "raw.slice",
+          "lineNumber": 326
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "stripped.match",
+          "lineNumber": 328
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "stripped.match",
+          "lineNumber": 329
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "stripped.match",
+          "lineNumber": 330
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "personaMatch[1].trim",
+          "lineNumber": 332
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "scenarioMatch[1].trim",
+          "lineNumber": 333
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "questionMatch[1].replace(/^\"|\"$/g, '').trim",
+          "lineNumber": 334
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "questionMatch[1].replace",
+          "lineNumber": 334
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "stripped.matchAll",
+          "lineNumber": 338
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "stripped.slice(start, end).trim",
+          "lineNumber": 344
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "stripped.slice",
+          "lineNumber": 344
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "materialFrames.push",
+          "lineNumber": 345
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "materialFrames.map(f => `## ${f.title}\\n\\n${f.body}`).join",
+          "lineNumber": 348
+        },
+        {
+          "caller": "loadTaskMaterials",
+          "callee": "materialFrames.map",
+          "lineNumber": 348
+        },
+        {
+          "caller": "llmCall",
+          "callee": "model.includes",
+          "lineNumber": 377
+        },
+        {
+          "caller": "llmCall",
+          "callee": "model.startsWith",
+          "lineNumber": 384
+        },
+        {
+          "caller": "llmCall",
+          "callee": "Date.now",
+          "lineNumber": 397
+        },
+        {
+          "caller": "llmCall",
+          "callee": "fetch",
+          "lineNumber": 401
+        },
+        {
+          "caller": "llmCall",
+          "callee": "JSON.stringify",
+          "lineNumber": 404
+        },
+        {
+          "caller": "llmCall",
+          "callee": "resp.json",
+          "lineNumber": 406
+        },
+        {
+          "caller": "llmCall",
+          "callee": "String(d.error?.message ?? JSON.stringify(d.error)).slice",
+          "lineNumber": 408
+        },
+        {
+          "caller": "llmCall",
+          "callee": "String",
+          "lineNumber": 408
+        },
+        {
+          "caller": "llmCall",
+          "callee": "JSON.stringify",
+          "lineNumber": 408
+        },
+        {
+          "caller": "llmCall",
+          "callee": "setTimeout",
+          "lineNumber": 409
+        },
+        {
+          "caller": "llmCall",
+          "callee": "Date.now",
+          "lineNumber": 418
+        },
+        {
+          "caller": "llmCall",
+          "callee": "`${(e as Error).name}: ${(e as Error).message}`.slice",
+          "lineNumber": 420
+        },
+        {
+          "caller": "llmCall",
+          "callee": "setTimeout",
+          "lineNumber": 421
+        },
+        {
+          "caller": "llmCall",
+          "callee": "Date.now",
+          "lineNumber": 427
+        },
+        {
+          "caller": "runCellSolo",
+          "callee": "logLine",
+          "lineNumber": 438
+        },
+        {
+          "caller": "runCellSolo",
+          "callee": "runSoloAgent",
+          "lineNumber": 443
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "path.join",
+          "lineNumber": 480
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "fs.existsSync",
+          "lineNumber": 481
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "fs.unlinkSync",
+          "lineNumber": 481
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "sessions.ensure",
+          "lineNumber": 488
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "frames.createIFrame",
+          "lineNumber": 492
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "logLine",
+          "lineNumber": 494
+        },
+        {
+          "caller": "searchAdapter",
+          "callee": "hybrid.search",
+          "lineNumber": 500
+        },
+        {
+          "caller": "searchAdapter",
+          "callee": "hits.map((sr, i) => `[result ${i + 1}, score ${sr.finalScore.toFixed(3)}]\\n${sr.frame.content}`).join",
+          "lineNumber": 502
+        },
+        {
+          "caller": "searchAdapter",
+          "callee": "hits.map",
+          "lineNumber": 502
+        },
+        {
+          "caller": "searchAdapter",
+          "callee": "sr.finalScore.toFixed",
+          "lineNumber": 502
+        },
+        {
+          "caller": "runCellMultiStep",
+          "callee": "runRetrievalAgentLoop",
+          "lineNumber": 509
+        },
+        {
+          "caller": "buildJudgePrompt",
+          "callee": "JUDGE_PROMPT_TEMPLATE\r\n    .replace('###PERSONA_SCENARIO_QUESTION###', `${task.persona}\\n\\nQUESTION: ${task.question}`)\r\n    .replace('###MATERIALS###', task.materialsConcat)\r\n    .replace",
+          "lineNumber": 587
+        },
+        {
+          "caller": "buildJudgePrompt",
+          "callee": "JUDGE_PROMPT_TEMPLATE\r\n    .replace('###PERSONA_SCENARIO_QUESTION###', `${task.persona}\\n\\nQUESTION: ${task.question}`)\r\n    .replace",
+          "lineNumber": 587
+        },
+        {
+          "caller": "buildJudgePrompt",
+          "callee": "JUDGE_PROMPT_TEMPLATE\r\n    .replace",
+          "lineNumber": 587
+        },
+        {
+          "caller": "parseJudgeJson",
+          "callee": "text.match",
+          "lineNumber": 594
+        },
+        {
+          "caller": "parseJudgeJson",
+          "callee": "JSON.parse",
+          "lineNumber": 597
+        },
+        {
+          "caller": "parseJudgeJson",
+          "callee": "dims.reduce",
+          "lineNumber": 602
+        },
+        {
+          "caller": "runJudge",
+          "callee": "llmCall",
+          "lineNumber": 626
+        },
+        {
+          "caller": "runJudge",
+          "callee": "parseJudgeJson",
+          "lineNumber": 629
+        },
+        {
+          "caller": "runJudge",
+          "callee": "r.content.slice",
+          "lineNumber": 637
+        },
+        {
+          "caller": "runJudge",
+          "callee": "logLine",
+          "lineNumber": 639
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "buildJudgePrompt",
+          "lineNumber": 651
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "Promise.all",
+          "lineNumber": 652
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "JUDGES.map",
+          "lineNumber": 652
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "runJudge",
+          "lineNumber": 652
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "records.filter(r => r.mean > 0).map",
+          "lineNumber": 653
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "records.filter",
+          "lineNumber": 653
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "validMeans.reduce",
+          "lineNumber": 655
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "validMeans.reduce",
+          "lineNumber": 656
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "records.filter",
+          "lineNumber": 657
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "records.filter",
+          "lineNumber": 658
+        },
+        {
+          "caller": "judgeWithTrio",
+          "callee": "records.reduce",
+          "lineNumber": 659
+        },
+        {
+          "caller": "findJudge",
+          "callee": "records.find",
+          "lineNumber": 676
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "stripJudge",
+          "lineNumber": 699
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "findJudge",
+          "lineNumber": 699
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "stripJudge",
+          "lineNumber": 700
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "findJudge",
+          "lineNumber": 700
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "stripJudge",
+          "lineNumber": 701
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "findJudge",
+          "lineNumber": 701
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "new Date().toISOString",
+          "lineNumber": 707
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "path.join",
+          "lineNumber": 710
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 711
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "JSON.stringify",
+          "lineNumber": 711
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "logLine",
+          "lineNumber": 712
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "path.basename",
+          "lineNumber": 712
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "judges.trioMean.toFixed",
+          "lineNumber": 712
+        },
+        {
+          "caller": "writeCellJsonl",
+          "callee": "rec.cell_cost_usd.toFixed",
+          "lineNumber": 712
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "Object.keys",
+          "lineNumber": 726
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "h2.toFixed",
+          "lineNumber": 737
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "h3.toFixed",
+          "lineNumber": 737
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "h4.toFixed",
+          "lineNumber": 737
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "cumulativeCost.toFixed",
+          "lineNumber": 746
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 759
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "path.join",
+          "lineNumber": 759
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "JSON.stringify",
+          "lineNumber": 759
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "logLine",
+          "lineNumber": 760
+        },
+        {
+          "caller": "writeSummary",
+          "callee": "cumulativeCost.toFixed",
+          "lineNumber": 760
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "path.join",
+          "lineNumber": 768
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "fs.existsSync",
+          "lineNumber": 769
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "logLine",
+          "lineNumber": 770
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "JSON.parse",
+          "lineNumber": 773
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "fs.readFileSync(jsonlPath, 'utf-8').trim",
+          "lineNumber": 773
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "fs.readFileSync",
+          "lineNumber": 773
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "loadTaskMaterials",
+          "lineNumber": 774
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "buildJudgePrompt",
+          "lineNumber": 775
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "logLine",
+          "lineNumber": 776
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "runJudge",
+          "lineNumber": 777
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "stripJudge",
+          "lineNumber": 779
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "[rec.judge_opus.mean, rec.judge_gpt.mean, rec.judge_minimax.mean].filter",
+          "lineNumber": 780
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "validMeans.reduce",
+          "lineNumber": 781
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "[rec.judge_opus, rec.judge_gpt, rec.judge_minimax].filter",
+          "lineNumber": 782
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "[rec.judge_opus, rec.judge_gpt, rec.judge_minimax].filter",
+          "lineNumber": 783
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "new Date().toISOString",
+          "lineNumber": 786
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 789
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "JSON.stringify",
+          "lineNumber": 789
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "logLine",
+          "lineNumber": 790
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "newJudge.mean.toFixed",
+          "lineNumber": 790
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "rec.trio_mean.toFixed",
+          "lineNumber": 790
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "newJudge.judge_cost_usd.toFixed",
+          "lineNumber": 790
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "logLine",
+          "lineNumber": 792
+        },
+        {
+          "caller": "retryCellAMinimax",
+          "callee": "newJudge.judge_cost_usd.toFixed",
+          "lineNumber": 792
+        },
+        {
+          "caller": "restartCells",
+          "callee": "path.join",
+          "lineNumber": 805
+        },
+        {
+          "caller": "restartCells",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 806
+        },
+        {
+          "caller": "restartCells",
+          "callee": "cellList.split(',').map(s => s.trim()).filter",
+          "lineNumber": 808
+        },
+        {
+          "caller": "restartCells",
+          "callee": "cellList.split(',').map",
+          "lineNumber": 808
+        },
+        {
+          "caller": "restartCells",
+          "callee": "cellList.split",
+          "lineNumber": 808
+        },
+        {
+          "caller": "restartCells",
+          "callee": "s.trim",
+          "lineNumber": 808
+        },
+        {
+          "caller": "restartCells",
+          "callee": "target.match",
+          "lineNumber": 812
+        },
+        {
+          "caller": "restartCells",
+          "callee": "logLine",
+          "lineNumber": 814
+        },
+        {
+          "caller": "restartCells",
+          "callee": "path.join",
+          "lineNumber": 819
+        },
+        {
+          "caller": "restartCells",
+          "callee": "path.join",
+          "lineNumber": 820
+        },
+        {
+          "caller": "restartCells",
+          "callee": "new Date().toISOString().replace",
+          "lineNumber": 820
+        },
+        {
+          "caller": "restartCells",
+          "callee": "new Date().toISOString",
+          "lineNumber": 820
+        },
+        {
+          "caller": "restartCells",
+          "callee": "fs.existsSync",
+          "lineNumber": 821
+        },
+        {
+          "caller": "restartCells",
+          "callee": "fs.renameSync",
+          "lineNumber": 822
+        },
+        {
+          "caller": "restartCells",
+          "callee": "logLine",
+          "lineNumber": 823
+        },
+        {
+          "caller": "restartCells",
+          "callee": "path.basename",
+          "lineNumber": 823
+        },
+        {
+          "caller": "restartCells",
+          "callee": "loadTaskMaterials",
+          "lineNumber": 825
+        },
+        {
+          "caller": "restartCells",
+          "callee": "runCellSolo",
+          "lineNumber": 827
+        },
+        {
+          "caller": "restartCells",
+          "callee": "runCellMultiStep",
+          "lineNumber": 828
+        },
+        {
+          "caller": "restartCells",
+          "callee": "judgeWithTrio",
+          "lineNumber": 829
+        },
+        {
+          "caller": "restartCells",
+          "callee": "writeCellJsonl",
+          "lineNumber": 831
+        },
+        {
+          "caller": "restartCells",
+          "callee": "records.push",
+          "lineNumber": 832
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 842
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 842
+        },
+        {
+          "caller": "main",
+          "callee": "printHelp",
+          "lineNumber": 843
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 845
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 846
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 847
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 852
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 852
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 860
+        },
+        {
+          "caller": "main",
+          "callee": "preflight",
+          "lineNumber": 861
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 863
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 864
+        },
+        {
+          "caller": "main",
+          "callee": "sha256File",
+          "lineNumber": 864
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 865
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 866
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 867
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 868
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 869
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 870
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 871
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 872
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 873
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 874
+        },
+        {
+          "caller": "main",
+          "callee": "createOllamaEmbedder",
+          "lineNumber": 878
+        },
+        {
+          "caller": "main",
+          "callee": "retryCellAMinimax",
+          "lineNumber": 881
+        },
+        {
+          "caller": "main",
+          "callee": "restartCells",
+          "lineNumber": 884
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 887
+        },
+        {
+          "caller": "main",
+          "callee": "partialCost.toFixed",
+          "lineNumber": 887
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readdirSync(OUT_DIR).filter",
+          "lineNumber": 889
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readdirSync",
+          "lineNumber": 889
+        },
+        {
+          "caller": "main",
+          "callee": "f.match",
+          "lineNumber": 889
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 892
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync(path.join(OUT_DIR, f), 'utf-8').trim",
+          "lineNumber": 892
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync",
+          "lineNumber": 892
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 892
+        },
+        {
+          "caller": "main",
+          "callee": "allRecords.push",
+          "lineNumber": 893
+        },
+        {
+          "caller": "main",
+          "callee": "allRecords.reduce",
+          "lineNumber": 895
+        },
+        {
+          "caller": "main",
+          "callee": "writeSummary",
+          "lineNumber": 896
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 896
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 904
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 904
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 911
+        },
+        {
+          "caller": "main",
+          "callee": "loadTaskMaterials",
+          "lineNumber": 913
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 914
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 915
+        },
+        {
+          "caller": "main",
+          "callee": "createOllamaEmbedder",
+          "lineNumber": 920
+        },
+        {
+          "caller": "main",
+          "callee": "loadTaskMaterials",
+          "lineNumber": 926
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 927
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 930
+        },
+        {
+          "caller": "main",
+          "callee": "cumulativeCost.toFixed",
+          "lineNumber": 930
+        },
+        {
+          "caller": "main",
+          "callee": "runCellSolo",
+          "lineNumber": 934
+        },
+        {
+          "caller": "main",
+          "callee": "runCellMultiStep",
+          "lineNumber": 935
+        },
+        {
+          "caller": "main",
+          "callee": "judgeWithTrio",
+          "lineNumber": 936
+        },
+        {
+          "caller": "main",
+          "callee": "writeCellJsonl",
+          "lineNumber": 938
+        },
+        {
+          "caller": "main",
+          "callee": "allRecords.push",
+          "lineNumber": 939
+        },
+        {
+          "caller": "main",
+          "callee": "logLine",
+          "lineNumber": 940
+        },
+        {
+          "caller": "main",
+          "callee": "cumulativeCost.toFixed",
+          "lineNumber": 940
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 944
+        },
+        {
+          "caller": "main",
+          "callee": "writeSummary",
+          "lineNumber": 945
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 22,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/scan-locomo-deep.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 89,
+      "functions": [
+        {
+          "name": "getConv",
+          "startLine": 6,
+          "endLine": 6,
+          "params": []
+        },
+        {
+          "name": "collectTurns",
+          "startLine": 7,
+          "endLine": 17,
+          "params": [
+            "conv"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getConv",
+          "callee": "data.find",
+          "lineNumber": 6
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "Object.keys",
+          "lineNumber": 10
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "key.match",
+          "lineNumber": 11
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "Array.isArray",
+          "lineNumber": 12
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "turns.push",
+          "lineNumber": 13
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/scan-locomo-for-triples.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 163,
+      "nonEmptyLines": 143,
+      "functions": [
+        {
+          "name": "getConv",
+          "startLine": 20,
+          "endLine": 24,
+          "params": [
+            "sampleId"
+          ]
+        },
+        {
+          "name": "collectTurns",
+          "startLine": 26,
+          "endLine": 47,
+          "params": [
+            "conv"
+          ]
+        },
+        {
+          "name": "grepTurns",
+          "startLine": 49,
+          "endLine": 53,
+          "params": [
+            "turns",
+            "regex"
+          ]
+        },
+        {
+          "name": "formatHit",
+          "startLine": 55,
+          "endLine": 58,
+          "params": [
+            "t"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getConv",
+          "callee": "data.find",
+          "lineNumber": 21
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "Object.keys",
+          "lineNumber": 30
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "key.match",
+          "lineNumber": 31
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "Array.isArray",
+          "lineNumber": 32
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "Number",
+          "lineNumber": 33
+        },
+        {
+          "caller": "collectTurns",
+          "callee": "turns.push",
+          "lineNumber": 36
+        },
+        {
+          "caller": "grepTurns",
+          "callee": "regex.test",
+          "lineNumber": 51
+        },
+        {
+          "caller": "grepTurns",
+          "callee": "out.push",
+          "lineNumber": 51
+        },
+        {
+          "caller": "formatHit",
+          "callee": "t.text.replace(/\\s+/g, ' ').slice",
+          "lineNumber": 56
+        },
+        {
+          "caller": "formatHit",
+          "callee": "t.text.replace",
+          "lineNumber": 56
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/seed-real-data.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 381,
+      "nonEmptyLines": 325,
+      "functions": [
+        {
+          "name": "ensureEntity",
+          "startLine": 274,
+          "endLine": 279,
+          "params": [
+            "type",
+            "name"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ensureEntity",
+          "callee": "kg.searchEntities",
+          "lineNumber": 275
+        },
+        {
+          "caller": "ensureEntity",
+          "callee": "existing.find",
+          "lineNumber": 276
+        },
+        {
+          "caller": "ensureEntity",
+          "callee": "e.name.toLowerCase",
+          "lineNumber": 276
+        },
+        {
+          "caller": "ensureEntity",
+          "callee": "name.toLowerCase",
+          "lineNumber": 276
+        },
+        {
+          "caller": "ensureEntity",
+          "callee": "kg.createEntity",
+          "lineNumber": 278
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/smoke-qwen-dual-route.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 112,
+      "nonEmptyLines": 106,
+      "functions": [
+        {
+          "name": "probe",
+          "startLine": 37,
+          "endLine": 81,
+          "params": [
+            "alias"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 83,
+          "endLine": 107,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "probe",
+          "callee": "LITELLM_URL.replace",
+          "lineNumber": 38
+        },
+        {
+          "caller": "probe",
+          "callee": "Date.now",
+          "lineNumber": 39
+        },
+        {
+          "caller": "probe",
+          "callee": "fetch",
+          "lineNumber": 42
+        },
+        {
+          "caller": "probe",
+          "callee": "JSON.stringify",
+          "lineNumber": 48
+        },
+        {
+          "caller": "probe",
+          "callee": "String",
+          "lineNumber": 56
+        },
+        {
+          "caller": "probe",
+          "callee": "Date.now",
+          "lineNumber": 56
+        },
+        {
+          "caller": "probe",
+          "callee": "Date.now",
+          "lineNumber": 58
+        },
+        {
+          "caller": "probe",
+          "callee": "res.text",
+          "lineNumber": 59
+        },
+        {
+          "caller": "probe",
+          "callee": "JSON.parse",
+          "lineNumber": 61
+        },
+        {
+          "caller": "probe",
+          "callee": "text.slice",
+          "lineNumber": 63
+        },
+        {
+          "caller": "probe",
+          "callee": "content.trim",
+          "lineNumber": 75
+        },
+        {
+          "caller": "probe",
+          "callee": "reasoning.slice(0, 120).replace",
+          "lineNumber": 76
+        },
+        {
+          "caller": "probe",
+          "callee": "reasoning.slice",
+          "lineNumber": 76
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "r.alias.padEnd",
+          "lineNumber": 87
+        },
+        {
+          "caller": "main",
+          "callee": "probe",
+          "lineNumber": 88
+        },
+        {
+          "caller": "main",
+          "callee": "results.push",
+          "lineNumber": 89
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 91
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 91
+        },
+        {
+          "caller": "main",
+          "callee": "p.content.slice",
+          "lineNumber": 91
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 93
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 94
+        },
+        {
+          "caller": "main",
+          "callee": "p.error.slice",
+          "lineNumber": 94
+        },
+        {
+          "caller": "main",
+          "callee": "results.every",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 98
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 99
+        },
+        {
+          "caller": "main",
+          "callee": "results.filter",
+          "lineNumber": 99
+        },
+        {
+          "caller": "main",
+          "callee": "results.map",
+          "lineNumber": 102
+        },
+        {
+          "caller": "main",
+          "callee": "(r.content ?? '').replace(/\\s+/g, ' ').trim().toLowerCase",
+          "lineNumber": 102
+        },
+        {
+          "caller": "main",
+          "callee": "(r.content ?? '').replace(/\\s+/g, ' ').trim",
+          "lineNumber": 102
+        },
+        {
+          "caller": "main",
+          "callee": "(r.content ?? '').replace",
+          "lineNumber": 102
+        },
+        {
+          "caller": "main",
+          "callee": "normalized.every",
+          "lineNumber": 103
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 106
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/smoke-sonnet-route.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 105,
+      "nonEmptyLines": 99,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 40,
+          "endLine": 103,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "args.litellmUrl.replace",
+          "lineNumber": 41
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 42
+        },
+        {
+          "caller": "main",
+          "callee": "fetch",
+          "lineNumber": 45
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 51
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 61
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 62
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 63
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "res.text",
+          "lineNumber": 66
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 69
+        },
+        {
+          "caller": "main",
+          "callee": "/model[_ -]?not[_ -]?found/i.test",
+          "lineNumber": 77
+        },
+        {
+          "caller": "main",
+          "callee": "/unknown model/i.test",
+          "lineNumber": 78
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 80
+        },
+        {
+          "caller": "main",
+          "callee": "bodyText.slice",
+          "lineNumber": 82
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 89
+        },
+        {
+          "caller": "main",
+          "callee": "bodyText.slice",
+          "lineNumber": 91
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 93
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 100
+        },
+        {
+          "caller": "main",
+          "callee": "content.slice",
+          "lineNumber": 100
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/sprint-11-b1-smoke.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 194,
+      "nonEmptyLines": 173,
+      "functions": [
+        {
+          "name": "iso",
+          "startLine": 51,
+          "endLine": 53,
+          "params": []
+        },
+        {
+          "name": "mkdirP",
+          "startLine": 55,
+          "endLine": 57,
+          "params": [
+            "dir"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 59,
+          "endLine": 182,
+          "params": []
+        },
+        {
+          "name": "writeArtifact",
+          "startLine": 184,
+          "endLine": 189,
+          "params": [
+            "artifact"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "iso",
+          "callee": "new Date().toISOString",
+          "lineNumber": 52
+        },
+        {
+          "caller": "mkdirP",
+          "callee": "fs.existsSync",
+          "lineNumber": 56
+        },
+        {
+          "caller": "mkdirP",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 56
+        },
+        {
+          "caller": "main",
+          "callee": "mkdirP",
+          "lineNumber": 60
+        },
+        {
+          "caller": "main",
+          "callee": "iso",
+          "lineNumber": 61
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 62
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 75
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 76
+        },
+        {
+          "caller": "main",
+          "callee": "fetch",
+          "lineNumber": 80
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 86
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 89
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 92
+        },
+        {
+          "caller": "main",
+          "callee": "writeArtifact",
+          "lineNumber": 99
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 100
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 101
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "res.text().catch",
+          "lineNumber": 107
+        },
+        {
+          "caller": "main",
+          "callee": "res.text",
+          "lineNumber": 107
+        },
+        {
+          "caller": "main",
+          "callee": "text.slice",
+          "lineNumber": 111
+        },
+        {
+          "caller": "main",
+          "callee": "writeArtifact",
+          "lineNumber": 117
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 118
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 119
+        },
+        {
+          "caller": "main",
+          "callee": "text.slice",
+          "lineNumber": 119
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 120
+        },
+        {
+          "caller": "main",
+          "callee": "res.json",
+          "lineNumber": 123
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 138
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 138
+        },
+        {
+          "caller": "main",
+          "callee": "iso",
+          "lineNumber": 145
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 156
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 156
+        },
+        {
+          "caller": "main",
+          "callee": "reasoning.slice",
+          "lineNumber": 161
+        },
+        {
+          "caller": "main",
+          "callee": "writeArtifact",
+          "lineNumber": 169
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 171
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 172
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 173
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 173
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 174
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 176
+        },
+        {
+          "caller": "main",
+          "callee": "text.trim().slice",
+          "lineNumber": 176
+        },
+        {
+          "caller": "main",
+          "callee": "text.trim",
+          "lineNumber": 176
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 178
+        },
+        {
+          "caller": "main",
+          "callee": "reasoning.slice(0, 150).replace",
+          "lineNumber": 178
+        },
+        {
+          "caller": "main",
+          "callee": "reasoning.slice",
+          "lineNumber": 178
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 180
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "new Date().toISOString().replace",
+          "lineNumber": 185
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "new Date().toISOString",
+          "lineNumber": 185
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "path.join",
+          "lineNumber": 186
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 187
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "JSON.stringify",
+          "lineNumber": 187
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "console.log",
+          "lineNumber": 188
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/sprint-11-b2-grok-smoke.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 216,
+      "nonEmptyLines": 197,
+      "functions": [
+        {
+          "name": "iso",
+          "startLine": 71,
+          "endLine": 71,
+          "params": []
+        },
+        {
+          "name": "mkdirP",
+          "startLine": 72,
+          "endLine": 72,
+          "params": [
+            "dir"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 74,
+          "endLine": 204,
+          "params": []
+        },
+        {
+          "name": "writeArtifact",
+          "startLine": 206,
+          "endLine": 211,
+          "params": [
+            "artifact"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "iso",
+          "callee": "new Date().toISOString",
+          "lineNumber": 71
+        },
+        {
+          "caller": "mkdirP",
+          "callee": "fs.existsSync",
+          "lineNumber": 72
+        },
+        {
+          "caller": "mkdirP",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 72
+        },
+        {
+          "caller": "main",
+          "callee": "mkdirP",
+          "lineNumber": 75
+        },
+        {
+          "caller": "main",
+          "callee": "iso",
+          "lineNumber": 76
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 77
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 79
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 80
+        },
+        {
+          "caller": "main",
+          "callee": "fetch",
+          "lineNumber": 84
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 90
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 101
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "writeArtifact",
+          "lineNumber": 110
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 111
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 112
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 115
+        },
+        {
+          "caller": "main",
+          "callee": "res.text().catch",
+          "lineNumber": 118
+        },
+        {
+          "caller": "main",
+          "callee": "res.text",
+          "lineNumber": 118
+        },
+        {
+          "caller": "main",
+          "callee": "text.slice",
+          "lineNumber": 122
+        },
+        {
+          "caller": "main",
+          "callee": "writeArtifact",
+          "lineNumber": 127
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 128
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 129
+        },
+        {
+          "caller": "main",
+          "callee": "text.slice",
+          "lineNumber": 129
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 130
+        },
+        {
+          "caller": "main",
+          "callee": "res.json",
+          "lineNumber": 133
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 144
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 144
+        },
+        {
+          "caller": "main",
+          "callee": "text.trim().match",
+          "lineNumber": 153
+        },
+        {
+          "caller": "main",
+          "callee": "text.trim",
+          "lineNumber": 153
+        },
+        {
+          "caller": "main",
+          "callee": "fenceMatch[1].trim",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "text.trim",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "body.indexOf",
+          "lineNumber": 155
+        },
+        {
+          "caller": "main",
+          "callee": "body.lastIndexOf",
+          "lineNumber": 156
+        },
+        {
+          "caller": "main",
+          "callee": "body.slice",
+          "lineNumber": 157
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 158
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 163
+        },
+        {
+          "caller": "main",
+          "callee": "iso",
+          "lineNumber": 170
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "writeArtifact",
+          "lineNumber": 195
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 197
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 198
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 200
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 201
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 202
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "text.slice",
+          "lineNumber": 203
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "new Date().toISOString().replace",
+          "lineNumber": 207
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "new Date().toISOString",
+          "lineNumber": 207
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "path.join",
+          "lineNumber": 208
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 209
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "JSON.stringify",
+          "lineNumber": 209
+        },
+        {
+          "caller": "writeArtifact",
+          "callee": "console.log",
+          "lineNumber": 210
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/stage-0-query.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 354,
+      "nonEmptyLines": 332,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 29,
+          "endLine": 67,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "recallContext",
+          "startLine": 71,
+          "endLine": 110,
+          "params": [
+            "question",
+            "dataDir",
+            "limit"
+          ]
+        },
+        {
+          "name": "buildUserPrompt",
+          "startLine": 126,
+          "endLine": 139,
+          "params": [
+            "question",
+            "hits"
+          ]
+        },
+        {
+          "name": "callLitellm",
+          "startLine": 143,
+          "endLine": 196,
+          "params": []
+        },
+        {
+          "name": "callOllama",
+          "startLine": 201,
+          "endLine": 233,
+          "params": []
+        },
+        {
+          "name": "computeCost",
+          "startLine": 251,
+          "endLine": 257,
+          "params": [
+            "backend",
+            "model",
+            "promptTokens",
+            "completionTokens"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 261,
+          "endLine": 349,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseArgs",
+          "callee": "Number",
+          "lineNumber": 55
+        },
+        {
+          "caller": "recallContext",
+          "callee": "path.resolve",
+          "lineNumber": 72
+        },
+        {
+          "caller": "recallContext",
+          "callee": "question\n    .replace(/[\"']/g, ' ')\n    .replace(/[:*()]/g, ' ')\n    .replace(/\\s+-/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim",
+          "lineNumber": 90
+        },
+        {
+          "caller": "recallContext",
+          "callee": "question\n    .replace(/[\"']/g, ' ')\n    .replace(/[:*()]/g, ' ')\n    .replace(/\\s+-/g, ' ')\n    .replace",
+          "lineNumber": 90
+        },
+        {
+          "caller": "recallContext",
+          "callee": "question\n    .replace(/[\"']/g, ' ')\n    .replace(/[:*()]/g, ' ')\n    .replace",
+          "lineNumber": 90
+        },
+        {
+          "caller": "recallContext",
+          "callee": "question\n    .replace(/[\"']/g, ' ')\n    .replace",
+          "lineNumber": 90
+        },
+        {
+          "caller": "recallContext",
+          "callee": "question\n    .replace",
+          "lineNumber": 90
+        },
+        {
+          "caller": "recallContext",
+          "callee": "spawnSync",
+          "lineNumber": 96
+        },
+        {
+          "caller": "recallContext",
+          "callee": "String",
+          "lineNumber": 98
+        },
+        {
+          "caller": "recallContext",
+          "callee": "res.stdout\n    .split('\\n')\n    .filter(l => !l.startsWith('[hive-mind'))\n    .join",
+          "lineNumber": 105
+        },
+        {
+          "caller": "recallContext",
+          "callee": "res.stdout\n    .split('\\n')\n    .filter",
+          "lineNumber": 105
+        },
+        {
+          "caller": "recallContext",
+          "callee": "res.stdout\n    .split",
+          "lineNumber": 105
+        },
+        {
+          "caller": "recallContext",
+          "callee": "l.startsWith",
+          "lineNumber": 107
+        },
+        {
+          "caller": "recallContext",
+          "callee": "JSON.parse",
+          "lineNumber": 109
+        },
+        {
+          "caller": "buildUserPrompt",
+          "callee": "hits.map",
+          "lineNumber": 127
+        },
+        {
+          "caller": "buildUserPrompt",
+          "callee": "(h.content ?? '').replace(/\\s+/g, ' ').slice",
+          "lineNumber": 130
+        },
+        {
+          "caller": "buildUserPrompt",
+          "callee": "(h.content ?? '').replace",
+          "lineNumber": 130
+        },
+        {
+          "caller": "buildUserPrompt",
+          "callee": "[\n    '# Recalled Memories',\n    memoryBlocks.join('\\n'),\n    '',\n    `Question: ${question}`,\n  ].join",
+          "lineNumber": 133
+        },
+        {
+          "caller": "buildUserPrompt",
+          "callee": "memoryBlocks.join",
+          "lineNumber": 135
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "Date.now",
+          "lineNumber": 144
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "fetch",
+          "lineNumber": 145
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "url.replace",
+          "lineNumber": 145
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "JSON.stringify",
+          "lineNumber": 151
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "Date.now",
+          "lineNumber": 168
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "res.text",
+          "lineNumber": 170
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "body.slice",
+          "lineNumber": 171
+        },
+        {
+          "caller": "callLitellm",
+          "callee": "res.json",
+          "lineNumber": 173
+        },
+        {
+          "caller": "callOllama",
+          "callee": "Date.now",
+          "lineNumber": 202
+        },
+        {
+          "caller": "callOllama",
+          "callee": "fetch",
+          "lineNumber": 203
+        },
+        {
+          "caller": "callOllama",
+          "callee": "url.replace",
+          "lineNumber": 203
+        },
+        {
+          "caller": "callOllama",
+          "callee": "JSON.stringify",
+          "lineNumber": 206
+        },
+        {
+          "caller": "callOllama",
+          "callee": "Date.now",
+          "lineNumber": 219
+        },
+        {
+          "caller": "callOllama",
+          "callee": "res.text",
+          "lineNumber": 221
+        },
+        {
+          "caller": "callOllama",
+          "callee": "body.slice",
+          "lineNumber": 222
+        },
+        {
+          "caller": "callOllama",
+          "callee": "res.json",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 262
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 262
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 264
+        },
+        {
+          "caller": "main",
+          "callee": "recallContext",
+          "lineNumber": 265
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 266
+        },
+        {
+          "caller": "main",
+          "callee": "buildUserPrompt",
+          "lineNumber": 269
+        },
+        {
+          "caller": "main",
+          "callee": "callOllama",
+          "lineNumber": 282
+        },
+        {
+          "caller": "main",
+          "callee": "callLitellm",
+          "lineNumber": 288
+        },
+        {
+          "caller": "main",
+          "callee": "computeCost",
+          "lineNumber": 299
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 304
+        },
+        {
+          "caller": "main",
+          "callee": "hits.map",
+          "lineNumber": 313
+        },
+        {
+          "caller": "main",
+          "callee": "(h.content ?? '').replace(/\\s+/g, ' ').slice",
+          "lineNumber": 324
+        },
+        {
+          "caller": "main",
+          "callee": "(h.content ?? '').replace",
+          "lineNumber": 324
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 340
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 340
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 341
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 341
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 343
+        },
+        {
+          "caller": "main",
+          "callee": "costUsd.toFixed",
+          "lineNumber": 346
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/test-full-compile.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 31,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/test-synthesizer.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 14,
+      "nonEmptyLines": 12,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/vendor-availability-probe.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 183,
+      "nonEmptyLines": 171,
+      "functions": [
+        {
+          "name": "probeVendor",
+          "startLine": 58,
+          "endLine": 144,
+          "params": [
+            "vendor"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 146,
+          "endLine": 178,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "probeVendor",
+          "callee": "args.litellmUrl.replace",
+          "lineNumber": 59
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "Date.now",
+          "lineNumber": 60
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "/opus-4-7|gpt-5|o3|o4/i.test",
+          "lineNumber": 64
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "fetch",
+          "lineNumber": 74
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "JSON.stringify",
+          "lineNumber": 80
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "String",
+          "lineNumber": 83
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "Date.now",
+          "lineNumber": 88
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "Date.now",
+          "lineNumber": 95
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "res.text",
+          "lineNumber": 96
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "JSON.parse",
+          "lineNumber": 98
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "bodyText.toLowerCase",
+          "lineNumber": 101
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "/unauthori[sz]ed/.test",
+          "lineNumber": 103
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "/billing|payment|quota/.test",
+          "lineNumber": 104
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "/model[_ -]?not[_ -]?found|unknown model/.test",
+          "lineNumber": 105
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "bodyText.slice",
+          "lineNumber": 113
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "bodyText.slice",
+          "lineNumber": 127
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "content.trim().slice",
+          "lineNumber": 140
+        },
+        {
+          "caller": "probeVendor",
+          "callee": "content.trim",
+          "lineNumber": 140
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 147
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "vendor.id.padEnd",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "vendor.model.padEnd",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "probeVendor",
+          "lineNumber": 151
+        },
+        {
+          "caller": "main",
+          "callee": "results.push",
+          "lineNumber": 152
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 156
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 157
+        },
+        {
+          "caller": "main",
+          "callee": "r.error.slice",
+          "lineNumber": 157
+        },
+        {
+          "caller": "main",
+          "callee": "results.every",
+          "lineNumber": 161
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 163
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 168
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 168
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 169
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 169
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 171
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 172
+        },
+        {
+          "caller": "main",
+          "callee": "results.filter",
+          "lineNumber": 174
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 177
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/vision-judge-workflow.mjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 168,
+      "nonEmptyLines": 144,
+      "exports": [
+        {
+          "name": "meta",
+          "line": 20,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "sidecar/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 16,
+      "nonEmptyLines": 16,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "private",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "sidecar/src/skill-loader.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 71,
+      "nonEmptyLines": 57,
+      "functions": [
+        {
+          "name": "parseFrontmatter",
+          "startLine": 15,
+          "endLine": 28,
+          "params": [
+            "content"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "SkillLoader",
+          "startLine": 30,
+          "endLine": 71,
+          "methods": [
+            "constructor",
+            "discover"
+          ],
+          "properties": [
+            "directories"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SkillLoader",
+          "line": 30,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseFrontmatter",
+          "callee": "content.match",
+          "lineNumber": 16
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "match[1].split",
+          "lineNumber": 20
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "line.indexOf",
+          "lineNumber": 21
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "line.slice(0, colonIdx).trim",
+          "lineNumber": 23
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "line.slice",
+          "lineNumber": 23
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "line.slice(colonIdx + 1).trim",
+          "lineNumber": 24
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "line.slice",
+          "lineNumber": 24
+        },
+        {
+          "caller": "parseFrontmatter",
+          "callee": "match[2].trim",
+          "lineNumber": 27
+        },
+        {
+          "caller": "discover",
+          "callee": "fs.existsSync",
+          "lineNumber": 41
+        },
+        {
+          "caller": "discover",
+          "callee": "fs.readdirSync",
+          "lineNumber": 43
+        },
+        {
+          "caller": "discover",
+          "callee": "entry.isDirectory",
+          "lineNumber": 45
+        },
+        {
+          "caller": "discover",
+          "callee": "path.join",
+          "lineNumber": 47
+        },
+        {
+          "caller": "discover",
+          "callee": "fs.existsSync",
+          "lineNumber": 48
+        },
+        {
+          "caller": "discover",
+          "callee": "fs.readFileSync",
+          "lineNumber": 50
+        },
+        {
+          "caller": "discover",
+          "callee": "parseFrontmatter",
+          "lineNumber": 51
+        },
+        {
+          "caller": "discover",
+          "callee": "parsed.meta.tools.split(',').map",
+          "lineNumber": 60
+        },
+        {
+          "caller": "discover",
+          "callee": "parsed.meta.tools.split",
+          "lineNumber": 60
+        },
+        {
+          "caller": "discover",
+          "callee": "t.trim",
+          "lineNumber": 60
+        },
+        {
+          "caller": "discover",
+          "callee": "skillMap.set",
+          "lineNumber": 65
+        },
+        {
+          "caller": "discover",
+          "callee": "Array.from",
+          "lineNumber": 69
+        },
+        {
+          "caller": "discover",
+          "callee": "skillMap.values",
+          "lineNumber": 69
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "sidecar/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 16,
+      "nonEmptyLines": 16,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 15
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "tests/agent-behavior-audit.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 548,
+      "nonEmptyLines": 452,
+      "functions": [
+        {
+          "name": "chat",
+          "startLine": 33,
+          "endLine": 101,
+          "params": [
+            "message",
+            "opts"
+          ]
+        },
+        {
+          "name": "inspectMind",
+          "startLine": 105,
+          "endLine": 136,
+          "params": [
+            "dbPath"
+          ]
+        },
+        {
+          "name": "clearHistory",
+          "startLine": 138,
+          "endLine": 143,
+          "params": [
+            "workspace"
+          ]
+        },
+        {
+          "name": "startSession",
+          "startLine": 156,
+          "endLine": 162,
+          "params": [
+            "num",
+            "name"
+          ]
+        },
+        {
+          "name": "check",
+          "startLine": 164,
+          "endLine": 168,
+          "params": [
+            "name",
+            "pass",
+            "detail"
+          ]
+        },
+        {
+          "name": "session1_coldStart",
+          "startLine": 172,
+          "endLine": 194,
+          "params": []
+        },
+        {
+          "name": "session2_memoryFormation",
+          "startLine": 196,
+          "endLine": 234,
+          "params": []
+        },
+        {
+          "name": "session3_memoryRecall",
+          "startLine": 236,
+          "endLine": 255,
+          "params": []
+        },
+        {
+          "name": "session4_conversationalReplies",
+          "startLine": 257,
+          "endLine": 288,
+          "params": []
+        },
+        {
+          "name": "session5_toolUsage",
+          "startLine": 290,
+          "endLine": 310,
+          "params": []
+        },
+        {
+          "name": "session6_personaSwitching",
+          "startLine": 312,
+          "endLine": 335,
+          "params": []
+        },
+        {
+          "name": "session7_entityExtraction",
+          "startLine": 337,
+          "endLine": 380,
+          "params": []
+        },
+        {
+          "name": "session8_evolutionPipeline",
+          "startLine": 382,
+          "endLine": 414,
+          "params": []
+        },
+        {
+          "name": "session9_crossWorkspace",
+          "startLine": 416,
+          "endLine": 450,
+          "params": []
+        },
+        {
+          "name": "session10_edgeCases",
+          "startLine": 452,
+          "endLine": 480,
+          "params": []
+        },
+        {
+          "name": "main",
+          "startLine": 484,
+          "endLine": 546,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "chat",
+          "callee": "JSON.stringify",
+          "lineNumber": 39
+        },
+        {
+          "caller": "chat",
+          "callee": "http.request",
+          "lineNumber": 48
+        },
+        {
+          "caller": "chat",
+          "callee": "res.on",
+          "lineNumber": 58
+        },
+        {
+          "caller": "chat",
+          "callee": "chunk.toString",
+          "lineNumber": 59
+        },
+        {
+          "caller": "chat",
+          "callee": "raw.split",
+          "lineNumber": 61
+        },
+        {
+          "caller": "chat",
+          "callee": "blocks.pop",
+          "lineNumber": 62
+        },
+        {
+          "caller": "chat",
+          "callee": "block.split",
+          "lineNumber": 64
+        },
+        {
+          "caller": "chat",
+          "callee": "line.startsWith",
+          "lineNumber": 68
+        },
+        {
+          "caller": "chat",
+          "callee": "line.slice(7).trim",
+          "lineNumber": 68
+        },
+        {
+          "caller": "chat",
+          "callee": "line.slice",
+          "lineNumber": 68
+        },
+        {
+          "caller": "chat",
+          "callee": "line.startsWith",
+          "lineNumber": 69
+        },
+        {
+          "caller": "chat",
+          "callee": "line.slice",
+          "lineNumber": 69
+        },
+        {
+          "caller": "chat",
+          "callee": "JSON.parse",
+          "lineNumber": 73
+        },
+        {
+          "caller": "chat",
+          "callee": "events.push",
+          "lineNumber": 74
+        },
+        {
+          "caller": "chat",
+          "callee": "res.on",
+          "lineNumber": 85
+        },
+        {
+          "caller": "chat",
+          "callee": "resolve",
+          "lineNumber": 86
+        },
+        {
+          "caller": "chat",
+          "callee": "res.on",
+          "lineNumber": 89
+        },
+        {
+          "caller": "chat",
+          "callee": "resolve",
+          "lineNumber": 90
+        },
+        {
+          "caller": "chat",
+          "callee": "req.on",
+          "lineNumber": 94
+        },
+        {
+          "caller": "chat",
+          "callee": "resolve",
+          "lineNumber": 95
+        },
+        {
+          "caller": "chat",
+          "callee": "req.write",
+          "lineNumber": 98
+        },
+        {
+          "caller": "chat",
+          "callee": "req.end",
+          "lineNumber": 99
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "fs.existsSync",
+          "lineNumber": 106
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "sqliteVec.load",
+          "lineNumber": 108
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get",
+          "lineNumber": 110
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare",
+          "lineNumber": 110
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare('SELECT COUNT(*) as cnt FROM knowledge_entities').get",
+          "lineNumber": 111
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare",
+          "lineNumber": 111
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare('SELECT COUNT(*) as cnt FROM execution_traces').get",
+          "lineNumber": 112
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare",
+          "lineNumber": 112
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare('SELECT COUNT(*) as cnt FROM sessions').get",
+          "lineNumber": 113
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare",
+          "lineNumber": 113
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare(\r\n    'SELECT entity_type, name FROM knowledge_entities ORDER BY id'\r\n  ).all",
+          "lineNumber": 115
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare",
+          "lineNumber": 115
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare(\r\n    'SELECT id, frame_type, content, source FROM memory_frames ORDER BY id'\r\n  ).all",
+          "lineNumber": 119
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.prepare",
+          "lineNumber": 119
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "entityList.filter",
+          "lineNumber": 123
+        },
+        {
+          "caller": "inspectMind",
+          "callee": "db.close",
+          "lineNumber": 125
+        },
+        {
+          "caller": "clearHistory",
+          "callee": "fetch",
+          "lineNumber": 142
+        },
+        {
+          "caller": "startSession",
+          "callee": "results.push",
+          "lineNumber": 158
+        },
+        {
+          "caller": "startSession",
+          "callee": "console.log",
+          "lineNumber": 159
+        },
+        {
+          "caller": "startSession",
+          "callee": "'═'.repeat",
+          "lineNumber": 159
+        },
+        {
+          "caller": "startSession",
+          "callee": "console.log",
+          "lineNumber": 160
+        },
+        {
+          "caller": "startSession",
+          "callee": "console.log",
+          "lineNumber": 161
+        },
+        {
+          "caller": "startSession",
+          "callee": "'═'.repeat",
+          "lineNumber": 161
+        },
+        {
+          "caller": "check",
+          "callee": "currentSession.tests.push",
+          "lineNumber": 165
+        },
+        {
+          "caller": "check",
+          "callee": "console.log",
+          "lineNumber": 167
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "startSession",
+          "lineNumber": 173
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "fetch",
+          "lineNumber": 176
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "JSON.stringify",
+          "lineNumber": 179
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "chat",
+          "lineNumber": 182
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "check",
+          "lineNumber": 187
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "check",
+          "lineNumber": 188
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "check",
+          "lineNumber": 189
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "res.events.some",
+          "lineNumber": 189
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "res.events.some",
+          "lineNumber": 192
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "e.data?.content?.includes",
+          "lineNumber": 192
+        },
+        {
+          "caller": "session1_coldStart",
+          "callee": "check",
+          "lineNumber": 193
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "startSession",
+          "lineNumber": 197
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "fetch",
+          "lineNumber": 199
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "JSON.stringify",
+          "lineNumber": 202
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "chat",
+          "lineNumber": 205
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "check",
+          "lineNumber": 210
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "inspectMind",
+          "lineNumber": 213
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "path.join",
+          "lineNumber": 213
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "check",
+          "lineNumber": 215
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "check",
+          "lineNumber": 216
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "mind.personEntities.filter",
+          "lineNumber": 219
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "['Current Situation', 'Key Issues', 'Recommended Next Action'].includes",
+          "lineNumber": 220
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "check",
+          "lineNumber": 222
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "garbagePersons.map(e => e.name).join",
+          "lineNumber": 223
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "garbagePersons.map",
+          "lineNumber": 223
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "mind.entityList.some",
+          "lineNumber": 226
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "e.name.toLowerCase().includes",
+          "lineNumber": 227
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "e.name.toLowerCase",
+          "lineNumber": 227
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "check",
+          "lineNumber": 229
+        },
+        {
+          "caller": "session2_memoryFormation",
+          "callee": "check",
+          "lineNumber": 232
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "startSession",
+          "lineNumber": 237
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "chat",
+          "lineNumber": 240
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "check",
+          "lineNumber": 245
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "res.events.find",
+          "lineNumber": 248
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "check",
+          "lineNumber": 249
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "recallEvent?.data?.content?.slice",
+          "lineNumber": 249
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "res.text.toLowerCase",
+          "lineNumber": 252
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "check",
+          "lineNumber": 253
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "text.includes",
+          "lineNumber": 253
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "check",
+          "lineNumber": 254
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "text.includes",
+          "lineNumber": 254
+        },
+        {
+          "caller": "session3_memoryRecall",
+          "callee": "text.includes",
+          "lineNumber": 254
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "startSession",
+          "lineNumber": 258
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "fetch",
+          "lineNumber": 260
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "JSON.stringify",
+          "lineNumber": 263
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "chat",
+          "lineNumber": 267
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "chat",
+          "lineNumber": 281
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "res.events.some",
+          "lineNumber": 282
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "e.data?.content?.includes",
+          "lineNumber": 283
+        },
+        {
+          "caller": "session4_conversationalReplies",
+          "callee": "check",
+          "lineNumber": 285
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "startSession",
+          "lineNumber": 291
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "fetch",
+          "lineNumber": 293
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "JSON.stringify",
+          "lineNumber": 296
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "chat",
+          "lineNumber": 299
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "check",
+          "lineNumber": 303
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "res.events.filter",
+          "lineNumber": 306
+        },
+        {
+          "caller": "session5_toolUsage",
+          "callee": "check",
+          "lineNumber": 309
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "startSession",
+          "lineNumber": 313
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "fetch",
+          "lineNumber": 315
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "JSON.stringify",
+          "lineNumber": 318
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "chat",
+          "lineNumber": 322
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "check",
+          "lineNumber": 325
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "chat",
+          "lineNumber": 328
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "check",
+          "lineNumber": 331
+        },
+        {
+          "caller": "session6_personaSwitching",
+          "callee": "check",
+          "lineNumber": 334
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "startSession",
+          "lineNumber": 338
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "fetch",
+          "lineNumber": 340
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "JSON.stringify",
+          "lineNumber": 343
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "chat",
+          "lineNumber": 347
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "check",
+          "lineNumber": 352
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "setTimeout",
+          "lineNumber": 355
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "inspectMind",
+          "lineNumber": 357
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "path.join",
+          "lineNumber": 357
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "persons.filter",
+          "lineNumber": 360
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "['Current Situation', 'Key Issues', 'Recommended Next Action', 'Project Phoenix'].includes",
+          "lineNumber": 361
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "check",
+          "lineNumber": 364
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "garbagePersons.map(e => e.name).join",
+          "lineNumber": 366
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "garbagePersons.map",
+          "lineNumber": 366
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "persons.map(p => p.name).join",
+          "lineNumber": 367
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "persons.map",
+          "lineNumber": 367
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "persons.find",
+          "lineNumber": 370
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "p.name.includes",
+          "lineNumber": 370
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "check",
+          "lineNumber": 371
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "mind.entityList.find",
+          "lineNumber": 374
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "e.name.toLowerCase().includes",
+          "lineNumber": 374
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "e.name.toLowerCase",
+          "lineNumber": 374
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "check",
+          "lineNumber": 375
+        },
+        {
+          "caller": "session7_entityExtraction",
+          "callee": "check",
+          "lineNumber": 378
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "startSession",
+          "lineNumber": 383
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "fetch",
+          "lineNumber": 385
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "JSON.stringify",
+          "lineNumber": 388
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "chat",
+          "lineNumber": 392
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "chat",
+          "lineNumber": 393
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "inspectMind",
+          "lineNumber": 396
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "path.join",
+          "lineNumber": 396
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "check",
+          "lineNumber": 398
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "fetch",
+          "lineNumber": 402
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "check",
+          "lineNumber": 403
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "fetch",
+          "lineNumber": 405
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "check",
+          "lineNumber": 406
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "statusRes.json",
+          "lineNumber": 409
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "check",
+          "lineNumber": 410
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "JSON.stringify(status).slice",
+          "lineNumber": 412
+        },
+        {
+          "caller": "session8_evolutionPipeline",
+          "callee": "JSON.stringify",
+          "lineNumber": 412
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "startSession",
+          "lineNumber": 417
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "fetch",
+          "lineNumber": 420
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "JSON.stringify",
+          "lineNumber": 423
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "fetch",
+          "lineNumber": 425
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "JSON.stringify",
+          "lineNumber": 428
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "chat",
+          "lineNumber": 432
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "chat",
+          "lineNumber": 437
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "check",
+          "lineNumber": 442
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "resB.text.toLowerCase().includes",
+          "lineNumber": 445
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "resB.text.toLowerCase",
+          "lineNumber": 445
+        },
+        {
+          "caller": "session9_crossWorkspace",
+          "callee": "check",
+          "lineNumber": 446
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "startSession",
+          "lineNumber": 453
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "fetch",
+          "lineNumber": 455
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "JSON.stringify",
+          "lineNumber": 458
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "chat",
+          "lineNumber": 462
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "check",
+          "lineNumber": 463
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "chat",
+          "lineNumber": 466
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "check",
+          "lineNumber": 469
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "check",
+          "lineNumber": 470
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "special.text.includes",
+          "lineNumber": 470
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "chat",
+          "lineNumber": 473
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "check",
+          "lineNumber": 474
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "'Tell me about AI. '.repeat",
+          "lineNumber": 477
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "chat",
+          "lineNumber": 478
+        },
+        {
+          "caller": "session10_edgeCases",
+          "callee": "check",
+          "lineNumber": 479
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 485
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 486
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 487
+        },
+        {
+          "caller": "main",
+          "callee": "fetch",
+          "lineNumber": 491
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 493
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 495
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 496
+        },
+        {
+          "caller": "main",
+          "callee": "session1_coldStart",
+          "lineNumber": 499
+        },
+        {
+          "caller": "main",
+          "callee": "session2_memoryFormation",
+          "lineNumber": 500
+        },
+        {
+          "caller": "main",
+          "callee": "session3_memoryRecall",
+          "lineNumber": 501
+        },
+        {
+          "caller": "main",
+          "callee": "session4_conversationalReplies",
+          "lineNumber": 502
+        },
+        {
+          "caller": "main",
+          "callee": "session5_toolUsage",
+          "lineNumber": 503
+        },
+        {
+          "caller": "main",
+          "callee": "session6_personaSwitching",
+          "lineNumber": 504
+        },
+        {
+          "caller": "main",
+          "callee": "session7_entityExtraction",
+          "lineNumber": 505
+        },
+        {
+          "caller": "main",
+          "callee": "session8_evolutionPipeline",
+          "lineNumber": 506
+        },
+        {
+          "caller": "main",
+          "callee": "session9_crossWorkspace",
+          "lineNumber": 507
+        },
+        {
+          "caller": "main",
+          "callee": "session10_edgeCases",
+          "lineNumber": 508
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 511
+        },
+        {
+          "caller": "main",
+          "callee": "'═'.repeat",
+          "lineNumber": 511
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 512
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 513
+        },
+        {
+          "caller": "main",
+          "callee": "'═'.repeat",
+          "lineNumber": 513
+        },
+        {
+          "caller": "main",
+          "callee": "session.tests.filter",
+          "lineNumber": 519
+        },
+        {
+          "caller": "main",
+          "callee": "session.tests.filter",
+          "lineNumber": 520
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 524
+        },
+        {
+          "caller": "main",
+          "callee": "session.tests.filter",
+          "lineNumber": 525
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 526
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 530
+        },
+        {
+          "caller": "main",
+          "callee": "results.map",
+          "lineNumber": 533
+        },
+        {
+          "caller": "main",
+          "callee": "s.tests.filter",
+          "lineNumber": 536
+        },
+        {
+          "caller": "main",
+          "callee": "s.tests.filter",
+          "lineNumber": 537
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 541
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 542
+        },
+        {
+          "caller": "main",
+          "callee": "process.cwd",
+          "lineNumber": 542
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 543
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 545
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 16,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/dock-app-title-consistency.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 73,
+      "nonEmptyLines": 65,
+      "functions": [
+        {
+          "name": "extractDockLabels",
+          "startLine": 22,
+          "endLine": 31,
+          "params": [
+            "source"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "extractDockLabels",
+          "callee": "source.matchAll",
+          "lineNumber": 25
+        },
+        {
+          "caller": "extractDockLabels",
+          "callee": "out.has",
+          "lineNumber": 27
+        },
+        {
+          "caller": "extractDockLabels",
+          "callee": "out.set",
+          "lineNumber": 27
+        },
+        {
+          "caller": "extractDockLabels",
+          "callee": "out.get(appId)!.add",
+          "lineNumber": 28
+        },
+        {
+          "caller": "extractDockLabels",
+          "callee": "out.get",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/docker-compose-litellm-env.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 83,
+      "functions": [
+        {
+          "name": "loadYaml",
+          "startLine": 36,
+          "endLine": 38,
+          "params": [
+            "relPath"
+          ]
+        },
+        {
+          "name": "collectLiteLLMEnvRefs",
+          "startLine": 41,
+          "endLine": 50,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "collectComposeEnv",
+          "startLine": 53,
+          "endLine": 65,
+          "params": [
+            "env"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadYaml",
+          "callee": "yaml.load",
+          "lineNumber": 37
+        },
+        {
+          "caller": "loadYaml",
+          "callee": "readFileSync",
+          "lineNumber": 37
+        },
+        {
+          "caller": "loadYaml",
+          "callee": "resolve",
+          "lineNumber": 37
+        },
+        {
+          "caller": "collectLiteLLMEnvRefs",
+          "callee": "keyRef.match",
+          "lineNumber": 46
+        },
+        {
+          "caller": "collectLiteLLMEnvRefs",
+          "callee": "refs.add",
+          "lineNumber": 47
+        },
+        {
+          "caller": "collectComposeEnv",
+          "callee": "Array.isArray",
+          "lineNumber": 56
+        },
+        {
+          "caller": "collectComposeEnv",
+          "callee": "entry.split",
+          "lineNumber": 58
+        },
+        {
+          "caller": "collectComposeEnv",
+          "callee": "names.add",
+          "lineNumber": 59
+        },
+        {
+          "caller": "collectComposeEnv",
+          "callee": "name.trim",
+          "lineNumber": 59
+        },
+        {
+          "caller": "collectComposeEnv",
+          "callee": "Object.keys",
+          "lineNumber": 62
+        },
+        {
+          "caller": "collectComposeEnv",
+          "callee": "names.add",
+          "lineNumber": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/boot-screen-skip.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 96,
+      "nonEmptyLines": 82,
+      "functions": [
+        {
+          "name": "clearBootFlag",
+          "startLine": 23,
+          "endLine": 35,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "seedBootFlag",
+          "startLine": 37,
+          "endLine": 46,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "clearBootFlag",
+          "callee": "page.addInitScript",
+          "lineNumber": 28
+        },
+        {
+          "caller": "clearBootFlag",
+          "callee": "window.localStorage.removeItem",
+          "lineNumber": 30
+        },
+        {
+          "caller": "seedBootFlag",
+          "callee": "page.addInitScript",
+          "lineNumber": 39
+        },
+        {
+          "caller": "seedBootFlag",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 41
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/competitive-benchmarks.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 1132,
+      "nonEmptyLines": 1003,
+      "functions": [
+        {
+          "name": "timed",
+          "startLine": 67,
+          "endLine": 71,
+          "params": [
+            "fn"
+          ]
+        },
+        {
+          "name": "saveMemory",
+          "startLine": 73,
+          "endLine": 77,
+          "params": [
+            "request",
+            "content",
+            "workspace"
+          ]
+        },
+        {
+          "name": "searchMemory",
+          "startLine": 79,
+          "endLine": 81,
+          "params": [
+            "request",
+            "query",
+            "workspace",
+            "limit"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "timed",
+          "callee": "Date.now",
+          "lineNumber": 68
+        },
+        {
+          "caller": "timed",
+          "callee": "fn",
+          "lineNumber": 69
+        },
+        {
+          "caller": "timed",
+          "callee": "Date.now",
+          "lineNumber": 70
+        },
+        {
+          "caller": "saveMemory",
+          "callee": "request.post",
+          "lineNumber": 74
+        },
+        {
+          "caller": "searchMemory",
+          "callee": "request.get",
+          "lineNumber": 80
+        },
+        {
+          "caller": "searchMemory",
+          "callee": "encodeURIComponent",
+          "lineNumber": 80
+        },
+        {
+          "caller": "searchMemory",
+          "callee": "encodeURIComponent",
+          "lineNumber": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/e2e/failure-injection/network-drop.spec.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 206,
+      "nonEmptyLines": 172,
+      "functions": [
+        {
+          "name": "skipOnboarding",
+          "startLine": 39,
+          "endLine": 43,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "waitForApp",
+          "startLine": 45,
+          "endLine": 51,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "dismissLoginBriefing",
+          "startLine": 53,
+          "endLine": 59,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "navigateTo",
+          "startLine": 61,
+          "endLine": 74,
+          "params": [
+            "page",
+            "view"
+          ]
+        },
+        {
+          "name": "gotoDesktop",
+          "startLine": 76,
+          "endLine": 82,
+          "params": [
+            "page"
+          ]
+        },
+        {
+          "name": "openChatInput",
+          "startLine": 84,
+          "endLine": 92,
+          "params": [
+            "page"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "skipOnboarding",
+          "callee": "page.evaluate",
+          "lineNumber": 40
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "localStorage.setItem",
+          "lineNumber": 41
+        },
+        {
+          "caller": "skipOnboarding",
+          "callee": "JSON.stringify",
+          "lineNumber": 41
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector(\n    '.waggle-app-shell, .waggle-sidebar, [role=\"navigation\"], [class*=\"onboarding\"]',\n    { timeout: 15_000 },\n  ).catch",
+          "lineNumber": 46
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForSelector",
+          "lineNumber": 46
+        },
+        {
+          "caller": "waitForApp",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 50
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "page.locator",
+          "lineNumber": 54
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "startBtn.isVisible({ timeout: 3_000 }).catch",
+          "lineNumber": 55
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "startBtn.isVisible",
+          "lineNumber": 55
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "startBtn.click",
+          "lineNumber": 56
+        },
+        {
+          "caller": "dismissLoginBriefing",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 57
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 62
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "dockBtn.isVisible().catch",
+          "lineNumber": 63
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "dockBtn.isVisible",
+          "lineNumber": 63
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "dockBtn.click",
+          "lineNumber": 64
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 65
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.locator",
+          "lineNumber": 68
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "sidebar.locator",
+          "lineNumber": 69
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.isVisible().catch",
+          "lineNumber": 70
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.isVisible",
+          "lineNumber": 70
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "btn.click",
+          "lineNumber": 71
+        },
+        {
+          "caller": "navigateTo",
+          "callee": "page.waitForTimeout",
+          "lineNumber": 72
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.goto",
+          "lineNumber": 77
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "skipOnboarding",
+          "lineNumber": 78
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "page.reload",
+          "lineNumber": 79
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "waitForApp",
+          "lineNumber": 80
+        },
+        {
+          "caller": "gotoDesktop",
+          "callee": "dismissLoginBriefing",
+          "lineNumber": 81
+        },
+        {
+          "caller": "openChatInput",
+          "callee": "navigateTo",
+          "lineNumber": 85
+        },
+        {
+          "caller": "openChatInput",
+          "callee": "page\n    .locator('textarea[placeholder*=\"Message\"], textarea[placeholder*=\"message\"]')\n    .first",
+          "lineNumber": 87
+        },
+        {
+          "caller": "openChatInput",
+          "callee": "page\n    .locator",
+          "lineNumber": 87
+        },
+        {
+          "caller": "openChatInput",
+          "callee": "expect(input).toBeVisible",
+          "lineNumber": 90
+        },
+        {
+          "caller": "openChatInput",
+          "callee": "expect",
+          "lineNumber": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    }
+  ]
+}

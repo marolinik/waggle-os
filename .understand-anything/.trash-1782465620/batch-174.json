@@ -1,0 +1,64 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/hive-mind-shim-core/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/hive-mind-shim-core/README.md",
+      "summary": "Developer documentation for @waggle/hive-mind-shim-core, describing the 8 foundation modules (frame-encoder, workspace-resolver, cli-bridge, hook-event-types, importance-classifier, prompt-summarizer, retry-bridge, logger) and the architecture of the CLI bridge chokepoint used by all per-IDE shims.",
+      "tags": ["documentation", "architecture", "shim", "hive-mind"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-shim-core/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/hive-mind-shim-core/package.json",
+      "summary": "Package manifest for @waggle/hive-mind-shim-core v0.1.0, an ESM-only Node >=20 foundation library for cross-IDE hive-mind capture shims, configured as a public npm package with composite TypeScript build output to dist/.",
+      "tags": ["configuration", "package-manifest", "build-system", "hive-mind"],
+      "complexity": "simple",
+      "languageNotes": "ESM-only (`\"type\": \"module\"`) with no runtime dependencies declared — relies on a global hive-mind-cli peer; publishConfig.access=public signals this is an OSS-facing package."
+    },
+    {
+      "id": "config:packages/hive-mind-shim-core/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/hive-mind-shim-core/tsconfig.json",
+      "summary": "TypeScript project configuration for @waggle/hive-mind-shim-core production build, extending the monorepo base config with composite mode enabled and output directed to dist/.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-shim-core/tsconfig.test.json",
+      "type": "config",
+      "name": "tsconfig.test.json",
+      "filePath": "packages/hive-mind-shim-core/tsconfig.test.json",
+      "summary": "TypeScript configuration for type-checking tests in @waggle/hive-mind-shim-core without emitting output, extending the base config and including both src and tests directories.",
+      "tags": ["configuration", "typescript", "test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/hive-mind-shim-core/README.md",
+      "target": "config:packages/hive-mind-shim-core/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/hive-mind-shim-core/tsconfig.json",
+      "target": "config:packages/hive-mind-shim-core/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/hive-mind-shim-core/tsconfig.test.json",
+      "target": "config:packages/hive-mind-shim-core/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

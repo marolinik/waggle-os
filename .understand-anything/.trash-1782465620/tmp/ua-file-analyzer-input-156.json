@@ -1,0 +1,18 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "gepa-phase-5/cost-probe-2026-04-29-summary.md", "language": "markdown", "sizeLines": 32, "fileCategory": "docs"},
+    {"path": "gepa-phase-5/cross-stream.md", "language": "markdown", "sizeLines": 120, "fileCategory": "docs"},
+    {"path": "gepa-phase-5/exit-criteria-coverage.md", "language": "markdown", "sizeLines": 88, "fileCategory": "docs"},
+    {"path": "gepa-phase-5/manifest.yaml", "language": "yaml", "sizeLines": 419, "fileCategory": "config"},
+    {"path": "gepa-phase-5/preflight-evidence.md", "language": "markdown", "sizeLines": 370, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "gepa-phase-5/cost-probe-2026-04-29-summary.md": [],
+    "gepa-phase-5/cross-stream.md": [],
+    "gepa-phase-5/exit-criteria-coverage.md": [],
+    "gepa-phase-5/manifest.yaml": [],
+    "gepa-phase-5/preflight-evidence.md": []
+  },
+  "neighborMap": {}
+}

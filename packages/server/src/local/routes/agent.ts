@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
+import { resolveUsableModel } from '../model-availability.js';
 
 /**
  * Agent routes — status, cost tracking, model management.
@@ -41,7 +42,9 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
 
   // GET /api/agent/model — current model
   server.get('/api/agent/model', async () => {
-    return { model: server.agentState.currentModel };
+    const model = await resolveUsableModel(server, server.agentState.currentModel);
+    server.agentState.currentModel = model;
+    return { model };
   });
 
   // PUT /api/agent/model — switch model

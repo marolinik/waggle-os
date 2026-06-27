@@ -1,0 +1,2242 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 9,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/wiki-compiler/src/adapters/notion.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 334,
+      "nonEmptyLines": 301,
+      "functions": [
+        {
+          "name": "stripFrontmatter",
+          "startLine": 78,
+          "endLine": 85,
+          "params": [
+            "markdown"
+          ]
+        },
+        {
+          "name": "toRichText",
+          "startLine": 92,
+          "endLine": 114,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "parseEmphasis",
+          "startLine": 117,
+          "endLine": 133,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "markdownToBlocks",
+          "startLine": 140,
+          "endLine": 205,
+          "params": [
+            "body"
+          ]
+        },
+        {
+          "name": "extractNotionPageId",
+          "startLine": 211,
+          "endLine": 215,
+          "params": [
+            "urlOrId"
+          ]
+        },
+        {
+          "name": "notionHeaders",
+          "startLine": 217,
+          "endLine": 223,
+          "params": [
+            "token"
+          ]
+        },
+        {
+          "name": "createNotionPage",
+          "startLine": 225,
+          "endLine": 267,
+          "params": [
+            "token",
+            "rootPageId",
+            "title",
+            "blocks"
+          ]
+        },
+        {
+          "name": "archiveNotionPage",
+          "startLine": 269,
+          "endLine": 279,
+          "params": [
+            "token",
+            "pageId"
+          ]
+        },
+        {
+          "name": "writeToNotionWorkspace",
+          "startLine": 285,
+          "endLine": 334,
+          "params": [
+            "pages",
+            "opts",
+            "state"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "stripFrontmatter",
+          "line": 78,
+          "isDefault": false
+        },
+        {
+          "name": "toRichText",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "markdownToBlocks",
+          "line": 140,
+          "isDefault": false
+        },
+        {
+          "name": "extractNotionPageId",
+          "line": 211,
+          "isDefault": false
+        },
+        {
+          "name": "writeToNotionWorkspace",
+          "line": 285,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "stripFrontmatter",
+          "callee": "markdown.match",
+          "lineNumber": 79
+        },
+        {
+          "caller": "stripFrontmatter",
+          "callee": "yaml.match",
+          "lineNumber": 83
+        },
+        {
+          "caller": "stripFrontmatter",
+          "callee": "nameMatch?.[1]?.trim",
+          "lineNumber": 84
+        },
+        {
+          "caller": "toRichText",
+          "callee": "linkRe.exec",
+          "lineNumber": 99
+        },
+        {
+          "caller": "toRichText",
+          "callee": "text.slice",
+          "lineNumber": 101
+        },
+        {
+          "caller": "toRichText",
+          "callee": "out.push",
+          "lineNumber": 102
+        },
+        {
+          "caller": "toRichText",
+          "callee": "parseEmphasis",
+          "lineNumber": 102
+        },
+        {
+          "caller": "toRichText",
+          "callee": "out.push",
+          "lineNumber": 104
+        },
+        {
+          "caller": "toRichText",
+          "callee": "out.push",
+          "lineNumber": 111
+        },
+        {
+          "caller": "toRichText",
+          "callee": "parseEmphasis",
+          "lineNumber": 111
+        },
+        {
+          "caller": "toRichText",
+          "callee": "text.slice",
+          "lineNumber": 111
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "text.split",
+          "lineNumber": 120
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "parts.filter(p => p.length > 0).map",
+          "lineNumber": 121
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "parts.filter",
+          "lineNumber": 121
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.startsWith",
+          "lineNumber": 122
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.endsWith",
+          "lineNumber": 122
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.slice",
+          "lineNumber": 123
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.startsWith",
+          "lineNumber": 125
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.endsWith",
+          "lineNumber": 125
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.slice",
+          "lineNumber": 126
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.startsWith",
+          "lineNumber": 128
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.endsWith",
+          "lineNumber": 128
+        },
+        {
+          "caller": "parseEmphasis",
+          "callee": "p.slice",
+          "lineNumber": 129
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "body.split",
+          "lineNumber": 142
+        },
+        {
+          "caller": "flushParagraph",
+          "callee": "paragraph.join(' ').trim",
+          "lineNumber": 146
+        },
+        {
+          "caller": "flushParagraph",
+          "callee": "paragraph.join",
+          "lineNumber": 146
+        },
+        {
+          "caller": "flushParagraph",
+          "callee": "blocks.push",
+          "lineNumber": 148
+        },
+        {
+          "caller": "flushParagraph",
+          "callee": "toRichText",
+          "lineNumber": 151
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "line.trimEnd",
+          "lineNumber": 158
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "flushParagraph",
+          "lineNumber": 160
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "trimmed.match",
+          "lineNumber": 164
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "flushParagraph",
+          "lineNumber": 166
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "blocks.push",
+          "lineNumber": 170
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "toRichText",
+          "lineNumber": 173
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "trimmed.match",
+          "lineNumber": 178
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "flushParagraph",
+          "lineNumber": 180
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "blocks.push",
+          "lineNumber": 181
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "toRichText",
+          "lineNumber": 184
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "trimmed.match",
+          "lineNumber": 189
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "flushParagraph",
+          "lineNumber": 191
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "blocks.push",
+          "lineNumber": 192
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "toRichText",
+          "lineNumber": 195
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "paragraph.push",
+          "lineNumber": 200
+        },
+        {
+          "caller": "markdownToBlocks",
+          "callee": "flushParagraph",
+          "lineNumber": 202
+        },
+        {
+          "caller": "extractNotionPageId",
+          "callee": "urlOrId.trim",
+          "lineNumber": 212
+        },
+        {
+          "caller": "extractNotionPageId",
+          "callee": "trimmed.match",
+          "lineNumber": 213
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "blocks.slice",
+          "lineNumber": 231
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "fetch",
+          "lineNumber": 232
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "notionHeaders",
+          "lineNumber": 234
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "JSON.stringify",
+          "lineNumber": 235
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "title.slice",
+          "lineNumber": 239
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "res.text().catch",
+          "lineNumber": 246
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "res.text",
+          "lineNumber": 246
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "err.slice",
+          "lineNumber": 247
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "res.json",
+          "lineNumber": 249
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "blocks.slice",
+          "lineNumber": 253
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "fetch",
+          "lineNumber": 254
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "notionHeaders",
+          "lineNumber": 256
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "JSON.stringify",
+          "lineNumber": 257
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "appendRes.text().catch",
+          "lineNumber": 260
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "appendRes.text",
+          "lineNumber": 260
+        },
+        {
+          "caller": "createNotionPage",
+          "callee": "err.slice",
+          "lineNumber": 261
+        },
+        {
+          "caller": "archiveNotionPage",
+          "callee": "fetch",
+          "lineNumber": 270
+        },
+        {
+          "caller": "archiveNotionPage",
+          "callee": "notionHeaders",
+          "lineNumber": 272
+        },
+        {
+          "caller": "archiveNotionPage",
+          "callee": "JSON.stringify",
+          "lineNumber": 273
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "state.getNotionPageId",
+          "lineNumber": 303
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "state.getPageContentHash",
+          "lineNumber": 304
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "stripFrontmatter",
+          "lineNumber": 310
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "markdownToBlocks",
+          "lineNumber": 311
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "archiveNotionPage",
+          "lineNumber": 315
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "state.clearNotionPageId",
+          "lineNumber": 316
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "createNotionPage",
+          "lineNumber": 319
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "state.setNotionPageId",
+          "lineNumber": 320
+        },
+        {
+          "caller": "writeToNotionWorkspace",
+          "callee": "stats.errors.push",
+          "lineNumber": 326
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 5,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/src/adapters/obsidian.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 128,
+      "nonEmptyLines": 112,
+      "functions": [
+        {
+          "name": "transformWikilinks",
+          "startLine": 37,
+          "endLine": 49,
+          "params": [
+            "markdown",
+            "nameToSlug"
+          ]
+        },
+        {
+          "name": "buildIndex",
+          "startLine": 51,
+          "endLine": 86,
+          "params": [
+            "pages"
+          ]
+        },
+        {
+          "name": "writeToObsidianVault",
+          "startLine": 95,
+          "endLine": 128,
+          "params": [
+            "pages",
+            "outDir"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "writeToObsidianVault",
+          "line": 95,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "transformWikilinks",
+          "callee": "markdown.replace",
+          "lineNumber": 38
+        },
+        {
+          "caller": "transformWikilinks",
+          "callee": "inner.trim",
+          "lineNumber": 39
+        },
+        {
+          "caller": "transformWikilinks",
+          "callee": "nameToSlug.values",
+          "lineNumber": 42
+        },
+        {
+          "caller": "transformWikilinks",
+          "callee": "nameToSlug.get",
+          "lineNumber": 46
+        },
+        {
+          "caller": "transformWikilinks",
+          "callee": "trimmed.toLowerCase",
+          "lineNumber": 46
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "(byType[page.pageType] ??= []).push",
+          "lineNumber": 54
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 57
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 58
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 59
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "new Date().toISOString",
+          "lineNumber": 59
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 60
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 61
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 62
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 63
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 64
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 65
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 66
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 77
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 78
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 80
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.push",
+          "lineNumber": 82
+        },
+        {
+          "caller": "buildIndex",
+          "callee": "lines.join",
+          "lineNumber": 85
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 96
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "nameToSlug.set",
+          "lineNumber": 102
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "page.name.toLowerCase",
+          "lineNumber": 102
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "path.join",
+          "lineNumber": 112
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 113
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "transformWikilinks",
+          "lineNumber": 115
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "path.join",
+          "lineNumber": 116
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 117
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "path.join",
+          "lineNumber": 123
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 124
+        },
+        {
+          "caller": "writeToObsidianVault",
+          "callee": "buildIndex",
+          "lineNumber": 124
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/src/compiler.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 596,
+      "nonEmptyLines": 524,
+      "functions": [
+        {
+          "name": "slugify",
+          "startLine": 29,
+          "endLine": 35,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "buildFrontmatter",
+          "startLine": 37,
+          "endLine": 58,
+          "params": [
+            "type",
+            "name",
+            "frameIds",
+            "relatedEntities",
+            "confidence",
+            "entityType"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "WikiCompiler",
+          "startLine": 60,
+          "endLine": 596,
+          "methods": [
+            "constructor",
+            "compileEntityPage",
+            "compileConceptPage",
+            "compileSynthesisPage",
+            "compileIndex",
+            "compileHealth",
+            "compile",
+            "detectConcepts",
+            "exportToMarkdown",
+            "exportToDirectory"
+          ],
+          "properties": [
+            "kg",
+            "frames",
+            "search",
+            "state",
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "WikiCompiler",
+          "line": 60,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase()\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace(/^-|-$/g, '')\r\n    .slice",
+          "lineNumber": 30
+        },
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase()\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace",
+          "lineNumber": 30
+        },
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase()\r\n    .replace",
+          "lineNumber": 30
+        },
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase",
+          "lineNumber": 30
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "name.replace",
+          "lineNumber": 49
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "confidence.toFixed",
+          "lineNumber": 50
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "new Date().toISOString",
+          "lineNumber": 52
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "frameIds.join",
+          "lineNumber": 53
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "relatedEntities.map(e => `\"${e}\"`).join",
+          "lineNumber": 54
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "relatedEntities.map",
+          "lineNumber": 54
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "lines.join",
+          "lineNumber": 57
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.search.search",
+          "lineNumber": 91
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "searchResults.map",
+          "lineNumber": 95
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 106
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getRelationsTo",
+          "lineNumber": 107
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getEntity",
+          "lineNumber": 112
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relations.push",
+          "lineNumber": 114
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relatedEntities.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getEntity",
+          "lineNumber": 119
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relations.push",
+          "lineNumber": 121
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relatedEntities.includes",
+          "lineNumber": 122
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relatedEntities.push",
+          "lineNumber": 123
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "entityPagePrompt",
+          "lineNumber": 129
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.config.synthesize",
+          "lineNumber": 130
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "frameData.map",
+          "lineNumber": 132
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "slugify",
+          "lineNumber": 134
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "buildFrontmatter",
+          "lineNumber": 136
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 147
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "contentHash",
+          "lineNumber": 152
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "this.search.search",
+          "lineNumber": 159
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "searchResults.map",
+          "lineNumber": 163
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "this.kg.searchEntities",
+          "lineNumber": 174
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "entityResults.map",
+          "lineNumber": 175
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "conceptPagePrompt",
+          "lineNumber": 177
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "this.config.synthesize",
+          "lineNumber": 178
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "frameData.map",
+          "lineNumber": 180
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "slugify",
+          "lineNumber": 182
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "buildFrontmatter",
+          "lineNumber": 184
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 194
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "contentHash",
+          "lineNumber": 199
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "this.search.search",
+          "lineNumber": 206
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "bySource.get",
+          "lineNumber": 214
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "bySource.set",
+          "lineNumber": 217
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "group.push",
+          "lineNumber": 219
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "searchResults.slice(0, this.config.maxFramesPerCall).map",
+          "lineNumber": 227
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "searchResults.slice",
+          "lineNumber": 227
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "synthesisPagePrompt",
+          "lineNumber": 234
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "this.config.synthesize",
+          "lineNumber": 235
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "crossSourceFrames.map",
+          "lineNumber": 237
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "slugify",
+          "lineNumber": 239
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "Array.from",
+          "lineNumber": 240
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "bySource.keys",
+          "lineNumber": 240
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "buildFrontmatter",
+          "lineNumber": 242
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 252
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "contentHash",
+          "lineNumber": 257
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "this.state.getAllPages",
+          "lineNumber": 264
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "allPages.filter",
+          "lineNumber": 266
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "allPages.filter",
+          "lineNumber": 267
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "allPages.filter",
+          "lineNumber": 268
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "new Date().toISOString().slice",
+          "lineNumber": 273
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "new Date().toISOString",
+          "lineNumber": 273
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 278
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 280
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "p.compiledAt.slice",
+          "lineNumber": 280
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 282
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 286
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 288
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "p.compiledAt.slice",
+          "lineNumber": 288
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 290
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 294
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 296
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "p.compiledAt.slice",
+          "lineNumber": 296
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 298
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.join",
+          "lineNumber": 301
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "new Date().toISOString",
+          "lineNumber": 310
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "contentHash",
+          "lineNumber": 315
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.state.getAllPages",
+          "lineNumber": 323
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getEntityCount",
+          "lineNumber": 324
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.frames.getStats",
+          "lineNumber": 325
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getEntities",
+          "lineNumber": 328
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "allPages.map",
+          "lineNumber": 329
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "p.name.toLowerCase",
+          "lineNumber": 329
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "pageNames.has",
+          "lineNumber": 332
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "entity.name.toLowerCase",
+          "lineNumber": 332
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 334
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 336
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 350
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 362
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsTo",
+          "lineNumber": 363
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 365
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Date.now",
+          "lineNumber": 381
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.max",
+          "lineNumber": 382
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "allPages.flatMap",
+          "lineNumber": 382
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "JSON.parse",
+          "lineNumber": 383
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.state.getWatermark",
+          "lineNumber": 385
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Date.parse",
+          "lineNumber": 390
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Number.isFinite",
+          "lineNumber": 391
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 392
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.round",
+          "lineNumber": 395
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Date.now",
+          "lineNumber": 395
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "entities.filter",
+          "lineNumber": 405
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 406
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.min",
+          "lineNumber": 410
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "allPages.filter",
+          "lineNumber": 410
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.filter",
+          "lineNumber": 412
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.filter",
+          "lineNumber": 418
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.min",
+          "lineNumber": 419
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.max",
+          "lineNumber": 420
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "new Date().toISOString",
+          "lineNumber": 430
+        },
+        {
+          "caller": "compile",
+          "callee": "Date.now",
+          "lineNumber": 437
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getWatermark",
+          "lineNumber": 439
+        },
+        {
+          "caller": "compile",
+          "callee": "this.kg.getEntities",
+          "lineNumber": 449
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getPage",
+          "lineNumber": 453
+        },
+        {
+          "caller": "compile",
+          "callee": "slugify",
+          "lineNumber": 453
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getFramesSince",
+          "lineNumber": 456
+        },
+        {
+          "caller": "compile",
+          "callee": "newFrames.some",
+          "lineNumber": 457
+        },
+        {
+          "caller": "compile",
+          "callee": "f.content.toLowerCase().includes",
+          "lineNumber": 458
+        },
+        {
+          "caller": "compile",
+          "callee": "f.content.toLowerCase",
+          "lineNumber": 458
+        },
+        {
+          "caller": "compile",
+          "callee": "entity.name.toLowerCase",
+          "lineNumber": 458
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileEntityPage",
+          "lineNumber": 467
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 469
+        },
+        {
+          "caller": "compile",
+          "callee": "entityPageNames.push",
+          "lineNumber": 477
+        },
+        {
+          "caller": "compile",
+          "callee": "this.detectConcepts",
+          "lineNumber": 482
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileConceptPage",
+          "lineNumber": 484
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 486
+        },
+        {
+          "caller": "compile",
+          "callee": "conceptPageNames.push",
+          "lineNumber": 494
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileSynthesisPage",
+          "lineNumber": 500
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 502
+        },
+        {
+          "caller": "compile",
+          "callee": "synthesisPageNames.push",
+          "lineNumber": 510
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileIndex",
+          "lineNumber": 515
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 516
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getMaxFrameId",
+          "lineNumber": 519
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.updateWatermark",
+          "lineNumber": 521
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileHealth",
+          "lineNumber": 524
+        },
+        {
+          "caller": "compile",
+          "callee": "new Date().toISOString",
+          "lineNumber": 534
+        },
+        {
+          "caller": "compile",
+          "callee": "Date.now",
+          "lineNumber": 535
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "typeCounts.set",
+          "lineNumber": 545
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "typeCounts.get",
+          "lineNumber": 545
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.push",
+          "lineNumber": 553
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "entities.filter",
+          "lineNumber": 558
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.includes",
+          "lineNumber": 560
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.push",
+          "lineNumber": 561
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.slice",
+          "lineNumber": 565
+        },
+        {
+          "caller": "exportToMarkdown",
+          "callee": "this.state.getAllPages",
+          "lineNumber": 573
+        },
+        {
+          "caller": "exportToMarkdown",
+          "callee": "result.set",
+          "lineNumber": 576
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "import",
+          "lineNumber": 586
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "mkdirSync",
+          "lineNumber": 587
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "this.exportToMarkdown",
+          "lineNumber": 588
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "writeFileSync",
+          "lineNumber": 591
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/src/prompts.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 75,
+      "functions": [
+        {
+          "name": "entityPagePrompt",
+          "startLine": 5,
+          "endLine": 37,
+          "params": [
+            "entityName",
+            "entityType",
+            "frames",
+            "relations"
+          ]
+        },
+        {
+          "name": "conceptPagePrompt",
+          "startLine": 39,
+          "endLine": 69,
+          "params": [
+            "conceptName",
+            "frames",
+            "relatedEntities"
+          ]
+        },
+        {
+          "name": "synthesisPagePrompt",
+          "startLine": 71,
+          "endLine": 94,
+          "params": [
+            "topic",
+            "crossSourceFrames"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "entityPagePrompt",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "conceptPagePrompt",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "synthesisPagePrompt",
+          "line": 71,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "entityPagePrompt",
+          "callee": "frames\r\n    .map(f => `[Frame #${f.id}, ${f.created_at}]: ${f.content}`)\r\n    .join",
+          "lineNumber": 11
+        },
+        {
+          "caller": "entityPagePrompt",
+          "callee": "frames\r\n    .map",
+          "lineNumber": 11
+        },
+        {
+          "caller": "entityPagePrompt",
+          "callee": "relations.map(r => `- ${r.target} (${r.relationType}, confidence: ${r.confidence})`).join",
+          "lineNumber": 16
+        },
+        {
+          "caller": "entityPagePrompt",
+          "callee": "relations.map",
+          "lineNumber": 16
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "frames\r\n    .map(f => `[Frame #${f.id}, ${f.created_at}]: ${f.content}`)\r\n    .join",
+          "lineNumber": 44
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "frames\r\n    .map",
+          "lineNumber": 44
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "relatedEntities.map(e => `- [[${e}]]`).join",
+          "lineNumber": 49
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "relatedEntities.map",
+          "lineNumber": 49
+        },
+        {
+          "caller": "synthesisPagePrompt",
+          "callee": "crossSourceFrames\r\n    .map(f => `[Frame #${f.id}, source: ${f.source}, ${f.created_at}]: ${f.content}`)\r\n    .join",
+          "lineNumber": 75
+        },
+        {
+          "caller": "synthesisPagePrompt",
+          "callee": "crossSourceFrames\r\n    .map",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/src/state.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 193,
+      "nonEmptyLines": 166,
+      "functions": [
+        {
+          "name": "contentHash",
+          "startLine": 32,
+          "endLine": 34,
+          "params": [
+            "content"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "CompilationState",
+          "startLine": 36,
+          "endLine": 193,
+          "methods": [
+            "constructor",
+            "ensureSchema",
+            "getNotionPageId",
+            "setNotionPageId",
+            "clearNotionPageId",
+            "getPageContentHash",
+            "getWatermark",
+            "updateWatermark",
+            "getPage",
+            "getAllPages",
+            "getPagesByType",
+            "upsertPage",
+            "deletePage",
+            "getMaxFrameId",
+            "getFramesSince"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "contentHash",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "CompilationState",
+          "line": 36,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "contentHash",
+          "callee": "createHash('sha256').update(content).digest('hex').slice",
+          "lineNumber": 33
+        },
+        {
+          "caller": "contentHash",
+          "callee": "createHash('sha256').update(content).digest",
+          "lineNumber": 33
+        },
+        {
+          "caller": "contentHash",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 33
+        },
+        {
+          "caller": "contentHash",
+          "callee": "createHash",
+          "lineNumber": 33
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.ensureSchema",
+          "lineNumber": 41
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 45
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(PAGES_TABLE).run",
+          "lineNumber": 46
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 46
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(WATERMARK_TABLE).run",
+          "lineNumber": 47
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 47
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(\"SELECT markdown FROM wiki_pages LIMIT 0\").get",
+          "lineNumber": 50
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 50
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(\"ALTER TABLE wiki_pages ADD COLUMN markdown TEXT NOT NULL DEFAULT ''\").run",
+          "lineNumber": 52
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 52
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(\"SELECT notion_page_id FROM wiki_pages LIMIT 0\").get",
+          "lineNumber": 57
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 57
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(\"ALTER TABLE wiki_pages ADD COLUMN notion_page_id TEXT\").run",
+          "lineNumber": 59
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 59
+        },
+        {
+          "caller": "getNotionPageId",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 65
+        },
+        {
+          "caller": "getNotionPageId",
+          "callee": "raw.prepare('SELECT notion_page_id FROM wiki_pages WHERE slug = ?').get",
+          "lineNumber": 66
+        },
+        {
+          "caller": "getNotionPageId",
+          "callee": "raw.prepare",
+          "lineNumber": 66
+        },
+        {
+          "caller": "setNotionPageId",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 72
+        },
+        {
+          "caller": "setNotionPageId",
+          "callee": "raw.prepare('UPDATE wiki_pages SET notion_page_id = ? WHERE slug = ?').run",
+          "lineNumber": 73
+        },
+        {
+          "caller": "setNotionPageId",
+          "callee": "raw.prepare",
+          "lineNumber": 73
+        },
+        {
+          "caller": "clearNotionPageId",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 78
+        },
+        {
+          "caller": "clearNotionPageId",
+          "callee": "raw.prepare('UPDATE wiki_pages SET notion_page_id = NULL WHERE slug = ?').run",
+          "lineNumber": 79
+        },
+        {
+          "caller": "clearNotionPageId",
+          "callee": "raw.prepare",
+          "lineNumber": 79
+        },
+        {
+          "caller": "getPageContentHash",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 84
+        },
+        {
+          "caller": "getPageContentHash",
+          "callee": "raw.prepare('SELECT content_hash FROM wiki_pages WHERE slug = ?').get",
+          "lineNumber": 85
+        },
+        {
+          "caller": "getPageContentHash",
+          "callee": "raw.prepare",
+          "lineNumber": 85
+        },
+        {
+          "caller": "getWatermark",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 92
+        },
+        {
+          "caller": "getWatermark",
+          "callee": "raw.prepare('SELECT * FROM wiki_watermark WHERE id = 1').get",
+          "lineNumber": 93
+        },
+        {
+          "caller": "getWatermark",
+          "callee": "raw.prepare",
+          "lineNumber": 93
+        },
+        {
+          "caller": "updateWatermark",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 111
+        },
+        {
+          "caller": "updateWatermark",
+          "callee": "raw.prepare(`\r\n      INSERT INTO wiki_watermark (id, last_frame_id, last_compiled_at, pages_compiled)\r\n      VALUES (1, ?, datetime('now'), ?)\r\n      ON CONFLICT(id) DO UPDATE SET\r\n        last_frame_id = excluded.last_frame_id,\r\n        last_compiled_at = excluded.last_compiled_at,\r\n        pages_compiled = excluded.pages_compiled\r\n    `).run",
+          "lineNumber": 112
+        },
+        {
+          "caller": "updateWatermark",
+          "callee": "raw.prepare",
+          "lineNumber": 112
+        },
+        {
+          "caller": "getPage",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE slug = ?',\r\n    ).get",
+          "lineNumber": 125
+        },
+        {
+          "caller": "getPage",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 125
+        },
+        {
+          "caller": "getPage",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 125
+        },
+        {
+          "caller": "getAllPages",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages ORDER BY name',\r\n    ).all",
+          "lineNumber": 131
+        },
+        {
+          "caller": "getAllPages",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 131
+        },
+        {
+          "caller": "getAllPages",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 131
+        },
+        {
+          "caller": "getPagesByType",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE page_type = ? ORDER BY name',\r\n    ).all",
+          "lineNumber": 137
+        },
+        {
+          "caller": "getPagesByType",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 137
+        },
+        {
+          "caller": "getPagesByType",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 137
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 151
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "this.getPage",
+          "lineNumber": 152
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "raw.prepare(`\r\n      INSERT INTO wiki_pages (slug, page_type, name, content_hash, markdown, frame_ids, compiled_at, source_count)\r\n      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)\r\n      ON CONFLICT(slug) DO UPDATE SET\r\n        content_hash = excluded.content_hash,\r\n        markdown = excluded.markdown,\r\n        frame_ids = excluded.frame_ids,\r\n        compiled_at = excluded.compiled_at,\r\n        source_count = excluded.source_count\r\n    `).run",
+          "lineNumber": 158
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "raw.prepare",
+          "lineNumber": 158
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "JSON.stringify",
+          "lineNumber": 167
+        },
+        {
+          "caller": "deletePage",
+          "callee": "this.db.getDatabase().prepare(\r\n      'DELETE FROM wiki_pages WHERE slug = ?',\r\n    ).run",
+          "lineNumber": 173
+        },
+        {
+          "caller": "deletePage",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 173
+        },
+        {
+          "caller": "deletePage",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 173
+        },
+        {
+          "caller": "getMaxFrameId",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT COALESCE(MAX(id), 0) as max_id FROM memory_frames',\r\n    ).get",
+          "lineNumber": 181
+        },
+        {
+          "caller": "getMaxFrameId",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 181
+        },
+        {
+          "caller": "getMaxFrameId",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 181
+        },
+        {
+          "caller": "getFramesSince",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT id, content, importance, source, created_at FROM memory_frames WHERE id > ? ORDER BY id ASC LIMIT ?',\r\n    ).all",
+          "lineNumber": 189
+        },
+        {
+          "caller": "getFramesSince",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 189
+        },
+        {
+          "caller": "getFramesSince",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 189
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/src/synthesizer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 156,
+      "nonEmptyLines": 133,
+      "functions": [
+        {
+          "name": "createAnthropicSynthesizer",
+          "startLine": 27,
+          "endLine": 42,
+          "params": [
+            "apiKey",
+            "maxTokens"
+          ]
+        },
+        {
+          "name": "createOllamaSynthesizer",
+          "startLine": 46,
+          "endLine": 69,
+          "params": [
+            "baseUrl",
+            "model",
+            "maxTokens"
+          ]
+        },
+        {
+          "name": "createEchoSynthesizer",
+          "startLine": 73,
+          "endLine": 92,
+          "params": []
+        },
+        {
+          "name": "resolveSynthesizer",
+          "startLine": 106,
+          "endLine": 156,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "resolveSynthesizer",
+          "line": 106,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createAnthropicSynthesizer",
+          "callee": "import",
+          "lineNumber": 30
+        },
+        {
+          "caller": "createAnthropicSynthesizer",
+          "callee": "client.messages.create",
+          "lineNumber": 33
+        },
+        {
+          "caller": "createAnthropicSynthesizer",
+          "callee": "response.content.find",
+          "lineNumber": 39
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "baseUrl.replace",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "fetch",
+          "lineNumber": 50
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "JSON.stringify",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "AbortSignal.timeout",
+          "lineNumber": 59
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "response.json",
+          "lineNumber": 66
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 75
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 77
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 77
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 81
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "frameLines.slice(0, 8).map(line => {\r\n      const m = line.match(/\\[Frame (#\\d+).*?\\]: (.+)/);\r\n      return m ? `- ${m[2].slice(0, 200)} *(${m[1]})*` : null;\r\n    }).filter",
+          "lineNumber": 82
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "frameLines.slice(0, 8).map",
+          "lineNumber": 82
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "frameLines.slice",
+          "lineNumber": 82
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "line.match",
+          "lineNumber": 83
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "m[2].slice",
+          "lineNumber": 84
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "facts.join",
+          "lineNumber": 88
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "import",
+          "lineNumber": 117
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "createAnthropicSynthesizer",
+          "lineNumber": 119
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "fetch",
+          "lineNumber": 135
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "ollamaUrl.replace",
+          "lineNumber": 135
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "AbortSignal.timeout",
+          "lineNumber": 136
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "createOllamaSynthesizer",
+          "lineNumber": 140
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "createEchoSynthesizer",
+          "lineNumber": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/src/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 119,
+      "nonEmptyLines": 103,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/tests/notion.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 169,
+      "nonEmptyLines": 148,
+      "functions": [
+        {
+          "name": "payloadOf",
+          "startLine": 25,
+          "endLine": 27,
+          "params": [
+            "block"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/wiki-compiler/tests/obsidian.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 210,
+      "nonEmptyLines": 183,
+      "functions": [
+        {
+          "name": "seedPages",
+          "startLine": 15,
+          "endLine": 100,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

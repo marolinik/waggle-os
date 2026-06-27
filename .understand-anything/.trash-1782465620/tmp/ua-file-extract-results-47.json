@@ -1,0 +1,2767 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 17,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-cli/src/commands/cognify.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 126,
+      "nonEmptyLines": 107,
+      "functions": [
+        {
+          "name": "extractCandidateEntities",
+          "startLine": 41,
+          "endLine": 59,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "runCognify",
+          "startLine": 61,
+          "endLine": 121,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "safeParse",
+          "startLine": 123,
+          "endLine": 126,
+          "params": [
+            "raw"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runCognify",
+          "line": 61,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "text.matchAll",
+          "lineNumber": 45
+        },
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "match[1].trim",
+          "lineNumber": 46
+        },
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "seen.add",
+          "lineNumber": 47
+        },
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "text.matchAll",
+          "lineNumber": 51
+        },
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "match[1].trim",
+          "lineNumber": 52
+        },
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "STOP_TOKENS.has",
+          "lineNumber": 53
+        },
+        {
+          "caller": "extractCandidateEntities",
+          "callee": "seen.add",
+          "lineNumber": 55
+        },
+        {
+          "caller": "runCognify",
+          "callee": "openPersonalMind",
+          "lineNumber": 62
+        },
+        {
+          "caller": "runCognify",
+          "callee": "env.db.getDatabase",
+          "lineNumber": 69
+        },
+        {
+          "caller": "runCognify",
+          "callee": "raw.prepare(\r\n      'SELECT id, content FROM memory_frames WHERE id > ? ORDER BY id ASC LIMIT ?',\r\n    ).all",
+          "lineNumber": 70
+        },
+        {
+          "caller": "runCognify",
+          "callee": "raw.prepare",
+          "lineNumber": 70
+        },
+        {
+          "caller": "runCognify",
+          "callee": "Math.max",
+          "lineNumber": 79
+        },
+        {
+          "caller": "runCognify",
+          "callee": "extractCandidateEntities",
+          "lineNumber": 80
+        },
+        {
+          "caller": "runCognify",
+          "callee": "normalizeEntityName",
+          "lineNumber": 83
+        },
+        {
+          "caller": "runCognify",
+          "callee": "env.kg.findEntityByName",
+          "lineNumber": 93
+        },
+        {
+          "caller": "runCognify",
+          "callee": "safeParse",
+          "lineNumber": 97
+        },
+        {
+          "caller": "runCognify",
+          "callee": "Number",
+          "lineNumber": 98
+        },
+        {
+          "caller": "runCognify",
+          "callee": "env.kg.updateEntity",
+          "lineNumber": 99
+        },
+        {
+          "caller": "runCognify",
+          "callee": "env.kg.createEntity",
+          "lineNumber": 105
+        },
+        {
+          "caller": "runCognify",
+          "callee": "close",
+          "lineNumber": 119
+        },
+        {
+          "caller": "safeParse",
+          "callee": "JSON.parse",
+          "lineNumber": 125
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/compile-wiki.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 68,
+      "nonEmptyLines": 61,
+      "functions": [
+        {
+          "name": "runCompileWiki",
+          "startLine": 34,
+          "endLine": 68,
+          "params": [
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runCompileWiki",
+          "line": 34,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runCompileWiki",
+          "callee": "openPersonalMind",
+          "lineNumber": 35
+        },
+        {
+          "caller": "runCompileWiki",
+          "callee": "env.getSearch",
+          "lineNumber": 41
+        },
+        {
+          "caller": "runCompileWiki",
+          "callee": "resolveSynthesizer",
+          "lineNumber": 42
+        },
+        {
+          "caller": "runCompileWiki",
+          "callee": "compiler.compile",
+          "lineNumber": 47
+        },
+        {
+          "caller": "runCompileWiki",
+          "callee": "close",
+          "lineNumber": 66
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/doctor.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 279,
+      "nonEmptyLines": 258,
+      "functions": [
+        {
+          "name": "renderDoctorResult",
+          "startLine": 45,
+          "endLine": 63,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "spawnSelfProbe",
+          "startLine": 65,
+          "endLine": 120,
+          "params": []
+        },
+        {
+          "name": "frameRoundtripProbe",
+          "startLine": 122,
+          "endLine": 181,
+          "params": [
+            "env"
+          ]
+        },
+        {
+          "name": "inspectAndCleanQuarantineCache",
+          "startLine": 183,
+          "endLine": 212,
+          "params": []
+        },
+        {
+          "name": "runDoctor",
+          "startLine": 220,
+          "endLine": 279,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "renderDoctorResult",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "runDoctor",
+          "line": 220,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "renderDoctorResult",
+          "callee": "lines.push",
+          "lineNumber": 52
+        },
+        {
+          "caller": "renderDoctorResult",
+          "callee": "lines.push",
+          "lineNumber": 55
+        },
+        {
+          "caller": "renderDoctorResult",
+          "callee": "lines.push",
+          "lineNumber": 57
+        },
+        {
+          "caller": "renderDoctorResult",
+          "callee": "lines.push",
+          "lineNumber": 59
+        },
+        {
+          "caller": "renderDoctorResult",
+          "callee": "lines.join",
+          "lineNumber": 62
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "spawn",
+          "lineNumber": 78
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "setTimeout",
+          "lineNumber": 81
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "child.kill",
+          "lineNumber": 83
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "resolve",
+          "lineNumber": 84
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "child.stderr?.on",
+          "lineNumber": 92
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "String",
+          "lineNumber": 92
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "child.on",
+          "lineNumber": 93
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "clearTimeout",
+          "lineNumber": 94
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "resolve",
+          "lineNumber": 96
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "child.on",
+          "lineNumber": 102
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "clearTimeout",
+          "lineNumber": 103
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "resolve",
+          "lineNumber": 106
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "resolve",
+          "lineNumber": 112
+        },
+        {
+          "caller": "spawnSelfProbe",
+          "callee": "stderr.slice",
+          "lineNumber": 115
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "new Date().toISOString",
+          "lineNumber": 124
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "sessions.ensureActive",
+          "lineNumber": 130
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "frames.createIFrame",
+          "lineNumber": 136
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "steps.push",
+          "lineNumber": 143
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "String",
+          "lineNumber": 145
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "steps.push",
+          "lineNumber": 146
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "frames.getById",
+          "lineNumber": 155
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "steps.push",
+          "lineNumber": 157
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "steps.push",
+          "lineNumber": 163
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "steps.push",
+          "lineNumber": 169
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "String",
+          "lineNumber": 176
+        },
+        {
+          "caller": "frameRoundtripProbe",
+          "callee": "steps.push",
+          "lineNumber": 177
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "path.join",
+          "lineNumber": 184
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "os.homedir",
+          "lineNumber": 184
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "fs.existsSync",
+          "lineNumber": 185
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "JSON.parse",
+          "lineNumber": 189
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "fs.readFileSync",
+          "lineNumber": 189
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 196
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "JSON.stringify",
+          "lineNumber": 196
+        },
+        {
+          "caller": "inspectAndCleanQuarantineCache",
+          "callee": "String",
+          "lineNumber": 205
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "steps.push",
+          "lineNumber": 224
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "spawnSelfProbe",
+          "lineNumber": 224
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "resolveDataDir",
+          "lineNumber": 230
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "path.join",
+          "lineNumber": 231
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "fs.existsSync",
+          "lineNumber": 232
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "steps.push",
+          "lineNumber": 233
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "openPersonalMind",
+          "lineNumber": 245
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "frameRoundtripProbe",
+          "lineNumber": 249
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "steps.push",
+          "lineNumber": 250
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "(env.db as unknown as { close: () => void }).close",
+          "lineNumber": 255
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "steps.push",
+          "lineNumber": 262
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "inspectAndCleanQuarantineCache",
+          "lineNumber": 262
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "steps.every",
+          "lineNumber": 264
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "steps.find",
+          "lineNumber": 267
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "firstFail.name.startsWith",
+          "lineNumber": 269
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "firstFail.name.startsWith",
+          "lineNumber": 271
+        },
+        {
+          "caller": "runDoctor",
+          "callee": "firstFail.name.startsWith",
+          "lineNumber": 271
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/harvest-local.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 399,
+      "nonEmptyLines": 369,
+      "functions": [
+        {
+          "name": "writeClaudeExport",
+          "startLine": 41,
+          "endLine": 64,
+          "params": [
+            "dir",
+            "convCreatedAt"
+          ]
+        },
+        {
+          "name": "fetchCreatedAt",
+          "startLine": 66,
+          "endLine": 74,
+          "params": [
+            "env"
+          ]
+        },
+        {
+          "name": "writeClaudeExportWithAssistantLength",
+          "startLine": 81,
+          "endLine": 102,
+          "params": [
+            "dir",
+            "assistantLen"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "writeClaudeExport",
+          "callee": "join",
+          "lineNumber": 61
+        },
+        {
+          "caller": "writeClaudeExport",
+          "callee": "writeFileSync",
+          "lineNumber": 62
+        },
+        {
+          "caller": "writeClaudeExport",
+          "callee": "JSON.stringify",
+          "lineNumber": 62
+        },
+        {
+          "caller": "fetchCreatedAt",
+          "callee": "env.db\r\n    .getDatabase()\r\n    .prepare('SELECT id, created_at FROM memory_frames ORDER BY id DESC LIMIT 1')\r\n    .get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "fetchCreatedAt",
+          "callee": "env.db\r\n    .getDatabase()\r\n    .prepare",
+          "lineNumber": 70
+        },
+        {
+          "caller": "fetchCreatedAt",
+          "callee": "env.db\r\n    .getDatabase",
+          "lineNumber": 70
+        },
+        {
+          "caller": "writeClaudeExportWithAssistantLength",
+          "callee": "Math.ceil",
+          "lineNumber": 86
+        },
+        {
+          "caller": "writeClaudeExportWithAssistantLength",
+          "callee": "marker.repeat(repeats).slice",
+          "lineNumber": 87
+        },
+        {
+          "caller": "writeClaudeExportWithAssistantLength",
+          "callee": "marker.repeat",
+          "lineNumber": 87
+        },
+        {
+          "caller": "writeClaudeExportWithAssistantLength",
+          "callee": "join",
+          "lineNumber": 99
+        },
+        {
+          "caller": "writeClaudeExportWithAssistantLength",
+          "callee": "writeFileSync",
+          "lineNumber": 100
+        },
+        {
+          "caller": "writeClaudeExportWithAssistantLength",
+          "callee": "JSON.stringify",
+          "lineNumber": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/harvest-local.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 237,
+      "nonEmptyLines": 215,
+      "functions": [
+        {
+          "name": "isIsoTimestamp",
+          "startLine": 24,
+          "endLine": 29,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "parseWithAdapter",
+          "startLine": 48,
+          "endLine": 86,
+          "params": [
+            "source",
+            "pathOrJson"
+          ]
+        },
+        {
+          "name": "runHarvestLocal",
+          "startLine": 88,
+          "endLine": 237,
+          "params": [
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runHarvestLocal",
+          "line": 88,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isIsoTimestamp",
+          "callee": "/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:?\\d{2})$/.test",
+          "lineNumber": 25
+        },
+        {
+          "caller": "isIsoTimestamp",
+          "callee": "Number.isFinite",
+          "lineNumber": 28
+        },
+        {
+          "caller": "isIsoTimestamp",
+          "callee": "Date.parse",
+          "lineNumber": 28
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "adapter.scan",
+          "lineNumber": 54
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "fs.statSync",
+          "lineNumber": 59
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "stat.isDirectory",
+          "lineNumber": 60
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "errors.push",
+          "lineNumber": 61
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "fs.readFileSync",
+          "lineNumber": 64
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "String",
+          "lineNumber": 67
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "JSON.parse",
+          "lineNumber": 73
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "String",
+          "lineNumber": 76
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "new ChatGPTAdapter().parse",
+          "lineNumber": 81
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "new ClaudeAdapter().parse",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "new GeminiAdapter().parse",
+          "lineNumber": 83
+        },
+        {
+          "caller": "parseWithAdapter",
+          "callee": "new UniversalAdapter().parse",
+          "lineNumber": 84
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "openPersonalMind",
+          "lineNumber": 89
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "path.resolve",
+          "lineNumber": 94
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "fs.existsSync",
+          "lineNumber": 95
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "parseWithAdapter",
+          "lineNumber": 108
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "String",
+          "lineNumber": 116
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "env.sessions.ensure",
+          "lineNumber": 131
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "path.basename",
+          "lineNumber": 134
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "env.db.getDatabase",
+          "lineNumber": 141
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "raw.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM memory_frames').get",
+          "lineNumber": 143
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "raw.prepare",
+          "lineNumber": 143
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "item.content.slice",
+          "lineNumber": 165
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "isIsoTimestamp",
+          "lineNumber": 185
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "console.warn",
+          "lineNumber": 188
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "env.frames.createIFrame",
+          "lineNumber": 194
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "errors.push",
+          "lineNumber": 205
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "env.harvestSources.upsert",
+          "lineNumber": 212
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "env.harvestSources.recordSync",
+          "lineNumber": 217
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "errors.push",
+          "lineNumber": 223
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "String",
+          "lineNumber": 223
+        },
+        {
+          "caller": "runHarvestLocal",
+          "callee": "close",
+          "lineNumber": 235
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/init.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 71,
+      "nonEmptyLines": 63,
+      "functions": [
+        {
+          "name": "runInit",
+          "startLine": 27,
+          "endLine": 48,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "renderInitResult",
+          "startLine": 50,
+          "endLine": 71,
+          "params": [
+            "result",
+            "format"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runInit",
+          "line": 27,
+          "isDefault": false
+        },
+        {
+          "name": "renderInitResult",
+          "line": 50,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runInit",
+          "callee": "resolveDataDir",
+          "lineNumber": 28
+        },
+        {
+          "caller": "runInit",
+          "callee": "path.join",
+          "lineNumber": 29
+        },
+        {
+          "caller": "runInit",
+          "callee": "fs.existsSync",
+          "lineNumber": 31
+        },
+        {
+          "caller": "runInit",
+          "callee": "fs.existsSync",
+          "lineNumber": 32
+        },
+        {
+          "caller": "runInit",
+          "callee": "openPersonalMind",
+          "lineNumber": 35
+        },
+        {
+          "caller": "runInit",
+          "callee": "close",
+          "lineNumber": 46
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "JSON.stringify",
+          "lineNumber": 52
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 56
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 58
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 61
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 63
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 65
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 66
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 67
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 68
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.push",
+          "lineNumber": 69
+        },
+        {
+          "caller": "renderInitResult",
+          "callee": "lines.join",
+          "lineNumber": 70
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/maintenance.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 125,
+      "nonEmptyLines": 112,
+      "functions": [
+        {
+          "name": "runMaintenance",
+          "startLine": 50,
+          "endLine": 125,
+          "params": [
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runMaintenance",
+          "line": 50,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runMaintenance",
+          "callee": "openPersonalMind",
+          "lineNumber": 51
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "Date.now",
+          "lineNumber": 53
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "env.frames.compact",
+          "lineNumber": 58
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "env.db.getDatabase",
+          "lineNumber": 70
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw\r\n        .prepare(\"SELECT COUNT(*) as cnt FROM memory_frames WHERE source = 'import'\")\r\n        .get",
+          "lineNumber": 71
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw\r\n        .prepare",
+          "lineNumber": 71
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw\r\n          .prepare(\"SELECT id FROM memory_frames WHERE source = 'import'\")\r\n          .all",
+          "lineNumber": 76
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw\r\n          .prepare",
+          "lineNumber": 76
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.transaction",
+          "lineNumber": 80
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 82
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.prepare",
+          "lineNumber": 82
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run",
+          "lineNumber": 84
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.prepare",
+          "lineNumber": 84
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.prepare(\"DELETE FROM memory_frames WHERE source = 'import'\").run",
+          "lineNumber": 87
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "raw.prepare",
+          "lineNumber": 87
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "tx",
+          "lineNumber": 89
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "env.getEmbedder",
+          "lineNumber": 96
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "reconcileIndexes",
+          "lineNumber": 97
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "runCognify",
+          "lineNumber": 102
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "runCompileWiki",
+          "lineNumber": 111
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "Date.now",
+          "lineNumber": 120
+        },
+        {
+          "caller": "runMaintenance",
+          "callee": "close",
+          "lineNumber": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/mcp-call.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 236,
+      "nonEmptyLines": 212,
+      "functions": [
+        {
+          "name": "spawnMcpChild",
+          "startLine": 47,
+          "endLine": 76,
+          "params": [
+            "envOverride"
+          ]
+        },
+        {
+          "name": "createLineParser",
+          "startLine": 79,
+          "endLine": 103,
+          "params": []
+        },
+        {
+          "name": "awaitResponse",
+          "startLine": 106,
+          "endLine": 132,
+          "params": [
+            "stdout",
+            "parser",
+            "id",
+            "timeoutMs"
+          ]
+        },
+        {
+          "name": "runMcpCall",
+          "startLine": 134,
+          "endLine": 213,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "renderMcpCallResult",
+          "startLine": 215,
+          "endLine": 236,
+          "params": [
+            "result",
+            "format"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runMcpCall",
+          "line": 134,
+          "isDefault": false
+        },
+        {
+          "name": "renderMcpCallResult",
+          "line": 215,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "spawnMcpChild",
+          "callee": "resolveMcpServerEntry",
+          "lineNumber": 53
+        },
+        {
+          "caller": "spawnMcpChild",
+          "callee": "spawn",
+          "lineNumber": 54
+        },
+        {
+          "caller": "spawnMcpChild",
+          "callee": "child.stderr.on",
+          "lineNumber": 64
+        },
+        {
+          "caller": "spawnMcpChild",
+          "callee": "child.on",
+          "lineNumber": 67
+        },
+        {
+          "caller": "spawnMcpChild",
+          "callee": "resolve",
+          "lineNumber": 67
+        },
+        {
+          "caller": "spawnMcpChild",
+          "callee": "child.kill",
+          "lineNumber": 73
+        },
+        {
+          "caller": "feed",
+          "callee": "buffer.indexOf",
+          "lineNumber": 87
+        },
+        {
+          "caller": "feed",
+          "callee": "buffer.slice(0, newlineIdx).trim",
+          "lineNumber": 89
+        },
+        {
+          "caller": "feed",
+          "callee": "buffer.slice",
+          "lineNumber": 89
+        },
+        {
+          "caller": "feed",
+          "callee": "buffer.slice",
+          "lineNumber": 90
+        },
+        {
+          "caller": "feed",
+          "callee": "messages.push",
+          "lineNumber": 93
+        },
+        {
+          "caller": "feed",
+          "callee": "JSON.parse",
+          "lineNumber": 93
+        },
+        {
+          "caller": "feed",
+          "callee": "buffer.indexOf",
+          "lineNumber": 98
+        },
+        {
+          "caller": "awaitResponse",
+          "callee": "setTimeout",
+          "lineNumber": 113
+        },
+        {
+          "caller": "awaitResponse",
+          "callee": "stdout.off",
+          "lineNumber": 114
+        },
+        {
+          "caller": "awaitResponse",
+          "callee": "reject",
+          "lineNumber": 115
+        },
+        {
+          "caller": "onData",
+          "callee": "chunk.toString",
+          "lineNumber": 119
+        },
+        {
+          "caller": "onData",
+          "callee": "parser.feed",
+          "lineNumber": 120
+        },
+        {
+          "caller": "onData",
+          "callee": "clearTimeout",
+          "lineNumber": 122
+        },
+        {
+          "caller": "onData",
+          "callee": "stdout.off",
+          "lineNumber": 123
+        },
+        {
+          "caller": "onData",
+          "callee": "resolve",
+          "lineNumber": 124
+        },
+        {
+          "caller": "awaitResponse",
+          "callee": "stdout.on",
+          "lineNumber": 130
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "options.transport",
+          "lineNumber": 141
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "spawnMcpChild",
+          "lineNumber": 142
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "createLineParser",
+          "lineNumber": 144
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "transport.stdin.write",
+          "lineNumber": 158
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "JSON.stringify",
+          "lineNumber": 158
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "awaitResponse",
+          "lineNumber": 159
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "JSON.stringify",
+          "lineNumber": 161
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "transport.stdin.write",
+          "lineNumber": 165
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "JSON.stringify",
+          "lineNumber": 165
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "transport.stdin.write",
+          "lineNumber": 180
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "JSON.stringify",
+          "lineNumber": 180
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "awaitResponse",
+          "lineNumber": 181
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "String",
+          "lineNumber": 207
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "transport.kill",
+          "lineNumber": 210
+        },
+        {
+          "caller": "runMcpCall",
+          "callee": "transport.exitPromise.catch",
+          "lineNumber": 211
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "JSON.stringify",
+          "lineNumber": 216
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "lines.push",
+          "lineNumber": 223
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "lines.push",
+          "lineNumber": 227
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "lines.push",
+          "lineNumber": 229
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "JSON.stringify",
+          "lineNumber": 229
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "lines.push",
+          "lineNumber": 233
+        },
+        {
+          "caller": "renderMcpCallResult",
+          "callee": "lines.join",
+          "lineNumber": 235
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/mcp-start.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 80,
+      "nonEmptyLines": 73,
+      "functions": [
+        {
+          "name": "resolveMcpServerEntry",
+          "startLine": 34,
+          "endLine": 46,
+          "params": []
+        },
+        {
+          "name": "runMcpStart",
+          "startLine": 48,
+          "endLine": 80,
+          "params": [
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "resolveMcpServerEntry",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "runMcpStart",
+          "line": 48,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolveMcpServerEntry",
+          "callee": "createRequire",
+          "lineNumber": 35
+        },
+        {
+          "caller": "resolveMcpServerEntry",
+          "callee": "require.resolve",
+          "lineNumber": 37
+        },
+        {
+          "caller": "resolveMcpServerEntry",
+          "callee": "String",
+          "lineNumber": 39
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "options.runner",
+          "lineNumber": 49
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "resolveMcpServerEntry",
+          "lineNumber": 51
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "spawn",
+          "lineNumber": 52
+        },
+        {
+          "caller": "forward",
+          "callee": "child.kill",
+          "lineNumber": 60
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "process.once",
+          "lineNumber": 62
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "forward",
+          "lineNumber": 62
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "process.once",
+          "lineNumber": 63
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "forward",
+          "lineNumber": 63
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "child.on",
+          "lineNumber": 66
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "resolve",
+          "lineNumber": 69
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "resolve",
+          "lineNumber": 72
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "child.on",
+          "lineNumber": 74
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "console.error",
+          "lineNumber": 76
+        },
+        {
+          "caller": "runMcpStart",
+          "callee": "resolve",
+          "lineNumber": 77
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/recall-context.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 99,
+      "functions": [
+        {
+          "name": "runRecallContext",
+          "startLine": 33,
+          "endLine": 94,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "renderRecallResult",
+          "startLine": 97,
+          "endLine": 110,
+          "params": [
+            "result",
+            "format"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runRecallContext",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "renderRecallResult",
+          "line": 97,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runRecallContext",
+          "callee": "openPersonalMind",
+          "lineNumber": 34
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "env.getSearch",
+          "lineNumber": 42
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "search.search",
+          "lineNumber": 47
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "hits.push",
+          "lineNumber": 49
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "Math.round",
+          "lineNumber": 54
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "env.workspaces.list",
+          "lineNumber": 62
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "env.mindCache.getOrOpen",
+          "lineNumber": 63
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "import",
+          "lineNumber": 66
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "env.getEmbedder",
+          "lineNumber": 69
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "wsSearch.search",
+          "lineNumber": 71
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "hits.push",
+          "lineNumber": 73
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "Math.round",
+          "lineNumber": 78
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "hits.sort",
+          "lineNumber": 87
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "hits.slice",
+          "lineNumber": 88
+        },
+        {
+          "caller": "runRecallContext",
+          "callee": "close",
+          "lineNumber": 92
+        },
+        {
+          "caller": "renderRecallResult",
+          "callee": "JSON.stringify",
+          "lineNumber": 99
+        },
+        {
+          "caller": "renderRecallResult",
+          "callee": "h.created_at.slice",
+          "lineNumber": 106
+        },
+        {
+          "caller": "renderRecallResult",
+          "callee": "lines.push",
+          "lineNumber": 107
+        },
+        {
+          "caller": "renderRecallResult",
+          "callee": "h.score.toFixed",
+          "lineNumber": 107
+        },
+        {
+          "caller": "renderRecallResult",
+          "callee": "lines.join",
+          "lineNumber": 109
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/save-session.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 87,
+      "functions": [
+        {
+          "name": "readStdinSync",
+          "startLine": 32,
+          "endLine": 40,
+          "params": []
+        },
+        {
+          "name": "runSaveSession",
+          "startLine": 42,
+          "endLine": 99,
+          "params": [
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runSaveSession",
+          "line": 42,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "readStdinSync",
+          "callee": "fs.readFileSync",
+          "lineNumber": 36
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "openPersonalMind",
+          "lineNumber": 43
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "fs.readFileSync",
+          "lineNumber": 50
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "String",
+          "lineNumber": 55
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "readStdinSync",
+          "lineNumber": 61
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "text.trim",
+          "lineNumber": 64
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "new Date().toISOString().slice",
+          "lineNumber": 73
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "new Date().toISOString",
+          "lineNumber": 73
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "env.sessions.ensure",
+          "lineNumber": 75
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "env.frames.createIFrame",
+          "lineNumber": 77
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "env.getSearch",
+          "lineNumber": 86
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "search.indexFrame",
+          "lineNumber": 87
+        },
+        {
+          "caller": "runSaveSession",
+          "callee": "close",
+          "lineNumber": 97
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/commands/status.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 162,
+      "nonEmptyLines": 140,
+      "functions": [
+        {
+          "name": "runStatus",
+          "startLine": 38,
+          "endLine": 110,
+          "params": [
+            "options"
+          ]
+        },
+        {
+          "name": "previewOf",
+          "startLine": 112,
+          "endLine": 117,
+          "params": [
+            "content"
+          ]
+        },
+        {
+          "name": "renderStatusResult",
+          "startLine": 119,
+          "endLine": 162,
+          "params": [
+            "result",
+            "format"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runStatus",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "renderStatusResult",
+          "line": 119,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runStatus",
+          "callee": "resolveDataDir",
+          "lineNumber": 39
+        },
+        {
+          "caller": "runStatus",
+          "callee": "path.join",
+          "lineNumber": 40
+        },
+        {
+          "caller": "runStatus",
+          "callee": "fs.existsSync",
+          "lineNumber": 41
+        },
+        {
+          "caller": "runStatus",
+          "callee": "openPersonalMind",
+          "lineNumber": 56
+        },
+        {
+          "caller": "runStatus",
+          "callee": "env.db.getDatabase",
+          "lineNumber": 60
+        },
+        {
+          "caller": "runStatus",
+          "callee": "db\r\n      .prepare(\"SELECT COUNT(*) AS n FROM memory_frames WHERE importance != 'deprecated'\")\r\n      .get",
+          "lineNumber": 63
+        },
+        {
+          "caller": "runStatus",
+          "callee": "db\r\n      .prepare",
+          "lineNumber": 63
+        },
+        {
+          "caller": "runStatus",
+          "callee": "db\r\n      .prepare(\"SELECT COUNT(*) AS n FROM knowledge_relations WHERE valid_to IS NULL\")\r\n      .get",
+          "lineNumber": 66
+        },
+        {
+          "caller": "runStatus",
+          "callee": "db\r\n      .prepare",
+          "lineNumber": 66
+        },
+        {
+          "caller": "runStatus",
+          "callee": "db\r\n      .prepare(\r\n        \"SELECT id, source, importance, created_at, content FROM memory_frames \" +\r\n        \"WHERE importance != 'deprecated' ORDER BY id DESC LIMIT 1\",\r\n      )\r\n      .get",
+          "lineNumber": 70
+        },
+        {
+          "caller": "runStatus",
+          "callee": "db\r\n      .prepare",
+          "lineNumber": 70
+        },
+        {
+          "caller": "runStatus",
+          "callee": "env.kg.getEntityCount",
+          "lineNumber": 83
+        },
+        {
+          "caller": "runStatus",
+          "callee": "env.kg.getEntityTypeCounts",
+          "lineNumber": 84
+        },
+        {
+          "caller": "runStatus",
+          "callee": "env.workspaces.list().map",
+          "lineNumber": 86
+        },
+        {
+          "caller": "runStatus",
+          "callee": "env.workspaces.list",
+          "lineNumber": 86
+        },
+        {
+          "caller": "runStatus",
+          "callee": "previewOf",
+          "lineNumber": 103
+        },
+        {
+          "caller": "runStatus",
+          "callee": "close",
+          "lineNumber": 108
+        },
+        {
+          "caller": "previewOf",
+          "callee": "content.replace(/\\s+/g, ' ').trim",
+          "lineNumber": 113
+        },
+        {
+          "caller": "previewOf",
+          "callee": "content.replace",
+          "lineNumber": 113
+        },
+        {
+          "caller": "previewOf",
+          "callee": "normalized.slice",
+          "lineNumber": 116
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "JSON.stringify",
+          "lineNumber": 121
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 125
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 126
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 129
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.join",
+          "lineNumber": 130
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 133
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.frames.toLocaleString",
+          "lineNumber": 133
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 134
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.entities.toLocaleString",
+          "lineNumber": 134
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 135
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.relations.toLocaleString",
+          "lineNumber": 135
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.entityTypeCounts.slice(0, 5)\r\n      .map((e) => `${e.type}=${e.count}`)\r\n      .join",
+          "lineNumber": 138
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.entityTypeCounts.slice(0, 5)\r\n      .map",
+          "lineNumber": 138
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.entityTypeCounts.slice",
+          "lineNumber": 138
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 141
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.lastFrame.created_at.replace('T', ' ').slice",
+          "lineNumber": 145
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.lastFrame.created_at.replace",
+          "lineNumber": 145
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 146
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 150
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 152
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.push",
+          "lineNumber": 156
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.workspaces.slice(0, 3).map((w) => w.name).join",
+          "lineNumber": 157
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.workspaces.slice(0, 3).map",
+          "lineNumber": 157
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "result.workspaces.slice",
+          "lineNumber": 157
+        },
+        {
+          "caller": "renderStatusResult",
+          "callee": "lines.join",
+          "lineNumber": 161
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/dispatch.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 442,
+      "nonEmptyLines": 400,
+      "callGraph": [
+        {
+          "caller": "makeMockTransport",
+          "callee": "stdin.on",
+          "lineNumber": 343
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "chunk.toString",
+          "lineNumber": 344
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "buffer.indexOf",
+          "lineNumber": 345
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "buffer.slice(0, idx).trim",
+          "lineNumber": 347
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "buffer.slice",
+          "lineNumber": 347
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "buffer.slice",
+          "lineNumber": 348
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "JSON.parse",
+          "lineNumber": 351
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "responses.find",
+          "lineNumber": 353
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "stdout.write",
+          "lineNumber": 355
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "JSON.stringify",
+          "lineNumber": 355
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "buffer.indexOf",
+          "lineNumber": 360
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "stdin.end",
+          "lineNumber": 367
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "stdout.end",
+          "lineNumber": 367
+        },
+        {
+          "caller": "makeMockTransport",
+          "callee": "Promise.resolve",
+          "lineNumber": 368
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/dispatch.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 202,
+      "nonEmptyLines": 181,
+      "functions": [
+        {
+          "name": "intArg",
+          "startLine": 30,
+          "endLine": 35,
+          "params": [
+            "values",
+            "key"
+          ]
+        },
+        {
+          "name": "formatOf",
+          "startLine": 37,
+          "endLine": 39,
+          "params": [
+            "values"
+          ]
+        },
+        {
+          "name": "json",
+          "startLine": 41,
+          "endLine": 43,
+          "params": [
+            "obj"
+          ]
+        },
+        {
+          "name": "dispatch",
+          "startLine": 45,
+          "endLine": 202,
+          "params": [
+            "args"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "dispatch",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "intArg",
+          "callee": "Number",
+          "lineNumber": 33
+        },
+        {
+          "caller": "intArg",
+          "callee": "Number.isFinite",
+          "lineNumber": 34
+        },
+        {
+          "caller": "json",
+          "callee": "JSON.stringify",
+          "lineNumber": 42
+        },
+        {
+          "caller": "dispatch",
+          "callee": "formatOf",
+          "lineNumber": 47
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runRecallContext",
+          "lineNumber": 53
+        },
+        {
+          "caller": "dispatch",
+          "callee": "intArg",
+          "lineNumber": 55
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 60
+        },
+        {
+          "caller": "dispatch",
+          "callee": "renderRecallResult",
+          "lineNumber": 60
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runSaveSession",
+          "lineNumber": 64
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 70
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runHarvestLocal",
+          "lineNumber": 82
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 83
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runCognify",
+          "lineNumber": 92
+        },
+        {
+          "caller": "dispatch",
+          "callee": "intArg",
+          "lineNumber": 93
+        },
+        {
+          "caller": "dispatch",
+          "callee": "intArg",
+          "lineNumber": 94
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 97
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runCompileWiki",
+          "lineNumber": 104
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 109
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runMaintenance",
+          "lineNumber": 117
+        },
+        {
+          "caller": "dispatch",
+          "callee": "Boolean",
+          "lineNumber": 118
+        },
+        {
+          "caller": "dispatch",
+          "callee": "Boolean",
+          "lineNumber": 119
+        },
+        {
+          "caller": "dispatch",
+          "callee": "Boolean",
+          "lineNumber": 120
+        },
+        {
+          "caller": "dispatch",
+          "callee": "Boolean",
+          "lineNumber": 121
+        },
+        {
+          "caller": "dispatch",
+          "callee": "Boolean",
+          "lineNumber": 122
+        },
+        {
+          "caller": "dispatch",
+          "callee": "intArg",
+          "lineNumber": 123
+        },
+        {
+          "caller": "dispatch",
+          "callee": "intArg",
+          "lineNumber": 124
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 127
+        },
+        {
+          "caller": "dispatch",
+          "callee": "lines.push",
+          "lineNumber": 129
+        },
+        {
+          "caller": "dispatch",
+          "callee": "lines.push",
+          "lineNumber": 130
+        },
+        {
+          "caller": "dispatch",
+          "callee": "lines.push",
+          "lineNumber": 131
+        },
+        {
+          "caller": "dispatch",
+          "callee": "lines.push",
+          "lineNumber": 132
+        },
+        {
+          "caller": "dispatch",
+          "callee": "lines.push",
+          "lineNumber": 133
+        },
+        {
+          "caller": "dispatch",
+          "callee": "lines.join",
+          "lineNumber": 134
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runInit",
+          "lineNumber": 138
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 139
+        },
+        {
+          "caller": "dispatch",
+          "callee": "renderInitResult",
+          "lineNumber": 139
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runStatus",
+          "lineNumber": 143
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 144
+        },
+        {
+          "caller": "dispatch",
+          "callee": "renderStatusResult",
+          "lineNumber": 144
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runMcpStart",
+          "lineNumber": 150
+        },
+        {
+          "caller": "dispatch",
+          "callee": "process.exit",
+          "lineNumber": 151
+        },
+        {
+          "caller": "dispatch",
+          "callee": "JSON.parse",
+          "lineNumber": 165
+        },
+        {
+          "caller": "dispatch",
+          "callee": "String",
+          "lineNumber": 167
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runMcpCall",
+          "lineNumber": 172
+        },
+        {
+          "caller": "dispatch",
+          "callee": "intArg",
+          "lineNumber": 175
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 177
+        },
+        {
+          "caller": "dispatch",
+          "callee": "renderMcpCallResult",
+          "lineNumber": 177
+        },
+        {
+          "caller": "dispatch",
+          "callee": "runDoctor",
+          "lineNumber": 184
+        },
+        {
+          "caller": "dispatch",
+          "callee": "json",
+          "lineNumber": 189
+        },
+        {
+          "caller": "dispatch",
+          "callee": "renderDoctorResult",
+          "lineNumber": 191
+        }
+      ],
+      "metrics": {
+        "importCount": 12,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 136,
+      "nonEmptyLines": 125,
+      "functions": [
+        {
+          "name": "parseRootArgs",
+          "startLine": 27,
+          "endLine": 77,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 79,
+          "endLine": 107,
+          "params": []
+        },
+        {
+          "name": "main",
+          "startLine": 109,
+          "endLine": 131,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseRootArgs",
+          "callee": "rest.slice",
+          "lineNumber": 41
+        },
+        {
+          "caller": "parseRootArgs",
+          "callee": "parseArgs",
+          "lineNumber": 44
+        },
+        {
+          "caller": "printHelp",
+          "callee": "[\r\n    'Usage: hive-mind-cli <subcommand> [options]',\r\n    '',\r\n    'Subcommands:',\r\n    '  init                         Scaffold data dir + personal.mind (idempotent)',\r\n    '  status                       Show frame/entity counts + last activity',\r\n    '  mcp start                    Run the hive-mind MCP server (stdio)',\r\n    '  mcp call <tool> [--args J]   Invoke one MCP tool and print the result',\r\n    '  recall-context \"<query>\"     Search the personal mind and print hits',\r\n    '  save-session --file PATH     Persist a session summary as a memory frame',\r\n    '  harvest-local --source S --path P   Import local AI tool exports',\r\n    '  cognify                      Heuristic KG entity extraction from recent frames',\r\n    '  compile-wiki [--mode M]      Build/refresh the personal wiki',\r\n    '  maintenance --compact ...    Batch ops for a nightly cron',\r\n    '',\r\n    'Common flags:',\r\n    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',\r\n    '  --json                       Emit JSON rather than human text',\r\n    '',\r\n    'Environment:',\r\n    '  HIVE_MIND_DATA_DIR           Data directory (default ~/.hive-mind)',\r\n    '  OLLAMA_URL / OLLAMA_MODEL    Preferred embedder and wiki LLM',\r\n    '  VOYAGE_API_KEY               Remote embedder fallback',\r\n    '  OPENAI_API_KEY               Remote embedder fallback',\r\n    '  ANTHROPIC_API_KEY            Wiki synthesizer (Haiku)',\r\n  ].join",
+          "lineNumber": 80
+        },
+        {
+          "caller": "printHelp",
+          "callee": "console.log",
+          "lineNumber": 106
+        },
+        {
+          "caller": "main",
+          "callee": "parseRootArgs",
+          "lineNumber": 110
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 110
+        },
+        {
+          "caller": "main",
+          "callee": "printHelp",
+          "lineNumber": 112
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 113
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 118
+        },
+        {
+          "caller": "main",
+          "callee": "dispatch",
+          "lineNumber": 122
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 123
+        },
+        {
+          "caller": "main",
+          "callee": "output.endsWith",
+          "lineNumber": 124
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 124
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 125
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 127
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 128
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 129
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/setup.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 72,
+      "nonEmptyLines": 63,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/src/setup.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 153,
+      "nonEmptyLines": 140,
+      "functions": [
+        {
+          "name": "resolveDataDir",
+          "startLine": 47,
+          "endLine": 56,
+          "params": []
+        },
+        {
+          "name": "embedderConfigFromEnv",
+          "startLine": 62,
+          "endLine": 95,
+          "params": [
+            "dataDir"
+          ]
+        },
+        {
+          "name": "openPersonalMind",
+          "startLine": 102,
+          "endLine": 153,
+          "params": [
+            "dataDir"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "resolveDataDir",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "openPersonalMind",
+          "line": 102,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolveDataDir",
+          "callee": "envDir.startsWith",
+          "lineNumber": 50
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "path.join",
+          "lineNumber": 51
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "os.homedir",
+          "lineNumber": 51
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "envDir.slice",
+          "lineNumber": 51
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "path.join",
+          "lineNumber": 55
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "os.homedir",
+          "lineNumber": 55
+        },
+        {
+          "caller": "embedderConfigFromEnv",
+          "callee": "path.join",
+          "lineNumber": 83
+        },
+        {
+          "caller": "openPersonalMind",
+          "callee": "resolveDataDir",
+          "lineNumber": 102
+        },
+        {
+          "caller": "openPersonalMind",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 103
+        },
+        {
+          "caller": "openPersonalMind",
+          "callee": "path.join",
+          "lineNumber": 104
+        },
+        {
+          "caller": "openPersonalMind",
+          "callee": "workspaces.getMindPath",
+          "lineNumber": 116
+        },
+        {
+          "caller": "getEmbedder",
+          "callee": "createEmbeddingProvider",
+          "lineNumber": 124
+        },
+        {
+          "caller": "getEmbedder",
+          "callee": "embedderConfigFromEnv",
+          "lineNumber": 124
+        },
+        {
+          "caller": "getSearch",
+          "callee": "getEmbedder",
+          "lineNumber": 130
+        },
+        {
+          "caller": "openPersonalMind",
+          "callee": "mindCache.closeAll",
+          "lineNumber": 149
+        },
+        {
+          "caller": "openPersonalMind",
+          "callee": "db.close",
+          "lineNumber": 150
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    }
+  ]
+}

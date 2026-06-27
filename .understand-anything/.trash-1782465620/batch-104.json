@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": "document:benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md",
+      "type": "document",
+      "name": "h3-spot-audit-pre-a-addendum.md",
+      "filePath": "benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md",
+      "summary": "Addendum to the GEPA Phase-1 H3 corpus pre-A audit report, documenting Option B retry execution, resume-bug recovery, texture audit methodology and quantitative/qualitative delta analysis, drift assessment, PM ratification verdict, and final cost reconciliation for the corpus generation phase.",
+      "tags": ["documentation", "benchmark", "audit", "quality-assurance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md",
+      "type": "document",
+      "name": "h3-spot-audit-pre-a-report.md",
+      "filePath": "benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md",
+      "summary": "Primary GEPA Phase-1 H3 corpus quality audit report covering generation summary, failed cells, per-family/persona/company-stage coverage analysis, spot-audit results, cost reconciliation, and PM ratification ask for the pre-A halt decision.",
+      "tags": ["documentation", "benchmark", "audit", "quality-assurance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md",
+      "type": "document",
+      "name": "texture-audit-side-by-side.md",
+      "filePath": "benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md",
+      "summary": "Side-by-side texture comparison of RETRY (JSON-mode) versus ORIGINAL-SAMPLE (seed=99) benchmark corpus entries across H3 task families F1-F5, personas (CFO, Founder/CEO, COO, VP Finance), and company stages (Series B growth, post-profitable consolidation), used to assess output quality drift between generation runs.",
+      "tags": ["documentation", "benchmark", "data-pipeline", "quality-assurance"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md",
+      "target": "document:benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md",
+      "target": "document:benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

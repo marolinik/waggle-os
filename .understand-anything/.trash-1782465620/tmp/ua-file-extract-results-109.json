@@ -1,0 +1,1895 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/AGENT-AUDIT-RESULTS-2026-04-16.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 272,
+      "nonEmptyLines": 272,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 0
+      }
+    },
+    {
+      "path": "docs/AGENT-BEHAVIOR-AUDIT-2026-04-16.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 54,
+      "nonEmptyLines": 40,
+      "sections": [
+        {
+          "heading": "Agent Behavior Audit — 2026-04-16",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Symptoms Reported",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Root Causes Found",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "RC-1: GEPA expands mid-conversation replies (CRITICAL)",
+          "level": 3,
+          "line": 12
+        },
+        {
+          "heading": "RC-2: Entity extractor defaults capitalized phrases to \"person\" (MEDIUM)",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "RC-3: Cognify processes agent responses (LOW)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "RC-4: Frame dedup not catching identical content (LOW)",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Fixes Applied",
+          "level": 2,
+          "line": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/AI-ACT-AUDIT-2026-04-10.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 94,
+      "nonEmptyLines": 94,
+      "sections": [
+        {
+          "heading": "report",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "workspace",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "complianceStatus",
+          "level": 1,
+          "line": 12
+        },
+        {
+          "heading": "modelInventory",
+          "level": 1,
+          "line": 47
+        },
+        {
+          "heading": "humanOversightLog",
+          "level": 1,
+          "line": 48
+        },
+        {
+          "heading": "harvestProvenance",
+          "level": 1,
+          "line": 49
+        },
+        {
+          "heading": "interactionCount",
+          "level": 1,
+          "line": 57
+        },
+        {
+          "heading": "harvestAudit",
+          "level": 1,
+          "line": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/AI-ACT-AUDIT-2026-04-10.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 143,
+      "nonEmptyLines": 101,
+      "sections": [
+        {
+          "heading": "Waggle Personal Mind — EU AI Act Audit Report",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Executive Summary",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§1 Article-by-Article Status",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Art. 26 — Active monitors",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "§2 Workspace Risk Classification",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "§3 Harvest Provenance (Art. 12 §1 — Chain of Custody)",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "Claude Code (~/.claude)",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "§4 PII & Sensitive Data Scan",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "✅ No critical credential leaks detected",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "§5 Data Minimization (Art. 10 §3 / GDPR Art. 5)",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "§6 Retention Posture (Art. 19)",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "§7 Source Auditability (Art. 12 §1(c))",
+          "level": 2,
+          "line": 100
+        },
+        {
+          "heading": "§8 Model Inventory & Oversight Log (Art. 50 / Art. 14)",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "§9 Right-to-Erasure (GDPR Art. 17)",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "§10 Findings & Required Actions",
+          "level": 2,
+          "line": 127
+        },
+        {
+          "heading": "§11 Compliance Posture — honest caveats",
+          "level": 2,
+          "line": 133
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/AI-ACT-COMPLIANCE-PROOF-2026-04-16.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 699,
+      "nonEmptyLines": 554,
+      "sections": [
+        {
+          "heading": "Waggle OS -- EU AI Act Compliance Proof",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Table of Contents",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Executive Summary",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Article-by-Article Mapping",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "Article 12 -- Automatic Event Logging",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "Article 14 -- Human Oversight",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Article 19 -- Log Retention",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "Article 26 -- Deployer Monitoring",
+          "level": 3,
+          "line": 151
+        },
+        {
+          "heading": "Article 50 -- Transparency Obligations",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "Compliance Matrix",
+          "level": 2,
+          "line": 215
+        },
+        {
+          "heading": "Art. 12 -- Event Logging",
+          "level": 3,
+          "line": 219
+        },
+        {
+          "heading": "Art. 14 -- Human Oversight",
+          "level": 3,
+          "line": 238
+        },
+        {
+          "heading": "Art. 19 -- Log Retention",
+          "level": 3,
+          "line": 255
+        },
+        {
+          "heading": "Art. 26 -- Deployer Monitoring",
+          "level": 3,
+          "line": 266
+        },
+        {
+          "heading": "Art. 50 -- Transparency",
+          "level": 3,
+          "line": 280
+        },
+        {
+          "heading": "Summary",
+          "level": 3,
+          "line": 292
+        },
+        {
+          "heading": "How to Generate Proof",
+          "level": 2,
+          "line": 310
+        },
+        {
+          "heading": "Step 1: Generate an Audit Report via the API",
+          "level": 3,
+          "line": 314
+        },
+        {
+          "heading": "Step 2: Verify Interaction Logs Exist",
+          "level": 3,
+          "line": 358
+        },
+        {
+          "heading": "Step 3: Check Model Inventory Completeness",
+          "level": 3,
+          "line": 395
+        },
+        {
+          "heading": "Step 4: Validate Oversight Log Entries",
+          "level": 3,
+          "line": 418
+        },
+        {
+          "heading": "Step 5: Generate a PDF Compliance Report",
+          "level": 3,
+          "line": 456
+        },
+        {
+          "heading": "Step 6: Verify Risk Classification",
+          "level": 3,
+          "line": 483
+        },
+        {
+          "heading": "Sample Audit Report",
+          "level": 2,
+          "line": 527
+        },
+        {
+          "heading": "PDF Structure (from `buildComplianceDocDefinition`)",
+          "level": 3,
+          "line": 627
+        },
+        {
+          "heading": "Gaps and Remediation Plan",
+          "level": 2,
+          "line": 685
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 26
+      }
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 245,
+      "nonEmptyLines": 195,
+      "sections": [
+        {
+          "heading": "Architecture",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Package Overview",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Package Details",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "@waggle/core",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "@waggle/agent",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "@waggle/server",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "@waggle/ui",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "@waggle/marketplace",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "@waggle/waggle-dance",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "@waggle/worker",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "Data Flow",
+          "level": 2,
+          "line": 125
+        },
+        {
+          "heading": "Chat Message Flow",
+          "level": 3,
+          "line": 127
+        },
+        {
+          "heading": "Memory Flow",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "Workspace Startup Flow",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Extension Points",
+          "level": 2,
+          "line": 177
+        },
+        {
+          "heading": "Adding a New Tool",
+          "level": 3,
+          "line": 179
+        },
+        {
+          "heading": "Adding a New Connector",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "Adding a Skill",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "Adding a Slash Command",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "Adding a Workflow Template",
+          "level": 3,
+          "line": 215
+        },
+        {
+          "heading": "Storage Locations",
+          "level": 2,
+          "line": 221
+        },
+        {
+          "heading": "Security Model",
+          "level": 2,
+          "line": 237
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/AUDIT-PERSONAL-MIND-2026-04-10.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 276,
+      "nonEmptyLines": 205,
+      "sections": [
+        {
+          "heading": "Waggle Personal Mind — Audit Report",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 Vitals",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "§2 Content Volume",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "§3 Content Breakdown",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "§4 Topic Density (top 25)",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "§5 Project Coverage",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "§6 Knowledge Graph — extracted entities",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "By type",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Top persons",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "Top concepts",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Top technologys",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "Top organizations",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "Top projects",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "§7 Live Search Verification (FTS5)",
+          "level": 2,
+          "line": 175
+        },
+        {
+          "heading": "§8 Sample Highlight — EU AI Act Compliance Strategy",
+          "level": 2,
+          "line": 233
+        },
+        {
+          "heading": "§9 Status & Next Steps",
+          "level": 2,
+          "line": 254
+        },
+        {
+          "heading": "✅ Completed in this session",
+          "level": 3,
+          "line": 256
+        },
+        {
+          "heading": "⏳ Still open",
+          "level": 3,
+          "line": 268
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/BRAND-VOICE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 106,
+      "nonEmptyLines": 71,
+      "sections": [
+        {
+          "heading": "Waggle OS — Brand Voice Reference",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Voice attributes",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "What \"Anti-hype\" means in practice",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Numerical claims require sources",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "\"Probability: high\" is a reserved phrase",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Formatting",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "Honest-voice pattern",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "What this file is NOT",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "Ratifying this document",
+          "level": 2,
+          "line": 102
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/CONTRIBUTING.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 148,
+      "nonEmptyLines": 105,
+      "sections": [
+        {
+          "heading": "Contributing to Waggle",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Prerequisites",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Setup",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Running the App",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Running Tests",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "Test Requirements",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "Test Organization",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Pull Request Process",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "PR Title Format",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "Code Style",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "TypeScript",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "File Organization",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "Naming Conventions",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "Error Handling",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "Package Structure",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "Adding to an Existing Package",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "Key Directories",
+          "level": 3,
+          "line": 124
+        },
+        {
+          "heading": "Product Rules",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "Questions?",
+          "level": 2,
+          "line": 146
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "docs/DAY-2-BACKLOG-2026-05-01.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 331,
+      "nonEmptyLines": 238,
+      "sections": [
+        {
+          "heading": "Day-2 Backlog — Onboarding + Addiction Features (2026-05-01)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Cross-feature decisions — RATIFIED",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1.1 Frame inclusion (used by Streak/Growth, Milestones, Wins, Brief)",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "1.2 Timezone strategy",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "1.3 Empty-state behaviour",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "1.4 Overlay queue",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "1.5 LLM cost caps",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "2. Modified addiction-feature specs (Phases 2-6 → Day-2)",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "2.1 Feature #1 — Memory Growth Chart  *(was: Memory Streak)*",
+          "level": 3,
+          "line": 102
+        },
+        {
+          "heading": "2.2 Feature #5 — Milestone Cards (split toast vs card)",
+          "level": 3,
+          "line": 124
+        },
+        {
+          "heading": "2.3 Feature #2 — Today's Brief Dashboard Card  *(was: Daily Brief notification)*",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "2.4 Feature #3 — Continuity Moments",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "2.5 Feature #4 — Weekly Wins Digest",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "3. FR #30 — Returning-user persona pick",
+          "level": 2,
+          "line": 188
+        },
+        {
+          "heading": "4. Recommended build order (post-launch)",
+          "level": 2,
+          "line": 222
+        },
+        {
+          "heading": "5. /schedule trigger — May 8 follow-up",
+          "level": 2,
+          "line": 248
+        },
+        {
+          "heading": "5b. PM Pass 7 friction notes (2026-05-01)",
+          "level": 2,
+          "line": 266
+        },
+        {
+          "heading": "FR Pass7-A — P2 — Replay tour resets onboarding when wizard incomplete",
+          "level": 3,
+          "line": 272
+        },
+        {
+          "heading": "FR Pass7-B — P3 cosmetic — Window state persists across page reload",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "FR Pass7-C — P3 cosmetic — Memory window opens layered over Dashboard",
+          "level": 3,
+          "line": 304
+        },
+        {
+          "heading": "6. NOT in this Day-2 batch (defer further)",
+          "level": 2,
+          "line": 323
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 21
+      }
+    },
+    {
+      "path": "docs/GEPA-SCOPE-AUDIT-2026-04-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 171,
+      "nonEmptyLines": 122,
+      "sections": [
+        {
+          "heading": "GEPA Scope Audit — 2026-04-30",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Summary table",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "1. GEPA input optimizer — **first-call-only, intentional**",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "2. Evolved Behavioral-Spec overrides — **every turn, correct**",
+          "level": 2,
+          "line": 41
+        },
+        {
+          "heading": "3. Evolved Persona overrides — **bug, never applied**",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "4. PromptAssembler v5 evolved shapes — **missing production wiring**",
+          "level": 2,
+          "line": 94
+        },
+        {
+          "heading": "My recommendation",
+          "level": 2,
+          "line": 144
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/GETTING-STARTED.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 92,
+      "nonEmptyLines": 74,
+      "sections": [
+        {
+          "heading": "Getting Started with Waggle",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Quick Start (5 minutes)",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "1. Install Waggle",
+          "level": 3,
+          "line": 7
+        },
+        {
+          "heading": "2. Set Up Your API Key",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "3. Create Your First Workspace",
+          "level": 3,
+          "line": 19
+        },
+        {
+          "heading": "4. Start Working",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "5. The Memory Magic",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "Key Features",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Workflow Commands",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Personas",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "Keyboard Shortcuts",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "Memory View",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "Workspace Home",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "Product Scopes",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "Need Help?",
+          "level": 2,
+          "line": 91
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/HARVEST-EXPORT-MANUAL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 292,
+      "nonEmptyLines": 231,
+      "sections": [
+        {
+          "heading": "Harvest Export Manual — All Marko's AI Accounts",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Prep: Create the import folder",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. ChatGPT (chatgpt.com)",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "2. Claude Web (claude.ai) — marolinik@gmail.com account",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Repeat for marko.markovic@egzakta.com account:",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "3. Claude Desktop App",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "4. Claude Code — ALL sessions, ALL projects, BOTH accounts",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "Where Claude Code stores sessions:",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "A. Gather ALL session files across ALL projects:",
+          "level": 4,
+          "line": 105
+        },
+        {
+          "heading": "B. Key projects to verify are included:",
+          "level": 4,
+          "line": 128
+        },
+        {
+          "heading": "C. Also grab the memory files (per-project learned context):",
+          "level": 4,
+          "line": 143
+        },
+        {
+          "heading": "D. Both accounts:",
+          "level": 4,
+          "line": 155
+        },
+        {
+          "heading": "5. Gemini (gemini.google.com)",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "6. Perplexity (perplexity.ai)",
+          "level": 2,
+          "line": 184
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 189
+        },
+        {
+          "heading": "7. Cursor (cursor.sh)",
+          "level": 2,
+          "line": 207
+        },
+        {
+          "heading": "Steps:",
+          "level": 3,
+          "line": 212
+        },
+        {
+          "heading": "8. Microsoft Graph (email + calendar + files) — FUTURE",
+          "level": 2,
+          "line": 232
+        },
+        {
+          "heading": "Prep (for when I build the connector):",
+          "level": 3,
+          "line": 237
+        },
+        {
+          "heading": "Checklist",
+          "level": 2,
+          "line": 258
+        },
+        {
+          "heading": "Keys to add to Waggle vault",
+          "level": 2,
+          "line": 272
+        },
+        {
+          "heading": "When you're done",
+          "level": 2,
+          "line": 281
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 27
+      }
+    },
+    {
+      "path": "docs/HIVE-MIND-INTEGRATION-DESIGN.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 345,
+      "nonEmptyLines": 264,
+      "sections": [
+        {
+          "heading": "Hive-Mind Integration Design — How It Actually Works in the Wild",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The Problem",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "The Solution: Three Integration Layers",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Layer 1: MCP Resources (Silent, Automatic)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "Layer 2: CLAUDE.md / .cursorrules Instructions (Guided, Consistent)",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "Layer 3: CLI Hooks (Active, Event-Driven)",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "The Installation Experience",
+          "level": 2,
+          "line": 124
+        },
+        {
+          "heading": "Scenario: User installs hive-mind for Claude Code",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "What happens on the next Claude Code session:",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "How It Feels for Each Host",
+          "level": 2,
+          "line": 181
+        },
+        {
+          "heading": "Claude Code (deepest integration)",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "Cursor",
+          "level": 3,
+          "line": 191
+        },
+        {
+          "heading": "Codex (OpenAI)",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "Windsurf / Antigravity / Others",
+          "level": 3,
+          "line": 204
+        },
+        {
+          "heading": "The Daemon Question",
+          "level": 2,
+          "line": 212
+        },
+        {
+          "heading": "Option A: Lazy Processing (simplest)",
+          "level": 3,
+          "line": 225
+        },
+        {
+          "heading": "Option B: CLI Cron (recommended for production)",
+          "level": 3,
+          "line": 231
+        },
+        {
+          "heading": "Option C: Background Service (full Waggle parity)",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "Skills 2.0 + Learning: What Transfers",
+          "level": 2,
+          "line": 252
+        },
+        {
+          "heading": "Harvest Targets — Complete List",
+          "level": 2,
+          "line": 276
+        },
+        {
+          "heading": "What Ships in v1 vs v2",
+          "level": 2,
+          "line": 299
+        },
+        {
+          "heading": "v1 (launch)",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "v2 (post-launch)",
+          "level": 3,
+          "line": 311
+        },
+        {
+          "heading": "The Upgrade Funnel",
+          "level": 2,
+          "line": 322
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    },
+    {
+      "path": "docs/MAY-8-FOLLOWUP-REPORT-2026-05-08.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 119,
+      "nonEmptyLines": 78,
+      "sections": [
+        {
+          "heading": "May 8 Follow-up Audit — Phase 1 Health + Day-2 Wave Recommendation",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Phase 1 Feature Health",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "FR #6 — Tour Replay (commit f4e3591)",
+          "level": 3,
+          "line": 10
+        },
+        {
+          "heading": "FR #7 — Pending Imports Reminder (commit 4874f15)",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "Tests",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "GitHub issues",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "2. Day-2 Wave Priority Recommendation",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "What shipped since Phase 1 (Phase 4.1, 14 commits, 2026-05-01 → 2026-05-08)",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "Signal summary",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Recommendation",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "3. Drift Summary",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "4. Action taken",
+          "level": 2,
+          "line": 115
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/MILESTONE-LAUNCH-STORY-VALIDATED-2026-04-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 162,
+      "nonEmptyLines": 126,
+      "sections": [
+        {
+          "heading": "Milestone — Launch Story Validated",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What this milestone closes",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Empirical verification",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Backend live state at verification time",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "Spawn path — CC live smoke (CC bm1ukrbb0)",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "Spawn path — earlier CC live smoke (Phase B verification)",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "Chat path — PM Chrome MCP UI verification",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "Test gates",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Decisions ratified by Marko",
+          "level": 2,
+          "line": 79
+        },
+        {
+          "heading": "Session 2026-04-30 — 20 commits on `origin/main`",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "Coverage",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Recurring pattern surfaced & remediation queued",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "What this does NOT include (open work)",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "Reference files",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "Sign-off",
+          "level": 2,
+          "line": 158
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/ONBOARDING-DAY-2-BACKLOG-2026-04-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 187,
+      "nonEmptyLines": 140,
+      "sections": [
+        {
+          "heading": "Onboarding — Day-2 Backlog",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why this exists",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "A3 — Smarter auto-complete heuristic",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Reset Onboarding affordance",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "Document the production behavior",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 178
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/ONBOARDING-INVESTIGATION-2026-04-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 225,
+      "nonEmptyLines": 167,
+      "sections": [
+        {
+          "heading": "Onboarding Flow Investigation — 2026-04-30",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. The full flow exists and is documented",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "2. Why PM didn't see it — the auto-complete branch",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "3. Git archaeology",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "`04add13` — auto-complete behavior introduced",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "`bd1f1f1` — Tauri filesystem flag (NOT on main)",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "Other recent onboarding commits on main (Apr 12 - Apr 29)",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "4. Remediation options for PM walkthrough",
+          "level": 2,
+          "line": 144
+        },
+        {
+          "heading": "Option A — Deeper reset (recommended for PM walkthrough)",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Option B — Force-render flag for testing (code change, scope creep)",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "Option C — Ratify the current 4-surface flow as Day 0 UX",
+          "level": 3,
+          "line": 174
+        },
+        {
+          "heading": "5. Findings summary table",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "6. PM friction reports FR #23-32 — what they're for",
+          "level": 2,
+          "line": 196
+        },
+        {
+          "heading": "7. Out-of-scope notes",
+          "level": 2,
+          "line": 208
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/ONBOARDING.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 108,
+      "nonEmptyLines": 96,
+      "sections": [
+        {
+          "heading": "Onboarding Guide: Waggle OS",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Overview",
+          "level": 2,
+          "line": 4
+        },
+        {
+          "heading": "Tech Stack (verified 2026-05-28)",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Architecture",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Key Entry Points",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Directory Map",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Request Lifecycle (a chat message)",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "Conventions",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "Common Tasks",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Verification before claiming done",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Where to Look",
+          "level": 2,
+          "line": 92
+        },
+        {
+          "heading": "Flags for maintainers (found during onboarding recon)",
+          "level": 2,
+          "line": 106
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/PM-SYNC-PRE-DAY0-2026-05-05.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 456,
+      "nonEmptyLines": 342,
+      "sections": [
+        {
+          "heading": "PM Sync — Pre-Day-0 Two-Repo Survey",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — waggle-os repo state",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Recent local commit chain (last 15)",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Local branches with drift vs origin",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "§2 — waggle-os CLAUDE.md audit",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Section structure",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "Mentions audit (deferred / TODO / post-launch / Day-2 / TBD)",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "Benchmark gate / pricing / OSS extraction / branch architecture references",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "Stale items in CLAUDE.md §10",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "§3 — waggle-os backlog docs inventory (`docs/`)",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "§4 — waggle-os open work signals (grep)",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "Concentrated in three doc files",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "Source-code TODOs",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Document-level DEFERRED",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "§5 — hive-mind repo state",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "Local + remote branches",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "Remote branches (origin)",
+          "level": 3,
+          "line": 195
+        },
+        {
+          "heading": "NO oss-export branches in hive-mind",
+          "level": 3,
+          "line": 205
+        },
+        {
+          "heading": "Recent commits on hive-mind master (last 15)",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "§6 — hive-mind README + EXTRACTION.md",
+          "level": 2,
+          "line": 233
+        },
+        {
+          "heading": "README.md (307 lines)",
+          "level": 3,
+          "line": 235
+        },
+        {
+          "heading": "EXTRACTION.md (58 lines)",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "§7 — hive-mind open work + npm publish state",
+          "level": 2,
+          "line": 288
+        },
+        {
+          "heading": "git grep TODO/FIXME/XXX/HACK/DEFERRED/UNDOCUMENTED across `*.ts`, `*.md`",
+          "level": 3,
+          "line": 290
+        },
+        {
+          "heading": "npm publish state (queried 2026-05-05)",
+          "level": 3,
+          "line": 296
+        },
+        {
+          "heading": "Hive-mind master commits ahead of v0.1.0 publish (10 commits)",
+          "level": 3,
+          "line": 307
+        },
+        {
+          "heading": "Per-package last touch on hive-mind master",
+          "level": 3,
+          "line": 324
+        },
+        {
+          "heading": "§8 — Cross-cutting sync + consistency analysis",
+          "level": 2,
+          "line": 335
+        },
+        {
+          "heading": "§8a — SHA terminus comparison (waggle-os oss-export branches ↔ hive-mind master)",
+          "level": 3,
+          "line": 337
+        },
+        {
+          "heading": "§8b — Production-ready for Day 0",
+          "level": 3,
+          "line": 371
+        },
+        {
+          "heading": "§8c — In-flight pre-Day 0",
+          "level": 3,
+          "line": 382
+        },
+        {
+          "heading": "§8d — Consciously deferred to post Day 0",
+          "level": 3,
+          "line": 396
+        },
+        {
+          "heading": "§8e — Dangling concerns (not raised by PM Claude)",
+          "level": 3,
+          "line": 410
+        },
+        {
+          "heading": "§8f — PR + issue state",
+          "level": 3,
+          "line": 436
+        },
+        {
+          "heading": "Summary: Day 0 readiness one-liner",
+          "level": 2,
+          "line": 447
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 35
+      }
+    }
+  ]
+}

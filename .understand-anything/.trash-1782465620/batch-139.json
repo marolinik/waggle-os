@@ -1,0 +1,166 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "document",
+      "name": "BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/BUILD-PLAN.md",
+      "summary": "Master build plan for the warm-Hive redesign covering the full PR roadmap (PR1–PR8), token mapping from waggle.css to apps/web, theme provider, 5-item spine + command center, and open decisions requiring founder confirmation.",
+      "tags": ["documentation", "design-system", "development", "deployment"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR3-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR3-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR3-BUILD-PLAN.md",
+      "summary": "Detailed build plan for PR3 of the warm-Hive redesign covering three screens — Home (editorial), Chat (split work-canvas), and Workspace (overview + tabs) — with TDD-first phased execution, data wiring specs, and per-screen verification gates.",
+      "tags": ["documentation", "development", "ui-ux", "design-system"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR35-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR35-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR35-BUILD-PLAN.md",
+      "summary": "Build plan for PR3.5 of the warm-Hive redesign implementing Memory-Trust (screen 19), including frame.source projection onto the workspace briefing endpoint, provenance pill primitives, memory row confidence rings, and the 'Why did you do that?' trace view.",
+      "tags": ["documentation", "development", "ui-ux", "design-system"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR4-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR4-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR4-BUILD-PLAN.md",
+      "summary": "Build plan for PR4 of the warm-Hive redesign covering the Marketplace screen and shared install store (sync), with ratified founder decisions on UI variation, shelf collapse, and in-place OAuth flow.",
+      "tags": ["documentation", "development", "ui-ux", "design-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR5-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR5-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR5-BUILD-PLAN.md",
+      "summary": "Build plan for PR5 of the warm-Hive redesign implementing Settings reskin (models-first + failover) and a 6-step onboarding flow with a model-gate hard block, treating most of the backend as already built.",
+      "tags": ["documentation", "development", "ui-ux", "design-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR6-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR6-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR6-BUILD-PLAN.md",
+      "summary": "Build plan for PR6 of the warm-Hive redesign covering the remaining long-tail surfaces (9 screens split into 3 sub-PRs), with a grounded current-state row per screen, recommended sub-PR split, and an honesty log of verified drift from the live app.",
+      "tags": ["documentation", "development", "ui-ux", "design-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR7-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR7-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR7-BUILD-PLAN.md",
+      "summary": "Build plan for PR7 of the warm-Hive redesign implementing themed Auth (Clerk, screen 13) and Billing (Stripe, screen 14) surfaces, with strategic BYO-key vs Waggle-metered gate, no-fabrication contract for identity/money, and two sub-PR risk-shaped split.",
+      "tags": ["documentation", "development", "security", "deployment"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/PR8-BUILD-PLAN.md",
+      "type": "document",
+      "name": "PR8-BUILD-PLAN.md",
+      "filePath": "docs/redesign-warm-hive/PR8-BUILD-PLAN.md",
+      "summary": "Build plan for PR8 of the warm-Hive redesign migrating the apps/www Next.js landing page to the warm-Hive visual identity, with token remap table, no-fabrication contract, external dependency list, and phased plan targeting waggle-os.ai.",
+      "tags": ["documentation", "development", "deployment", "design-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr4-20260617-after-search.txt",
+      "type": "document",
+      "name": "smoke-pr4-20260617-after-search.txt",
+      "filePath": "docs/redesign-warm-hive/smoke-pr4-20260617-after-search.txt",
+      "summary": "Raw verbose output from the PR4 live smoke test session (2026-06-17) after exercising the Marketplace search feature, capturing all network requests, console output, and backend route responses during the smoke run.",
+      "tags": ["documentation", "development", "test"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/smoke-pr4-20260617.md",
+      "type": "document",
+      "name": "smoke-pr4-20260617.md",
+      "filePath": "docs/redesign-warm-hive/smoke-pr4-20260617.md",
+      "summary": "Summary report of the PR4 live smoke test on 2026-06-17, verifying backend marketplace routes via curl and frontend rendering via chrome-devtools, with documented gates and deliberately untested paths.",
+      "tags": ["documentation", "test", "development"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/redesign-warm-hive/smoke-pr4-20260617.md",
+      "target": "document:docs/redesign-warm-hive/PR4-BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/smoke-pr4-20260617-after-search.txt",
+      "target": "document:docs/redesign-warm-hive/PR4-BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/smoke-pr4-20260617.md",
+      "target": "document:docs/redesign-warm-hive/smoke-pr4-20260617-after-search.txt",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR3-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR35-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR4-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR5-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR6-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR7-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/PR8-BUILD-PLAN.md",
+      "target": "document:docs/redesign-warm-hive/BUILD-PLAN.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

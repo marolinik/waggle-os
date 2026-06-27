@@ -1,0 +1,2181 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 11,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/admin-web/src/App.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 138,
+      "nonEmptyLines": 133,
+      "functions": [
+        {
+          "name": "App",
+          "startLine": 22,
+          "endLine": 138,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "App",
+          "line": 22,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "App",
+          "callee": "useState",
+          "lineNumber": 23
+        },
+        {
+          "caller": "App",
+          "callee": "useState",
+          "lineNumber": 24
+        },
+        {
+          "caller": "App",
+          "callee": "useState",
+          "lineNumber": 25
+        },
+        {
+          "caller": "App",
+          "callee": "NAV_ITEMS.map",
+          "lineNumber": 46
+        },
+        {
+          "caller": "App",
+          "callee": "setPage",
+          "lineNumber": 49
+        },
+        {
+          "caller": "App",
+          "callee": "setTeamSlug",
+          "lineNumber": 79
+        },
+        {
+          "caller": "App",
+          "callee": "setToken",
+          "lineNumber": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/api.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 210,
+      "nonEmptyLines": 196,
+      "functions": [
+        {
+          "name": "getErrorMessage",
+          "startLine": 12,
+          "endLine": 16,
+          "params": [
+            "error",
+            "fallback"
+          ]
+        },
+        {
+          "name": "apiFetch",
+          "startLine": 18,
+          "endLine": 26,
+          "params": [
+            "path",
+            "token"
+          ]
+        },
+        {
+          "name": "apiMutate",
+          "startLine": 28,
+          "endLine": 48,
+          "params": [
+            "path",
+            "token",
+            "method",
+            "body"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "getErrorMessage",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "api",
+          "line": 161,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "apiFetch",
+          "callee": "fetch",
+          "lineNumber": 19
+        },
+        {
+          "caller": "apiFetch",
+          "callee": "res.json",
+          "lineNumber": 25
+        },
+        {
+          "caller": "apiMutate",
+          "callee": "fetch",
+          "lineNumber": 34
+        },
+        {
+          "caller": "apiMutate",
+          "callee": "JSON.stringify",
+          "lineNumber": 40
+        },
+        {
+          "caller": "apiMutate",
+          "callee": "res.text().catch",
+          "lineNumber": 43
+        },
+        {
+          "caller": "apiMutate",
+          "callee": "res.text",
+          "lineNumber": 43
+        },
+        {
+          "caller": "apiMutate",
+          "callee": "res.json",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/main.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 9,
+      "nonEmptyLines": 8,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/Analytics.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 376,
+      "nonEmptyLines": 345,
+      "functions": [
+        {
+          "name": "ActiveUsersCard",
+          "startLine": 63,
+          "endLine": 83,
+          "params": [
+            "{ data }"
+          ]
+        },
+        {
+          "name": "TokenUsageCard",
+          "startLine": 85,
+          "endLine": 126,
+          "params": [
+            "{ data }"
+          ]
+        },
+        {
+          "name": "TopToolsCard",
+          "startLine": 128,
+          "endLine": 169,
+          "params": [
+            "{ data }"
+          ]
+        },
+        {
+          "name": "TopCommandsCard",
+          "startLine": 171,
+          "endLine": 210,
+          "params": [
+            "{ data }"
+          ]
+        },
+        {
+          "name": "CapabilityGapsCard",
+          "startLine": 212,
+          "endLine": 253,
+          "params": [
+            "{ data }"
+          ]
+        },
+        {
+          "name": "PerformanceTrendsCard",
+          "startLine": 255,
+          "endLine": 283,
+          "params": [
+            "{ data }"
+          ]
+        },
+        {
+          "name": "Analytics",
+          "startLine": 287,
+          "endLine": 376,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Analytics",
+          "line": 287,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "TokenUsageCard",
+          "callee": "(data.total / 1000000).toFixed",
+          "lineNumber": 87
+        },
+        {
+          "caller": "TokenUsageCard",
+          "callee": "(data.total / 1000).toFixed",
+          "lineNumber": 89
+        },
+        {
+          "caller": "TokenUsageCard",
+          "callee": "String",
+          "lineNumber": 90
+        },
+        {
+          "caller": "TokenUsageCard",
+          "callee": "data.byUser.map",
+          "lineNumber": 110
+        },
+        {
+          "caller": "TokenUsageCard",
+          "callee": "u.tokens.toLocaleString",
+          "lineNumber": 114
+        },
+        {
+          "caller": "TokenUsageCard",
+          "callee": "u.cost.toFixed",
+          "lineNumber": 117
+        },
+        {
+          "caller": "TopToolsCard",
+          "callee": "Math.max",
+          "lineNumber": 129
+        },
+        {
+          "caller": "TopToolsCard",
+          "callee": "data.map",
+          "lineNumber": 129
+        },
+        {
+          "caller": "TopToolsCard",
+          "callee": "data.map",
+          "lineNumber": 138
+        },
+        {
+          "caller": "TopToolsCard",
+          "callee": "Math.max",
+          "lineNumber": 139
+        },
+        {
+          "caller": "TopCommandsCard",
+          "callee": "Math.max",
+          "lineNumber": 172
+        },
+        {
+          "caller": "TopCommandsCard",
+          "callee": "data.map",
+          "lineNumber": 172
+        },
+        {
+          "caller": "TopCommandsCard",
+          "callee": "data.map",
+          "lineNumber": 181
+        },
+        {
+          "caller": "TopCommandsCard",
+          "callee": "Math.max",
+          "lineNumber": 182
+        },
+        {
+          "caller": "CapabilityGapsCard",
+          "callee": "data.map",
+          "lineNumber": 228
+        },
+        {
+          "caller": "PerformanceTrendsCard",
+          "callee": "(data.correctionRate * 100).toFixed",
+          "lineNumber": 267
+        },
+        {
+          "caller": "PerformanceTrendsCard",
+          "callee": "Math.abs(data.correctionTrend * 100).toFixed",
+          "lineNumber": 270
+        },
+        {
+          "caller": "PerformanceTrendsCard",
+          "callee": "Math.abs",
+          "lineNumber": 270
+        },
+        {
+          "caller": "PerformanceTrendsCard",
+          "callee": "data.avgResponseTime.toFixed",
+          "lineNumber": 276
+        },
+        {
+          "caller": "Analytics",
+          "callee": "useState",
+          "lineNumber": 288
+        },
+        {
+          "caller": "Analytics",
+          "callee": "useState",
+          "lineNumber": 289
+        },
+        {
+          "caller": "Analytics",
+          "callee": "useState",
+          "lineNumber": 290
+        },
+        {
+          "caller": "Analytics",
+          "callee": "useEffect",
+          "lineNumber": 292
+        },
+        {
+          "caller": "Analytics",
+          "callee": "(async () => {\r\n      try {\r\n        setLoading(true);\r\n        setError(null);\r\n        const result = await api.getAnalytics(token, teamSlug);\r\n        if (!cancelled) setData(result);\r\n      } catch (err) {\r\n        if (!cancelled) setError(getErrorMessage(err, 'Failed to load analytics'));\r\n      } finally {\r\n        if (!cancelled) setLoading(false);\r\n      }\r\n    })",
+          "lineNumber": 296
+        },
+        {
+          "caller": "Analytics",
+          "callee": "setLoading",
+          "lineNumber": 298
+        },
+        {
+          "caller": "Analytics",
+          "callee": "setError",
+          "lineNumber": 299
+        },
+        {
+          "caller": "Analytics",
+          "callee": "api.getAnalytics",
+          "lineNumber": 300
+        },
+        {
+          "caller": "Analytics",
+          "callee": "setData",
+          "lineNumber": 301
+        },
+        {
+          "caller": "Analytics",
+          "callee": "setError",
+          "lineNumber": 303
+        },
+        {
+          "caller": "Analytics",
+          "callee": "getErrorMessage",
+          "lineNumber": 303
+        },
+        {
+          "caller": "Analytics",
+          "callee": "setLoading",
+          "lineNumber": 305
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/Audit.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 161,
+      "nonEmptyLines": 148,
+      "functions": [
+        {
+          "name": "approvalLabel",
+          "startLine": 36,
+          "endLine": 41,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "approvalColor",
+          "startLine": 43,
+          "endLine": 48,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "Audit",
+          "startLine": 50,
+          "endLine": 161,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Audit",
+          "line": 50,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Audit",
+          "callee": "useState",
+          "lineNumber": 51
+        },
+        {
+          "caller": "Audit",
+          "callee": "useState",
+          "lineNumber": 52
+        },
+        {
+          "caller": "Audit",
+          "callee": "useState",
+          "lineNumber": 53
+        },
+        {
+          "caller": "Audit",
+          "callee": "useEffect",
+          "lineNumber": 55
+        },
+        {
+          "caller": "Audit",
+          "callee": "(async () => {\r\n      try {\r\n        setLoading(true);\r\n        setError(null);\r\n        const data = await api.listAudit(token, teamSlug);\r\n        if (!cancelled) setEntries(Array.isArray(data) ? data : []);\r\n      } catch {\r\n        if (!cancelled) {\r\n          setError('Could not load audit log. You may need admin access, or the server is not running.');\r\n          setEntries([]);\r\n        }\r\n      } finally {\r\n        if (!cancelled) setLoading(false);\r\n      }\r\n    })",
+          "lineNumber": 59
+        },
+        {
+          "caller": "Audit",
+          "callee": "setLoading",
+          "lineNumber": 61
+        },
+        {
+          "caller": "Audit",
+          "callee": "setError",
+          "lineNumber": 62
+        },
+        {
+          "caller": "Audit",
+          "callee": "api.listAudit",
+          "lineNumber": 63
+        },
+        {
+          "caller": "Audit",
+          "callee": "setEntries",
+          "lineNumber": 64
+        },
+        {
+          "caller": "Audit",
+          "callee": "Array.isArray",
+          "lineNumber": 64
+        },
+        {
+          "caller": "Audit",
+          "callee": "setError",
+          "lineNumber": 67
+        },
+        {
+          "caller": "Audit",
+          "callee": "setEntries",
+          "lineNumber": 68
+        },
+        {
+          "caller": "Audit",
+          "callee": "setLoading",
+          "lineNumber": 71
+        },
+        {
+          "caller": "Audit",
+          "callee": "entries.map",
+          "lineNumber": 123
+        },
+        {
+          "caller": "Audit",
+          "callee": "approvalColor",
+          "lineNumber": 143
+        },
+        {
+          "caller": "Audit",
+          "callee": "approvalLabel",
+          "lineNumber": 145
+        },
+        {
+          "caller": "Audit",
+          "callee": "new Date(entry.createdAt).toLocaleString",
+          "lineNumber": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/Capabilities.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 886,
+      "nonEmptyLines": 830,
+      "functions": [
+        {
+          "name": "badge",
+          "startLine": 77,
+          "endLine": 96,
+          "params": [
+            "label",
+            "bg",
+            "fg"
+          ]
+        },
+        {
+          "name": "relativeTime",
+          "startLine": 98,
+          "endLine": 109,
+          "params": [
+            "dateStr"
+          ]
+        },
+        {
+          "name": "PoliciesTab",
+          "startLine": 113,
+          "endLine": 342,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        },
+        {
+          "name": "OverridesTab",
+          "startLine": 346,
+          "endLine": 593,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        },
+        {
+          "name": "RequestsTab",
+          "startLine": 597,
+          "endLine": 822,
+          "params": [
+            "{\r\n  token,\r\n  teamSlug,\r\n  onPendingCount,\r\n}"
+          ]
+        },
+        {
+          "name": "Capabilities",
+          "startLine": 826,
+          "endLine": 886,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Capabilities",
+          "line": 826,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "relativeTime",
+          "callee": "Date.now",
+          "lineNumber": 99
+        },
+        {
+          "caller": "relativeTime",
+          "callee": "new Date(dateStr).getTime",
+          "lineNumber": 100
+        },
+        {
+          "caller": "relativeTime",
+          "callee": "Math.floor",
+          "lineNumber": 101
+        },
+        {
+          "caller": "relativeTime",
+          "callee": "Math.floor",
+          "lineNumber": 103
+        },
+        {
+          "caller": "relativeTime",
+          "callee": "Math.floor",
+          "lineNumber": 105
+        },
+        {
+          "caller": "relativeTime",
+          "callee": "Math.floor",
+          "lineNumber": 107
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 114
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 115
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 116
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 117
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 118
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 119
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useState",
+          "lineNumber": 120
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useCallback",
+          "lineNumber": 122
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setLoading",
+          "lineNumber": 124
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setError",
+          "lineNumber": 125
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "api.listCapabilityPolicies",
+          "lineNumber": 126
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setPolicies",
+          "lineNumber": 127
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setError",
+          "lineNumber": 129
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "getErrorMessage",
+          "lineNumber": 129
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setLoading",
+          "lineNumber": 131
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "useEffect",
+          "lineNumber": 135
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "fetchPolicies",
+          "lineNumber": 136
+        },
+        {
+          "caller": "startEdit",
+          "callee": "setEditingRole",
+          "lineNumber": 140
+        },
+        {
+          "caller": "startEdit",
+          "callee": "setEditSources",
+          "lineNumber": 141
+        },
+        {
+          "caller": "startEdit",
+          "callee": "setEditBlocked",
+          "lineNumber": 142
+        },
+        {
+          "caller": "startEdit",
+          "callee": "p.blockedTools.join",
+          "lineNumber": 142
+        },
+        {
+          "caller": "startEdit",
+          "callee": "setEditThreshold",
+          "lineNumber": 143
+        },
+        {
+          "caller": "cancelEdit",
+          "callee": "setEditingRole",
+          "lineNumber": 146
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "setError",
+          "lineNumber": 151
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "api.updateCapabilityPolicy",
+          "lineNumber": 152
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "editBlocked\r\n          .split(',')\r\n          .map((s) => s.trim())\r\n          .filter",
+          "lineNumber": 154
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "editBlocked\r\n          .split(',')\r\n          .map",
+          "lineNumber": 154
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "editBlocked\r\n          .split",
+          "lineNumber": 154
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "s.trim",
+          "lineNumber": 156
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "setEditingRole",
+          "lineNumber": 160
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "fetchPolicies",
+          "lineNumber": 161
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "setError",
+          "lineNumber": 163
+        },
+        {
+          "caller": "saveEdit",
+          "callee": "getErrorMessage",
+          "lineNumber": 163
+        },
+        {
+          "caller": "toggleSource",
+          "callee": "setEditSources",
+          "lineNumber": 168
+        },
+        {
+          "caller": "toggleSource",
+          "callee": "prev.includes",
+          "lineNumber": 169
+        },
+        {
+          "caller": "toggleSource",
+          "callee": "prev.filter",
+          "lineNumber": 169
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "policies.map",
+          "lineNumber": 189
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "badge",
+          "lineNumber": 192
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "p.allowedSources.map",
+          "lineNumber": 195
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "badge",
+          "lineNumber": 195
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "p.blockedTools.map",
+          "lineNumber": 199
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "badge",
+          "lineNumber": 199
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "badge",
+          "lineNumber": 203
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "startEdit",
+          "lineNumber": 211
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "SOURCES.map",
+          "lineNumber": 249
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "editSources.includes",
+          "lineNumber": 253
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "toggleSource",
+          "lineNumber": 254
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setEditBlocked",
+          "lineNumber": 270
+        },
+        {
+          "caller": "PoliciesTab",
+          "callee": "setEditThreshold",
+          "lineNumber": 291
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 347
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 348
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 349
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 350
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 351
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 352
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 353
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useState",
+          "lineNumber": 354
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useCallback",
+          "lineNumber": 356
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setLoading",
+          "lineNumber": 358
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setError",
+          "lineNumber": 359
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "api.listCapabilityOverrides",
+          "lineNumber": 360
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setOverrides",
+          "lineNumber": 361
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setError",
+          "lineNumber": 363
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "getErrorMessage",
+          "lineNumber": 363
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setLoading",
+          "lineNumber": 365
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "useEffect",
+          "lineNumber": 369
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "fetchOverrides",
+          "lineNumber": 370
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "formName.trim",
+          "lineNumber": 374
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setError",
+          "lineNumber": 376
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "api.createCapabilityOverride",
+          "lineNumber": 377
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "formName.trim",
+          "lineNumber": 378
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "formReason.trim",
+          "lineNumber": 381
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setFormName",
+          "lineNumber": 383
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setFormType",
+          "lineNumber": 384
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setFormDecision",
+          "lineNumber": 385
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setFormReason",
+          "lineNumber": 386
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setShowForm",
+          "lineNumber": 387
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "fetchOverrides",
+          "lineNumber": 388
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "setError",
+          "lineNumber": 390
+        },
+        {
+          "caller": "handleCreate",
+          "callee": "getErrorMessage",
+          "lineNumber": 390
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "setError",
+          "lineNumber": 396
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "api.deleteCapabilityOverride",
+          "lineNumber": 397
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "fetchOverrides",
+          "lineNumber": 398
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "setError",
+          "lineNumber": 400
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "getErrorMessage",
+          "lineNumber": 400
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setShowForm",
+          "lineNumber": 412
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setFormName",
+          "lineNumber": 447
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setFormType",
+          "lineNumber": 465
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "CAP_TYPES.map",
+          "lineNumber": 475
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setFormDecision",
+          "lineNumber": 486
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "setFormReason",
+          "lineNumber": 507
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "formName.trim",
+          "lineNumber": 521
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "formName.trim",
+          "lineNumber": 530
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "overrides.map",
+          "lineNumber": 557
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "badge",
+          "lineNumber": 561
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "badge",
+          "lineNumber": 565
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "badge",
+          "lineNumber": 566
+        },
+        {
+          "caller": "OverridesTab",
+          "callee": "handleRemove",
+          "lineNumber": 573
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useState",
+          "lineNumber": 602
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useState",
+          "lineNumber": 603
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useState",
+          "lineNumber": 604
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useState",
+          "lineNumber": 605
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useState",
+          "lineNumber": 606
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useCallback",
+          "lineNumber": 608
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setLoading",
+          "lineNumber": 610
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setError",
+          "lineNumber": 611
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "api.listCapabilityRequests",
+          "lineNumber": 612
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setRequests",
+          "lineNumber": 613
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "onPendingCount",
+          "lineNumber": 614
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "data.filter",
+          "lineNumber": 614
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setError",
+          "lineNumber": 616
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "getErrorMessage",
+          "lineNumber": 616
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setLoading",
+          "lineNumber": 618
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "useEffect",
+          "lineNumber": 622
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "fetchRequests",
+          "lineNumber": 623
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "setError",
+          "lineNumber": 628
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "api.decideCapabilityRequest",
+          "lineNumber": 629
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "decisionReason.trim",
+          "lineNumber": 631
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "setDecidingId",
+          "lineNumber": 633
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "setDecisionReason",
+          "lineNumber": 634
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "fetchRequests",
+          "lineNumber": 635
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "setError",
+          "lineNumber": 637
+        },
+        {
+          "caller": "handleDecision",
+          "callee": "getErrorMessage",
+          "lineNumber": 637
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "requests.filter",
+          "lineNumber": 643
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "requests.filter",
+          "lineNumber": 644
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "pending.map",
+          "lineNumber": 659
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "badge",
+          "lineNumber": 673
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "relativeTime",
+          "lineNumber": 676
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setDecisionReason",
+          "lineNumber": 687
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "handleDecision",
+          "lineNumber": 701
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "handleDecision",
+          "lineNumber": 715
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setDecidingId",
+          "lineNumber": 729
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setDecisionReason",
+          "lineNumber": 729
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setDecidingId",
+          "lineNumber": 746
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "setDecidingId",
+          "lineNumber": 760
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "decided.map",
+          "lineNumber": 785
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "badge",
+          "lineNumber": 800
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "badge",
+          "lineNumber": 802
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "badge",
+          "lineNumber": 803
+        },
+        {
+          "caller": "RequestsTab",
+          "callee": "relativeTime",
+          "lineNumber": 806
+        },
+        {
+          "caller": "Capabilities",
+          "callee": "useState",
+          "lineNumber": 827
+        },
+        {
+          "caller": "Capabilities",
+          "callee": "useState",
+          "lineNumber": 828
+        },
+        {
+          "caller": "Capabilities",
+          "callee": "tabs.map",
+          "lineNumber": 842
+        },
+        {
+          "caller": "Capabilities",
+          "callee": "setTab",
+          "lineNumber": 845
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/Dashboard.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 231,
+      "nonEmptyLines": 211,
+      "functions": [
+        {
+          "name": "StatCard",
+          "startLine": 14,
+          "endLine": 31,
+          "params": [
+            "{ title, value }"
+          ]
+        },
+        {
+          "name": "Dashboard",
+          "startLine": 40,
+          "endLine": 217,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Dashboard",
+          "line": 40,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Dashboard",
+          "callee": "useState",
+          "lineNumber": 41
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "useState",
+          "lineNumber": 42
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "useState",
+          "lineNumber": 43
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "useState",
+          "lineNumber": 44
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "useEffect",
+          "lineNumber": 46
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "(async () => {\r\n      try {\r\n        setLoading(true);\r\n        setError(null);\r\n        const [teamData, taskData] = await Promise.allSettled([\r\n          api.getTeam(token, teamSlug),\r\n          api.listTasks(token, teamSlug),\r\n        ]);\r\n\r\n        if (cancelled) return;\r\n\r\n        if (teamData.status === 'fulfilled') {\r\n          setTeam(teamData.value);\r\n        }\r\n        if (taskData.status === 'fulfilled') {\r\n          setTasks(taskData.value);\r\n        }\r\n\r\n        if (teamData.status === 'rejected' && taskData.status === 'rejected') {\r\n          setError('Could not connect to team server. Is it running?');\r\n        }\r\n      } catch (err) {\r\n        if (!cancelled) setError(getErrorMessage(err, 'Failed to load dashboard data'));\r\n      } finally {\r\n        if (!cancelled) setLoading(false);\r\n      }\r\n    })",
+          "lineNumber": 50
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setLoading",
+          "lineNumber": 52
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setError",
+          "lineNumber": 53
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "Promise.allSettled",
+          "lineNumber": 54
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "api.getTeam",
+          "lineNumber": 55
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "api.listTasks",
+          "lineNumber": 56
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setTeam",
+          "lineNumber": 62
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setTasks",
+          "lineNumber": 65
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setError",
+          "lineNumber": 69
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setError",
+          "lineNumber": 72
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "getErrorMessage",
+          "lineNumber": 72
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "setLoading",
+          "lineNumber": 74
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "tasks.filter",
+          "lineNumber": 82
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "tasks.slice",
+          "lineNumber": 83
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "String",
+          "lineNumber": 122
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "String",
+          "lineNumber": 123
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "String",
+          "lineNumber": 124
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "team.members.map",
+          "lineNumber": 137
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "m.userId.slice",
+          "lineNumber": 150
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "recentTasks.map",
+          "lineNumber": 190
+        },
+        {
+          "caller": "Dashboard",
+          "callee": "new Date(task.createdAt).toLocaleDateString",
+          "lineNumber": 207
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/Jobs.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 147,
+      "nonEmptyLines": 135,
+      "functions": [
+        {
+          "name": "Jobs",
+          "startLine": 43,
+          "endLine": 147,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Jobs",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Jobs",
+          "callee": "useState",
+          "lineNumber": 44
+        },
+        {
+          "caller": "Jobs",
+          "callee": "useState",
+          "lineNumber": 45
+        },
+        {
+          "caller": "Jobs",
+          "callee": "useState",
+          "lineNumber": 46
+        },
+        {
+          "caller": "Jobs",
+          "callee": "useEffect",
+          "lineNumber": 48
+        },
+        {
+          "caller": "Jobs",
+          "callee": "(async () => {\r\n      try {\r\n        setLoading(true);\r\n        setError(null);\r\n        const data = await api.listJobs(token, teamSlug);\r\n        if (!cancelled) setJobs(Array.isArray(data) ? data : []);\r\n      } catch {\r\n        if (!cancelled) {\r\n          setError('Job queue not available. The team server may not support job listing, or is not running.');\r\n          setJobs([]);\r\n        }\r\n      } finally {\r\n        if (!cancelled) setLoading(false);\r\n      }\r\n    })",
+          "lineNumber": 52
+        },
+        {
+          "caller": "Jobs",
+          "callee": "setLoading",
+          "lineNumber": 54
+        },
+        {
+          "caller": "Jobs",
+          "callee": "setError",
+          "lineNumber": 55
+        },
+        {
+          "caller": "Jobs",
+          "callee": "api.listJobs",
+          "lineNumber": 56
+        },
+        {
+          "caller": "Jobs",
+          "callee": "setJobs",
+          "lineNumber": 57
+        },
+        {
+          "caller": "Jobs",
+          "callee": "Array.isArray",
+          "lineNumber": 57
+        },
+        {
+          "caller": "Jobs",
+          "callee": "setError",
+          "lineNumber": 60
+        },
+        {
+          "caller": "Jobs",
+          "callee": "setJobs",
+          "lineNumber": 61
+        },
+        {
+          "caller": "Jobs",
+          "callee": "setLoading",
+          "lineNumber": 64
+        },
+        {
+          "caller": "Jobs",
+          "callee": "jobs.map",
+          "lineNumber": 116
+        },
+        {
+          "caller": "Jobs",
+          "callee": "job.id.slice",
+          "lineNumber": 119
+        },
+        {
+          "caller": "Jobs",
+          "callee": "new Date(job.createdAt).toLocaleString",
+          "lineNumber": 135
+        },
+        {
+          "caller": "Jobs",
+          "callee": "new Date(job.completedAt).toLocaleString",
+          "lineNumber": 138
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/Members.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 263,
+      "nonEmptyLines": 247,
+      "functions": [
+        {
+          "name": "Members",
+          "startLine": 18,
+          "endLine": 249,
+          "params": [
+            "{ token, teamSlug }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Members",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Members",
+          "callee": "useState",
+          "lineNumber": 19
+        },
+        {
+          "caller": "Members",
+          "callee": "useState",
+          "lineNumber": 20
+        },
+        {
+          "caller": "Members",
+          "callee": "useState",
+          "lineNumber": 21
+        },
+        {
+          "caller": "Members",
+          "callee": "useState",
+          "lineNumber": 24
+        },
+        {
+          "caller": "Members",
+          "callee": "useState",
+          "lineNumber": 25
+        },
+        {
+          "caller": "Members",
+          "callee": "useState",
+          "lineNumber": 26
+        },
+        {
+          "caller": "Members",
+          "callee": "useCallback",
+          "lineNumber": 28
+        },
+        {
+          "caller": "Members",
+          "callee": "setLoading",
+          "lineNumber": 30
+        },
+        {
+          "caller": "Members",
+          "callee": "setError",
+          "lineNumber": 31
+        },
+        {
+          "caller": "Members",
+          "callee": "api.getTeam",
+          "lineNumber": 32
+        },
+        {
+          "caller": "Members",
+          "callee": "setMembers",
+          "lineNumber": 33
+        },
+        {
+          "caller": "Members",
+          "callee": "setError",
+          "lineNumber": 35
+        },
+        {
+          "caller": "Members",
+          "callee": "getErrorMessage",
+          "lineNumber": 35
+        },
+        {
+          "caller": "Members",
+          "callee": "setLoading",
+          "lineNumber": 37
+        },
+        {
+          "caller": "Members",
+          "callee": "useEffect",
+          "lineNumber": 41
+        },
+        {
+          "caller": "Members",
+          "callee": "fetchMembers",
+          "lineNumber": 42
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "inviteEmail.trim",
+          "lineNumber": 46
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "setInviting",
+          "lineNumber": 48
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "setError",
+          "lineNumber": 49
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "api.inviteMember",
+          "lineNumber": 50
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "inviteEmail.trim",
+          "lineNumber": 50
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "setInviteEmail",
+          "lineNumber": 51
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "fetchMembers",
+          "lineNumber": 52
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "setError",
+          "lineNumber": 54
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "getErrorMessage",
+          "lineNumber": 54
+        },
+        {
+          "caller": "handleInvite",
+          "callee": "setInviting",
+          "lineNumber": 56
+        },
+        {
+          "caller": "handleRoleChange",
+          "callee": "setError",
+          "lineNumber": 62
+        },
+        {
+          "caller": "handleRoleChange",
+          "callee": "api.updateMemberRole",
+          "lineNumber": 63
+        },
+        {
+          "caller": "handleRoleChange",
+          "callee": "fetchMembers",
+          "lineNumber": 64
+        },
+        {
+          "caller": "handleRoleChange",
+          "callee": "setError",
+          "lineNumber": 66
+        },
+        {
+          "caller": "handleRoleChange",
+          "callee": "getErrorMessage",
+          "lineNumber": 66
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "confirm",
+          "lineNumber": 72
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "setError",
+          "lineNumber": 74
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "api.removeMember",
+          "lineNumber": 75
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "fetchMembers",
+          "lineNumber": 76
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "setError",
+          "lineNumber": 78
+        },
+        {
+          "caller": "handleRemove",
+          "callee": "getErrorMessage",
+          "lineNumber": 78
+        },
+        {
+          "caller": "Members",
+          "callee": "setInviteEmail",
+          "lineNumber": 115
+        },
+        {
+          "caller": "Members",
+          "callee": "handleInvite",
+          "lineNumber": 125
+        },
+        {
+          "caller": "Members",
+          "callee": "setInviteRole",
+          "lineNumber": 129
+        },
+        {
+          "caller": "Members",
+          "callee": "inviteEmail.trim",
+          "lineNumber": 145
+        },
+        {
+          "caller": "Members",
+          "callee": "inviteEmail.trim",
+          "lineNumber": 155
+        },
+        {
+          "caller": "Members",
+          "callee": "members.map",
+          "lineNumber": 187
+        },
+        {
+          "caller": "Members",
+          "callee": "handleRoleChange",
+          "lineNumber": 206
+        },
+        {
+          "caller": "Members",
+          "callee": "ROLES.filter((r) => r !== 'owner').map",
+          "lineNumber": 216
+        },
+        {
+          "caller": "Members",
+          "callee": "ROLES.filter",
+          "lineNumber": 216
+        },
+        {
+          "caller": "Members",
+          "callee": "new Date(m.joinedAt).toLocaleDateString",
+          "lineNumber": 223
+        },
+        {
+          "caller": "Members",
+          "callee": "handleRemove",
+          "lineNumber": 228
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/src/pages/TeamSettings.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 152,
+      "nonEmptyLines": 139,
+      "functions": [
+        {
+          "name": "TeamSettings",
+          "startLine": 16,
+          "endLine": 142,
+          "params": [
+            "{ token, teamSlug, onTeamUpdated }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "TeamSettings",
+          "line": 16,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "TeamSettings",
+          "callee": "useState",
+          "lineNumber": 17
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "useState",
+          "lineNumber": 18
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "useState",
+          "lineNumber": 19
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "useState",
+          "lineNumber": 20
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "useState",
+          "lineNumber": 21
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "useState",
+          "lineNumber": 22
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "useEffect",
+          "lineNumber": 24
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "(async () => {\r\n      try {\r\n        setLoading(true);\r\n        const t = await api.getTeam(token, teamSlug);\r\n        setTeam(t);\r\n        setName(t.name);\r\n      } catch (err) {\r\n        setError(getErrorMessage(err, 'Failed to load team'));\r\n      } finally {\r\n        setLoading(false);\r\n      }\r\n    })",
+          "lineNumber": 26
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "setLoading",
+          "lineNumber": 28
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "api.getTeam",
+          "lineNumber": 29
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "setTeam",
+          "lineNumber": 30
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "setName",
+          "lineNumber": 31
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "setError",
+          "lineNumber": 33
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "getErrorMessage",
+          "lineNumber": 33
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "setLoading",
+          "lineNumber": 35
+        },
+        {
+          "caller": "handleSave",
+          "callee": "name.trim",
+          "lineNumber": 41
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setSaving",
+          "lineNumber": 43
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setError",
+          "lineNumber": 44
+        },
+        {
+          "caller": "handleSave",
+          "callee": "api.updateTeam",
+          "lineNumber": 45
+        },
+        {
+          "caller": "handleSave",
+          "callee": "name.trim",
+          "lineNumber": 45
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setTeam",
+          "lineNumber": 46
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setSaved",
+          "lineNumber": 47
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setTimeout",
+          "lineNumber": 48
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setSaved",
+          "lineNumber": 48
+        },
+        {
+          "caller": "handleSave",
+          "callee": "onTeamUpdated",
+          "lineNumber": 49
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setError",
+          "lineNumber": 51
+        },
+        {
+          "caller": "handleSave",
+          "callee": "getErrorMessage",
+          "lineNumber": 51
+        },
+        {
+          "caller": "handleSave",
+          "callee": "setSaving",
+          "lineNumber": 53
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "setName",
+          "lineNumber": 91
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "handleSave",
+          "lineNumber": 101
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "name.trim",
+          "lineNumber": 105
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "name.trim",
+          "lineNumber": 115
+        },
+        {
+          "caller": "TeamSettings",
+          "callee": "new Date(team.createdAt).toLocaleDateString",
+          "lineNumber": 136
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/admin-web/tests/admin-pages.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 537,
+      "nonEmptyLines": 449,
+      "functions": [
+        {
+          "name": "mockFetch",
+          "startLine": 104,
+          "endLine": 132,
+          "params": [
+            "responses"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockFetch",
+          "callee": "Object.entries(responses).sort",
+          "lineNumber": 106
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "Object.entries",
+          "lineNumber": 106
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn",
+          "lineNumber": 109
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "url.includes",
+          "lineNumber": 112
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "JSON.stringify",
+          "lineNumber": 117
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "vi.stubGlobal",
+          "lineNumber": 130
+        }
+      ],
+      "metrics": {
+        "importCount": 9,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

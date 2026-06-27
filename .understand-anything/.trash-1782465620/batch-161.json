@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/admin-web/index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "packages/admin-web/index.html",
+      "summary": "HTML entry point for the Waggle Admin web app, mounting the React root and loading the main TypeScript module via Vite.",
+      "tags": ["entry-point", "markup", "infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/admin-web/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/admin-web/package.json",
+      "summary": "Package manifest for the @waggle/admin-web workspace, declaring React 19 dependencies and Vite dev/build scripts with Tailwind 4 as a dev dependency.",
+      "tags": ["configuration", "build-system", "dependencies"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/admin-web/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/admin-web/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the admin-web package, enabling strict mode with bundler module resolution and react-jsx transform targeting ES2022.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "config:packages/admin-web/tsconfig.json",
+      "target": "file:packages/admin-web/index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/admin-web/package.json",
+      "target": "file:packages/admin-web/index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

@@ -1,0 +1,5687 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/harness/scripts/build-beam-canonical.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 531,
+      "nonEmptyLines": 469,
+      "functions": [
+        {
+          "name": "flattenBeamTurns",
+          "startLine": 173,
+          "endLine": 189,
+          "params": [
+            "batches"
+          ]
+        },
+        {
+          "name": "buildContext",
+          "startLine": 195,
+          "endLine": 197,
+          "params": [
+            "msgs"
+          ]
+        },
+        {
+          "name": "normaliseAnswer",
+          "startLine": 208,
+          "endLine": 217,
+          "params": [
+            "pq"
+          ]
+        },
+        {
+          "name": "serializeCanonical",
+          "startLine": 223,
+          "endLine": 229,
+          "params": [
+            "inst"
+          ]
+        },
+        {
+          "name": "locateChatSizeDir",
+          "startLine": 239,
+          "endLine": 248,
+          "params": [
+            "beamChatsPath",
+            "chatSize"
+          ]
+        },
+        {
+          "name": "discoverConversationDirs",
+          "startLine": 254,
+          "endLine": 260,
+          "params": [
+            "chatSizeDir"
+          ]
+        },
+        {
+          "name": "parseArgs",
+          "startLine": 266,
+          "endLine": 297,
+          "params": []
+        },
+        {
+          "name": "main",
+          "startLine": 303,
+          "endLine": 529,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "Array.isArray",
+          "lineNumber": 176
+        },
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "Array.isArray",
+          "lineNumber": 178
+        },
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "String(msg.role ?? 'unknown').toLowerCase",
+          "lineNumber": 180
+        },
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "String",
+          "lineNumber": 180
+        },
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "String(msg.content ?? '').trim",
+          "lineNumber": 181
+        },
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "String",
+          "lineNumber": 181
+        },
+        {
+          "caller": "flattenBeamTurns",
+          "callee": "out.push",
+          "lineNumber": 183
+        },
+        {
+          "caller": "buildContext",
+          "callee": "msgs.map(m => `${m.role}: ${m.content}`).join",
+          "lineNumber": 196
+        },
+        {
+          "caller": "buildContext",
+          "callee": "msgs.map",
+          "lineNumber": 196
+        },
+        {
+          "caller": "serializeCanonical",
+          "callee": "JSON.stringify",
+          "lineNumber": 228
+        },
+        {
+          "caller": "locateChatSizeDir",
+          "callee": "path.join",
+          "lineNumber": 242
+        },
+        {
+          "caller": "locateChatSizeDir",
+          "callee": "fs.existsSync",
+          "lineNumber": 243
+        },
+        {
+          "caller": "locateChatSizeDir",
+          "callee": "fs.statSync(full).isDirectory",
+          "lineNumber": 243
+        },
+        {
+          "caller": "locateChatSizeDir",
+          "callee": "fs.statSync",
+          "lineNumber": 243
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "fs.readdirSync",
+          "lineNumber": 255
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "entries\r\n    .filter(e => e.isDirectory() && /^\\d+$/.test(e.name))\r\n    .sort((a, b) => Number(a.name) - Number(b.name))\r\n    .map",
+          "lineNumber": 256
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "entries\r\n    .filter(e => e.isDirectory() && /^\\d+$/.test(e.name))\r\n    .sort",
+          "lineNumber": 256
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "entries\r\n    .filter",
+          "lineNumber": 256
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "e.isDirectory",
+          "lineNumber": 257
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "/^\\d+$/.test",
+          "lineNumber": 257
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "Number",
+          "lineNumber": 258
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "Number",
+          "lineNumber": 258
+        },
+        {
+          "caller": "discoverConversationDirs",
+          "callee": "path.join",
+          "lineNumber": 259
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "process.argv.slice",
+          "lineNumber": 267
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "fs.existsSync",
+          "lineNumber": 278
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "path.join",
+          "lineNumber": 278
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "path.join",
+          "lineNumber": 279
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "VALID_CHAT_SIZES.includes",
+          "lineNumber": 285
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "console.error",
+          "lineNumber": 286
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "VALID_CHAT_SIZES.join",
+          "lineNumber": 287
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "process.exit",
+          "lineNumber": 289
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 304
+        },
+        {
+          "caller": "main",
+          "callee": "url.fileURLToPath",
+          "lineNumber": 306
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 309
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 310
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 311
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 317
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 318
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 320
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 322
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 323
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 324
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 325
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 329
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 330
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 331
+        },
+        {
+          "caller": "main",
+          "callee": "locateChatSizeDir",
+          "lineNumber": 338
+        },
+        {
+          "caller": "main",
+          "callee": "(CHAT_SIZE_DIR_MAP[chatSize] ?? [chatSize]).map",
+          "lineNumber": 340
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 340
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 341
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 344
+        },
+        {
+          "caller": "main",
+          "callee": "tried.join",
+          "lineNumber": 344
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 345
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 348
+        },
+        {
+          "caller": "main",
+          "callee": "discoverConversationDirs",
+          "lineNumber": 354
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 356
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 359
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 362
+        },
+        {
+          "caller": "main",
+          "callee": "path.basename",
+          "lineNumber": 375
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 378
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 379
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 380
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 387
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync",
+          "lineNumber": 387
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 389
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 389
+        },
+        {
+          "caller": "main",
+          "callee": "flattenBeamTurns",
+          "lineNumber": 394
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 396
+        },
+        {
+          "caller": "main",
+          "callee": "buildContext",
+          "lineNumber": 400
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 403
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 404
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 405
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 412
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync",
+          "lineNumber": 412
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 414
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 414
+        },
+        {
+          "caller": "main",
+          "callee": "chatSize.replace",
+          "lineNumber": 420
+        },
+        {
+          "caller": "main",
+          "callee": "Object.entries",
+          "lineNumber": 423
+        },
+        {
+          "caller": "main",
+          "callee": "Array.isArray",
+          "lineNumber": 424
+        },
+        {
+          "caller": "main",
+          "callee": "normaliseAnswer",
+          "lineNumber": 433
+        },
+        {
+          "caller": "main",
+          "callee": "all.push",
+          "lineNumber": 441
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 460
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 461
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 461
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 462
+        },
+        {
+          "caller": "main",
+          "callee": "all.sort",
+          "lineNumber": 469
+        },
+        {
+          "caller": "main",
+          "callee": "a.instance_id.localeCompare",
+          "lineNumber": 469
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 481
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 482
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 482
+        },
+        {
+          "caller": "main",
+          "callee": "chatSize.replace",
+          "lineNumber": 484
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 485
+        },
+        {
+          "caller": "main",
+          "callee": "all.map(serializeCanonical).join",
+          "lineNumber": 486
+        },
+        {
+          "caller": "main",
+          "callee": "all.map",
+          "lineNumber": 486
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 487
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash('sha256').update(body, 'utf-8').digest",
+          "lineNumber": 489
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash('sha256').update",
+          "lineNumber": 489
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash",
+          "lineNumber": 489
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 491
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 496
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 515
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 515
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 521
+        },
+        {
+          "caller": "main",
+          "callee": "Object.entries",
+          "lineNumber": 522
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 523
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 525
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 526
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 527
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 528
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/scripts/build-locomo-canonical.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 301,
+      "nonEmptyLines": 276,
+      "functions": [
+        {
+          "name": "parseDiaId",
+          "startLine": 104,
+          "endLine": 107,
+          "params": [
+            "eid"
+          ]
+        },
+        {
+          "name": "buildContext",
+          "startLine": 109,
+          "endLine": 139,
+          "params": [
+            "sample",
+            "evidence"
+          ]
+        },
+        {
+          "name": "toCanonicalInstance",
+          "startLine": 141,
+          "endLine": 171,
+          "params": [
+            "sample",
+            "qaIndex",
+            "qa"
+          ]
+        },
+        {
+          "name": "serializeCanonical",
+          "startLine": 189,
+          "endLine": 195,
+          "params": [
+            "inst"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 197,
+          "endLine": 299,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseDiaId",
+          "callee": "eid.match",
+          "lineNumber": 105
+        },
+        {
+          "caller": "parseDiaId",
+          "callee": "Number",
+          "lineNumber": 106
+        },
+        {
+          "caller": "parseDiaId",
+          "callee": "Number",
+          "lineNumber": 106
+        },
+        {
+          "caller": "buildContext",
+          "callee": "parseDiaId",
+          "lineNumber": 112
+        },
+        {
+          "caller": "buildContext",
+          "callee": "session.find",
+          "lineNumber": 120
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.has",
+          "lineNumber": 122
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.set",
+          "lineNumber": 123
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.get(parsed.session)!.turns.push",
+          "lineNumber": 125
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.get",
+          "lineNumber": 125
+        },
+        {
+          "caller": "buildContext",
+          "callee": "Array.from(bySession.keys()).sort",
+          "lineNumber": 127
+        },
+        {
+          "caller": "buildContext",
+          "callee": "Array.from",
+          "lineNumber": 127
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.keys",
+          "lineNumber": 127
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.get",
+          "lineNumber": 130
+        },
+        {
+          "caller": "buildContext",
+          "callee": "entry.turns.map",
+          "lineNumber": 132
+        },
+        {
+          "caller": "buildContext",
+          "callee": "blocks.push",
+          "lineNumber": 136
+        },
+        {
+          "caller": "buildContext",
+          "callee": "[header, ...lines].join",
+          "lineNumber": 136
+        },
+        {
+          "caller": "buildContext",
+          "callee": "blocks.join",
+          "lineNumber": 138
+        },
+        {
+          "caller": "toCanonicalInstance",
+          "callee": "buildContext",
+          "lineNumber": 150
+        },
+        {
+          "caller": "toCanonicalInstance",
+          "callee": "String(qaIndex).padStart",
+          "lineNumber": 152
+        },
+        {
+          "caller": "toCanonicalInstance",
+          "callee": "String",
+          "lineNumber": 152
+        },
+        {
+          "caller": "toCanonicalInstance",
+          "callee": "String",
+          "lineNumber": 153
+        },
+        {
+          "caller": "serializeCanonical",
+          "callee": "JSON.stringify",
+          "lineNumber": 194
+        },
+        {
+          "caller": "main",
+          "callee": "url.fileURLToPath",
+          "lineNumber": 198
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 199
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 200
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 201
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 204
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 210
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync",
+          "lineNumber": 213
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 214
+        },
+        {
+          "caller": "main",
+          "callee": "toCanonicalInstance",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "all.push",
+          "lineNumber": 241
+        },
+        {
+          "caller": "main",
+          "callee": "all.sort",
+          "lineNumber": 245
+        },
+        {
+          "caller": "main",
+          "callee": "a.instance_id.localeCompare",
+          "lineNumber": 245
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 252
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 255
+        },
+        {
+          "caller": "main",
+          "callee": "all.map(serializeCanonical).join",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "all.map",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 257
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash('sha256').update(body, 'utf-8').digest",
+          "lineNumber": 259
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash('sha256').update",
+          "lineNumber": 259
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash",
+          "lineNumber": 259
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 261
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 265
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 287
+        },
+        {
+          "caller": "main",
+          "callee": "Object.entries",
+          "lineNumber": 288
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 288
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 289
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 290
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 291
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 292
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 294
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/scripts/build-longmemeval-canonical.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 445,
+      "nonEmptyLines": 391,
+      "functions": [
+        {
+          "name": "buildContext",
+          "startLine": 137,
+          "endLine": 147,
+          "params": [
+            "sessions"
+          ]
+        },
+        {
+          "name": "serializeCanonical",
+          "startLine": 153,
+          "endLine": 159,
+          "params": [
+            "inst"
+          ]
+        },
+        {
+          "name": "downloadFile",
+          "startLine": 165,
+          "endLine": 221,
+          "params": [
+            "remoteUrl",
+            "destPath"
+          ]
+        },
+        {
+          "name": "parseArgs",
+          "startLine": 227,
+          "endLine": 243,
+          "params": []
+        },
+        {
+          "name": "main",
+          "startLine": 249,
+          "endLine": 440,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "buildContext",
+          "callee": "s.messages.map",
+          "lineNumber": 143
+        },
+        {
+          "caller": "buildContext",
+          "callee": "blocks.push",
+          "lineNumber": 144
+        },
+        {
+          "caller": "buildContext",
+          "callee": "[header, ...lines].join",
+          "lineNumber": 144
+        },
+        {
+          "caller": "buildContext",
+          "callee": "blocks.join",
+          "lineNumber": 146
+        },
+        {
+          "caller": "serializeCanonical",
+          "callee": "JSON.stringify",
+          "lineNumber": 158
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "console.log",
+          "lineNumber": 167
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "console.log",
+          "lineNumber": 168
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "fs.createWriteStream",
+          "lineNumber": 170
+        },
+        {
+          "caller": "doGet",
+          "callee": "https\r\n        .get(requestUrl, res => {\r\n          if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {\r\n            const location = res.headers.location;\r\n            if (!location) {\r\n              reject(new Error(`Redirect with no Location header (${res.statusCode})`));\r\n              return;\r\n            }\r\n            doGet(location);\r\n            return;\r\n          }\r\n          if (res.statusCode !== 200) {\r\n            reject(new Error(`HTTP ${res.statusCode} for ${requestUrl}`));\r\n            return;\r\n          }\r\n          total = parseInt(res.headers['content-length'] ?? '0', 10);\r\n          res.on('data', (chunk: Buffer) => {\r\n            received += chunk.length;\r\n            if (total > 0) {\r\n              const pct = Math.floor((received / total) * 100);\r\n              if (pct !== lastPct && pct % 10 === 0) {\r\n                process.stdout.write(`  ${pct}% (${(received / 1024 / 1024).toFixed(1)} MB)\\r`);\r\n                lastPct = pct;\r\n              }\r\n            }\r\n          });\r\n          res.pipe(file);\r\n          res.on('end', () => {\r\n            file.end();\r\n          });\r\n        })\r\n        .on",
+          "lineNumber": 176
+        },
+        {
+          "caller": "doGet",
+          "callee": "https\r\n        .get",
+          "lineNumber": 176
+        },
+        {
+          "caller": "doGet",
+          "callee": "reject",
+          "lineNumber": 181
+        },
+        {
+          "caller": "doGet",
+          "callee": "doGet",
+          "lineNumber": 184
+        },
+        {
+          "caller": "doGet",
+          "callee": "reject",
+          "lineNumber": 188
+        },
+        {
+          "caller": "doGet",
+          "callee": "parseInt",
+          "lineNumber": 191
+        },
+        {
+          "caller": "doGet",
+          "callee": "res.on",
+          "lineNumber": 192
+        },
+        {
+          "caller": "doGet",
+          "callee": "Math.floor",
+          "lineNumber": 195
+        },
+        {
+          "caller": "doGet",
+          "callee": "process.stdout.write",
+          "lineNumber": 197
+        },
+        {
+          "caller": "doGet",
+          "callee": "(received / 1024 / 1024).toFixed",
+          "lineNumber": 197
+        },
+        {
+          "caller": "doGet",
+          "callee": "res.pipe",
+          "lineNumber": 202
+        },
+        {
+          "caller": "doGet",
+          "callee": "res.on",
+          "lineNumber": 203
+        },
+        {
+          "caller": "doGet",
+          "callee": "file.end",
+          "lineNumber": 204
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "file.on",
+          "lineNumber": 210
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "process.stdout.write",
+          "lineNumber": 211
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "console.log",
+          "lineNumber": 212
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "(received / 1024 / 1024).toFixed",
+          "lineNumber": 213
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "resolve",
+          "lineNumber": 215
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "file.on",
+          "lineNumber": 217
+        },
+        {
+          "caller": "downloadFile",
+          "callee": "doGet",
+          "lineNumber": 219
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "process.argv.slice",
+          "lineNumber": 228
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "console.error",
+          "lineNumber": 239
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "process.exit",
+          "lineNumber": 240
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 250
+        },
+        {
+          "caller": "main",
+          "callee": "url.fileURLToPath",
+          "lineNumber": 252
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 255
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 257
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 260
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 267
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 268
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 268
+        },
+        {
+          "caller": "main",
+          "callee": "downloadFile",
+          "lineNumber": 270
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 272
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 272
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 273
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 274
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 275
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 276
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 278
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 279
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 282
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 283
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 284
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 286
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 293
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync",
+          "lineNumber": 294
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 297
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 299
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 299
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 300
+        },
+        {
+          "caller": "main",
+          "callee": "Array.isArray",
+          "lineNumber": 303
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 304
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 305
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 308
+        },
+        {
+          "caller": "main",
+          "callee": "Array.isArray",
+          "lineNumber": 329
+        },
+        {
+          "caller": "main",
+          "callee": "Array.isArray",
+          "lineNumber": 331
+        },
+        {
+          "caller": "main",
+          "callee": "q.haystack_sessions.map",
+          "lineNumber": 332
+        },
+        {
+          "caller": "main",
+          "callee": "msgs.filter",
+          "lineNumber": 335
+        },
+        {
+          "caller": "main",
+          "callee": "q.question_id.endsWith",
+          "lineNumber": 344
+        },
+        {
+          "caller": "main",
+          "callee": "buildContext",
+          "lineNumber": 345
+        },
+        {
+          "caller": "main",
+          "callee": "all.push",
+          "lineNumber": 347
+        },
+        {
+          "caller": "main",
+          "callee": "all.sort",
+          "lineNumber": 362
+        },
+        {
+          "caller": "main",
+          "callee": "a.instance_id.localeCompare",
+          "lineNumber": 362
+        },
+        {
+          "caller": "main",
+          "callee": "all.filter",
+          "lineNumber": 369
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 375
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 376
+        },
+        {
+          "caller": "main",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 376
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 379
+        },
+        {
+          "caller": "main",
+          "callee": "all.map(serializeCanonical).join",
+          "lineNumber": 380
+        },
+        {
+          "caller": "main",
+          "callee": "all.map",
+          "lineNumber": 380
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 381
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash('sha256').update(body, 'utf-8').digest",
+          "lineNumber": 384
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash('sha256').update",
+          "lineNumber": 384
+        },
+        {
+          "caller": "main",
+          "callee": "crypto.createHash",
+          "lineNumber": 384
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 387
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 392
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 413
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 413
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 416
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 417
+        },
+        {
+          "caller": "main",
+          "callee": "fs.copyFileSync",
+          "lineNumber": 418
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 419
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 426
+        },
+        {
+          "caller": "main",
+          "callee": "Object.entries",
+          "lineNumber": 427
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 427
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 428
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 429
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 430
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 431
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 432
+        },
+        {
+          "caller": "main",
+          "callee": "console.warn",
+          "lineNumber": 435
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/scripts/build-preflight-samples.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 354,
+      "nonEmptyLines": 325,
+      "functions": [
+        {
+          "name": "makeRng",
+          "startLine": 102,
+          "endLine": 110,
+          "params": [
+            "seed"
+          ]
+        },
+        {
+          "name": "fisherYates",
+          "startLine": 112,
+          "endLine": 119,
+          "params": [
+            "items",
+            "rand"
+          ]
+        },
+        {
+          "name": "parseDiaId",
+          "startLine": 121,
+          "endLine": 125,
+          "params": [
+            "eid"
+          ]
+        },
+        {
+          "name": "buildContext",
+          "startLine": 127,
+          "endLine": 162,
+          "params": [
+            "sample",
+            "evidence"
+          ]
+        },
+        {
+          "name": "toPreflightInstance",
+          "startLine": 164,
+          "endLine": 187,
+          "params": [
+            "sample",
+            "qaIndex",
+            "qa"
+          ]
+        },
+        {
+          "name": "bucketByCategory",
+          "startLine": 189,
+          "endLine": 201,
+          "params": [
+            "instances"
+          ]
+        },
+        {
+          "name": "pickStratified",
+          "startLine": 203,
+          "endLine": 224,
+          "params": [
+            "buckets",
+            "distribution",
+            "seed",
+            "exclude"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 226,
+          "endLine": 352,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fisherYates",
+          "callee": "items.slice",
+          "lineNumber": 113
+        },
+        {
+          "caller": "fisherYates",
+          "callee": "Math.floor",
+          "lineNumber": 115
+        },
+        {
+          "caller": "fisherYates",
+          "callee": "rand",
+          "lineNumber": 115
+        },
+        {
+          "caller": "parseDiaId",
+          "callee": "eid.match",
+          "lineNumber": 122
+        },
+        {
+          "caller": "parseDiaId",
+          "callee": "Number",
+          "lineNumber": 124
+        },
+        {
+          "caller": "parseDiaId",
+          "callee": "Number",
+          "lineNumber": 124
+        },
+        {
+          "caller": "buildContext",
+          "callee": "parseDiaId",
+          "lineNumber": 134
+        },
+        {
+          "caller": "buildContext",
+          "callee": "session.find",
+          "lineNumber": 142
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.has",
+          "lineNumber": 144
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.set",
+          "lineNumber": 145
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.get(parsed.session)!.turns.push",
+          "lineNumber": 147
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.get",
+          "lineNumber": 147
+        },
+        {
+          "caller": "buildContext",
+          "callee": "Array.from(bySession.keys()).sort",
+          "lineNumber": 150
+        },
+        {
+          "caller": "buildContext",
+          "callee": "Array.from",
+          "lineNumber": 150
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.keys",
+          "lineNumber": 150
+        },
+        {
+          "caller": "buildContext",
+          "callee": "bySession.get",
+          "lineNumber": 153
+        },
+        {
+          "caller": "buildContext",
+          "callee": "entry.turns.map",
+          "lineNumber": 155
+        },
+        {
+          "caller": "buildContext",
+          "callee": "blocks.push",
+          "lineNumber": 159
+        },
+        {
+          "caller": "buildContext",
+          "callee": "[header, ...lines].join",
+          "lineNumber": 159
+        },
+        {
+          "caller": "buildContext",
+          "callee": "blocks.join",
+          "lineNumber": 161
+        },
+        {
+          "caller": "toPreflightInstance",
+          "callee": "buildContext",
+          "lineNumber": 169
+        },
+        {
+          "caller": "toPreflightInstance",
+          "callee": "String(qaIndex).padStart",
+          "lineNumber": 171
+        },
+        {
+          "caller": "toPreflightInstance",
+          "callee": "String",
+          "lineNumber": 171
+        },
+        {
+          "caller": "toPreflightInstance",
+          "callee": "String",
+          "lineNumber": 177
+        },
+        {
+          "caller": "bucketByCategory",
+          "callee": "buckets[inst.category].push",
+          "lineNumber": 196
+        },
+        {
+          "caller": "bucketByCategory",
+          "callee": "Object.keys",
+          "lineNumber": 197
+        },
+        {
+          "caller": "bucketByCategory",
+          "callee": "buckets[key].sort",
+          "lineNumber": 198
+        },
+        {
+          "caller": "bucketByCategory",
+          "callee": "a.id.localeCompare",
+          "lineNumber": 198
+        },
+        {
+          "caller": "pickStratified",
+          "callee": "makeRng",
+          "lineNumber": 209
+        },
+        {
+          "caller": "pickStratified",
+          "callee": "buckets[key].filter",
+          "lineNumber": 213
+        },
+        {
+          "caller": "pickStratified",
+          "callee": "exclude.has",
+          "lineNumber": 213
+        },
+        {
+          "caller": "pickStratified",
+          "callee": "fisherYates",
+          "lineNumber": 214
+        },
+        {
+          "caller": "pickStratified",
+          "callee": "out.push",
+          "lineNumber": 221
+        },
+        {
+          "caller": "pickStratified",
+          "callee": "shuffled.slice",
+          "lineNumber": 221
+        },
+        {
+          "caller": "main",
+          "callee": "url.fileURLToPath",
+          "lineNumber": 227
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 228
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 228
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 229
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 230
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 232
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 233
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 239
+        },
+        {
+          "caller": "main",
+          "callee": "fs.readFileSync",
+          "lineNumber": 242
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.parse",
+          "lineNumber": 243
+        },
+        {
+          "caller": "main",
+          "callee": "toPreflightInstance",
+          "lineNumber": 248
+        },
+        {
+          "caller": "main",
+          "callee": "allInstances.push",
+          "lineNumber": 249
+        },
+        {
+          "caller": "main",
+          "callee": "bucketByCategory",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 254
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "pickStratified",
+          "lineNumber": 260
+        },
+        {
+          "caller": "main",
+          "callee": "stage2.map",
+          "lineNumber": 266
+        },
+        {
+          "caller": "main",
+          "callee": "pickStratified",
+          "lineNumber": 269
+        },
+        {
+          "caller": "main",
+          "callee": "stage2Ids.has",
+          "lineNumber": 276
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 313
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 314
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 314
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 315
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 318
+        },
+        {
+          "caller": "main",
+          "callee": "[\n    '# Failure-mode judge calibration set',\n    '# brief: PM-Waggle-OS/briefs/2026-04-20-cc-preflight-prep-tasks.md Task 2',\n    '# locked: decisions/2026-04-20-failure-mode-oq-resolutions-locked.md §OQ-FM-3',\n    '# source: https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json',\n    '# seed=43 (non-overlapping with preflight-locomo-50.json seed=42)',\n    '# distribution: single-hop=3, multi-hop=3, temporal=2, open-ended=2 (total=10)',\n    '# human_label.{verdict,failure_mode,rationale} are left null. PM labels first pass; CC validates second pass.',\n    '# Judge activates Stage 1 only after ≥8/10 match against human_label.',\n    '',\n  ].join",
+          "lineNumber": 319
+        },
+        {
+          "caller": "main",
+          "callee": "lines.push",
+          "lineNumber": 337
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 337
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 339
+        },
+        {
+          "caller": "main",
+          "callee": "lines.join",
+          "lineNumber": 339
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 340
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 348
+        },
+        {
+          "caller": "main",
+          "callee": "countByCat",
+          "lineNumber": 348
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 349
+        },
+        {
+          "caller": "main",
+          "callee": "countByCat",
+          "lineNumber": 349
+        },
+        {
+          "caller": "main",
+          "callee": "calibration.filter",
+          "lineNumber": 350
+        },
+        {
+          "caller": "main",
+          "callee": "stage2Ids.has",
+          "lineNumber": 350
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 351
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/src/stats/fleiss-kappa.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 147,
+      "nonEmptyLines": 136,
+      "functions": [
+        {
+          "name": "computeFleissKappa",
+          "startLine": 65,
+          "endLine": 147,
+          "params": [
+            "matrix"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "computeFleissKappa",
+          "line": 65,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "computeFleissKappa",
+          "callee": "Number.isFinite",
+          "lineNumber": 68
+        },
+        {
+          "caller": "computeFleissKappa",
+          "callee": "Number.isInteger",
+          "lineNumber": 68
+        },
+        {
+          "caller": "computeFleissKappa",
+          "callee": "Array.isArray",
+          "lineNumber": 71
+        },
+        {
+          "caller": "computeFleissKappa",
+          "callee": "Number.isFinite",
+          "lineNumber": 91
+        },
+        {
+          "caller": "computeFleissKappa",
+          "callee": "Number.isInteger",
+          "lineNumber": 91
+        },
+        {
+          "caller": "computeFleissKappa",
+          "callee": "new Array<number>(K).fill",
+          "lineNumber": 112
+        },
+        {
+          "caller": "computeFleissKappa",
+          "callee": "marginals.reduce",
+          "lineNumber": 133
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/tests/smoke/fixtures/mock-judge-responses.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 119,
+      "nonEmptyLines": 119,
+      "sections": [
+        {
+          "heading": "_meta",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "judges",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "tie_break_reserve",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "responses",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "benchmarks/harness/tests/smoke/fixtures/mock-locomo-instances.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 75,
+      "nonEmptyLines": 75,
+      "sections": [
+        {
+          "heading": "_meta",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "instances",
+          "level": 1,
+          "line": 13
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 2
+      }
+    },
+    {
+      "path": "benchmarks/harness/tests/stats/fleiss-kappa.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 196,
+      "nonEmptyLines": 182,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/harness/tests/wrapper-v3-cells.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 154,
+      "nonEmptyLines": 136,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/deepseek-mt2048-probe.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 274,
+      "nonEmptyLines": 244,
+      "functions": [
+        {
+          "name": "ts",
+          "startLine": 88,
+          "endLine": 89,
+          "params": []
+        },
+        {
+          "name": "logmsg",
+          "startLine": 92,
+          "endLine": 93,
+          "params": [
+            "msg"
+          ]
+        },
+        {
+          "name": "load_env",
+          "startLine": 96,
+          "endLine": 105,
+          "params": []
+        },
+        {
+          "name": "extract_json_body",
+          "startLine": 108,
+          "endLine": 128,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "parse_verdict",
+          "startLine": 131,
+          "endLine": 142,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "http_post_json",
+          "startLine": 145,
+          "endLine": 163,
+          "params": [
+            "url",
+            "headers",
+            "body",
+            "timeout_s"
+          ]
+        },
+        {
+          "name": "call_deepseek_mt2048",
+          "startLine": 166,
+          "endLine": 207,
+          "params": [
+            "prompt",
+            "api_key",
+            "max_attempts"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 210,
+          "endLine": 270,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ts",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "logmsg",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "load_env",
+          "line": 96,
+          "isDefault": false
+        },
+        {
+          "name": "extract_json_body",
+          "line": 108,
+          "isDefault": false
+        },
+        {
+          "name": "parse_verdict",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "http_post_json",
+          "line": 145,
+          "isDefault": false
+        },
+        {
+          "name": "call_deepseek_mt2048",
+          "line": 166,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 210,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ts",
+          "callee": "datetime.now(timezone.utc).isoformat",
+          "lineNumber": 89
+        },
+        {
+          "caller": "ts",
+          "callee": "datetime.now",
+          "lineNumber": 89
+        },
+        {
+          "caller": "logmsg",
+          "callee": "print",
+          "lineNumber": 93
+        },
+        {
+          "caller": "logmsg",
+          "callee": "ts",
+          "lineNumber": 93
+        },
+        {
+          "caller": "load_env",
+          "callee": "Path",
+          "lineNumber": 97
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.read_text(encoding=\"utf-8\").splitlines",
+          "lineNumber": 99
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.read_text",
+          "lineNumber": 99
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.strip",
+          "lineNumber": 100
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.startswith",
+          "lineNumber": 101
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.partition",
+          "lineNumber": 103
+        },
+        {
+          "caller": "load_env",
+          "callee": "k.strip",
+          "lineNumber": 104
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip().strip('\"').strip",
+          "lineNumber": 104
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip().strip",
+          "lineNumber": 104
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip",
+          "lineNumber": 104
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "raw.strip",
+          "lineNumber": 112
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.startswith",
+          "lineNumber": 113
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "re.match",
+          "lineNumber": 114
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "m.group(1).strip",
+          "lineNumber": 116
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "m.group",
+          "lineNumber": 116
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "json.loads",
+          "lineNumber": 118
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.find",
+          "lineNumber": 121
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.rfind",
+          "lineNumber": 122
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "json.loads",
+          "lineNumber": 125
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "extract_json_body",
+          "lineNumber": 132
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "isinstance",
+          "lineNumber": 133
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 135
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 136
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 137
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "isinstance",
+          "lineNumber": 142
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "urllib.request.Request",
+          "lineNumber": 146
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.dumps(body).encode",
+          "lineNumber": 147
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.dumps",
+          "lineNumber": 147
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "urllib.request.urlopen",
+          "lineNumber": 151
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "resp.read().decode",
+          "lineNumber": 152
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "resp.read",
+          "lineNumber": 152
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.loads",
+          "lineNumber": 154
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "e.read().decode",
+          "lineNumber": 159
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "e.read",
+          "lineNumber": 159
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "type",
+          "lineNumber": 163
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "time.time",
+          "lineNumber": 175
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "range",
+          "lineNumber": 178
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "http_post_json",
+          "lineNumber": 179
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "isinstance",
+          "lineNumber": 180
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "resp.get",
+          "lineNumber": 181
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "choices[0].get",
+          "lineNumber": 183
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "msg.get",
+          "lineNumber": 184
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "msg.get",
+          "lineNumber": 184
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "resp.get",
+          "lineNumber": 185
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "int",
+          "lineNumber": 191
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "time.time",
+          "lineNumber": 191
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "usage.get",
+          "lineNumber": 192
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "usage.get",
+          "lineNumber": 193
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "str",
+          "lineNumber": 195
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "time.sleep",
+          "lineNumber": 198
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "int",
+          "lineNumber": 204
+        },
+        {
+          "caller": "call_deepseek_mt2048",
+          "callee": "time.time",
+          "lineNumber": 204
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 211
+        },
+        {
+          "caller": "main",
+          "callee": "load_env",
+          "lineNumber": 212
+        },
+        {
+          "caller": "main",
+          "callee": "env.get(\"DEEPSEEK_API_KEY\", \"\").strip",
+          "lineNumber": 213
+        },
+        {
+          "caller": "main",
+          "callee": "env.get",
+          "lineNumber": 213
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 215
+        },
+        {
+          "caller": "main",
+          "callee": "SAMPLE_PATH.open",
+          "lineNumber": 219
+        },
+        {
+          "caller": "main",
+          "callee": "line.strip",
+          "lineNumber": 221
+        },
+        {
+          "caller": "main",
+          "callee": "sample.append",
+          "lineNumber": 223
+        },
+        {
+          "caller": "main",
+          "callee": "json.loads",
+          "lineNumber": 223
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 224
+        },
+        {
+          "caller": "main",
+          "callee": "enumerate",
+          "lineNumber": 227
+        },
+        {
+          "caller": "main",
+          "callee": "JUDGE_PROMPT_TEMPLATE.format",
+          "lineNumber": 228
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 229
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 230
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 231
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 232
+        },
+        {
+          "caller": "main",
+          "callee": "call_deepseek_mt2048",
+          "lineNumber": 234
+        },
+        {
+          "caller": "main",
+          "callee": "parse_verdict",
+          "lineNumber": 235
+        },
+        {
+          "caller": "main",
+          "callee": "rows.append",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "resp.get",
+          "lineNumber": 244
+        },
+        {
+          "caller": "main",
+          "callee": "resp.get",
+          "lineNumber": 247
+        },
+        {
+          "caller": "main",
+          "callee": "resp.get",
+          "lineNumber": 248
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 254
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 257
+        },
+        {
+          "caller": "main",
+          "callee": "resp.get",
+          "lineNumber": 259
+        },
+        {
+          "caller": "main",
+          "callee": "OUT_PATH.parent.mkdir",
+          "lineNumber": 262
+        },
+        {
+          "caller": "main",
+          "callee": "OUT_PATH.open",
+          "lineNumber": 263
+        },
+        {
+          "caller": "main",
+          "callee": "f.write",
+          "lineNumber": 265
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 265
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 267
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 267
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 268
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 268
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 269
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 8,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/deepseek-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/deepseek-split-responses-v2-mt2048.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/deepseek-split-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/kappa-split-analysis.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 417,
+      "nonEmptyLines": 381,
+      "functions": [
+        {
+          "name": "load_jsonl",
+          "startLine": 36,
+          "endLine": 43,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "cohen_kappa",
+          "startLine": 46,
+          "endLine": 69,
+          "params": [
+            "pairs"
+          ]
+        },
+        {
+          "name": "split_verdict",
+          "startLine": 72,
+          "endLine": 79,
+          "params": [
+            "kappa_cons"
+          ]
+        },
+        {
+          "name": "pct",
+          "startLine": 82,
+          "endLine": 85,
+          "params": [
+            "x",
+            "n"
+          ]
+        },
+        {
+          "name": "fmt_k",
+          "startLine": 88,
+          "endLine": 91,
+          "params": [
+            "x"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 94,
+          "endLine": 412,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "load_jsonl",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "cohen_kappa",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "split_verdict",
+          "line": 72,
+          "isDefault": false
+        },
+        {
+          "name": "pct",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "fmt_k",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 94,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "load_jsonl",
+          "callee": "path.open",
+          "lineNumber": 38
+        },
+        {
+          "caller": "load_jsonl",
+          "callee": "line.strip",
+          "lineNumber": 40
+        },
+        {
+          "caller": "load_jsonl",
+          "callee": "rows.append",
+          "lineNumber": 42
+        },
+        {
+          "caller": "load_jsonl",
+          "callee": "json.loads",
+          "lineNumber": 42
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "float",
+          "lineNumber": 50
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "len",
+          "lineNumber": 51
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "sum",
+          "lineNumber": 52
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "cand_counts.get",
+          "lineNumber": 58
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "ref_counts.get",
+          "lineNumber": 59
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "sum",
+          "lineNumber": 60
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "cand_counts.get",
+          "lineNumber": 61
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "ref_counts.get",
+          "lineNumber": 61
+        },
+        {
+          "caller": "cohen_kappa",
+          "callee": "float",
+          "lineNumber": 65
+        },
+        {
+          "caller": "main",
+          "callee": "load_jsonl",
+          "lineNumber": 96
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 97
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 98
+        },
+        {
+          "caller": "main",
+          "callee": "p.exists",
+          "lineNumber": 103
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 104
+        },
+        {
+          "caller": "main",
+          "callee": "load_jsonl",
+          "lineNumber": 107
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 108
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 108
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 117
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 118
+        },
+        {
+          "caller": "main",
+          "callee": "split_index.get",
+          "lineNumber": 127
+        },
+        {
+          "caller": "main",
+          "callee": "pairs_vs_opus.append",
+          "lineNumber": 133
+        },
+        {
+          "caller": "main",
+          "callee": "pairs_vs_gpt.append",
+          "lineNumber": 134
+        },
+        {
+          "caller": "main",
+          "callee": "latencies.append",
+          "lineNumber": 139
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 139
+        },
+        {
+          "caller": "main",
+          "callee": "routings.append",
+          "lineNumber": 140
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 140
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 142
+        },
+        {
+          "caller": "main",
+          "callee": "float",
+          "lineNumber": 143
+        },
+        {
+          "caller": "main",
+          "callee": "float",
+          "lineNumber": 144
+        },
+        {
+          "caller": "main",
+          "callee": "cohen_kappa",
+          "lineNumber": 145
+        },
+        {
+          "caller": "main",
+          "callee": "cohen_kappa",
+          "lineNumber": 146
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 147
+        },
+        {
+          "caller": "main",
+          "callee": "float",
+          "lineNumber": 147
+        },
+        {
+          "caller": "main",
+          "callee": "int",
+          "lineNumber": 148
+        },
+        {
+          "caller": "main",
+          "callee": "statistics.median",
+          "lineNumber": 148
+        },
+        {
+          "caller": "main",
+          "callee": "int",
+          "lineNumber": 149
+        },
+        {
+          "caller": "main",
+          "callee": "sorted",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "max",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "int",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "max",
+          "lineNumber": 152
+        },
+        {
+          "caller": "main",
+          "callee": "set",
+          "lineNumber": 152
+        },
+        {
+          "caller": "main",
+          "callee": "split_verdict",
+          "lineNumber": 168
+        },
+        {
+          "caller": "main",
+          "callee": "load_jsonl",
+          "lineNumber": 176
+        },
+        {
+          "caller": "main",
+          "callee": "p_unc.exists",
+          "lineNumber": 181
+        },
+        {
+          "caller": "main",
+          "callee": "load_jsonl",
+          "lineNumber": 182
+        },
+        {
+          "caller": "main",
+          "callee": "unanimous_resp.get",
+          "lineNumber": 194
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 195
+        },
+        {
+          "caller": "main",
+          "callee": "unanimous_index.get",
+          "lineNumber": 198
+        },
+        {
+          "caller": "main",
+          "callee": "pairs_opus.append",
+          "lineNumber": 202
+        },
+        {
+          "caller": "main",
+          "callee": "pairs_gpt.append",
+          "lineNumber": 203
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 206
+        },
+        {
+          "caller": "main",
+          "callee": "split_index.get",
+          "lineNumber": 209
+        },
+        {
+          "caller": "main",
+          "callee": "pairs_opus.append",
+          "lineNumber": 213
+        },
+        {
+          "caller": "main",
+          "callee": "pairs_gpt.append",
+          "lineNumber": 214
+        },
+        {
+          "caller": "main",
+          "callee": "cohen_kappa",
+          "lineNumber": 215
+        },
+        {
+          "caller": "main",
+          "callee": "cohen_kappa",
+          "lineNumber": 216
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 217
+        },
+        {
+          "caller": "main",
+          "callee": "float",
+          "lineNumber": 217
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 219
+        },
+        {
+          "caller": "main",
+          "callee": "sorted",
+          "lineNumber": 226
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 238
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 239
+        },
+        {
+          "caller": "main",
+          "callee": "max",
+          "lineNumber": 251
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 251
+        },
+        {
+          "caller": "main",
+          "callee": "all",
+          "lineNumber": 251
+        },
+        {
+          "caller": "main",
+          "callee": "max",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 253
+        },
+        {
+          "caller": "main",
+          "callee": "all",
+          "lineNumber": 254
+        },
+        {
+          "caller": "main",
+          "callee": "max",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "min",
+          "lineNumber": 256
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 258
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 269
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 274
+        },
+        {
+          "caller": "main",
+          "callee": "ranked_passing[0].upper",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "ranked_passing[1].upper",
+          "lineNumber": 286
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 286
+        },
+        {
+          "caller": "main",
+          "callee": "resp.get",
+          "lineNumber": 292
+        },
+        {
+          "caller": "main",
+          "callee": "set",
+          "lineNumber": 293
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 293
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 306
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 307
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 308
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 309
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 310
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 311
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 312
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 313
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 314
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 315
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 316
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 317
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 318
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 319
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 320
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 321
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 322
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 323
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 324
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 325
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 326
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 329
+        },
+        {
+          "caller": "main",
+          "callee": "pct",
+          "lineNumber": 330
+        },
+        {
+          "caller": "main",
+          "callee": "fmt_k",
+          "lineNumber": 333
+        },
+        {
+          "caller": "main",
+          "callee": "fmt_k",
+          "lineNumber": 333
+        },
+        {
+          "caller": "main",
+          "callee": "fmt_k",
+          "lineNumber": 333
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 337
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 338
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 339
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 340
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 341
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 342
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 343
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 344
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 345
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 346
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 347
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 348
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 349
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 350
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 351
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 352
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 353
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 354
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 355
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 358
+        },
+        {
+          "caller": "main",
+          "callee": "fmt_k",
+          "lineNumber": 359
+        },
+        {
+          "caller": "main",
+          "callee": "fmt_k",
+          "lineNumber": 360
+        },
+        {
+          "caller": "main",
+          "callee": "fmt_k",
+          "lineNumber": 360
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 362
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 363
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 364
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 365
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 366
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 367
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 368
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 369
+        },
+        {
+          "caller": "main",
+          "callee": "', '.join",
+          "lineNumber": 369
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 370
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 371
+        },
+        {
+          "caller": "main",
+          "callee": "primary.upper",
+          "lineNumber": 371
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 372
+        },
+        {
+          "caller": "main",
+          "callee": "backup.upper",
+          "lineNumber": 372
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 373
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 374
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 375
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 376
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 377
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 378
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 379
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 380
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 383
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 387
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 388
+        },
+        {
+          "caller": "main",
+          "callee": "lines.append",
+          "lineNumber": 389
+        },
+        {
+          "caller": "main",
+          "callee": "OUT.write_text",
+          "lineNumber": 391
+        },
+        {
+          "caller": "main",
+          "callee": "\"\\n\".join",
+          "lineNumber": 391
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 392
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 393
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 394
+        },
+        {
+          "caller": "main",
+          "callee": "print",
+          "lineNumber": 395
+        },
+        {
+          "caller": "main",
+          "callee": "primary.upper",
+          "lineNumber": 405
+        },
+        {
+          "caller": "main",
+          "callee": "backup.upper",
+          "lineNumber": 406
+        },
+        {
+          "caller": "main",
+          "callee": "(PROBE_DIR / \"_summary-split.json\").write_text",
+          "lineNumber": 409
+        },
+        {
+          "caller": "main",
+          "callee": "json.dumps",
+          "lineNumber": 410
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 6,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/kimi-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/kimi-split-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/minimax-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/minimax-split-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/probe-script-split.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 485,
+      "nonEmptyLines": 418,
+      "functions": [
+        {
+          "name": "ts",
+          "startLine": 101,
+          "endLine": 102,
+          "params": []
+        },
+        {
+          "name": "logmsg",
+          "startLine": 105,
+          "endLine": 106,
+          "params": [
+            "msg"
+          ]
+        },
+        {
+          "name": "load_env",
+          "startLine": 111,
+          "endLine": 125,
+          "params": []
+        },
+        {
+          "name": "extract_json_body",
+          "startLine": 130,
+          "endLine": 149,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "parse_verdict",
+          "startLine": 152,
+          "endLine": 163,
+          "params": [
+            "raw_text"
+          ]
+        },
+        {
+          "name": "http_post_json",
+          "startLine": 168,
+          "endLine": 189,
+          "params": [
+            "url",
+            "headers",
+            "body",
+            "timeout_s"
+          ]
+        },
+        {
+          "name": "_retry_call",
+          "startLine": 194,
+          "endLine": 238,
+          "params": [
+            "url",
+            "headers",
+            "body",
+            "model_id",
+            "routing",
+            "max_attempts"
+          ]
+        },
+        {
+          "name": "call_kimi",
+          "startLine": 241,
+          "endLine": 249,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "call_deepseek",
+          "startLine": 252,
+          "endLine": 261,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "call_zhipu",
+          "startLine": 264,
+          "endLine": 273,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "call_minimax_direct_with_fallback",
+          "startLine": 287,
+          "endLine": 323,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "_call_minimax_direct",
+          "startLine": 326,
+          "endLine": 345,
+          "params": [
+            "prompt",
+            "api_key",
+            "group_id",
+            "variant"
+          ]
+        },
+        {
+          "name": "_call_minimax_openrouter",
+          "startLine": 348,
+          "endLine": 357,
+          "params": [
+            "prompt",
+            "or_key"
+          ]
+        },
+        {
+          "name": "load_split_sample",
+          "startLine": 362,
+          "endLine": 369,
+          "params": []
+        },
+        {
+          "name": "run_provider",
+          "startLine": 382,
+          "endLine": 420,
+          "params": [
+            "name",
+            "call_fn",
+            "sample",
+            "env"
+          ]
+        },
+        {
+          "name": "write_jsonl",
+          "startLine": 423,
+          "endLine": 427,
+          "params": [
+            "path",
+            "rows"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 430,
+          "endLine": 476,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ts",
+          "line": 101,
+          "isDefault": false
+        },
+        {
+          "name": "logmsg",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "load_env",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "extract_json_body",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "parse_verdict",
+          "line": 152,
+          "isDefault": false
+        },
+        {
+          "name": "http_post_json",
+          "line": 168,
+          "isDefault": false
+        },
+        {
+          "name": "_retry_call",
+          "line": 194,
+          "isDefault": false
+        },
+        {
+          "name": "call_kimi",
+          "line": 241,
+          "isDefault": false
+        },
+        {
+          "name": "call_deepseek",
+          "line": 252,
+          "isDefault": false
+        },
+        {
+          "name": "call_zhipu",
+          "line": 264,
+          "isDefault": false
+        },
+        {
+          "name": "call_minimax_direct_with_fallback",
+          "line": 287,
+          "isDefault": false
+        },
+        {
+          "name": "_call_minimax_direct",
+          "line": 326,
+          "isDefault": false
+        },
+        {
+          "name": "_call_minimax_openrouter",
+          "line": 348,
+          "isDefault": false
+        },
+        {
+          "name": "load_split_sample",
+          "line": 362,
+          "isDefault": false
+        },
+        {
+          "name": "run_provider",
+          "line": 382,
+          "isDefault": false
+        },
+        {
+          "name": "write_jsonl",
+          "line": 423,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 430,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ts",
+          "callee": "datetime.now(timezone.utc).isoformat",
+          "lineNumber": 102
+        },
+        {
+          "caller": "ts",
+          "callee": "datetime.now",
+          "lineNumber": 102
+        },
+        {
+          "caller": "logmsg",
+          "callee": "print",
+          "lineNumber": 106
+        },
+        {
+          "caller": "logmsg",
+          "callee": "ts",
+          "lineNumber": 106
+        },
+        {
+          "caller": "load_env",
+          "callee": "Path",
+          "lineNumber": 112
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.exists",
+          "lineNumber": 114
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.read_text(encoding=\"utf-8\").splitlines",
+          "lineNumber": 116
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.read_text",
+          "lineNumber": 116
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.strip",
+          "lineNumber": 117
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.startswith",
+          "lineNumber": 118
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.partition",
+          "lineNumber": 122
+        },
+        {
+          "caller": "load_env",
+          "callee": "k.strip",
+          "lineNumber": 123
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip().strip('\"').strip",
+          "lineNumber": 123
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip().strip",
+          "lineNumber": 123
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip",
+          "lineNumber": 123
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "raw.strip",
+          "lineNumber": 133
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.startswith",
+          "lineNumber": 134
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "re.match",
+          "lineNumber": 135
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "m.group(1).strip",
+          "lineNumber": 137
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "m.group",
+          "lineNumber": 137
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "json.loads",
+          "lineNumber": 139
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.find",
+          "lineNumber": 142
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.rfind",
+          "lineNumber": 143
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "json.loads",
+          "lineNumber": 146
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "extract_json_body",
+          "lineNumber": 153
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "isinstance",
+          "lineNumber": 154
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 156
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 157
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 158
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "isinstance",
+          "lineNumber": 163
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "urllib.request.Request",
+          "lineNumber": 169
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.dumps(body).encode",
+          "lineNumber": 171
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.dumps",
+          "lineNumber": 171
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "urllib.request.urlopen",
+          "lineNumber": 176
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "resp.read().decode",
+          "lineNumber": 177
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "resp.read",
+          "lineNumber": 177
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.loads",
+          "lineNumber": 179
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "e.read().decode",
+          "lineNumber": 184
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "e.read",
+          "lineNumber": 184
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "type",
+          "lineNumber": 189
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.time",
+          "lineNumber": 202
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "range",
+          "lineNumber": 205
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "http_post_json",
+          "lineNumber": 206
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "isinstance",
+          "lineNumber": 207
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "resp.get",
+          "lineNumber": 208
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "choices[0].get",
+          "lineNumber": 210
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "msg.get",
+          "lineNumber": 211
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "msg.get",
+          "lineNumber": 211
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "resp.get",
+          "lineNumber": 212
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "int",
+          "lineNumber": 220
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.time",
+          "lineNumber": 220
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "usage.get",
+          "lineNumber": 221
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "usage.get",
+          "lineNumber": 222
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "str",
+          "lineNumber": 224
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.sleep",
+          "lineNumber": 227
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "int",
+          "lineNumber": 235
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.time",
+          "lineNumber": 235
+        },
+        {
+          "caller": "call_kimi",
+          "callee": "_retry_call",
+          "lineNumber": 249
+        },
+        {
+          "caller": "call_deepseek",
+          "callee": "_retry_call",
+          "lineNumber": 261
+        },
+        {
+          "caller": "call_zhipu",
+          "callee": "_retry_call",
+          "lineNumber": 273
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "env.get(\"MINIMAX_GROUP_ID\", \"\").strip",
+          "lineNumber": 291
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "env.get",
+          "lineNumber": 291
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "env.get(\"MINIMAX_API_KEY\", \"\").strip",
+          "lineNumber": 292
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "env.get",
+          "lineNumber": 292
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "env.get(\"OPENROUTER_API_KEY\", \"\").strip",
+          "lineNumber": 293
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "env.get",
+          "lineNumber": 293
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_call_minimax_direct",
+          "lineNumber": 297
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_call_minimax_direct",
+          "lineNumber": 299
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_call_minimax_openrouter",
+          "lineNumber": 301
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_call_minimax_direct",
+          "lineNumber": 304
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_MINIMAX_ROUTE_CACHE[\"first_tried\"].append",
+          "lineNumber": 305
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "logmsg",
+          "lineNumber": 308
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "logmsg",
+          "lineNumber": 310
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "r.get",
+          "lineNumber": 310
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_call_minimax_direct",
+          "lineNumber": 312
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_MINIMAX_ROUTE_CACHE[\"first_tried\"].append",
+          "lineNumber": 313
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "logmsg",
+          "lineNumber": 316
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "logmsg",
+          "lineNumber": 318
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "r.get",
+          "lineNumber": 318
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_MINIMAX_ROUTE_CACHE[\"first_tried\"].append",
+          "lineNumber": 321
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "logmsg",
+          "lineNumber": 322
+        },
+        {
+          "caller": "call_minimax_direct_with_fallback",
+          "callee": "_call_minimax_openrouter",
+          "lineNumber": 323
+        },
+        {
+          "caller": "_call_minimax_direct",
+          "callee": "_retry_call",
+          "lineNumber": 345
+        },
+        {
+          "caller": "_call_minimax_openrouter",
+          "callee": "_retry_call",
+          "lineNumber": 357
+        },
+        {
+          "caller": "load_split_sample",
+          "callee": "SPLIT_SAMPLE_PATH.open",
+          "lineNumber": 364
+        },
+        {
+          "caller": "load_split_sample",
+          "callee": "line.strip",
+          "lineNumber": 366
+        },
+        {
+          "caller": "load_split_sample",
+          "callee": "rows.append",
+          "lineNumber": 368
+        },
+        {
+          "caller": "load_split_sample",
+          "callee": "json.loads",
+          "lineNumber": 368
+        },
+        {
+          "caller": "run_provider",
+          "callee": "logmsg",
+          "lineNumber": 383
+        },
+        {
+          "caller": "run_provider",
+          "callee": "len",
+          "lineNumber": 383
+        },
+        {
+          "caller": "run_provider",
+          "callee": "enumerate",
+          "lineNumber": 385
+        },
+        {
+          "caller": "run_provider",
+          "callee": "JUDGE_PROMPT_TEMPLATE.format",
+          "lineNumber": 386
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 387
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 388
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 389
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 390
+        },
+        {
+          "caller": "run_provider",
+          "callee": "call_fn",
+          "lineNumber": 392
+        },
+        {
+          "caller": "run_provider",
+          "callee": "parse_verdict",
+          "lineNumber": 393
+        },
+        {
+          "caller": "run_provider",
+          "callee": "resp.get",
+          "lineNumber": 401
+        },
+        {
+          "caller": "run_provider",
+          "callee": "resp.get",
+          "lineNumber": 404
+        },
+        {
+          "caller": "run_provider",
+          "callee": "resp.get",
+          "lineNumber": 405
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 410
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 411
+        },
+        {
+          "caller": "run_provider",
+          "callee": "out.append",
+          "lineNumber": 413
+        },
+        {
+          "caller": "run_provider",
+          "callee": "logmsg",
+          "lineNumber": 414
+        },
+        {
+          "caller": "run_provider",
+          "callee": "len",
+          "lineNumber": 415
+        },
+        {
+          "caller": "run_provider",
+          "callee": "logmsg",
+          "lineNumber": 419
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "path.parent.mkdir",
+          "lineNumber": 424
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "path.open",
+          "lineNumber": 425
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "f.write",
+          "lineNumber": 427
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "json.dumps",
+          "lineNumber": 427
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 431
+        },
+        {
+          "caller": "main",
+          "callee": "load_env",
+          "lineNumber": 432
+        },
+        {
+          "caller": "main",
+          "callee": "env.get",
+          "lineNumber": 441
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 443
+        },
+        {
+          "caller": "main",
+          "callee": "load_split_sample",
+          "lineNumber": 446
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 447
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 447
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 448
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 449
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 452
+        },
+        {
+          "caller": "main",
+          "callee": "ThreadPoolExecutor",
+          "lineNumber": 454
+        },
+        {
+          "caller": "main",
+          "callee": "pool.submit",
+          "lineNumber": 456
+        },
+        {
+          "caller": "main",
+          "callee": "as_completed",
+          "lineNumber": 459
+        },
+        {
+          "caller": "main",
+          "callee": "fut.result",
+          "lineNumber": 462
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 465
+        },
+        {
+          "caller": "main",
+          "callee": "type",
+          "lineNumber": 465
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 468
+        },
+        {
+          "caller": "main",
+          "callee": "provider_rows.items",
+          "lineNumber": 469
+        },
+        {
+          "caller": "main",
+          "callee": "write_jsonl",
+          "lineNumber": 470
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 471
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 471
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 472
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 472
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 474
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 475
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 17,
+        "functionCount": 17,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/probe-script.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 486,
+      "nonEmptyLines": 425,
+      "functions": [
+        {
+          "name": "ts",
+          "startLine": 111,
+          "endLine": 112,
+          "params": []
+        },
+        {
+          "name": "logmsg",
+          "startLine": 115,
+          "endLine": 116,
+          "params": [
+            "msg"
+          ]
+        },
+        {
+          "name": "load_env",
+          "startLine": 121,
+          "endLine": 135,
+          "params": []
+        },
+        {
+          "name": "extract_json_body",
+          "startLine": 140,
+          "endLine": 162,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "parse_verdict",
+          "startLine": 165,
+          "endLine": 176,
+          "params": [
+            "raw_text"
+          ]
+        },
+        {
+          "name": "http_post_json",
+          "startLine": 181,
+          "endLine": 202,
+          "params": [
+            "url",
+            "headers",
+            "body",
+            "timeout_s"
+          ]
+        },
+        {
+          "name": "call_kimi",
+          "startLine": 207,
+          "endLine": 220,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "call_deepseek",
+          "startLine": 223,
+          "endLine": 232,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "call_zhipu",
+          "startLine": 235,
+          "endLine": 244,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "call_minimax_via_openrouter",
+          "startLine": 247,
+          "endLine": 259,
+          "params": [
+            "prompt",
+            "env"
+          ]
+        },
+        {
+          "name": "_retry_call",
+          "startLine": 262,
+          "endLine": 301,
+          "params": [
+            "url",
+            "headers",
+            "body",
+            "model_id",
+            "routing",
+            "max_attempts"
+          ]
+        },
+        {
+          "name": "build_sample",
+          "startLine": 306,
+          "endLine": 348,
+          "params": []
+        },
+        {
+          "name": "enrich_sample_with_locomo",
+          "startLine": 351,
+          "endLine": 380,
+          "params": [
+            "sample"
+          ]
+        },
+        {
+          "name": "run_provider",
+          "startLine": 393,
+          "endLine": 425,
+          "params": [
+            "name",
+            "call_fn",
+            "sample",
+            "env"
+          ]
+        },
+        {
+          "name": "write_jsonl",
+          "startLine": 428,
+          "endLine": 432,
+          "params": [
+            "path",
+            "rows"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 435,
+          "endLine": 477,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ts",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "logmsg",
+          "line": 115,
+          "isDefault": false
+        },
+        {
+          "name": "load_env",
+          "line": 121,
+          "isDefault": false
+        },
+        {
+          "name": "extract_json_body",
+          "line": 140,
+          "isDefault": false
+        },
+        {
+          "name": "parse_verdict",
+          "line": 165,
+          "isDefault": false
+        },
+        {
+          "name": "http_post_json",
+          "line": 181,
+          "isDefault": false
+        },
+        {
+          "name": "call_kimi",
+          "line": 207,
+          "isDefault": false
+        },
+        {
+          "name": "call_deepseek",
+          "line": 223,
+          "isDefault": false
+        },
+        {
+          "name": "call_zhipu",
+          "line": 235,
+          "isDefault": false
+        },
+        {
+          "name": "call_minimax_via_openrouter",
+          "line": 247,
+          "isDefault": false
+        },
+        {
+          "name": "_retry_call",
+          "line": 262,
+          "isDefault": false
+        },
+        {
+          "name": "build_sample",
+          "line": 306,
+          "isDefault": false
+        },
+        {
+          "name": "enrich_sample_with_locomo",
+          "line": 351,
+          "isDefault": false
+        },
+        {
+          "name": "run_provider",
+          "line": 393,
+          "isDefault": false
+        },
+        {
+          "name": "write_jsonl",
+          "line": 428,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 435,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ts",
+          "callee": "datetime.now(timezone.utc).isoformat",
+          "lineNumber": 112
+        },
+        {
+          "caller": "ts",
+          "callee": "datetime.now",
+          "lineNumber": 112
+        },
+        {
+          "caller": "logmsg",
+          "callee": "print",
+          "lineNumber": 116
+        },
+        {
+          "caller": "logmsg",
+          "callee": "ts",
+          "lineNumber": 116
+        },
+        {
+          "caller": "load_env",
+          "callee": "Path",
+          "lineNumber": 122
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.exists",
+          "lineNumber": 124
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.read_text(encoding=\"utf-8\").splitlines",
+          "lineNumber": 126
+        },
+        {
+          "caller": "load_env",
+          "callee": "env_path.read_text",
+          "lineNumber": 126
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.strip",
+          "lineNumber": 127
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.startswith",
+          "lineNumber": 128
+        },
+        {
+          "caller": "load_env",
+          "callee": "line.partition",
+          "lineNumber": 132
+        },
+        {
+          "caller": "load_env",
+          "callee": "k.strip",
+          "lineNumber": 133
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip().strip('\"').strip",
+          "lineNumber": 133
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip().strip",
+          "lineNumber": 133
+        },
+        {
+          "caller": "load_env",
+          "callee": "v.strip",
+          "lineNumber": 133
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "raw.strip",
+          "lineNumber": 143
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.startswith",
+          "lineNumber": 145
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "re.match",
+          "lineNumber": 146
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "m.group(1).strip",
+          "lineNumber": 148
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "m.group",
+          "lineNumber": 148
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "json.loads",
+          "lineNumber": 151
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.find",
+          "lineNumber": 155
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "trimmed.rfind",
+          "lineNumber": 156
+        },
+        {
+          "caller": "extract_json_body",
+          "callee": "json.loads",
+          "lineNumber": 159
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "extract_json_body",
+          "lineNumber": 166
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "isinstance",
+          "lineNumber": 167
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 169
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 170
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "body.get",
+          "lineNumber": 171
+        },
+        {
+          "caller": "parse_verdict",
+          "callee": "isinstance",
+          "lineNumber": 176
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "urllib.request.Request",
+          "lineNumber": 182
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.dumps(body).encode",
+          "lineNumber": 184
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.dumps",
+          "lineNumber": 184
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "urllib.request.urlopen",
+          "lineNumber": 189
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "resp.read().decode",
+          "lineNumber": 190
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "resp.read",
+          "lineNumber": 190
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "json.loads",
+          "lineNumber": 192
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "e.read().decode",
+          "lineNumber": 197
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "e.read",
+          "lineNumber": 197
+        },
+        {
+          "caller": "http_post_json",
+          "callee": "type",
+          "lineNumber": 202
+        },
+        {
+          "caller": "call_kimi",
+          "callee": "_retry_call",
+          "lineNumber": 220
+        },
+        {
+          "caller": "call_deepseek",
+          "callee": "_retry_call",
+          "lineNumber": 232
+        },
+        {
+          "caller": "call_zhipu",
+          "callee": "_retry_call",
+          "lineNumber": 244
+        },
+        {
+          "caller": "call_minimax_via_openrouter",
+          "callee": "_retry_call",
+          "lineNumber": 259
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.time",
+          "lineNumber": 265
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "range",
+          "lineNumber": 268
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "http_post_json",
+          "lineNumber": 269
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "isinstance",
+          "lineNumber": 270
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "resp.get",
+          "lineNumber": 271
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "choices[0].get",
+          "lineNumber": 273
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "msg.get",
+          "lineNumber": 274
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "msg.get",
+          "lineNumber": 274
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "resp.get",
+          "lineNumber": 275
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "int",
+          "lineNumber": 283
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.time",
+          "lineNumber": 283
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "usage.get",
+          "lineNumber": 284
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "usage.get",
+          "lineNumber": 285
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "str",
+          "lineNumber": 287
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.sleep",
+          "lineNumber": 290
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "int",
+          "lineNumber": 298
+        },
+        {
+          "caller": "_retry_call",
+          "callee": "time.time",
+          "lineNumber": 298
+        },
+        {
+          "caller": "build_sample",
+          "callee": "CALIBRATION_SRC.open",
+          "lineNumber": 311
+        },
+        {
+          "caller": "build_sample",
+          "callee": "line.strip",
+          "lineNumber": 313
+        },
+        {
+          "caller": "build_sample",
+          "callee": "json.loads",
+          "lineNumber": 317
+        },
+        {
+          "caller": "build_sample",
+          "callee": "r.get",
+          "lineNumber": 320
+        },
+        {
+          "caller": "build_sample",
+          "callee": "len",
+          "lineNumber": 323
+        },
+        {
+          "caller": "build_sample",
+          "callee": "r.get",
+          "lineNumber": 326
+        },
+        {
+          "caller": "build_sample",
+          "callee": "next",
+          "lineNumber": 327
+        },
+        {
+          "caller": "build_sample",
+          "callee": "j.get(\"model\", \"\").lower",
+          "lineNumber": 327
+        },
+        {
+          "caller": "build_sample",
+          "callee": "j.get",
+          "lineNumber": 327
+        },
+        {
+          "caller": "build_sample",
+          "callee": "next",
+          "lineNumber": 328
+        },
+        {
+          "caller": "build_sample",
+          "callee": "j.get(\"model\", \"\").lower",
+          "lineNumber": 328
+        },
+        {
+          "caller": "build_sample",
+          "callee": "j.get",
+          "lineNumber": 328
+        },
+        {
+          "caller": "build_sample",
+          "callee": "per_cell_rows[cell].append",
+          "lineNumber": 331
+        },
+        {
+          "caller": "build_sample",
+          "callee": "r.get",
+          "lineNumber": 332
+        },
+        {
+          "caller": "build_sample",
+          "callee": "r.get",
+          "lineNumber": 334
+        },
+        {
+          "caller": "build_sample",
+          "callee": "opus.get",
+          "lineNumber": 339
+        },
+        {
+          "caller": "build_sample",
+          "callee": "opus.get",
+          "lineNumber": 340
+        },
+        {
+          "caller": "build_sample",
+          "callee": "gpt.get",
+          "lineNumber": 341
+        },
+        {
+          "caller": "build_sample",
+          "callee": "gpt.get",
+          "lineNumber": 342
+        },
+        {
+          "caller": "build_sample",
+          "callee": "r.get",
+          "lineNumber": 343
+        },
+        {
+          "caller": "build_sample",
+          "callee": "sample.extend",
+          "lineNumber": 347
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "Path",
+          "lineNumber": 354
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "locomo_path.open",
+          "lineNumber": 356
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "line.strip",
+          "lineNumber": 358
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "json.loads",
+          "lineNumber": 362
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "r.get",
+          "lineNumber": 365
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "by_id.get",
+          "lineNumber": 369
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "enriched.append",
+          "lineNumber": 374
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "src.get",
+          "lineNumber": 376
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "src.get",
+          "lineNumber": 377
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "src.get",
+          "lineNumber": 377
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "src.get",
+          "lineNumber": 378
+        },
+        {
+          "caller": "enrich_sample_with_locomo",
+          "callee": "enriched.append",
+          "lineNumber": 379
+        },
+        {
+          "caller": "run_provider",
+          "callee": "logmsg",
+          "lineNumber": 394
+        },
+        {
+          "caller": "run_provider",
+          "callee": "len",
+          "lineNumber": 394
+        },
+        {
+          "caller": "run_provider",
+          "callee": "enumerate",
+          "lineNumber": 396
+        },
+        {
+          "caller": "run_provider",
+          "callee": "JUDGE_PROMPT_TEMPLATE.format",
+          "lineNumber": 397
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 398
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 399
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 400
+        },
+        {
+          "caller": "run_provider",
+          "callee": "s.get",
+          "lineNumber": 401
+        },
+        {
+          "caller": "run_provider",
+          "callee": "call_fn",
+          "lineNumber": 403
+        },
+        {
+          "caller": "run_provider",
+          "callee": "parse_verdict",
+          "lineNumber": 404
+        },
+        {
+          "caller": "run_provider",
+          "callee": "resp.get",
+          "lineNumber": 412
+        },
+        {
+          "caller": "run_provider",
+          "callee": "resp.get",
+          "lineNumber": 415
+        },
+        {
+          "caller": "run_provider",
+          "callee": "resp.get",
+          "lineNumber": 416
+        },
+        {
+          "caller": "run_provider",
+          "callee": "out.append",
+          "lineNumber": 422
+        },
+        {
+          "caller": "run_provider",
+          "callee": "logmsg",
+          "lineNumber": 423
+        },
+        {
+          "caller": "run_provider",
+          "callee": "len",
+          "lineNumber": 423
+        },
+        {
+          "caller": "run_provider",
+          "callee": "logmsg",
+          "lineNumber": 424
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "path.parent.mkdir",
+          "lineNumber": 429
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "path.open",
+          "lineNumber": 430
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "f.write",
+          "lineNumber": 432
+        },
+        {
+          "caller": "write_jsonl",
+          "callee": "json.dumps",
+          "lineNumber": 432
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 436
+        },
+        {
+          "caller": "main",
+          "callee": "load_env",
+          "lineNumber": 437
+        },
+        {
+          "caller": "main",
+          "callee": "env.get",
+          "lineNumber": 439
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 441
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 444
+        },
+        {
+          "caller": "main",
+          "callee": "build_sample",
+          "lineNumber": 445
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 446
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 447
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 447
+        },
+        {
+          "caller": "main",
+          "callee": "enrich_sample_with_locomo",
+          "lineNumber": 448
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 449
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 449
+        },
+        {
+          "caller": "main",
+          "callee": "s.get",
+          "lineNumber": 449
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 450
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 450
+        },
+        {
+          "caller": "main",
+          "callee": "write_jsonl",
+          "lineNumber": 451
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 453
+        },
+        {
+          "caller": "main",
+          "callee": "ThreadPoolExecutor",
+          "lineNumber": 455
+        },
+        {
+          "caller": "main",
+          "callee": "pool.submit",
+          "lineNumber": 457
+        },
+        {
+          "caller": "main",
+          "callee": "as_completed",
+          "lineNumber": 460
+        },
+        {
+          "caller": "main",
+          "callee": "fut.result",
+          "lineNumber": 463
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 466
+        },
+        {
+          "caller": "main",
+          "callee": "type",
+          "lineNumber": 466
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 469
+        },
+        {
+          "caller": "main",
+          "callee": "provider_rows.items",
+          "lineNumber": 470
+        },
+        {
+          "caller": "main",
+          "callee": "write_jsonl",
+          "lineNumber": 471
+        },
+        {
+          "caller": "main",
+          "callee": "sum",
+          "lineNumber": 472
+        },
+        {
+          "caller": "main",
+          "callee": "r.get",
+          "lineNumber": 472
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 473
+        },
+        {
+          "caller": "main",
+          "callee": "len",
+          "lineNumber": 473
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 475
+        },
+        {
+          "caller": "main",
+          "callee": "logmsg",
+          "lineNumber": 476
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 16,
+        "functionCount": 16,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/sample-instances.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/split-cases-sample.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/zhipu-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 20,
+      "nonEmptyLines": 20,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/zhipu-split-responses.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 7,
+      "nonEmptyLines": 7,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/vertex-batch-eligibility/eligibility-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 32,
+      "nonEmptyLines": 23,
+      "sections": [
+        {
+          "heading": "Vertex AI Batch Eligibility Probe — gemini-3.1-pro-preview",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verdict: **INFEASIBLE**",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Control proof (plumbing OK)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "SDK versions (audit)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Consequence",
+          "level": 2,
+          "line": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

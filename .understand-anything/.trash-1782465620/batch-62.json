@@ -1,0 +1,441 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/server/src/stripe/checkout.ts",
+      "type": "file",
+      "name": "checkout.ts",
+      "filePath": "packages/server/src/stripe/checkout.ts",
+      "summary": "Fastify route plugin registering POST /stripe/checkout that creates a Stripe checkout session for a given tier, resolving the correct price ID and returning the session URL.",
+      "tags": ["api-handler", "billing", "stripe", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/stripe/checkout.ts:checkoutRoutes",
+      "type": "function",
+      "name": "checkoutRoutes",
+      "filePath": "packages/server/src/stripe/checkout.ts",
+      "lineRange": [13, 57],
+      "summary": "Fastify plugin that registers the POST /checkout route: validates the requested tier, maps it to a Stripe price ID, creates a checkout session, and returns the session URL.",
+      "tags": ["api-handler", "billing", "stripe"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/stripe/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/server/src/stripe/index.ts",
+      "summary": "Central Stripe integration module that lazily loads the Stripe SDK, resolves price-to-tier and tier-to-price mappings from environment variables, and aggregates all Stripe route sub-plugins (checkout, webhook, portal, sync) under a single Fastify plugin.",
+      "tags": ["service", "billing", "stripe", "barrel", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "function",
+      "name": "getStripe",
+      "filePath": "packages/server/src/stripe/index.ts",
+      "lineRange": [25, 43],
+      "summary": "Lazily initializes and returns the Stripe SDK singleton using the STRIPE_SECRET_KEY environment variable, returning null when the key is absent so callers can respond with 503.",
+      "tags": ["service", "billing", "stripe", "singleton"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/server/src/stripe/index.ts:tierFromPriceId",
+      "type": "function",
+      "name": "tierFromPriceId",
+      "filePath": "packages/server/src/stripe/index.ts",
+      "lineRange": [71, 87],
+      "summary": "Resolves a Stripe price ID to a Waggle tier name (pro or teams) by reading PRO and TEAMS price env vars and checking membership, returning null for unrecognized IDs.",
+      "tags": ["billing", "stripe", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/server/src/stripe/index.ts:priceIdForTier",
+      "type": "function",
+      "name": "priceIdForTier",
+      "filePath": "packages/server/src/stripe/index.ts",
+      "lineRange": [91, 113],
+      "summary": "Maps a tier name and billing period (monthly/annual) to the corresponding Stripe price ID from environment variables, supporting the full pro/teams monthly/annual matrix plus legacy single-var fallbacks.",
+      "tags": ["billing", "stripe", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/stripe/index.ts:stripeRoutes",
+      "type": "function",
+      "name": "stripeRoutes",
+      "filePath": "packages/server/src/stripe/index.ts",
+      "lineRange": [131, 146],
+      "summary": "Top-level Fastify plugin that registers the webhook sub-scope (raw body parser) and then registers checkout, portal, and sync route plugins under the Stripe route namespace.",
+      "tags": ["api-handler", "billing", "stripe"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/stripe/portal.ts",
+      "type": "file",
+      "name": "portal.ts",
+      "filePath": "packages/server/src/stripe/portal.ts",
+      "summary": "Fastify route plugin for POST /stripe/portal that creates a Stripe Billing Portal session, requiring the user to hold a PRO or higher tier and have a stored Stripe customer ID.",
+      "tags": ["api-handler", "billing", "stripe", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/stripe/portal.ts:portalRoutes",
+      "type": "function",
+      "name": "portalRoutes",
+      "filePath": "packages/server/src/stripe/portal.ts",
+      "lineRange": [14, 51],
+      "summary": "Fastify plugin that registers the POST /portal route: enforces a PRO-tier preValidation hook, reads the customer ID from the workspace config file, and creates a Stripe Billing Portal session returning its URL.",
+      "tags": ["api-handler", "billing", "stripe"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/stripe/sync.ts",
+      "type": "file",
+      "name": "sync.ts",
+      "filePath": "packages/server/src/stripe/sync.ts",
+      "summary": "Fastify route plugin for POST /stripe/sync that retrieves a completed Stripe checkout session by ID, resolves the purchased tier, and writes it to the local workspace config file.",
+      "tags": ["api-handler", "billing", "stripe", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/stripe/sync.ts:syncRoutes",
+      "type": "function",
+      "name": "syncRoutes",
+      "filePath": "packages/server/src/stripe/sync.ts",
+      "lineRange": [18, 90],
+      "summary": "Fastify plugin that registers the POST /sync route: retrieves and validates a Stripe checkout session, maps the price to a tier, and calls updateUserTier to persist the subscription change locally.",
+      "tags": ["api-handler", "billing", "stripe"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/stripe/webhook.ts",
+      "type": "file",
+      "name": "webhook.ts",
+      "filePath": "packages/server/src/stripe/webhook.ts",
+      "summary": "Stripe webhook handler that verifies event signatures, deduplicates processed events via an idempotency file, and handles checkout.session.completed, customer.subscription.updated, and customer.subscription.deleted to update local tier state.",
+      "tags": ["api-handler", "billing", "stripe", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/stripe/webhook.ts:updateUserTier",
+      "type": "function",
+      "name": "updateUserTier",
+      "filePath": "packages/server/src/stripe/webhook.ts",
+      "lineRange": [52, 62],
+      "summary": "Reads the workspace user config JSON, merges the new tier and Stripe customer ID, and atomically writes the updated config back to disk.",
+      "tags": ["billing", "stripe", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/server/src/stripe/webhook.ts:webhookRoutes",
+      "type": "function",
+      "name": "webhookRoutes",
+      "filePath": "packages/server/src/stripe/webhook.ts",
+      "lineRange": [64, 170],
+      "summary": "Fastify plugin that installs a raw-body content-type parser, verifies Stripe webhook signatures, deduplicates events via an idempotency store, and dispatches checkout.session.completed / subscription.updated / subscription.deleted events to updateUserTier.",
+      "tags": ["api-handler", "billing", "stripe", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/tests/stripe/checkout.test.ts",
+      "type": "file",
+      "name": "checkout.test.ts",
+      "filePath": "packages/server/tests/stripe/checkout.test.ts",
+      "summary": "Vitest test suite for checkoutRoutes covering successful session creation, Stripe unavailability (503), missing/invalid tier parameters (400), and upstream Stripe API failures (502).",
+      "tags": ["test", "billing", "stripe", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/tests/stripe/status.test.ts",
+      "type": "file",
+      "name": "status.test.ts",
+      "filePath": "packages/server/tests/stripe/status.test.ts",
+      "summary": "Minimal Vitest test verifying the Stripe status route returns the correct availability flag based on whether the STRIPE_SECRET_KEY environment variable is set.",
+      "tags": ["test", "billing", "stripe"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/stripe/webhook.test.ts",
+      "type": "file",
+      "name": "webhook.test.ts",
+      "filePath": "packages/server/tests/stripe/webhook.test.ts",
+      "summary": "Comprehensive Vitest test suite for webhookRoutes covering signature verification, event deduplication, and tier updates for all three supported Stripe event types across annual and monthly price variants.",
+      "tags": ["test", "billing", "stripe", "event-handler"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/server/src/stripe/checkout.ts",
+      "target": "function:packages/server/src/stripe/checkout.ts:checkoutRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/checkout.ts",
+      "target": "function:packages/server/src/stripe/checkout.ts:checkoutRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/checkout.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/server/src/stripe/checkout.ts:checkoutRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/server/src/stripe/checkout.ts:checkoutRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:priceIdForTier",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:tierFromPriceId",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:tierFromPriceId",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:priceIdForTier",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:priceIdForTier",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:stripeRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "function:packages/server/src/stripe/index.ts:stripeRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/portal.ts",
+      "target": "function:packages/server/src/stripe/portal.ts:portalRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/portal.ts",
+      "target": "function:packages/server/src/stripe/portal.ts:portalRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/portal.ts",
+      "target": "file:packages/server/src/middleware/assert-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/stripe/portal.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/server/src/stripe/portal.ts:portalRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/sync.ts",
+      "target": "function:packages/server/src/stripe/sync.ts:syncRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/sync.ts",
+      "target": "function:packages/server/src/stripe/sync.ts:syncRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/sync.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/stripe/sync.ts",
+      "target": "file:packages/server/src/stripe/webhook.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/server/src/stripe/sync.ts:syncRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/server/src/stripe/sync.ts:syncRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:tierFromPriceId",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/server/src/stripe/sync.ts:syncRoutes",
+      "target": "function:packages/server/src/stripe/webhook.ts:updateUserTier",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/webhook.ts",
+      "target": "function:packages/server/src/stripe/webhook.ts:updateUserTier",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/webhook.ts",
+      "target": "function:packages/server/src/stripe/webhook.ts:updateUserTier",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/webhook.ts",
+      "target": "function:packages/server/src/stripe/webhook.ts:webhookRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/stripe/webhook.ts",
+      "target": "function:packages/server/src/stripe/webhook.ts:webhookRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/stripe/webhook.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "function:packages/server/src/stripe/webhook.ts:webhookRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:getStripe",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/server/src/stripe/webhook.ts:webhookRoutes",
+      "target": "function:packages/server/src/stripe/index.ts:tierFromPriceId",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/tests/stripe/checkout.test.ts",
+      "target": "file:packages/server/src/stripe/checkout.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/stripe/checkout.ts",
+      "target": "file:packages/server/tests/stripe/checkout.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/tests/stripe/status.test.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/stripe/index.ts",
+      "target": "file:packages/server/tests/stripe/status.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/server/tests/stripe/webhook.test.ts",
+      "target": "file:packages/server/src/stripe/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/stripe/webhook.test.ts",
+      "target": "file:packages/server/src/stripe/webhook.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/stripe/webhook.ts",
+      "target": "file:packages/server/tests/stripe/webhook.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

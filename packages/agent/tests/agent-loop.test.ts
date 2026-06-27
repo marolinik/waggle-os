@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { runAgentLoop, type AgentLoopConfig, type PluginToolProvider } from '../src/agent-loop.js';
 import type { ToolDefinition } from '../src/tools.js';
 import { CapabilityRouter } from '../src/capability-router.js';
+import { HookRegistry } from '../src/hooks.js';
 import Database from 'better-sqlite3';
 
 /**
@@ -74,6 +75,22 @@ describe('runAgentLoop', () => {
     expect(body.messages[1]).toEqual({ role: 'user', content: 'Hello' });
   });
 
+  it('retries once when the model emits raw tool-call markup as text', async () => {
+    const fetch = mockFetch([
+      {
+        content: 'Let me check.\n[TOOL_CALL]\n{tool => "get_identity", args => {}}\n[/TOOL_CALL]',
+      },
+      { content: 'Direct answer without fake tool markup.' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({ fetch }));
+
+    expect(result.content).toBe('Direct answer without fake tool markup.');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    expect(secondBody.messages.at(-1).content).toContain('Do not output tool-call tags');
+  });
+
   it('executes tool calls and loops until final response', async () => {
     const echoTool: ToolDefinition = {
       name: 'echo',
@@ -118,6 +135,74 @@ describe('runAgentLoop', () => {
     );
     expect(toolResultMsg).toBeDefined();
     expect(toolResultMsg.content).toBe('Echo: hi');
+  });
+
+  it('keeps the next model request valid after malformed tool-call arguments', async () => {
+    const echoTool: ToolDefinition = {
+      name: 'echo',
+      description: 'Echoes input',
+      parameters: {
+        type: 'object',
+        properties: { text: { type: 'string' } },
+        required: ['text'],
+      },
+      execute: vi.fn(async (args) => `Echo: ${args.text}`),
+    };
+
+    let callCount = 0;
+    const fetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'Let me check that.',
+                  tool_calls: [
+                    {
+                      id: 'call_bad',
+                      type: 'function',
+                      function: { name: 'echo', arguments: '{"text":' },
+                    },
+                  ],
+                },
+                finish_reason: 'tool_calls',
+              },
+            ],
+            usage: { prompt_tokens: 10, completion_tokens: 4 },
+          }),
+        } as unknown as Response;
+      }
+
+      const body = JSON.parse(String(init?.body ?? '{}'));
+      const assistantWithToolCall = body.messages.find(
+        (m: { role?: string; tool_calls?: Array<{ function: { arguments: string } }> }) => m.role === 'assistant' && m.tool_calls,
+      );
+      const toolResult = body.messages.find((m: { role?: string; content?: string }) => m.role === 'tool');
+      expect(assistantWithToolCall.tool_calls[0].function.arguments).toBe('{}');
+      expect(toolResult.content).toContain('Invalid arguments for echo');
+
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          choices: [
+            { message: { role: 'assistant', content: 'I can answer without that malformed tool call.' } },
+          ],
+          usage: { prompt_tokens: 12, completion_tokens: 7 },
+        }),
+      } as unknown as Response;
+    });
+
+    const result = await runAgentLoop(makeConfig({ fetch, tools: [echoTool] }));
+
+    expect(result.content).toBe('I can answer without that malformed tool call.');
+    expect(echoTool.execute).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('calls onToken for final content', async () => {
@@ -216,6 +301,31 @@ describe('runAgentLoop', () => {
     // Should contain the sub-agent researcher route (keyword match on "research")
     expect(toolResultMsg.content).toContain('subagent');
     expect(toolResultMsg.content).toContain('researcher');
+  });
+
+  it('does not run approval hooks for unavailable tool calls', async () => {
+    const hooks = new HookRegistry();
+    const preTool = vi.fn();
+    hooks.on('pre:tool', preTool);
+    const fetch = mockFetch([
+      {
+        content: null,
+        tool_calls: [
+          { id: 'call_hidden', function: { name: 'bash', arguments: '{"command":"pwd"}' } },
+        ],
+      },
+      { content: 'I answered without the unavailable tool.' },
+    ]);
+
+    const result = await runAgentLoop(makeConfig({ fetch, hooks, tools: [] }));
+
+    expect(result.content).toBe('I answered without the unavailable tool.');
+    expect(preTool).not.toHaveBeenCalled();
+    const secondBody = JSON.parse(fetch.mock.calls[1][1].body);
+    const toolResultMsg = secondBody.messages.find(
+      (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_hidden'
+    );
+    expect(toolResultMsg.content).toContain('Unknown tool "bash"');
   });
 
   it('merges plugin tools into the agent toolset via pluginTools provider', async () => {
@@ -697,22 +807,17 @@ describe('Agent error paths (PRQ-045)', () => {
     expect(fetch).toHaveBeenCalledTimes(3);
   });
 
-  it('handles 200 response with null content and no tool calls', async () => {
+  it('rejects 200 responses with no assistant content and no tool calls', async () => {
     const fetch = mockFetch([
       {
         content: null,
-        // No tool_calls — this is an edge case where the LLM returns nothing
+        // No tool_calls — a model/proxy returned a syntactically successful
+        // response that cannot answer the user.
         usage: { prompt_tokens: 10, completion_tokens: 0 },
       },
     ]);
 
-    const result = await runAgentLoop(makeConfig({ fetch }));
-
-    // Should return empty string content (null coalesces to '')
-    expect(result.content).toBe('');
-    expect(result.toolsUsed).toEqual([]);
-    expect(result.usage.inputTokens).toBe(10);
-    expect(result.usage.outputTokens).toBe(0);
+    await expect(runAgentLoop(makeConfig({ fetch }))).rejects.toThrow(/empty assistant response/i);
   });
 });
 

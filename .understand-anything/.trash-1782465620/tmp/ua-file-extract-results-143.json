@@ -1,0 +1,664 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 7,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/01-stripe-backend.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 116,
+      "nonEmptyLines": 81,
+      "sections": [
+        {
+          "heading": "PR7 Recon · 01 — Stripe / Billing BACKEND state",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. The two-stack split (read this first)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Stripe backend inventory (local sidecar — the PR7 surface)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Webhook DOES flip tiers (REAL)",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "2. Price wiring / env contract (REAL, documented)",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "3. Per-state verdict (screen 14 · Billing)",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "4. Auth context for screen 13 (and what \"Manage\" identity rests on)",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "5. FABRICATION RISKS — must be gated off, never invented",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "6. Custom card form vs hosted — PCI / scope implication (FLAG)",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "7. One-line summary per question asked",
+          "level": 2,
+          "line": 108
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/02-auth-session.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 129,
+      "nonEmptyLines": 91,
+      "sections": [
+        {
+          "heading": "PR7 Recon · 02 — Current auth / session / identity model",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR — the architecture tension, stated plainly",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. How the app authenticates TODAY (no account)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "1.1 The token is a per-process secret, minted at sidecar boot — not a credential",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "1.2 Server enforcement = \"is this the current process's token?\", nothing about identity",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "1.3 The client side: attach token, refresh on 401, never a login",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "2. What currently consumes \"who is the user\"",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "3. The Clerk substrate that DOES exist (cloud/team server — not apps/web)",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "4. Existing UI surfaces (what's there vs. what PR7 must build)",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "5. Billing substrate — already REAL end-to-end (screen 14 is mostly a themed re-skin)",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "6. Fabrication risks for PR7 (must gate off — never invent)",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "7. REAL / DERIVABLE / MUST-BUILD / EXTERNAL-DEP summary",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "8. Open decisions PR7 must resolve (carry to the build plan)",
+          "level": 2,
+          "line": 124
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/03-screen-auth-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 283,
+      "nonEmptyLines": 234,
+      "sections": [
+        {
+          "heading": "PR7 Recon · Screen 13 — Auth (Clerk, themed) · DESIGN spec",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. The headline (read this before building)",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "1. Exact layout (split: brand-panel left + form right)",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "2. Every state — verbatim copy + behavior",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "2a. Sign in (`data-view=\"signin\"`, `auth.html:106-117`) — default",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "2b. Sign up (`data-view=\"signup\"`, `:120-132`) — carries the local-first note",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "2c. Verify — 6-box OTP (`data-view=\"verify\"`, `:135-140`)",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "2d. SSO / enterprise (`data-view=\"sso\"`, `:143-150`)",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "2e. Brand-panel pitch + trust copy (verbatim, `:93-100`)",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "3. Warm tokens + primitives used (for faithful build)",
+          "level": 2,
+          "line": 127
+        },
+        {
+          "heading": "4. Clerk's themeable components vs custom",
+          "level": 2,
+          "line": 159
+        },
+        {
+          "heading": "5. Honesty contract — where Auth could fabricate (MUST be gated off)",
+          "level": 2,
+          "line": 185
+        },
+        {
+          "heading": "6. Decisions a build agent must get answered first",
+          "level": 2,
+          "line": 220
+        },
+        {
+          "heading": "7. REAL vs DERIVABLE vs MUST-BUILD vs EXTERNAL-DEP (screen 13)",
+          "level": 2,
+          "line": 252
+        },
+        {
+          "heading": "8. One-paragraph build brief (for the implementer)",
+          "level": 2,
+          "line": 268
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/04-screen-billing-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 271,
+      "nonEmptyLines": 228,
+      "sections": [
+        {
+          "heading": "PR7 Recon — Screen 14: Billing (Stripe) DESIGN spec",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR for the PR7 builder",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "1. State 1 — PLANS (`billing.html:127–159`) — **REAL, ship it**",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Verbatim copy",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "The 3 cards (verbatim)",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "REAL backing",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "2. State 2 — CHECKOUT (`billing.html:161–185`) — **DO NOT hand-build the card form**",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "Verbatim copy (left \"Payment details\" panel, `:163–175`)",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Verbatim copy (right \"Order summary\" panel, `:176–184`)",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "Reality check — THIS IS THE CORE TENSION",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "3. State 3 — SUCCESS (`billing.html:187–199`) — **receipt = FABRICATED, gate it**",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "Verbatim copy",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "Reality check",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "4. State 4 — MANAGE (`billing.html:201–218`) — **invoice list + payment method = FABRICATED; use Customer Portal**",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "Verbatim copy",
+          "level": 3,
+          "line": 166
+        },
+        {
+          "heading": "Reality check",
+          "level": 3,
+          "line": 182
+        },
+        {
+          "heading": "5. The custom-card-form-vs-Stripe-Checkout tension (explicit, per task)",
+          "level": 2,
+          "line": 204
+        },
+        {
+          "heading": "6. Fabrication-risk register (what PR7 could silently invent — gate OFF)",
+          "level": 2,
+          "line": 220
+        },
+        {
+          "heading": "7. REAL vs MUST-BUILD vs EXTERNAL-DEP (summary)",
+          "level": 2,
+          "line": 240
+        },
+        {
+          "heading": "8. Recommended PR7 shape for Billing (so the builder doesn't fabricate)",
+          "level": 2,
+          "line": 260
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/05-clerk-integration.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 251,
+      "nonEmptyLines": 205,
+      "sections": [
+        {
+          "heading": "PR7 Recon · 05 — Clerk Integration (themed, reconciled with local-first)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR verdict (the highest-uncertainty recon)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Stack verification (what `apps/web` actually is)",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "2. Clerk in the repo today (prior art — REAL)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "3. Local-first crux — why the desktop must stay accountless",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "4. ARCHITECTURE VERDICT — does Clerk fit \"account is optional\"?",
+          "level": 2,
+          "line": 95
+        },
+        {
+          "heading": "5. The minimal, correct THEMED integration (for Option b)",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "5.1 Package + env (EXTERNAL-DEP)",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "5.2 ClerkProvider placement",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "5.3 Appearance → warm CSS tokens (the themed part)",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "5.4 Prebuilt vs custom-flow components (what the design needs)",
+          "level": 3,
+          "line": 146
+        },
+        {
+          "heading": "6. Billing half of PR7 (screen 14) — mostly already REAL (brief note; not my topic)",
+          "level": 2,
+          "line": 165
+        },
+        {
+          "heading": "7. FABRICATION RISKS (must be gated off — honesty contract)",
+          "level": 2,
+          "line": 181
+        },
+        {
+          "heading": "8. What's REAL vs DERIVABLE vs MUST-BUILD vs EXTERNAL-DEP",
+          "level": 2,
+          "line": 207
+        },
+        {
+          "heading": "9. Decisions the founder must make before PR7 builds screen 13",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "10. Honesty log / discrepancies surfaced",
+          "level": 2,
+          "line": 240
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/06-routing-surfaces.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 320,
+      "nonEmptyLines": 267,
+      "sections": [
+        {
+          "heading": "PR7 Recon — 06 · Routing & Surfaces (Auth /auth + Billing /billing)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR (the two registration shapes)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. The route table today (`apps/web/src/App.tsx`)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "2. The PR6 route-wrapper pattern (to copy)",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "3. Command-catalog entries (`apps/web/src/lib/command-catalog.ts`)",
+          "level": 2,
+          "line": 80
+        },
+        {
+          "heading": "4. `/auth` — the pre-shell, full-screen registration (THE special case)",
+          "level": 2,
+          "line": 105
+        },
+        {
+          "heading": "Why it can't be an AppShell child",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "Recommended shape (sibling route, outside the shell)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Honesty gate (CRITICAL — auth is the #1 fabrication risk)",
+          "level": 3,
+          "line": 132
+        },
+        {
+          "heading": "5. `/billing` — reuse the EXISTING Settings \"Plan\" tab (do not rebuild from zero)",
+          "level": 2,
+          "line": 156
+        },
+        {
+          "heading": "What is already REAL (verified, fully wired)",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "What is a build GAP for the SCREENS §14 design (`SCREENS.md:282-295`)",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "Recommended registration for billing",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "BYO-vs-metered (BLOCKER — founder decision before billing ships)",
+          "level": 3,
+          "line": 196
+        },
+        {
+          "heading": "6. The breadcrumb / `matchNavRoute` label gap (must NOT repeat for /billing)",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "How the breadcrumb label is derived",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "The gap (this is the handoff \"P3 / PR6 ⌘K-only routes show a fuzzy fallback label\" note)",
+          "level": 3,
+          "line": 218
+        },
+        {
+          "heading": "Requirement for PR7",
+          "level": 3,
+          "line": 227
+        },
+        {
+          "heading": "Deep-link gap that BLOCKS the \"/settings?tab=billing\" approach (verified)",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "7. Existing upgrade entry points (where \"Upgrade\"/\"Manage plan\" link today)",
+          "level": 2,
+          "line": 255
+        },
+        {
+          "heading": "8. Fabrication risks for PR7 (gate-off candidates — HONESTY CONTRACT)",
+          "level": 2,
+          "line": 276
+        },
+        {
+          "heading": "9. File index (everything PR7 routing touches)",
+          "level": 2,
+          "line": 303
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 22
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/pr7-recon/07-byo-vs-metered.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 166,
+      "nonEmptyLines": 115,
+      "sections": [
+        {
+          "heading": "PR7 Recon — DESIGN_POV #4: BYO-key vs Waggle-metered (the inference-cost decision)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR (the de-facto commitment)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "1. Evidence — what PR5 actually shipped for BYO-key (D1)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "2. Evidence — Stripe tiers are flat SUBSCRIPTION, not metered",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "3. Evidence — the current Usage/cost surface (what's shown today)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "4. Evidence — Auth (Clerk) status: NOT in the desktop app; FULLY built in `apps/www`",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "5. The screen-14 fabrication risks (honesty contract carried from PR3–PR6)",
+          "level": 2,
+          "line": 90
+        },
+        {
+          "heading": "6. The decision, made concrete",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "Option A — Ratify BYO-key + flat subscription (RECOMMENDED, de-facto current state)",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "Option B — Pivot to Waggle-metered (MAJOR ARC, strategic reversal)",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "Recommendation",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "7. Open sub-decisions for the founder (surfaced, not decided)",
+          "level": 2,
+          "line": 143
+        },
+        {
+          "heading": "Appendix — files read for this recon (all `file:line` claims above traceable to these)",
+          "level": 2,
+          "line": 151
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    }
+  ]
+}

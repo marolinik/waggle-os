@@ -1,0 +1,1777 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 20,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/briefs/2026-04-19-engineering-audit-pre-benchmark.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 225,
+      "nonEmptyLines": 132,
+      "sections": [
+        {
+          "heading": "Engineering Audit — Pre-Benchmark",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Bottom line first",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Audit dimensions and findings",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "1. Architecture coherence",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "2. Tech debt density",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "3. Hot path code review (agent loop + memory retrieval + prompt assembler + orchestrator + harvest)",
+          "level": 3,
+          "line": 50
+        },
+        {
+          "heading": "4. Testing strategy gap",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "5. Simplifikacija opportunities",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "6. Dependency hygiene",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "7. Observability gap",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "8. vLLM 0.19.0+ Qwen3.6-35B-A3B compatibility",
+          "level": 3,
+          "line": 128
+        },
+        {
+          "heading": "Three-bucket triage",
+          "level": 2,
+          "line": 146
+        },
+        {
+          "heading": "Must fix before benchmark (Track 1 H-XX additions)",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Should fix during UI/UX window (Track 3)",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Post-launch backlog (T+30 parking lot)",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "What this audit does not cover",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "Recommended sequencing back to Track 1 / Track 2",
+          "level": 2,
+          "line": 196
+        },
+        {
+          "heading": "Appendix: Verification source map",
+          "level": 2,
+          "line": 204
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-19-handoff-claude-code.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 92,
+      "nonEmptyLines": 55,
+      "sections": [
+        {
+          "heading": "Handoff za Claude Code — 2026-04-19",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Šta je odlučeno (LOCKED 2026-04-19)",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Konkretan rad — Track 1",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Phase A+B (prvi prioritet, ~6-8h)",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "Standing pool (posle Phase A+B, prema prioritetu)",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "Šta dolazi posle Polish (čekaj instrukcije)",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Engineering audit (PM agent radi paralelno)",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Track 2 (čekaj zelenu)",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Judge ensemble specifikacija",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "Track 3 (paralelno sa Track 2)",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "Launch copy anchor (za Track 2 output)",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Sledeći komunikacioni cycle",
+          "level": 2,
+          "line": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-19-launch-copy-variants.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 378,
+      "nonEmptyLines": 258,
+      "sections": [
+        {
+          "heading": "Waggle Launch Copy — Three Variants (A/B/C)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Kada se koja varijanta aktivira",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Zajednički messaging pillars (ne menjaju se ni jednoj varijanti)",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Varijanta A — Beats SOTA",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "A.1 Hero — landing page (apps/www)",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "A.2 Announcement opener (thread / post lead)",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "A.3 Proof points (for press-style post)",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "A.4 Key differentiators (copy-ready)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "A.5 Do / Don't for Variant A",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "Varijanta B — Matches + Trade-off",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "B.1 Hero — landing page",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "B.2 Announcement opener",
+          "level": 3,
+          "line": 135
+        },
+        {
+          "heading": "B.3 Proof points",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "B.4 Key differentiators",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "B.5 Do / Don't for Variant B",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "Varijanta C — Below / Category Redefinition",
+          "level": 2,
+          "line": 179
+        },
+        {
+          "heading": "C.1 Hero — landing page",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "C.2 Announcement opener",
+          "level": 3,
+          "line": 206
+        },
+        {
+          "heading": "C.3 Proof points",
+          "level": 3,
+          "line": 218
+        },
+        {
+          "heading": "C.4 Key differentiators",
+          "level": 3,
+          "line": 226
+        },
+        {
+          "heading": "C.5 Do / Don't for Variant C",
+          "level": 3,
+          "line": 236
+        },
+        {
+          "heading": "Diferencijalna matrica",
+          "level": 2,
+          "line": 252
+        },
+        {
+          "heading": "Tone calibration",
+          "level": 2,
+          "line": 266
+        },
+        {
+          "heading": "Asset deployment sequencing (posle odluke koju varijantu koristiti)",
+          "level": 2,
+          "line": 282
+        },
+        {
+          "heading": "Decision point: koji broj aktivira koju varijantu",
+          "level": 2,
+          "line": 298
+        },
+        {
+          "heading": "Next actions",
+          "level": 2,
+          "line": 315
+        },
+        {
+          "heading": "Appendix — Headline alternatives (longlist za svaku varijantu)",
+          "level": 2,
+          "line": 331
+        },
+        {
+          "heading": "Appendix — Tagline (ultra-short, for app splash, social avatar bio, conference one-liner)",
+          "level": 2,
+          "line": 359
+        },
+        {
+          "heading": "Appendix — Decision references",
+          "level": 2,
+          "line": 367
+        },
+        {
+          "heading": "Appendix — Komplementarni dokumenti",
+          "level": 2,
+          "line": 375
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 30
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-19-sota-benchmark-audit-readiness.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 192,
+      "nonEmptyLines": 108,
+      "sections": [
+        {
+          "heading": "SOTA Benchmark Audit-Readiness Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Zašto ovaj dokument postoji sada",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Sedam dimenzija audit-readiness-a",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "1. Reprodukabilnost na commit-nivou",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "2. Chain of custody za broj",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "3. Judge ensemble integritet",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "4. Dataset integritet i split policy",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "5. Metric definicije i sigurnosne margine",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "6. Methodological transparency i limitations section",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "7. Release gate — ko sme da pusti broj napolje",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "Pre-flight checklist za svaki Track 2 run",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "Reporting artefakti — šta mora da se proizvede",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "Interakcija sa engineering audit findings",
+          "level": 2,
+          "line": 151
+        },
+        {
+          "heading": "Sto se dešava ako broj ne pogodi target",
+          "level": 2,
+          "line": 163
+        },
+        {
+          "heading": "Bottom line",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "Appendix: Decision references",
+          "level": 2,
+          "line": 181
+        },
+        {
+          "heading": "Appendix: Dokumenti na koje se ovaj brief oslanja",
+          "level": 2,
+          "line": 188
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-19-sota-benchmark-pre-mortem.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 261,
+      "nonEmptyLines": 146,
+      "sections": [
+        {
+          "heading": "SOTA Benchmark Pre-Mortem",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Premisa retrospekcije",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Tigers — realni problemi, visok uticaj, verovatnoća srednja do visoka",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "T-01. Judge ensemble variance veća od naše headline margine",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "T-02. LoCoMo skor ulazi u noise band oko Mem0 91.6%",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "T-03. Qwen3.6-35B-A3B API nestabilnost mid-run",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "T-04. Cognify O(E²) wall-clock time skews benchmark",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "T-05. H-AUDIT-1 trace IDs nisu landed na vreme",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "T-06. Jedan od tri benchmark-a ispada značajno drugačije od ostala dva",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "T-07. Reprodukabilnost puca na external rerun-u",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "T-08. Peer reviewer otkrije metodološki diff naspram SOTA baseline-a",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "T-09. Track 1 slipping pushes Track 2 beyond launch window",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "Paper Tigers — glasni napadi koji nisu realno blokirajući",
+          "level": 2,
+          "line": 117
+        },
+        {
+          "heading": "PT-01. \"Isključili ste Anthropic modele iz judge ensemble-a, to je konflikt interesa\"",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "PT-02. \"vLLM self-hosting nije ready, vaš claim 'sovereign' je neispravan\"",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "PT-03. \"Compliance test suite ne postoji, EU AI Act claim je prazan\"",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "PT-04. \"Benchmarkujete protiv godinu dana starog Mem0 baseline-a\"",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "PT-05. \"Samo 200 LoCoMo primera, statistički ne-značajno\"",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "Elephants — neizgovoreni problemi koji se moraju adresirati",
+          "level": 2,
+          "line": 151
+        },
+        {
+          "heading": "E-01. LoCoMo dataset možda favorizuje naš bitemporal KG by design",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "E-02. Qwen3.6-35B-A3B može biti superseded pre ili ubrzo posle launch-a",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "E-03. Legal exposure oko dataset licenci i judge API terms",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "E-04. Inter-team quality bar mismatch",
+          "level": 3,
+          "line": 183
+        },
+        {
+          "heading": "Klasifikacija po launch-blocker statusu",
+          "level": 2,
+          "line": 193
+        },
+        {
+          "heading": "Launch-blocking (bez rešenja, launch ne ide)",
+          "level": 3,
+          "line": 195
+        },
+        {
+          "heading": "Fast-follow (launch ide ali fix u prvih 2 nedelje posle)",
+          "level": 3,
+          "line": 202
+        },
+        {
+          "heading": "Track (observe, ne aktivno lečimo)",
+          "level": 3,
+          "line": 208
+        },
+        {
+          "heading": "Decision rules summary",
+          "level": 2,
+          "line": 216
+        },
+        {
+          "heading": "Bottom line",
+          "level": 2,
+          "line": 240
+        },
+        {
+          "heading": "Appendix: Decision references",
+          "level": 2,
+          "line": 250
+        },
+        {
+          "heading": "Appendix: Komplementarni dokumenti",
+          "level": 2,
+          "line": 257
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 31
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-benchmark-scope-expansion-paired.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 122,
+      "nonEmptyLines": 81,
+      "sections": [
+        {
+          "heading": "Benchmark Scope Expansion — Paired Inference for H-42",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Predlog u jednoj rečenici",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Zašto ovo ima smisla",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Šta se konkretno radi",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Cost estimate",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Wall-clock i sequencing",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Rizici specifični za paired setup",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Decision potrebna od Marka",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "Ako je go — sledeći korak",
+          "level": 2,
+          "line": 113
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-cc-preflight-prep-tasks.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 184,
+      "nonEmptyLines": 128,
+      "sections": [
+        {
+          "heading": "CC Brief — Preflight Prep Mini-Sprint",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Read-first (sequential, in this order)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Task 1 — Stage 2 sample lock file",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Task 2 — Failure mode calibration set",
+          "level": 2,
+          "line": 60
+        },
+        {
+          "heading": "Task 3 — Verbose-fixed cell isolation unit test",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "Task 4 — Failure mode judge module (scaffold, not wired)",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "Exit gate",
+          "level": 2,
+          "line": 162
+        },
+        {
+          "heading": "Not in scope (explicit exclusions)",
+          "level": 2,
+          "line": 177
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-cc-sprint-7-tasks.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 426,
+      "nonEmptyLines": 317,
+      "sections": [
+        {
+          "heading": "Claude Code Sprint Brief — Bucket 1 Audit Close + Benchmark Prep",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Sprint pregled — 7 tasks",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Task 0 — Regression suite re-run",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Task 1 — L-20: FileIndexer transaction safety",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "Task 2 — M-08: Atomic cache write",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Task 3 — M-09: Port discovery + prompt injection defense",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Change A — Port discovery fix",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "Change B — Prompt sandbox",
+          "level": 3,
+          "line": 132
+        },
+        {
+          "heading": "Change C — Timeout",
+          "level": 3,
+          "line": 146
+        },
+        {
+          "heading": "Change D — Confidence gate",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "Change E — JSON regex",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "Task 4 — M-11: Real embedder u wiki compile",
+          "level": 2,
+          "line": 214
+        },
+        {
+          "heading": "Task 6 — H-AUDIT-1: per-turn trace ID implementation",
+          "level": 2,
+          "line": 249
+        },
+        {
+          "heading": "Task 7 — Four-cell ablation harness scaffold",
+          "level": 2,
+          "line": 295
+        },
+        {
+          "heading": "Harness structure",
+          "level": 3,
+          "line": 306
+        },
+        {
+          "heading": "CLI contract",
+          "level": 3,
+          "line": 334
+        },
+        {
+          "heading": "Per-instance log format (JSONL)",
+          "level": 3,
+          "line": 350
+        },
+        {
+          "heading": "Seed randomization",
+          "level": 3,
+          "line": 359
+        },
+        {
+          "heading": "Acceptance",
+          "level": 3,
+          "line": 363
+        },
+        {
+          "heading": "Out-of-scope za Task 7",
+          "level": 3,
+          "line": 371
+        },
+        {
+          "heading": "Exit gate za sprint",
+          "level": 2,
+          "line": 381
+        },
+        {
+          "heading": "Out-of-scope (ne raditi u ovom sprint-u)",
+          "level": 2,
+          "line": 394
+        },
+        {
+          "heading": "Reference",
+          "level": 2,
+          "line": 405
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-cc-sprint-9-tasks.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 278,
+      "nonEmptyLines": 176,
+      "sections": [
+        {
+          "heading": "CC Sprint 9 — Judge Wiring + Calibration Validation (Second-Pass)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context (ne preskakati)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Task 0 — Harvest timestamp preservation fix (Stage 0 pre-task, BLOCKING)",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Task 1 — JsonlRecord extension per taxonomy §9",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Task 2 — Judge wiring u runner.ts",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "Task 3 — aggregate.ts — failure-mode distribution rollup",
+          "level": 2,
+          "line": 132
+        },
+        {
+          "heading": "Task 4 — Calibration validation run (second-pass) — **PASS GATE TASK**",
+          "level": 2,
+          "line": 168
+        },
+        {
+          "heading": "Task 5 — Fleiss' kappa ensemble probe (opcionalno, ako PASS < perfect)",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "Exit gate za Sprint 9",
+          "level": 2,
+          "line": 217
+        },
+        {
+          "heading": "Pre-Stage-2 operativna stavka (nije Sprint 9 task, ali flag za Week 1)",
+          "level": 2,
+          "line": 234
+        },
+        {
+          "heading": "Path constraints (ratifikovano iz Sprint 8)",
+          "level": 2,
+          "line": 240
+        },
+        {
+          "heading": "Reference chain (zahtevano čitanje pre nego što počneš)",
+          "level": 2,
+          "line": 248
+        },
+        {
+          "heading": "Anti-patterns (eksplicitno ne raditi)",
+          "level": 2,
+          "line": 260
+        },
+        {
+          "heading": "Ako Stage 0 Dogfood padne tokom Sprint 9",
+          "level": 2,
+          "line": 270
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-cc-stage-0-dogfood-tasks.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 197,
+      "nonEmptyLines": 140,
+      "sections": [
+        {
+          "heading": "CC Brief — Stage 0 Dogfood (Preflight Gate, Stage 1 of 3)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Read-first (sequential)",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Marko-va priprema (blocking CC task 1)",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Task 1 — Harvest adapter inventory",
+          "level": 2,
+          "line": 70
+        },
+        {
+          "heading": "Task 2 — Harvest pipeline execution",
+          "level": 2,
+          "line": 85
+        },
+        {
+          "heading": "Task 3 — Query execution kroz full-stack cell",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "Task 4 — Report assembly i ping",
+          "level": 2,
+          "line": 136
+        },
+        {
+          "heading": "Exit gate",
+          "level": 2,
+          "line": 157
+        },
+        {
+          "heading": "Not in scope (explicit exclusions)",
+          "level": 2,
+          "line": 173
+        },
+        {
+          "heading": "Privacy guardrails (explicit)",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "Reference",
+          "level": 2,
+          "line": 191
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-claude-design-setup-submission.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 82,
+      "nonEmptyLines": 60,
+      "sections": [
+        {
+          "heading": "claude.ai/design — Waggle OS Design System setup",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Context",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Form Field 1 — Company blurb",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Form Field 2 — Any other notes (visual direction)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Form Field 3 — Asset uploads",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Control Gate before \"Continue to generation\"",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "Post-generation control gates (for reference)",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Decisions locked by this submission",
+          "level": 2,
+          "line": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-20-launch-copy-dual-axis-revision.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 202,
+      "nonEmptyLines": 136,
+      "sections": [
+        {
+          "heading": "Waggle Launch Copy — Dual-Axis Revision (Multiplier Framing)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Korekcija framing-a — šta sam propustio u prvom draftu",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Posledica za Track 2 benchmark scope",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Varijanta M — Multiplier (novi default)",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "M.1 Hero — landing page",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "M.2 Announcement opener",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "M.3 Proof points (for press-style post)",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "M.4 Key differentiators (copy-ready)",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "M.5 Do / Don't for Variant M",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Ažurirana decision matrix (paired benchmark)",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "Šta ostaje iz 2026-04-19 fajla",
+          "level": 2,
+          "line": 146
+        },
+        {
+          "heading": "Next actions",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "Appendix — Headline M pool (pick top 2 after Marko review)",
+          "level": 2,
+          "line": 172
+        },
+        {
+          "heading": "Appendix — Tagline M (ultra-short)",
+          "level": 2,
+          "line": 182
+        },
+        {
+          "heading": "Appendix — Decision references",
+          "level": 2,
+          "line": 190
+        },
+        {
+          "heading": "Appendix — Komplementarni dokumenti",
+          "level": 2,
+          "line": 197
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-21-cc-sprint-10-tasks.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 282,
+      "nonEmptyLines": 189,
+      "sections": [
+        {
+          "heading": "CC Sprint 10 — Task Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Šta se menja u odnosu na Sprint 9",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Vector 1 — Operativni queue (Sprint 9 §5.2 + §3.2, full-resolve)",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "Task 1.1 — Qwen3.6 thinking-mode stability matrix",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Task 1.2 — Sonnet route repair",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Task 1.3 — Sonnet calibration re-run posle Task 1.2",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "Task 1.4 — DashScope provisioning (paralelni track)",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "Task 1.5 — Harvest Claude artifacts adapter (hive-mind)",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "2. Vector 2 — Multi-vendor ensemble setup LOCKED",
+          "level": 2,
+          "line": 113
+        },
+        {
+          "heading": "Zašto NE Claude-only trio (rejection rationale u memoriji)",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "Task 2.1 — Tri-vendor API integracije",
+          "level": 3,
+          "line": 123
+        },
+        {
+          "heading": "Task 2.2 — Fleiss' kappa ensemble baseline",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "3. Vector 3 — Launch prep SPLIT (narrative-agnostic only)",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "4. Vector 4 — Harvest artifacts adapter",
+          "level": 2,
+          "line": 195
+        },
+        {
+          "heading": "5. Pre-registered LoCoMo acceptance thresholds (informativna sekcija, CC ne mora da ih implementira, ali mora da ih poštuje u agregator output-u)",
+          "level": 2,
+          "line": 201
+        },
+        {
+          "heading": "6. Sequencing i zavisnosti",
+          "level": 2,
+          "line": 215
+        },
+        {
+          "heading": "7. Cost ceiling i governance",
+          "level": 2,
+          "line": 231
+        },
+        {
+          "heading": "8. Reporting cadence",
+          "level": 2,
+          "line": 250
+        },
+        {
+          "heading": "9. Shta NE raditi u Sprint 10",
+          "level": 2,
+          "line": 259
+        },
+        {
+          "heading": "10. Sprint 10 close criteria",
+          "level": 2,
+          "line": 269
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-bee-writer-sleeping-regen-brief.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 110,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "Bee Writer + Sleeping Regen Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Why",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Style canon (unchanged from 2026-04-21 regen)",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Character brief — bee-writer-dark",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Character brief — bee-sleeping-dark",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Gen run spec",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "Deploy",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "Exit criteria pre claude.ai/design upload-a",
+          "level": 2,
+          "line": 90
+        },
+        {
+          "heading": "Links",
+          "level": 2,
+          "line": 101
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-brand-bee-personas-card-spec.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 138,
+      "nonEmptyLines": 100,
+      "sections": [
+        {
+          "heading": "Brand-Bee Personas Card — Scaffold Spec",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Purpose",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Layout",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "13 Persona Definitions (role title + one-line JTBD)",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "Accessibility",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Component contract (for Claude Code implementation)",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Deployment dependencies",
+          "level": 2,
+          "line": 110
+        },
+        {
+          "heading": "Exit criteria",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Related",
+          "level": 2,
+          "line": 129
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-cc-bee-regen-execution.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 148,
+      "nonEmptyLines": 109,
+      "sections": [
+        {
+          "heading": "CC Brief — Bee Regen Execution (writer + sleeping)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Kontekst (kratko)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Execution scope",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Gen run protokol",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Deploy gate (PM-authorized, not CC-autonomous)",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "Exit criteria (Task #24 CLOSE)",
+          "level": 2,
+          "line": 104
+        },
+        {
+          "heading": "Escalation triggers",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "Anti-pattern check",
+          "level": 2,
+          "line": 128
+        },
+        {
+          "heading": "Related",
+          "level": 2,
+          "line": 138
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-cc-c2-stage1-mikroeval-kickoff.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 109,
+      "nonEmptyLines": 75,
+      "sections": [
+        {
+          "heading": "CC-1 Brief — C2 Stage 1 Mikro-eval Kickoff Authorization",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Authorization",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "2. Pre-req: Docker / LiteLLM health-check",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "3. Invocation",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "4. Exit criteria",
+          "level": 2,
+          "line": 59
+        },
+        {
+          "heading": "5. Failure / abort criteria",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "6. What C2 does NOT need to do",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "7. After C2 PASS",
+          "level": 2,
+          "line": 88
+        },
+        {
+          "heading": "8. Sprint 11 close path after C2",
+          "level": 2,
+          "line": 93
+        },
+        {
+          "heading": "9. Related",
+          "level": 2,
+          "line": 97
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-cc-c3-stage2-mini-kickoff.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 172,
+      "nonEmptyLines": 129,
+      "sections": [
+        {
+          "heading": "CC-1 Brief — C3 Stage 2 Mini (4-cell) Kickoff Authorization",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Authorization",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "2. Pre-req: Docker / LiteLLM health-check",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "3. Manifest generation — step one of kickoff",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "4. Invocation",
+          "level": 2,
+          "line": 68
+        },
+        {
+          "heading": "5. Exit criteria",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "6. Abort criteria",
+          "level": 2,
+          "line": 125
+        },
+        {
+          "heading": "7. What C3 does NOT need",
+          "level": 2,
+          "line": 138
+        },
+        {
+          "heading": "8. After C3 PASS",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "9. Sprint 11 close path after C3",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "10. Related",
+          "level": 2,
+          "line": 158
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-cc-day2-am-kickoff.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 139,
+      "nonEmptyLines": 102,
+      "sections": [
+        {
+          "heading": "CC-1 — Day 2 AM Kickoff Brief",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Šta tražim",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Task A2 — reasoning_content capture (harness only)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Task B2 — Tie-break policy implementacija",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Task B3 — Opus 4.6 route audit",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "Day 2 AM execution rules",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "Reference (sve pročitati pre koda)",
+          "level": 2,
+          "line": 124
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/briefs/2026-04-22-cc-personas-card-component-parallel.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 221,
+      "nonEmptyLines": 164,
+      "sections": [
+        {
+          "heading": "CC-2 Brief — Personas Card Component (Parallel Terminal)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Critical boundary — CC-1 non-interference",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "Scope",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Authoritative source files (CC čita, ne menja)",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "Deliverables",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "1. Data source — `apps/www/src/data/personas.ts`",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "2. Component — `apps/www/src/components/BrandPersonasCard.tsx`",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "3. Preview route — `apps/www/src/app/design/personas/page.tsx`",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "4. Tests — `apps/www/__tests__/BrandPersonasCard.test.tsx` (ili equivalent repo convention)",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "5. Export hygiene",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Exit criteria",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "PM review gate",
+          "level": 2,
+          "line": 181
+        },
+        {
+          "heading": "Anti-pattern check",
+          "level": 2,
+          "line": 187
+        },
+        {
+          "heading": "Escalation triggers",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "Related",
+          "level": 2,
+          "line": 211
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    }
+  ]
+}

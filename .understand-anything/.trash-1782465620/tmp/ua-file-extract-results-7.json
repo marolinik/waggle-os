@@ -1,0 +1,2549 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 34,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "apps/web/src/components/NavLink.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 28,
+      "nonEmptyLines": 24,
+      "exports": [
+        {
+          "name": "NavLink",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/LauncherApp.test.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 105,
+      "nonEmptyLines": 95,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/LauncherApp.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 745,
+      "nonEmptyLines": 712,
+      "functions": [
+        {
+          "name": "LauncherApp",
+          "startLine": 98,
+          "endLine": 565,
+          "params": [
+            "{ activeWorkspaceId }"
+          ]
+        },
+        {
+          "name": "MemorySharingView",
+          "startLine": 639,
+          "endLine": 743,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 99
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 100
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 101
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 102
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 103
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 104
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 105
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 111
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useState",
+          "lineNumber": 117
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useCallback",
+          "lineNumber": 119
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLoading",
+          "lineNumber": 120
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setError",
+          "lineNumber": 121
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "adapter.detectTools",
+          "lineNumber": 123
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setError",
+          "lineNumber": 125
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setDetection",
+          "lineNumber": 126
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setDetection",
+          "lineNumber": 128
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setError",
+          "lineNumber": 131
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setDetection",
+          "lineNumber": 132
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLoading",
+          "lineNumber": 134
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useEffect",
+          "lineNumber": 138
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "refresh",
+          "lineNumber": 139
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useEffect",
+          "lineNumber": 146
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "adapter.getToolProcesses",
+          "lineNumber": 149
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "setRunningTools",
+          "lineNumber": 151
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "result.processes.map",
+          "lineNumber": 151
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "next.get",
+          "lineNumber": 154
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "arr.push",
+          "lineNumber": 155
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "next.set",
+          "lineNumber": 156
+        },
+        {
+          "caller": "pollOnce",
+          "callee": "setPidsByTool",
+          "lineNumber": 158
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "pollOnce",
+          "lineNumber": 160
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setInterval",
+          "lineNumber": 161
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "clearInterval",
+          "lineNumber": 164
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useCallback",
+          "lineNumber": 173
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "pidsByTool.get",
+          "lineNumber": 175
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setActiveAction",
+          "lineNumber": 178
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 179
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "adapter.killTool",
+          "lineNumber": 181
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 182
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "adapter.getToolProcesses",
+          "lineNumber": 192
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setRunningTools",
+          "lineNumber": 193
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "result.processes.map",
+          "lineNumber": 193
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "next.get",
+          "lineNumber": 196
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "arr.push",
+          "lineNumber": 197
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "next.set",
+          "lineNumber": 198
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setPidsByTool",
+          "lineNumber": 200
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 202
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setActiveAction",
+          "lineNumber": 209
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useCallback",
+          "lineNumber": 215
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setActiveAction",
+          "lineNumber": 217
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 218
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 222
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "promptArgsForTool",
+          "lineNumber": 234
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "adapter.launchTool",
+          "lineNumber": 235
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 242
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setPrompt",
+          "lineNumber": 252
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "adapter.manageHooks",
+          "lineNumber": 254
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 255
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "refresh",
+          "lineNumber": 266
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setLastResult",
+          "lineNumber": 270
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setActiveAction",
+          "lineNumber": 277
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "useMemo",
+          "lineNumber": 283
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "(['a', 'b'] as LauncherView[]).map",
+          "lineNumber": 304
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setView",
+          "lineNumber": 309
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "setPrompt",
+          "lineNumber": 368
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "prompt.trim",
+          "lineNumber": 373
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "(() => {\r\n                const accepting = tools\r\n                  .filter((t) => toolAcceptsInlinePrompt(t.id))\r\n                  .map((t) => t.displayName);\r\n                const ignoring = tools\r\n                  .filter((t) => !toolAcceptsInlinePrompt(t.id))\r\n                  .map((t) => t.displayName);\r\n                return (\r\n                  <>\r\n                    <span style={{ color: 'var(--healthy)' }}>Sent to:</span>{' '}\r\n                    {accepting.join(', ') || 'none'}\r\n                    {ignoring.length > 0 && (\r\n                      <>\r\n                        {' · '}\r\n                        <span className=\"text-muted-foreground/60\">Ignored by:</span>{' '}\r\n                        {ignoring.join(', ')}\r\n                      </>\r\n                    )}\r\n                  </>\r\n                );\r\n              })",
+          "lineNumber": 375
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "tools\r\n                  .filter((t) => toolAcceptsInlinePrompt(t.id))\r\n                  .map",
+          "lineNumber": 376
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "tools\r\n                  .filter",
+          "lineNumber": 376
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "toolAcceptsInlinePrompt",
+          "lineNumber": 377
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "tools\r\n                  .filter((t) => !toolAcceptsInlinePrompt(t.id))\r\n                  .map",
+          "lineNumber": 379
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "tools\r\n                  .filter",
+          "lineNumber": 379
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "toolAcceptsInlinePrompt",
+          "lineNumber": 380
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "accepting.join",
+          "lineNumber": 385
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "ignoring.join",
+          "lineNumber": 390
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "tools.map",
+          "lineNumber": 410
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "LAUNCH_COHORT.includes",
+          "lineNumber": 411
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "HOOKS_COHORT.includes",
+          "lineNumber": 412
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "runningTools.has",
+          "lineNumber": 438
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "doAction",
+          "lineNumber": 471
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "runningTools.has",
+          "lineNumber": 481
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "stopTool",
+          "lineNumber": 487
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "doAction",
+          "lineNumber": 500
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "doAction",
+          "lineNumber": 516
+        },
+        {
+          "caller": "LauncherApp",
+          "callee": "doAction",
+          "lineNumber": 533
+        },
+        {
+          "caller": "MemorySharingView",
+          "callee": "FLOW_NODES.map",
+          "lineNumber": 671
+        },
+        {
+          "caller": "MemorySharingView",
+          "callee": "EXPLAINER_CARDS.map",
+          "lineNumber": 705
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/MissionControlApp.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 280,
+      "nonEmptyLines": 262,
+      "functions": [
+        {
+          "name": "MissionControlApp",
+          "startLine": 36,
+          "endLine": 278,
+          "params": [
+            "{ onSpawnOpen }"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 37
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 38
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 39
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 40
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 41
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 42
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useState",
+          "lineNumber": 43
+        },
+        {
+          "caller": "refresh",
+          "callee": "setLoading",
+          "lineNumber": 51
+        },
+        {
+          "caller": "refresh",
+          "callee": "setErrors",
+          "lineNumber": 52
+        },
+        {
+          "caller": "refresh",
+          "callee": "Promise.allSettled",
+          "lineNumber": 53
+        },
+        {
+          "caller": "refresh",
+          "callee": "adapter.getFleet",
+          "lineNumber": 54
+        },
+        {
+          "caller": "refresh",
+          "callee": "adapter.getTeamMembers",
+          "lineNumber": 55
+        },
+        {
+          "caller": "refresh",
+          "callee": "adapter.getTeamActivity",
+          "lineNumber": 56
+        },
+        {
+          "caller": "refresh",
+          "callee": "adapter.detectTools",
+          "lineNumber": 57
+        },
+        {
+          "caller": "refresh",
+          "callee": "setSessions",
+          "lineNumber": 59
+        },
+        {
+          "caller": "refresh",
+          "callee": "setTeamMembers",
+          "lineNumber": 60
+        },
+        {
+          "caller": "refresh",
+          "callee": "setActivity",
+          "lineNumber": 61
+        },
+        {
+          "caller": "refresh",
+          "callee": "setToolCounts",
+          "lineNumber": 64
+        },
+        {
+          "caller": "refresh",
+          "callee": "ts.filter",
+          "lineNumber": 66
+        },
+        {
+          "caller": "refresh",
+          "callee": "ts.filter",
+          "lineNumber": 67
+        },
+        {
+          "caller": "refresh",
+          "callee": "setErrors",
+          "lineNumber": 72
+        },
+        {
+          "caller": "refresh",
+          "callee": "reason",
+          "lineNumber": 73
+        },
+        {
+          "caller": "refresh",
+          "callee": "reason",
+          "lineNumber": 74
+        },
+        {
+          "caller": "refresh",
+          "callee": "reason",
+          "lineNumber": 75
+        },
+        {
+          "caller": "refresh",
+          "callee": "setLoading",
+          "lineNumber": 77
+        },
+        {
+          "caller": "openLauncher",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 82
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "useEffect",
+          "lineNumber": 87
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "refresh",
+          "lineNumber": 88
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "setInterval",
+          "lineNumber": 89
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "clearInterval",
+          "lineNumber": 90
+        },
+        {
+          "caller": "handleAction",
+          "callee": "adapter.fleetAction",
+          "lineNumber": 94
+        },
+        {
+          "caller": "handleAction",
+          "callee": "refresh",
+          "lineNumber": 95
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "(['fleet', 'team', 'activity'] as const).map",
+          "lineNumber": 148
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "setTab",
+          "lineNumber": 151
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "sessions.map",
+          "lineNumber": 187
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "handleAction",
+          "lineNumber": 197
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "handleAction",
+          "lineNumber": 202
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "handleAction",
+          "lineNumber": 206
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "Math.round",
+          "lineNumber": 212
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "(s.tokenUsage ?? 0).toLocaleString",
+          "lineNumber": 215
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "teamMembers.map",
+          "lineNumber": 241
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "activity.map",
+          "lineNumber": 267
+        },
+        {
+          "caller": "MissionControlApp",
+          "callee": "new Date(a.timestamp).toLocaleTimeString",
+          "lineNumber": 271
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/WaggleDanceApp.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 201,
+      "nonEmptyLines": 187,
+      "functions": [
+        {
+          "name": "getTypeConfig",
+          "startLine": 26,
+          "endLine": 29,
+          "params": [
+            "type"
+          ]
+        },
+        {
+          "name": "WaggleDanceApp",
+          "startLine": 33,
+          "endLine": 199,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "useWaggleDance",
+          "lineNumber": 34
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "useState",
+          "lineNumber": 35
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "useMemo",
+          "lineNumber": 37
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "sortSignalsForDisplay",
+          "lineNumber": 37
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "allSignals.filter",
+          "lineNumber": 39
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "filterTypes.map",
+          "lineNumber": 61
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "setFilter",
+          "lineNumber": 67
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "orderedSignals.map",
+          "lineNumber": 103
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "getTypeConfig",
+          "lineNumber": 104
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "setSelectedSignal",
+          "lineNumber": 110
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "new Date(signal.timestamp).toLocaleTimeString",
+          "lineNumber": 136
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "(() => {\r\n                  const cfg = getTypeConfig(selectedSignal.type);\r\n                  const Icon = cfg.icon;\r\n                  return <Icon className={`w-5 h-5 ${cfg.color}`} />;\r\n                })",
+          "lineNumber": 152
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "getTypeConfig",
+          "lineNumber": 153
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "getTypeConfig",
+          "lineNumber": 157
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "selectedSignal.priority.toUpperCase",
+          "lineNumber": 160
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "new Date(selectedSignal.timestamp).toLocaleString",
+          "lineNumber": 172
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "Object.keys",
+          "lineNumber": 175
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "JSON.stringify",
+          "lineNumber": 179
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "acknowledge",
+          "lineNumber": 186
+        },
+        {
+          "caller": "WaggleDanceApp",
+          "callee": "setSelectedSignal",
+          "lineNumber": 190
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/power/power-primitives.test.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 87,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/power/power-primitives.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 192,
+      "nonEmptyLines": 174,
+      "functions": [
+        {
+          "name": "SurfaceRow",
+          "startLine": 34,
+          "endLine": 56,
+          "params": [
+            "{ leading, title, subtitle, actions, className }"
+          ]
+        },
+        {
+          "name": "SurfaceToggle",
+          "startLine": 70,
+          "endLine": 95,
+          "params": [
+            "{ checked, onChange, label, disabled, className }"
+          ]
+        },
+        {
+          "name": "RiskBadge",
+          "startLine": 125,
+          "endLine": 140,
+          "params": [
+            "{ level, withSuffix = true, className }"
+          ]
+        },
+        {
+          "name": "StatusBadge",
+          "startLine": 154,
+          "endLine": 167,
+          "params": [
+            "{ tone, dot, children, className }"
+          ]
+        },
+        {
+          "name": "riskToneForTool",
+          "startLine": 186,
+          "endLine": 192,
+          "params": [
+            "toolName",
+            "input"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SurfaceRow",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "SurfaceToggle",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "RiskBadge",
+          "line": 125,
+          "isDefault": false
+        },
+        {
+          "name": "StatusBadge",
+          "line": 154,
+          "isDefault": false
+        },
+        {
+          "name": "riskToneForTool",
+          "line": 186,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "SurfaceRow",
+          "callee": "cn",
+          "lineNumber": 37
+        },
+        {
+          "caller": "SurfaceToggle",
+          "callee": "onChange",
+          "lineNumber": 78
+        },
+        {
+          "caller": "SurfaceToggle",
+          "callee": "cn",
+          "lineNumber": 79
+        },
+        {
+          "caller": "SurfaceToggle",
+          "callee": "cn",
+          "lineNumber": 88
+        },
+        {
+          "caller": "RiskBadge",
+          "callee": "cn",
+          "lineNumber": 129
+        },
+        {
+          "caller": "StatusBadge",
+          "callee": "cn",
+          "lineNumber": 157
+        },
+        {
+          "caller": "riskToneForTool",
+          "callee": "toolName.toLowerCase",
+          "lineNumber": 187
+        },
+        {
+          "caller": "riskToneForTool",
+          "callee": "EXTERNAL_WRITE_HINTS.some",
+          "lineNumber": 190
+        },
+        {
+          "caller": "riskToneForTool",
+          "callee": "name.includes",
+          "lineNumber": 190
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/ActivityStream.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 79,
+      "nonEmptyLines": 76,
+      "functions": [
+        {
+          "name": "ActivityStream",
+          "startLine": 30,
+          "endLine": 79,
+          "params": [
+            "{\r\n  summary,\r\n  durationMs,\r\n  steps,\r\n  defaultOpen = false,\r\n  className,\r\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ActivityStream",
+          "line": 30,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ActivityStream",
+          "callee": "useState",
+          "lineNumber": 37
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "Math.max",
+          "lineNumber": 38
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "Math.round",
+          "lineNumber": 38
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "[`${steps.length} step${steps.length === 1 ? '' : 's'}`, seconds].filter(Boolean).join",
+          "lineNumber": 39
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "[`${steps.length} step${steps.length === 1 ? '' : 's'}`, seconds].filter",
+          "lineNumber": 39
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "cn",
+          "lineNumber": 41
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "setOpen",
+          "lineNumber": 44
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "cn",
+          "lineNumber": 54
+        },
+        {
+          "caller": "ActivityStream",
+          "callee": "steps.map",
+          "lineNumber": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/ConfidenceRing.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 47,
+      "functions": [
+        {
+          "name": "confidenceColor",
+          "startLine": 17,
+          "endLine": 21,
+          "params": [
+            "c"
+          ]
+        },
+        {
+          "name": "ConfidenceRing",
+          "startLine": 30,
+          "endLine": 50,
+          "params": [
+            "{ value, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "confidenceColor",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "ConfidenceRing",
+          "line": 30,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ConfidenceRing",
+          "callee": "Number.isFinite",
+          "lineNumber": 31
+        },
+        {
+          "caller": "ConfidenceRing",
+          "callee": "confidenceColor",
+          "lineNumber": 32
+        },
+        {
+          "caller": "ConfidenceRing",
+          "callee": "cn",
+          "lineNumber": 34
+        },
+        {
+          "caller": "ConfidenceRing",
+          "callee": "Math.round",
+          "lineNumber": 40
+        },
+        {
+          "caller": "ConfidenceRing",
+          "callee": "Math.round",
+          "lineNumber": 43
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/DotLive.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 27,
+      "functions": [
+        {
+          "name": "DotLive",
+          "startLine": 17,
+          "endLine": 29,
+          "params": [
+            "{ tone = 'healthy', live = true, size = 8, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DotLive",
+          "line": 17,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "DotLive",
+          "callee": "cn",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/HexAvatar.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 40,
+      "nonEmptyLines": 37,
+      "functions": [
+        {
+          "name": "firstInitial",
+          "startLine": 13,
+          "endLine": 16,
+          "params": [
+            "label"
+          ]
+        },
+        {
+          "name": "HexAvatar",
+          "startLine": 24,
+          "endLine": 40,
+          "params": [
+            "{ label, size = 28, gradient = true, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HexAvatar",
+          "line": 24,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "firstInitial",
+          "callee": "label.trim",
+          "lineNumber": 14
+        },
+        {
+          "caller": "firstInitial",
+          "callee": "ch.toUpperCase",
+          "lineNumber": 15
+        },
+        {
+          "caller": "HexAvatar",
+          "callee": "Math.max",
+          "lineNumber": 28
+        },
+        {
+          "caller": "HexAvatar",
+          "callee": "Math.round",
+          "lineNumber": 28
+        },
+        {
+          "caller": "HexAvatar",
+          "callee": "cn",
+          "lineNumber": 29
+        },
+        {
+          "caller": "HexAvatar",
+          "callee": "firstInitial",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/HexCheckTile.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 26,
+      "nonEmptyLines": 24,
+      "functions": [
+        {
+          "name": "HexCheckTile",
+          "startLine": 15,
+          "endLine": 26,
+          "params": [
+            "{ tone = 'healthy', size = 26, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HexCheckTile",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "HexCheckTile",
+          "callee": "Math.round",
+          "lineNumber": 16
+        },
+        {
+          "caller": "HexCheckTile",
+          "callee": "cn",
+          "lineNumber": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/IconTile.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 27,
+      "nonEmptyLines": 25,
+      "functions": [
+        {
+          "name": "IconTile",
+          "startLine": 16,
+          "endLine": 27,
+          "params": [
+            "{ icon: Icon, tone = 'honey', size = 38, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "IconTile",
+          "line": 16,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "IconTile",
+          "callee": "Math.round",
+          "lineNumber": 17
+        },
+        {
+          "caller": "IconTile",
+          "callee": "cn",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/ModelPill.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 48,
+      "nonEmptyLines": 46,
+      "functions": [
+        {
+          "name": "ModelPill",
+          "startLine": 18,
+          "endLine": 48,
+          "params": [
+            "{ mode = 'auto', model, onClick, title, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ModelPill",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ModelPill",
+          "callee": "cn",
+          "lineNumber": 37
+        },
+        {
+          "caller": "ModelPill",
+          "callee": "cn",
+          "lineNumber": 44
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/OvernightHero.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 58,
+      "nonEmptyLines": 56,
+      "functions": [
+        {
+          "name": "OvernightHero",
+          "startLine": 21,
+          "endLine": 58,
+          "params": [
+            "{\r\n  eyebrow = 'While you slept',\r\n  statement,\r\n  runs = [],\r\n  emptyText = 'Nothing ran overnight — a calm night for the hive.',\r\n  className,\r\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "OvernightHero",
+          "line": 21,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "OvernightHero",
+          "callee": "cn",
+          "lineNumber": 31
+        },
+        {
+          "caller": "OvernightHero",
+          "callee": "runs.map",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/ProvenanceLine.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 32,
+      "nonEmptyLines": 30,
+      "functions": [
+        {
+          "name": "ProvenanceLine",
+          "startLine": 19,
+          "endLine": 32,
+          "params": [
+            "{ source, when, onClick, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ProvenanceLine",
+          "line": 19,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ProvenanceLine",
+          "callee": "cn",
+          "lineNumber": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/RunChip.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 27,
+      "nonEmptyLines": 25,
+      "functions": [
+        {
+          "name": "RunChip",
+          "startLine": 15,
+          "endLine": 27,
+          "params": [
+            "{ label, tone = 'healthy', className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "RunChip",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "RunChip",
+          "callee": "cn",
+          "lineNumber": 18
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/SectionLabel.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 24,
+      "nonEmptyLines": 22,
+      "functions": [
+        {
+          "name": "SectionLabel",
+          "startLine": 15,
+          "endLine": 24,
+          "params": [
+            "{ children, rule = false, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "SectionLabel",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "SectionLabel",
+          "callee": "cn",
+          "lineNumber": 17
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/StreakChip.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 26,
+      "nonEmptyLines": 24,
+      "functions": [
+        {
+          "name": "StreakChip",
+          "startLine": 14,
+          "endLine": 26,
+          "params": [
+            "{ days, className }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "StreakChip",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "StreakChip",
+          "callee": "cn",
+          "lineNumber": 17
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/tones.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 34,
+      "exports": [
+        {
+          "name": "TONE_COLOR",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "TONE_WASH",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/accordion.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 45,
+      "exports": [
+        {
+          "name": "Accordion",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "AccordionItem",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "AccordionTrigger",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "AccordionContent",
+          "line": 52,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 4,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/alert-dialog.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 104,
+      "nonEmptyLines": 91,
+      "functions": [
+        {
+          "name": "AlertDialogHeader",
+          "startLine": 46,
+          "endLine": 48,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "AlertDialogFooter",
+          "startLine": 51,
+          "endLine": 53,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AlertDialog",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogPortal",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogOverlay",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogTrigger",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogContent",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogHeader",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogFooter",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogTitle",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogDescription",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogAction",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDialogCancel",
+          "line": 92,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "AlertDialogHeader",
+          "callee": "cn",
+          "lineNumber": 47
+        },
+        {
+          "caller": "AlertDialogFooter",
+          "callee": "cn",
+          "lineNumber": 52
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 11,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/alert.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 43,
+      "nonEmptyLines": 37,
+      "exports": [
+        {
+          "name": "Alert",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "AlertTitle",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "AlertDescription",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 3,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/badge.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 24,
+      "functions": [
+        {
+          "name": "Badge",
+          "startLine": 25,
+          "endLine": 27,
+          "params": [
+            "{ className, variant, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Badge",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "badgeVariants",
+          "line": 29,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Badge",
+          "callee": "cn",
+          "lineNumber": 26
+        },
+        {
+          "caller": "Badge",
+          "callee": "badgeVariants",
+          "lineNumber": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/breadcrumb.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 80,
+      "functions": [
+        {
+          "name": "BreadcrumbSeparator",
+          "startLine": 62,
+          "endLine": 66,
+          "params": [
+            "{ children, className, ...props }"
+          ]
+        },
+        {
+          "name": "BreadcrumbEllipsis",
+          "startLine": 69,
+          "endLine": 79,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Breadcrumb",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "BreadcrumbList",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "BreadcrumbItem",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "BreadcrumbLink",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "BreadcrumbPage",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "BreadcrumbSeparator",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "BreadcrumbEllipsis",
+          "line": 82,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "BreadcrumbSeparator",
+          "callee": "cn",
+          "lineNumber": 63
+        },
+        {
+          "caller": "BreadcrumbEllipsis",
+          "callee": "cn",
+          "lineNumber": 73
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 7,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/button.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 47,
+      "nonEmptyLines": 42,
+      "exports": [
+        {
+          "name": "Button",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "buttonVariants",
+          "line": 47,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/calendar.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 60,
+      "nonEmptyLines": 56,
+      "functions": [
+        {
+          "name": "Calendar",
+          "startLine": 10,
+          "endLine": 57,
+          "params": [
+            "{ className, classNames, showOutsideDays = true, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Calendar",
+          "line": 60,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Calendar",
+          "callee": "cn",
+          "lineNumber": 14
+        },
+        {
+          "caller": "Calendar",
+          "callee": "cn",
+          "lineNumber": 21
+        },
+        {
+          "caller": "Calendar",
+          "callee": "buttonVariants",
+          "lineNumber": 22
+        },
+        {
+          "caller": "Calendar",
+          "callee": "cn",
+          "lineNumber": 25
+        },
+        {
+          "caller": "Calendar",
+          "callee": "buttonVariants",
+          "lineNumber": 26
+        },
+        {
+          "caller": "Calendar",
+          "callee": "cn",
+          "lineNumber": 34
+        },
+        {
+          "caller": "Calendar",
+          "callee": "buttonVariants",
+          "lineNumber": 34
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/card.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 43,
+      "nonEmptyLines": 35,
+      "exports": [
+        {
+          "name": "Card",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "CardHeader",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "CardFooter",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "CardTitle",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "CardDescription",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "CardContent",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/carousel.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 224,
+      "nonEmptyLines": 195,
+      "functions": [
+        {
+          "name": "useCarousel",
+          "startLine": 31,
+          "endLine": 39,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "CarouselApi",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "Carousel",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "CarouselContent",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "CarouselItem",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "CarouselPrevious",
+          "line": 224,
+          "isDefault": false
+        },
+        {
+          "name": "CarouselNext",
+          "line": 224,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useCarousel",
+          "callee": "React.useContext",
+          "lineNumber": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 6,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/chart.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 303,
+      "nonEmptyLines": 268,
+      "functions": [
+        {
+          "name": "useChart",
+          "startLine": 22,
+          "endLine": 30,
+          "params": []
+        },
+        {
+          "name": "ChartStyle",
+          "startLine": 61,
+          "endLine": 88,
+          "params": [
+            "{ id, config }"
+          ]
+        },
+        {
+          "name": "getPayloadConfigFromPayload",
+          "startLine": 278,
+          "endLine": 301,
+          "params": [
+            "config",
+            "payload",
+            "key"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ChartContainer",
+          "line": 303,
+          "isDefault": false
+        },
+        {
+          "name": "ChartTooltip",
+          "line": 303,
+          "isDefault": false
+        },
+        {
+          "name": "ChartTooltipContent",
+          "line": 303,
+          "isDefault": false
+        },
+        {
+          "name": "ChartLegend",
+          "line": 303,
+          "isDefault": false
+        },
+        {
+          "name": "ChartLegendContent",
+          "line": 303,
+          "isDefault": false
+        },
+        {
+          "name": "ChartStyle",
+          "line": 303,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useChart",
+          "callee": "React.useContext",
+          "lineNumber": 23
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "Object.entries(config).filter",
+          "lineNumber": 62
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "Object.entries",
+          "lineNumber": 62
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "Object.entries(THEMES)\r\n          .map(\r\n            ([theme, prefix]) => `\r\n${prefix} [data-chart=${id}] {\r\n${colorConfig\r\n  .map(([key, itemConfig]) => {\r\n    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;\r\n    return color ? `  --color-${key}: ${color};` : null;\r\n  })\r\n  .join(\"\\n\")}\r\n}\r\n`,\r\n          )\r\n          .join",
+          "lineNumber": 71
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "Object.entries(THEMES)\r\n          .map",
+          "lineNumber": 71
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "Object.entries",
+          "lineNumber": 71
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "colorConfig\r\n  .map(([key, itemConfig]) => {\r\n    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;\r\n    return color ? `  --color-${key}: ${color};` : null;\r\n  })\r\n  .join",
+          "lineNumber": 75
+        },
+        {
+          "caller": "ChartStyle",
+          "callee": "colorConfig\r\n  .map",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/checkbox.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 26,
+      "nonEmptyLines": 23,
+      "exports": [
+        {
+          "name": "Checkbox",
+          "line": 26,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/context-menu.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 178,
+      "nonEmptyLines": 161,
+      "functions": [
+        {
+          "name": "ContextMenuShortcut",
+          "startLine": 157,
+          "endLine": 159,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "ContextMenu",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuTrigger",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuContent",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuItem",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuCheckboxItem",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuRadioItem",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuLabel",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuSeparator",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuShortcut",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuGroup",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuPortal",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuSub",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuSubContent",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuSubTrigger",
+          "line": 162,
+          "isDefault": false
+        },
+        {
+          "name": "ContextMenuRadioGroup",
+          "line": 162,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ContextMenuShortcut",
+          "callee": "cn",
+          "lineNumber": 158
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 15,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/drawer.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 87,
+      "nonEmptyLines": 75,
+      "functions": [
+        {
+          "name": "Drawer",
+          "startLine": 6,
+          "endLine": 8,
+          "params": [
+            "{ shouldScaleBackground = true, ...props }"
+          ]
+        },
+        {
+          "name": "DrawerHeader",
+          "startLine": 46,
+          "endLine": 48,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "DrawerFooter",
+          "startLine": 51,
+          "endLine": 53,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Drawer",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerPortal",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerOverlay",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerTrigger",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerClose",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerContent",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerHeader",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerFooter",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerTitle",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "DrawerDescription",
+          "line": 76,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "DrawerHeader",
+          "callee": "cn",
+          "lineNumber": 47
+        },
+        {
+          "caller": "DrawerFooter",
+          "callee": "cn",
+          "lineNumber": 52
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 10,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/dropdown-menu.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 179,
+      "nonEmptyLines": 162,
+      "functions": [
+        {
+          "name": "DropdownMenuShortcut",
+          "startLine": 158,
+          "endLine": 160,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DropdownMenu",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuTrigger",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuContent",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuItem",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuCheckboxItem",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuRadioItem",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuLabel",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuSeparator",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuShortcut",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuGroup",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuPortal",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuSub",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuSubContent",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuSubTrigger",
+          "line": 163,
+          "isDefault": false
+        },
+        {
+          "name": "DropdownMenuRadioGroup",
+          "line": 163,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "DropdownMenuShortcut",
+          "callee": "cn",
+          "lineNumber": 159
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 15,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

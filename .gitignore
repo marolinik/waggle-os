@@ -24,6 +24,7 @@ dist-ssr
 .waggle/
 *.mind
 marketplace.db
+!packages/marketplace/marketplace.db
 
 # Code signing (LAUNCH-06 pilot self-sign artifacts — never commit private
 # cert material or operator-local thumbprints into the repo)

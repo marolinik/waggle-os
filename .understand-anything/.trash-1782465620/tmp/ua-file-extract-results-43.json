@@ -1,0 +1,2246 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 22,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/adapter.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 106,
+      "nonEmptyLines": 95,
+      "functions": [
+        {
+          "name": "pickFromExtra",
+          "startLine": 63,
+          "endLine": 70,
+          "params": [
+            "payload",
+            "...keys"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HERMES_EVENT_NAME",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "HERMES_SESSION_START_OBSERVE_EVENT",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "hermesAdapter",
+          "line": 73,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "pickFromExtra",
+          "callee": "pickStringField",
+          "lineNumber": 66
+        },
+        {
+          "caller": "pickFromExtra",
+          "callee": "pickStringField",
+          "lineNumber": 69
+        },
+        {
+          "caller": "extractCwd",
+          "callee": "pickFromExtra",
+          "lineNumber": 78
+        },
+        {
+          "caller": "extractSessionId",
+          "callee": "pickFromExtra",
+          "lineNumber": 82
+        },
+        {
+          "caller": "extractPrompt",
+          "callee": "pickFromExtra",
+          "lineNumber": 87
+        },
+        {
+          "caller": "extractResponse",
+          "callee": "pickFromExtra",
+          "lineNumber": 92
+        },
+        {
+          "caller": "extractParent",
+          "callee": "pickFromExtra",
+          "lineNumber": 96
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/bin/hermes-hooks.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 183,
+      "nonEmptyLines": 170,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 20,
+          "endLine": 45,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 47,
+          "endLine": 71,
+          "params": []
+        },
+        {
+          "name": "printInstallSummary",
+          "startLine": 73,
+          "endLine": 104,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "printUninstallSummary",
+          "startLine": 106,
+          "endLine": 119,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "printVerifySummary",
+          "startLine": 121,
+          "endLine": 132,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 134,
+          "endLine": 181,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseArgs",
+          "callee": "valid.includes",
+          "lineNumber": 25
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.startsWith",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.indexOf",
+          "lineNumber": 31
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 33
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "next.startsWith",
+          "lineNumber": 36
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 37
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 40
+        },
+        {
+          "caller": "printHelp",
+          "callee": "process.stdout.write",
+          "lineNumber": 48
+        },
+        {
+          "caller": "printHelp",
+          "callee": "[\r\n    'Usage: hermes-hooks <command> [options]',\r\n    '',\r\n    'Commands:',\r\n    '  install     Patch ~/.hermes/config.yaml (additive, create-if-missing, with backup).',\r\n    '  uninstall   Restore the literal byte-identical pre-install config.yaml (or remove it if created).',\r\n    '  verify      Smoke-check the install + hive-mind-cli reachability.',\r\n    '',\r\n    'Options:',\r\n    '  --help, -h           Show this help.',\r\n    '  --hooks-dir <PATH>   Override compiled hooks directory (testing).',\r\n    '  --hook-timeout <S>   Override per-hook timeout in seconds (default 60, cap 300).',\r\n    '  --no-auto-accept     Do NOT seed hooks_auto_accept: true. WARNING: under',\r\n    '                       headless / non-TTY launches the hooks then silently',\r\n    '                       never register unless HERMES_ACCEPT_HOOKS=1 is set.',\r\n    '  --cli-path <PATH>    Absolute path to the hive-mind-cli binary or its',\r\n    '                       compiled JS entry. Required on Windows (npm bin',\r\n    '                       is a .cmd shim) and recommended for production',\r\n    '                       installs. Threaded into every hook command.',\r\n    '',\r\n    'Repo: https://github.com/marolinik/waggle-os',\r\n    '',\r\n  ].join",
+          "lineNumber": 48
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "result.installedHooks.join",
+          "lineNumber": 79
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "result.registeredEvents.join",
+          "lineNumber": 80
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 103
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "lines.join",
+          "lineNumber": 103
+        },
+        {
+          "caller": "printUninstallSummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 118
+        },
+        {
+          "caller": "printUninstallSummary",
+          "callee": "lines.join",
+          "lineNumber": 118
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 126
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 128
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 129
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 130
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 131
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.join",
+          "lineNumber": 131
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 135
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 135
+        },
+        {
+          "caller": "main",
+          "callee": "printHelp",
+          "lineNumber": 137
+        },
+        {
+          "caller": "main",
+          "callee": "Number.parseInt",
+          "lineNumber": 144
+        },
+        {
+          "caller": "main",
+          "callee": "install",
+          "lineNumber": 162
+        },
+        {
+          "caller": "main",
+          "callee": "printInstallSummary",
+          "lineNumber": 163
+        },
+        {
+          "caller": "main",
+          "callee": "uninstall",
+          "lineNumber": 167
+        },
+        {
+          "caller": "main",
+          "callee": "printUninstallSummary",
+          "lineNumber": 168
+        },
+        {
+          "caller": "main",
+          "callee": "verify",
+          "lineNumber": 172
+        },
+        {
+          "caller": "main",
+          "callee": "printVerifySummary",
+          "lineNumber": 173
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 174
+        },
+        {
+          "caller": "main",
+          "callee": "process.stderr.write",
+          "lineNumber": 178
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 178
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 179
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/compact-on-stop.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 126,
+      "nonEmptyLines": 116,
+      "functions": [
+        {
+          "name": "compactStatePath",
+          "startLine": 37,
+          "endLine": 39,
+          "params": [
+            "home"
+          ]
+        },
+        {
+          "name": "isCompactEnabled",
+          "startLine": 46,
+          "endLine": 49,
+          "params": [
+            "env"
+          ]
+        },
+        {
+          "name": "resolveWindowMs",
+          "startLine": 56,
+          "endLine": 67,
+          "params": [
+            "env",
+            "overrideMs"
+          ]
+        },
+        {
+          "name": "readLastCompactTs",
+          "startLine": 73,
+          "endLine": 81,
+          "params": [
+            "path"
+          ]
+        },
+        {
+          "name": "writeLastCompactTs",
+          "startLine": 90,
+          "endLine": 93,
+          "params": [
+            "path",
+            "ts"
+          ]
+        },
+        {
+          "name": "maybeCompactOnStop",
+          "startLine": 108,
+          "endLine": 126,
+          "params": [
+            "ctx",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DEFAULT_WINDOW_MS",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "compactStatePath",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "isCompactEnabled",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "resolveWindowMs",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "readLastCompactTs",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "writeLastCompactTs",
+          "line": 90,
+          "isDefault": false
+        },
+        {
+          "name": "maybeCompactOnStop",
+          "line": 108,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "compactStatePath",
+          "callee": "join",
+          "lineNumber": 38
+        },
+        {
+          "caller": "compactStatePath",
+          "callee": "resolvePaths",
+          "lineNumber": 38
+        },
+        {
+          "caller": "isCompactEnabled",
+          "callee": "flag.toLowerCase",
+          "lineNumber": 48
+        },
+        {
+          "caller": "resolveWindowMs",
+          "callee": "Number.parseFloat",
+          "lineNumber": 63
+        },
+        {
+          "caller": "resolveWindowMs",
+          "callee": "Number.isFinite",
+          "lineNumber": 64
+        },
+        {
+          "caller": "readLastCompactTs",
+          "callee": "readFile",
+          "lineNumber": 75
+        },
+        {
+          "caller": "readLastCompactTs",
+          "callee": "Number.parseInt",
+          "lineNumber": 76
+        },
+        {
+          "caller": "readLastCompactTs",
+          "callee": "raw.trim",
+          "lineNumber": 76
+        },
+        {
+          "caller": "readLastCompactTs",
+          "callee": "Number.isFinite",
+          "lineNumber": 77
+        },
+        {
+          "caller": "writeLastCompactTs",
+          "callee": "mkdir",
+          "lineNumber": 91
+        },
+        {
+          "caller": "writeLastCompactTs",
+          "callee": "dirname",
+          "lineNumber": 91
+        },
+        {
+          "caller": "writeLastCompactTs",
+          "callee": "writeFile",
+          "lineNumber": 92
+        },
+        {
+          "caller": "writeLastCompactTs",
+          "callee": "String",
+          "lineNumber": 92
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "isCompactEnabled",
+          "lineNumber": 113
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "opts.now",
+          "lineNumber": 114
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "Date.now",
+          "lineNumber": 114
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "compactStatePath",
+          "lineNumber": 115
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "readLastCompactTs",
+          "lineNumber": 116
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "resolveWindowMs",
+          "lineNumber": 117
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "ctx.bridge.cleanupFrames",
+          "lineNumber": 119
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "writeLastCompactTs",
+          "lineNumber": 120
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "ctx.logger.warn",
+          "lineNumber": 122
+        },
+        {
+          "caller": "maybeCompactOnStop",
+          "callee": "String",
+          "lineNumber": 123
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 7,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/hooks/session-start.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 86,
+      "functions": [
+        {
+          "name": "isFirstTurn",
+          "startLine": 37,
+          "endLine": 47,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "runSessionStart",
+          "startLine": 49,
+          "endLine": 77,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runSessionStart",
+          "line": 49,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runSessionStart",
+          "callee": "process.exit",
+          "lineNumber": 54
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "reader",
+          "lineNumber": 58
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "isFirstTurn",
+          "lineNumber": 59
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "safeJsonParse",
+          "lineNumber": 59
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "exit",
+          "lineNumber": 60
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "exit",
+          "lineNumber": 66
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "runHook",
+          "lineNumber": 69
+        },
+        {
+          "caller": "runSessionStart",
+          "callee": "makeSessionStartHandler",
+          "lineNumber": 69
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/hooks/stop.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 68,
+      "nonEmptyLines": 64,
+      "functions": [
+        {
+          "name": "runStop",
+          "startLine": 35,
+          "endLine": 55,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runStop",
+          "line": 35,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runStop",
+          "callee": "makeStopHandler",
+          "lineNumber": 37
+        },
+        {
+          "caller": "run",
+          "callee": "base.run",
+          "lineNumber": 43
+        },
+        {
+          "caller": "run",
+          "callee": "maybeCompactOnStop",
+          "lineNumber": 46
+        },
+        {
+          "caller": "runStop",
+          "callee": "runHook",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/hooks/user-prompt-submit.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 44,
+      "nonEmptyLines": 41,
+      "functions": [
+        {
+          "name": "runUserPromptSubmit",
+          "startLine": 25,
+          "endLine": 31,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runUserPromptSubmit",
+          "line": 25,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "runUserPromptSubmit",
+          "callee": "runHook",
+          "lineNumber": 26
+        },
+        {
+          "caller": "runUserPromptSubmit",
+          "callee": "makeUserPromptSubmitHandler",
+          "lineNumber": 26
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/install.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 200,
+      "nonEmptyLines": 182,
+      "functions": [
+        {
+          "name": "ensureDir",
+          "startLine": 91,
+          "endLine": 93,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "buildEntries",
+          "startLine": 102,
+          "endLine": 117,
+          "params": [
+            "hooksDir",
+            "cliPath",
+            "timeout"
+          ]
+        },
+        {
+          "name": "install",
+          "startLine": 119,
+          "endLine": 200,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "install",
+          "line": 119,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ensureDir",
+          "callee": "existsSync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "ensureDir",
+          "callee": "mkdir",
+          "lineNumber": 92
+        },
+        {
+          "caller": "buildEntries",
+          "callee": "hookCommandFor",
+          "lineNumber": 103
+        },
+        {
+          "caller": "buildEntries",
+          "callee": "hookScriptPath",
+          "lineNumber": 103
+        },
+        {
+          "caller": "buildEntries",
+          "callee": "hookCommandFor",
+          "lineNumber": 104
+        },
+        {
+          "caller": "buildEntries",
+          "callee": "hookScriptPath",
+          "lineNumber": 104
+        },
+        {
+          "caller": "buildEntries",
+          "callee": "hookCommandFor",
+          "lineNumber": 105
+        },
+        {
+          "caller": "buildEntries",
+          "callee": "hookScriptPath",
+          "lineNumber": 105
+        },
+        {
+          "caller": "install",
+          "callee": "createLogger",
+          "lineNumber": 120
+        },
+        {
+          "caller": "install",
+          "callee": "resolvePaths",
+          "lineNumber": 121
+        },
+        {
+          "caller": "install",
+          "callee": "log.info",
+          "lineNumber": 128
+        },
+        {
+          "caller": "install",
+          "callee": "existsSync",
+          "lineNumber": 132
+        },
+        {
+          "caller": "install",
+          "callee": "readFile",
+          "lineNumber": 134
+        },
+        {
+          "caller": "install",
+          "callee": "parseConfig",
+          "lineNumber": 135
+        },
+        {
+          "caller": "install",
+          "callee": "ensureDir",
+          "lineNumber": 138
+        },
+        {
+          "caller": "install",
+          "callee": "dirname",
+          "lineNumber": 138
+        },
+        {
+          "caller": "install",
+          "callee": "backupByteIdentical",
+          "lineNumber": 142
+        },
+        {
+          "caller": "install",
+          "callee": "now().toISOString",
+          "lineNumber": 144
+        },
+        {
+          "caller": "install",
+          "callee": "now",
+          "lineNumber": 144
+        },
+        {
+          "caller": "install",
+          "callee": "log.info",
+          "lineNumber": 146
+        },
+        {
+          "caller": "install",
+          "callee": "normalizeCliPath",
+          "lineNumber": 148
+        },
+        {
+          "caller": "install",
+          "callee": "Math.min",
+          "lineNumber": 150
+        },
+        {
+          "caller": "install",
+          "callee": "Math.max",
+          "lineNumber": 150
+        },
+        {
+          "caller": "install",
+          "callee": "Math.floor",
+          "lineNumber": 150
+        },
+        {
+          "caller": "install",
+          "callee": "buildEntries",
+          "lineNumber": 151
+        },
+        {
+          "caller": "install",
+          "callee": "yamlRegister",
+          "lineNumber": 153
+        },
+        {
+          "caller": "install",
+          "callee": "serializeConfig",
+          "lineNumber": 160
+        },
+        {
+          "caller": "install",
+          "callee": "writeFile",
+          "lineNumber": 161
+        },
+        {
+          "caller": "install",
+          "callee": "entries.map",
+          "lineNumber": 163
+        },
+        {
+          "caller": "install",
+          "callee": "now().toISOString",
+          "lineNumber": 168
+        },
+        {
+          "caller": "install",
+          "callee": "now",
+          "lineNumber": 168
+        },
+        {
+          "caller": "install",
+          "callee": "writePointer",
+          "lineNumber": 180
+        },
+        {
+          "caller": "install",
+          "callee": "log.info",
+          "lineNumber": 182
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/paths.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 81,
+      "nonEmptyLines": 71,
+      "functions": [
+        {
+          "name": "allHookBasenames",
+          "startLine": 57,
+          "endLine": 59,
+          "params": []
+        },
+        {
+          "name": "resolvePaths",
+          "startLine": 61,
+          "endLine": 78,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "allHookBasenames",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 61,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 81,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 81,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolvePaths",
+          "callee": "homedir",
+          "lineNumber": 62
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "join",
+          "lineNumber": 63
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "join",
+          "lineNumber": 64
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "join",
+          "lineNumber": 65
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "resolve",
+          "lineNumber": 69
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "hooksDirFromModuleUrl",
+          "lineNumber": 71
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "resolve",
+          "lineNumber": 74
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "process.cwd",
+          "lineNumber": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/uninstall.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 79,
+      "nonEmptyLines": 70,
+      "functions": [
+        {
+          "name": "uninstall",
+          "startLine": 42,
+          "endLine": 79,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "uninstall",
+          "line": 42,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "uninstall",
+          "callee": "createLogger",
+          "lineNumber": 43
+        },
+        {
+          "caller": "uninstall",
+          "callee": "resolvePaths",
+          "lineNumber": 44
+        },
+        {
+          "caller": "uninstall",
+          "callee": "existsSync",
+          "lineNumber": 50
+        },
+        {
+          "caller": "uninstall",
+          "callee": "readPointer",
+          "lineNumber": 57
+        },
+        {
+          "caller": "uninstall",
+          "callee": "restoreFromBackup",
+          "lineNumber": 58
+        },
+        {
+          "caller": "uninstall",
+          "callee": "log.info",
+          "lineNumber": 65
+        },
+        {
+          "caller": "uninstall",
+          "callee": "log.info",
+          "lineNumber": 67
+        },
+        {
+          "caller": "uninstall",
+          "callee": "unlink",
+          "lineNumber": 70
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/verify.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 162,
+      "nonEmptyLines": 147,
+      "functions": [
+        {
+          "name": "fileReadable",
+          "startLine": 43,
+          "endLine": 45,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "isJsPath",
+          "startLine": 47,
+          "endLine": 49,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "probeCliVersion",
+          "startLine": 51,
+          "endLine": 86,
+          "params": [
+            "cliPath",
+            "spawnImpl",
+            "timeoutMs"
+          ]
+        },
+        {
+          "name": "verify",
+          "startLine": 88,
+          "endLine": 162,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "verify",
+          "line": 88,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fileReadable",
+          "callee": "access",
+          "lineNumber": 44
+        },
+        {
+          "caller": "isJsPath",
+          "callee": "p.endsWith",
+          "lineNumber": 48
+        },
+        {
+          "caller": "isJsPath",
+          "callee": "p.endsWith",
+          "lineNumber": 48
+        },
+        {
+          "caller": "isJsPath",
+          "callee": "p.endsWith",
+          "lineNumber": 48
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "isJsPath",
+          "lineNumber": 58
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "isJsPath",
+          "lineNumber": 59
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "spawnImpl",
+          "lineNumber": 60
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "setTimeout",
+          "lineNumber": 63
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.kill",
+          "lineNumber": 66
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "resolve",
+          "lineNumber": 67
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.stdout?.on",
+          "lineNumber": 69
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "stdout.push",
+          "lineNumber": 69
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.stderr?.on",
+          "lineNumber": 70
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "stderr.push",
+          "lineNumber": 70
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.on",
+          "lineNumber": 71
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "clearTimeout",
+          "lineNumber": 74
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "resolve",
+          "lineNumber": 75
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "String",
+          "lineNumber": 75
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.on",
+          "lineNumber": 77
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "clearTimeout",
+          "lineNumber": 80
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stdout).toString('utf-8').slice",
+          "lineNumber": 81
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stdout).toString",
+          "lineNumber": 81
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat",
+          "lineNumber": 81
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stderr).toString('utf-8').slice",
+          "lineNumber": 82
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stderr).toString",
+          "lineNumber": 82
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat",
+          "lineNumber": 82
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "resolve",
+          "lineNumber": 83
+        },
+        {
+          "caller": "verify",
+          "callee": "createLogger",
+          "lineNumber": 89
+        },
+        {
+          "caller": "verify",
+          "callee": "resolvePaths",
+          "lineNumber": 90
+        },
+        {
+          "caller": "verify",
+          "callee": "existsSync",
+          "lineNumber": 97
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 98
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 101
+        },
+        {
+          "caller": "verify",
+          "callee": "parseConfig",
+          "lineNumber": 105
+        },
+        {
+          "caller": "verify",
+          "callee": "readFile",
+          "lineNumber": 105
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 106
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 108
+        },
+        {
+          "caller": "verify",
+          "callee": "String",
+          "lineNumber": 111
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 117
+        },
+        {
+          "caller": "verify",
+          "callee": "hasHiveEntries",
+          "lineNumber": 119
+        },
+        {
+          "caller": "verify",
+          "callee": "allHookBasenames",
+          "lineNumber": 123
+        },
+        {
+          "caller": "verify",
+          "callee": "join",
+          "lineNumber": 124
+        },
+        {
+          "caller": "verify",
+          "callee": "fileReadable",
+          "lineNumber": 125
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 126
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 131
+        },
+        {
+          "caller": "verify",
+          "callee": "existsSync",
+          "lineNumber": 141
+        },
+        {
+          "caller": "verify",
+          "callee": "JSON.parse",
+          "lineNumber": 143
+        },
+        {
+          "caller": "verify",
+          "callee": "readFile",
+          "lineNumber": 143
+        },
+        {
+          "caller": "verify",
+          "callee": "probeCliVersion",
+          "lineNumber": 152
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 153
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.every",
+          "lineNumber": 159
+        },
+        {
+          "caller": "verify",
+          "callee": "log.info",
+          "lineNumber": 160
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.filter",
+          "lineNumber": 160
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/yaml-merger.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 186,
+      "nonEmptyLines": 167,
+      "functions": [
+        {
+          "name": "asRecord",
+          "startLine": 58,
+          "endLine": 62,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "asEntryArray",
+          "startLine": 64,
+          "endLine": 66,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "isHiveEntry",
+          "startLine": 69,
+          "endLine": 72,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "entryCommand",
+          "startLine": 74,
+          "endLine": 78,
+          "params": [
+            "entry"
+          ]
+        },
+        {
+          "name": "parseConfig",
+          "startLine": 85,
+          "endLine": 101,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "serializeConfig",
+          "startLine": 104,
+          "endLine": 107,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "yamlRegister",
+          "startLine": 116,
+          "endLine": 147,
+          "params": [
+            "config",
+            "entries"
+          ]
+        },
+        {
+          "name": "yamlUnregister",
+          "startLine": 157,
+          "endLine": 175,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "hasHiveEntries",
+          "startLine": 178,
+          "endLine": 186,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HIVE_MIND_MARKER",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "HOOKS_KEY",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "isHiveEntry",
+          "line": 69,
+          "isDefault": false
+        },
+        {
+          "name": "parseConfig",
+          "line": 85,
+          "isDefault": false
+        },
+        {
+          "name": "serializeConfig",
+          "line": 104,
+          "isDefault": false
+        },
+        {
+          "name": "yamlRegister",
+          "line": 116,
+          "isDefault": false
+        },
+        {
+          "name": "yamlUnregister",
+          "line": 157,
+          "isDefault": false
+        },
+        {
+          "name": "hasHiveEntries",
+          "line": 178,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "asRecord",
+          "callee": "Array.isArray",
+          "lineNumber": 59
+        },
+        {
+          "caller": "asEntryArray",
+          "callee": "Array.isArray",
+          "lineNumber": 65
+        },
+        {
+          "caller": "isHiveEntry",
+          "callee": "asRecord",
+          "lineNumber": 70
+        },
+        {
+          "caller": "entryCommand",
+          "callee": "asRecord",
+          "lineNumber": 75
+        },
+        {
+          "caller": "parseConfig",
+          "callee": "raw.trim",
+          "lineNumber": 86
+        },
+        {
+          "caller": "parseConfig",
+          "callee": "parseYaml",
+          "lineNumber": 89
+        },
+        {
+          "caller": "parseConfig",
+          "callee": "String",
+          "lineNumber": 93
+        },
+        {
+          "caller": "parseConfig",
+          "callee": "asRecord",
+          "lineNumber": 96
+        },
+        {
+          "caller": "serializeConfig",
+          "callee": "stringifyYaml",
+          "lineNumber": 105
+        },
+        {
+          "caller": "serializeConfig",
+          "callee": "text.endsWith",
+          "lineNumber": 106
+        },
+        {
+          "caller": "yamlRegister",
+          "callee": "asRecord",
+          "lineNumber": 121
+        },
+        {
+          "caller": "yamlRegister",
+          "callee": "asEntryArray(nextHooks[entry.eventKey]).slice",
+          "lineNumber": 125
+        },
+        {
+          "caller": "yamlRegister",
+          "callee": "asEntryArray",
+          "lineNumber": 125
+        },
+        {
+          "caller": "yamlRegister",
+          "callee": "isHiveEntry",
+          "lineNumber": 134
+        },
+        {
+          "caller": "yamlRegister",
+          "callee": "entryCommand",
+          "lineNumber": 134
+        },
+        {
+          "caller": "yamlRegister",
+          "callee": "arr.push",
+          "lineNumber": 140
+        },
+        {
+          "caller": "yamlUnregister",
+          "callee": "asRecord",
+          "lineNumber": 161
+        },
+        {
+          "caller": "yamlUnregister",
+          "callee": "Object.entries",
+          "lineNumber": 165
+        },
+        {
+          "caller": "yamlUnregister",
+          "callee": "asEntryArray",
+          "lineNumber": 166
+        },
+        {
+          "caller": "yamlUnregister",
+          "callee": "arr.filter",
+          "lineNumber": 171
+        },
+        {
+          "caller": "yamlUnregister",
+          "callee": "isHiveEntry",
+          "lineNumber": 171
+        },
+        {
+          "caller": "hasHiveEntries",
+          "callee": "asRecord",
+          "lineNumber": 180
+        },
+        {
+          "caller": "hasHiveEntries",
+          "callee": "Object.values",
+          "lineNumber": 182
+        },
+        {
+          "caller": "hasHiveEntries",
+          "callee": "asEntryArray(value).some",
+          "lineNumber": 183
+        },
+        {
+          "caller": "hasHiveEntries",
+          "callee": "asEntryArray",
+          "lineNumber": 183
+        },
+        {
+          "caller": "hasHiveEntries",
+          "callee": "isHiveEntry",
+          "lineNumber": 183
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 9,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/adapter.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 82,
+      "nonEmptyLines": 71,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/compact-on-stop.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 169,
+      "nonEmptyLines": 150,
+      "functions": [
+        {
+          "name": "makeLogger",
+          "startLine": 22,
+          "endLine": 29,
+          "params": []
+        },
+        {
+          "name": "makeCtx",
+          "startLine": 31,
+          "endLine": 33,
+          "params": [
+            "bridge"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeCtx",
+          "callee": "makeLogger",
+          "lineNumber": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/hooks/_test-helpers.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 62,
+      "nonEmptyLines": 57,
+      "functions": [
+        {
+          "name": "makeMockBridge",
+          "startLine": 25,
+          "endLine": 43,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeHookCaptures",
+          "startLine": 50,
+          "endLine": 62,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "makeMockBridge",
+          "line": 25,
+          "isDefault": false
+        },
+        {
+          "name": "makeHookCaptures",
+          "line": 50,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 28
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 29
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 30
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 31
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 32
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 33
+        },
+        {
+          "caller": "makeMockBridge",
+          "callee": "vi.fn",
+          "lineNumber": 34
+        },
+        {
+          "caller": "makeHookCaptures",
+          "callee": "stdout.push",
+          "lineNumber": 59
+        },
+        {
+          "caller": "makeHookCaptures",
+          "callee": "exits.push",
+          "lineNumber": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/hooks/session-start.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 138,
+      "nonEmptyLines": 129,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/hooks/stop.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 246,
+      "nonEmptyLines": 229,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/hooks/user-prompt-submit.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 98,
+      "nonEmptyLines": 92,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/install.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 217,
+      "nonEmptyLines": 190,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 18,
+          "endLine": 29,
+          "params": [
+            "initialYaml"
+          ]
+        },
+        {
+          "name": "readPointer",
+          "startLine": 31,
+          "endLine": 33,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "hooksOf",
+          "startLine": 35,
+          "endLine": 37,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 20
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 22
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 24
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "resolve",
+          "lineNumber": 26
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 27
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 28
+        },
+        {
+          "caller": "readPointer",
+          "callee": "readFile(p, 'utf-8').then",
+          "lineNumber": 32
+        },
+        {
+          "caller": "readPointer",
+          "callee": "readFile",
+          "lineNumber": 32
+        },
+        {
+          "caller": "readPointer",
+          "callee": "JSON.parse",
+          "lineNumber": 32
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/paths.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 76,
+      "nonEmptyLines": 67,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/register.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 225,
+      "nonEmptyLines": 201,
+      "functions": [
+        {
+          "name": "entry",
+          "startLine": 15,
+          "endLine": 17,
+          "params": [
+            "eventKey",
+            "command",
+            "timeout"
+          ]
+        },
+        {
+          "name": "eventArray",
+          "startLine": 27,
+          "endLine": 30,
+          "params": [
+            "config",
+            "eventKey"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/uninstall.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 130,
+      "nonEmptyLines": 113,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 17,
+          "endLine": 28,
+          "params": [
+            "initialYaml"
+          ]
+        },
+        {
+          "name": "sha256",
+          "startLine": 30,
+          "endLine": 32,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 20
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 23
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "resolve",
+          "lineNumber": 25
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 26
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 27
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update(s, 'utf-8').digest",
+          "lineNumber": 31
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 31
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash",
+          "lineNumber": 31
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/tests/verify.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 187,
+      "nonEmptyLines": 172,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 17,
+          "endLine": 36,
+          "params": [
+            "initialYaml",
+            "withHookFiles"
+          ]
+        },
+        {
+          "name": "mockSpawnImpl",
+          "startLine": 38,
+          "endLine": 51,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 22
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 23
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 25
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 25
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 27
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 28
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 32
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 32
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "import",
+          "lineNumber": 38
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Readable.from",
+          "lineNumber": 41
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Buffer.from",
+          "lineNumber": 41
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Readable.from",
+          "lineNumber": 42
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Buffer.from",
+          "lineNumber": 42
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Object.assign",
+          "lineNumber": 43
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "vi.fn",
+          "lineNumber": 46
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "setImmediate",
+          "lineNumber": 48
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "emitter.emit",
+          "lineNumber": 48
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "import",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

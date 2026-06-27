@@ -1,0 +1,34 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/research/01-oss-memory-packaging-strategy.md", "language": "markdown", "sizeLines": 428, "fileCategory": "docs"},
+    {"path": "docs/research/02-memory-system-scientific-draft.md", "language": "markdown", "sizeLines": 445, "fileCategory": "docs"},
+    {"path": "docs/research/03-memory-harvesting-strategy.md", "language": "markdown", "sizeLines": 281, "fileCategory": "docs"},
+    {"path": "docs/research/03-paper-skeleton-v2-2026-04-30.md", "language": "markdown", "sizeLines": 328, "fileCategory": "docs"},
+    {"path": "docs/research/04-competitive-landscape.md", "language": "markdown", "sizeLines": 198, "fileCategory": "docs"},
+    {"path": "docs/research/04-gepa-public-reveal-strategy.md", "language": "markdown", "sizeLines": 392, "fileCategory": "docs"},
+    {"path": "docs/research/05-user-personas-ai-os.md", "language": "markdown", "sizeLines": 272, "fileCategory": "docs"},
+    {"path": "docs/research/06-waggle-os-product-overview.md", "language": "markdown", "sizeLines": 406, "fileCategory": "docs"},
+    {"path": "docs/research/07-skills-connectors-strategy.md", "language": "markdown", "sizeLines": 355, "fileCategory": "docs"},
+    {"path": "docs/research/PAPER-1-CONCEPT_hive-mind-memory.md", "language": "markdown", "sizeLines": 131, "fileCategory": "docs"},
+    {"path": "docs/research/PAPER-2-CONCEPT_gepa-evolution.md", "language": "markdown", "sizeLines": 174, "fileCategory": "docs"},
+    {"path": "docs/research/README.md", "language": "markdown", "sizeLines": 215, "fileCategory": "docs"},
+    {"path": "docs/research/waggle-hive-mind-paper.md", "language": "markdown", "sizeLines": 1144, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/research/01-oss-memory-packaging-strategy.md": [],
+    "docs/research/02-memory-system-scientific-draft.md": [],
+    "docs/research/03-memory-harvesting-strategy.md": [],
+    "docs/research/03-paper-skeleton-v2-2026-04-30.md": [],
+    "docs/research/04-competitive-landscape.md": [],
+    "docs/research/04-gepa-public-reveal-strategy.md": [],
+    "docs/research/05-user-personas-ai-os.md": [],
+    "docs/research/06-waggle-os-product-overview.md": [],
+    "docs/research/07-skills-connectors-strategy.md": [],
+    "docs/research/PAPER-1-CONCEPT_hive-mind-memory.md": [],
+    "docs/research/PAPER-2-CONCEPT_gepa-evolution.md": [],
+    "docs/research/README.md": [],
+    "docs/research/waggle-hive-mind-paper.md": []
+  },
+  "neighborMap": {}
+}

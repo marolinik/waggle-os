@@ -1,0 +1,618 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/superpowers/specs/2026-05-23-waggle-os-ux-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 305,
+      "nonEmptyLines": 229,
+      "sections": [
+        {
+          "heading": "Waggle OS — UX Design v1",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. The anchor metaphor (and what it isn't)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "1. Spatial chrome & window choreography",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "2. The command surface — the omnibar",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "3. Agent visibility & multi-agent choreography",
+          "level": 2,
+          "line": 80
+        },
+        {
+          "heading": "4. Memory as first-class fabric",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "5. Workspaces as scenes (not folders)",
+          "level": 2,
+          "line": 121
+        },
+        {
+          "heading": "6. Input modalities & ambient capture",
+          "level": 2,
+          "line": 142
+        },
+        {
+          "heading": "7. Trust, autonomy & approval choreography",
+          "level": 2,
+          "line": 162
+        },
+        {
+          "heading": "8. Discoverability — the OS teaches you",
+          "level": 2,
+          "line": 181
+        },
+        {
+          "heading": "9. Cross-cutting design principles",
+          "level": 2,
+          "line": 201
+        },
+        {
+          "heading": "10. Phased rollout suggestion",
+          "level": 2,
+          "line": 218
+        },
+        {
+          "heading": "Phase 1 — The OS-feel pass (2–3 weeks)",
+          "level": 3,
+          "line": 222
+        },
+        {
+          "heading": "Phase 2 — The differentiation moat (4–6 weeks)",
+          "level": 3,
+          "line": 237
+        },
+        {
+          "heading": "Phase 3 — The deepening (multi-week, prioritize when Phase 2 is in users' hands)",
+          "level": 3,
+          "line": 252
+        },
+        {
+          "heading": "11. Open questions / decisions Marko owns",
+          "level": 2,
+          "line": 263
+        },
+        {
+          "heading": "12. Implementation notes (deferred — for writing-plans)",
+          "level": 2,
+          "line": 278
+        },
+        {
+          "heading": "13. What this design doesn't try to do",
+          "level": 2,
+          "line": 294
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-01-hermes-compact-on-stop-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 209,
+      "nonEmptyLines": 163,
+      "sections": [
+        {
+          "heading": "Design — Hermes opportunistic time-gated compact-on-Stop (OQ-4)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Problem",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "2. Goal / non-goals",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "3. Core constraint — statelessness",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "4. Placement",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "5. Design",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "5.1 New module: `src/compact-on-stop.ts`",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "5.2 Compose into `src/hooks/stop.ts` (save-first)",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "5.3 No changes to install / verify / yaml-merger / paths basenames",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "6. Tests (TDD — write first, watch fail, then implement)",
+          "level": 2,
+          "line": 149
+        },
+        {
+          "heading": "6.1 Unit — `tests/compact-on-stop.test.ts` (new)",
+          "level": 3,
+          "line": 151
+        },
+        {
+          "heading": "6.2 Integration — extend `tests/hooks/stop.test.ts`",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "7. Docs to correct (same PR)",
+          "level": 2,
+          "line": 183
+        },
+        {
+          "heading": "8. Risk / rollback",
+          "level": 2,
+          "line": 196
+        },
+        {
+          "heading": "9. Success criteria",
+          "level": 2,
+          "line": 203
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 15
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-01-openclaw-dedup-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 64,
+      "sections": [
+        {
+          "heading": "OQ-6 — Provenance-Insensitive Save-Side Dedup (OpenClaw gateway double-capture)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Summary",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "2. Decision log",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "3. Mechanism (verified from source)",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "4. The change",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "5. Properties",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "6. Testing",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "7. Risks + open questions",
+          "level": 2,
+          "line": 83
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-01-wave23-hook-feasibility-research.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 383,
+      "nonEmptyLines": 306,
+      "sections": [
+        {
+          "heading": "Wave 2/3 Hook Feasibility — Porting the hive-mind claude-code hook package to 6 other AI tools",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Comparison Matrix",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "2. Per-Tool Detail",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "2.1 Cursor — `near-direct port` — confidence: high",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "2.2 Codex CLI — `near-direct port` — confidence: high",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "2.3 Codex Desktop — `near-direct port` (fold into Codex pkg) — confidence: high",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "2.4 Hermes Agent — `lifecycle-hooks-need-adapter` — confidence: medium",
+          "level": 3,
+          "line": 166
+        },
+        {
+          "heading": "2.5 OpenClaw — `lifecycle-hooks-need-adapter` — confidence: medium",
+          "level": 3,
+          "line": 208
+        },
+        {
+          "heading": "2.6 Claude Desktop — `mcp-bridge-only` — confidence: high",
+          "level": 3,
+          "line": 255
+        },
+        {
+          "heading": "3. Implementation Tiers",
+          "level": 2,
+          "line": 305
+        },
+        {
+          "heading": "Tier A — `near-direct port` (reuse shim-core + handlers; rewrite only the 3 install modules + field renames)",
+          "level": 3,
+          "line": 307
+        },
+        {
+          "heading": "Tier B — `lifecycle-hooks-need-adapter` (events exist but config format/registration model is a rewrite; one event degraded/missing)",
+          "level": 3,
+          "line": 315
+        },
+        {
+          "heading": "Tier C — `mcp-bridge-only` (no hook surface; register an MCP server; partial, on-demand capture)",
+          "level": 3,
+          "line": 323
+        },
+        {
+          "heading": "Tier D — `not-feasible-now`",
+          "level": 3,
+          "line": 330
+        },
+        {
+          "heading": "4. Recommended Implementation Order (easiest + highest-value first)",
+          "level": 2,
+          "line": 336
+        },
+        {
+          "heading": "5. Key Risks",
+          "level": 2,
+          "line": 347
+        },
+        {
+          "heading": "6. OSS-Mirror Implication",
+          "level": 2,
+          "line": 360
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-01-wave23-hook-stubs-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 783,
+      "nonEmptyLines": 662,
+      "sections": [
+        {
+          "heading": "Wave 2/3 hive-mind Hook Ports — Design Specification",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Summary",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "What",
+          "level": 3,
+          "line": 19
+        },
+        {
+          "heading": "Why",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Shape of the work",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "2. Decision Log",
+          "level": 2,
+          "line": 61
+        },
+        {
+          "heading": "D1 — Scope = Tier A + Tier B (the 5 packages)",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "D2 — Tier B (hermes, openclaw) = source-verify the public repos FIRST",
+          "level": 3,
+          "line": 72
+        },
+        {
+          "heading": "D3 — Architecture = new shared `@waggle/hive-mind-hooks-core`; CC left as-is",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "3. Architecture — `@waggle/hive-mind-hooks-core`",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "3.0 Package metadata",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "3.1 Reversible-install primitives (`install-core.ts` / `paths-core.ts`)",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "3.2 `EventAdapter` interface (`event-adapter.ts`)",
+          "level": 3,
+          "line": 184
+        },
+        {
+          "heading": "3.3 Shared handler bodies (`handlers-core.ts`)",
+          "level": 3,
+          "line": 216
+        },
+        {
+          "heading": "3.4 How `runHook` / `CliBridge` are composed",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "3.5 `jsonRegister` helper (`json-register.ts`)",
+          "level": 3,
+          "line": 272
+        },
+        {
+          "heading": "4. Lifecycle → tool-event mapping (canonical reference)",
+          "level": 2,
+          "line": 310
+        },
+        {
+          "heading": "5. Per-Package Designs",
+          "level": 2,
+          "line": 324
+        },
+        {
+          "heading": "5.1 `@waggle/hive-mind-hooks-codex` (Tier A — second reference shape)",
+          "level": 3,
+          "line": 326
+        },
+        {
+          "heading": "5.2 `@waggle/hive-mind-hooks-codex-desktop` (Tier A — thin re-export)",
+          "level": 3,
+          "line": 356
+        },
+        {
+          "heading": "5.3 `@waggle/hive-mind-hooks-cursor` (Tier A — JSON with field renames + degraded events)",
+          "level": 3,
+          "line": 376
+        },
+        {
+          "heading": "5.4 `@waggle/hive-mind-hooks-hermes` (Tier B — YAML; **source-verified, confidence: high**)",
+          "level": 3,
+          "line": 406
+        },
+        {
+          "heading": "5.5 `@waggle/hive-mind-hooks-openclaw` (Tier B — JSON5 + in-process TS; **source-verified, two design corrections**)",
+          "level": 3,
+          "line": 495
+        },
+        {
+          "heading": "6. Cross-Cutting Concerns",
+          "level": 2,
+          "line": 600
+        },
+        {
+          "heading": "6.1 Degraded / missing-event documentation policy",
+          "level": 3,
+          "line": 602
+        },
+        {
+          "heading": "6.2 Non-silent install UX",
+          "level": 3,
+          "line": 618
+        },
+        {
+          "heading": "6.3 `tool-detection.ts` fixes",
+          "level": 3,
+          "line": 629
+        },
+        {
+          "heading": "6.4 OSS / subtree-split",
+          "level": 3,
+          "line": 642
+        },
+        {
+          "heading": "7. Testing Strategy",
+          "level": 2,
+          "line": 660
+        },
+        {
+          "heading": "7.1 Per-package parity with the CC reference suite",
+          "level": 3,
+          "line": 662
+        },
+        {
+          "heading": "7.2 `hooks-core` unit tests",
+          "level": 3,
+          "line": 685
+        },
+        {
+          "heading": "7.3 The two invariants every package MUST prove",
+          "level": 3,
+          "line": 693
+        },
+        {
+          "heading": "8. Build Order + Tier B Handling",
+          "level": 2,
+          "line": 706
+        },
+        {
+          "heading": "9. Risks + Open Questions",
+          "level": 2,
+          "line": 734
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/superpowers/specs/2026-06-09-temporal-substrate-fix-design.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 52,
+      "nonEmptyLines": 39,
+      "sections": [
+        {
+          "heading": "Temporal Substrate Fix — Design Spec",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Root cause (from `Explore` map, file:line)",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Approach (chosen): shared renderer in `hive-mind-core`, additive",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Phase 1 — Surface snippet time + prompt guidance (ZERO LLM re-cost)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Phase 2 — Dated distilled facts (OPTIONAL, only if Phase 1 underdelivers; has LLM re-cost)",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Success / regression gate",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Repos & OSS hygiene",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Risks",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Out of scope (YAGNI)",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Follow-on sub-project B (separate spec)",
+          "level": 2,
+          "line": 51
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/01-stripe-backend.md",
+      "type": "document",
+      "name": "01-stripe-backend.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/01-stripe-backend.md",
+      "summary": "Recon document auditing the existing Stripe/billing backend state for the PR7 build, inventorying real vs fabricated surfaces in the local Fastify sidecar, webhook tier-flipping, price env contract, and PCI implications of a custom card form.",
+      "tags": ["documentation", "billing", "infrastructure", "api-schema", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/02-auth-session.md",
+      "type": "document",
+      "name": "02-auth-session.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/02-auth-session.md",
+      "summary": "Recon document mapping the current accountless auth and session model (per-process device token, no identity) against what PR7 must add via Clerk, cataloguing real vs must-build surfaces and open architectural decisions.",
+      "tags": ["documentation", "security", "configuration", "infrastructure"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/03-screen-auth-design.md",
+      "type": "document",
+      "name": "03-screen-auth-design.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/03-screen-auth-design.md",
+      "summary": "Detailed design specification for Screen 13 (Auth / Clerk themed), including exact split-panel layout, every view-state (sign-in, sign-up, verify OTP, SSO), warm-token CSS mapping, and a honesty contract listing fabrication risks that must be gated off.",
+      "tags": ["documentation", "design", "security", "configuration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/04-screen-billing-design.md",
+      "type": "document",
+      "name": "04-screen-billing-design.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/04-screen-billing-design.md",
+      "summary": "Detailed design specification for Screen 14 (Billing / Stripe), covering four states (Plans, Checkout, Success, Manage), verbatim copy from the HTML prototype, fabrication-risk register distinguishing real Stripe-backed surfaces from must-gate items, and recommended PR7 build shape.",
+      "tags": ["documentation", "billing", "design", "security"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/05-clerk-integration.md",
+      "type": "document",
+      "name": "05-clerk-integration.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/05-clerk-integration.md",
+      "summary": "Architecture verdict and integration guide for adding optional Clerk auth to the local-first desktop app, detailing ClerkProvider placement, warm CSS token theming of prebuilt components, the optional-account pattern, and fabrication risks to gate off.",
+      "tags": ["documentation", "security", "configuration", "infrastructure"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/06-routing-surfaces.md",
+      "type": "document",
+      "name": "06-routing-surfaces.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/06-routing-surfaces.md",
+      "summary": "Routing and surface registration recon for PR7, detailing how /auth (full-screen pre-shell sibling route) and /billing (Settings Plan-tab deep-link) must be wired into App.tsx and the command catalog, including breadcrumb label gaps and existing upgrade entry-points.",
+      "tags": ["documentation", "configuration", "infrastructure", "design"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/redesign-warm-hive/pr7-recon/07-byo-vs-metered.md",
+      "type": "document",
+      "name": "07-byo-vs-metered.md",
+      "filePath": "docs/redesign-warm-hive/pr7-recon/07-byo-vs-metered.md",
+      "summary": "Founder decision document analysing the BYO-key (flat subscription) vs Waggle-metered inference-cost model for PR7, presenting evidence from the shipped PR5 BYO-key implementation and existing flat Stripe tiers, with a concrete recommendation and open sub-decisions.",
+      "tags": ["documentation", "billing", "configuration", "design"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/01-stripe-backend.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/04-screen-billing-design.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/02-auth-session.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/03-screen-auth-design.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/02-auth-session.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/05-clerk-integration.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/03-screen-auth-design.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/05-clerk-integration.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/04-screen-billing-design.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/07-byo-vs-metered.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/05-clerk-integration.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/06-routing-surfaces.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/06-routing-surfaces.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/07-byo-vs-metered.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/redesign-warm-hive/pr7-recon/01-stripe-backend.md",
+      "target": "document:docs/redesign-warm-hive/pr7-recon/07-byo-vs-metered.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

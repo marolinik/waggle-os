@@ -1,0 +1,235 @@
+{
+  "nodes": [
+    {
+      "id": "file:sidecar/src/agent-session.ts",
+      "type": "file",
+      "name": "agent-session.ts",
+      "filePath": "sidecar/src/agent-session.ts",
+      "summary": "Manages a single agent conversation session within the Tauri sidecar, wrapping the orchestrator to build prompts, resolve tools, call the Anthropic API, stream responses, and execute tool calls in a loop.",
+      "tags": ["service", "agent-runtime", "streaming", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:sidecar/src/agent-session.ts:AgentSession",
+      "type": "class",
+      "name": "AgentSession",
+      "filePath": "sidecar/src/agent-session.ts",
+      "lineRange": [12, 124],
+      "summary": "Encapsulates a single agent session: lazily initializes the orchestrator with an embedding provider, then drives the Anthropic message loop (streaming, tool execution, error handling) via sendMessage.",
+      "tags": ["service", "agent-runtime", "streaming"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:sidecar/src/main.ts",
+      "type": "file",
+      "name": "main.ts",
+      "filePath": "sidecar/src/main.ts",
+      "summary": "Entry point for the Tauri Node.js sidecar process; bootstraps the RPC handler and weaver scheduler, then wires them to the IPC communication channel with the Tauri shell.",
+      "tags": ["entry-point", "service", "sidecar"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:sidecar/src/mcp-manager.ts",
+      "type": "file",
+      "name": "mcp-manager.ts",
+      "filePath": "sidecar/src/mcp-manager.ts",
+      "summary": "Provides the McpManager class for managing a registry of MCP (Model Context Protocol) server entries within the sidecar, with add/remove/list and JSON serialization capabilities.",
+      "tags": ["service", "middleware", "singleton"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:sidecar/src/mcp-manager.ts:McpManager",
+      "type": "class",
+      "name": "McpManager",
+      "filePath": "sidecar/src/mcp-manager.ts",
+      "lineRange": [10, 48],
+      "summary": "Registry for MCP server configurations; supports add, remove, get, list operations and JSON serialization/deserialization for persistence.",
+      "tags": ["service", "middleware", "singleton"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:sidecar/src/rpc-handler.ts",
+      "type": "file",
+      "name": "rpc-handler.ts",
+      "filePath": "sidecar/src/rpc-handler.ts",
+      "summary": "Implements the RpcHandler class that dispatches incoming IPC/RPC calls from the Tauri frontend, routing agent chat, MCP management, and memory context operations through the appropriate sidecar subsystems.",
+      "tags": ["api-handler", "middleware", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:sidecar/src/rpc-handler.ts:RpcHandler",
+      "type": "class",
+      "name": "RpcHandler",
+      "filePath": "sidecar/src/rpc-handler.ts",
+      "lineRange": [32, 132],
+      "summary": "Central dispatcher for sidecar RPC calls; holds references to all memory layers (identity, awareness, frames, sessions, knowledge), the AgentSession, and McpManager, and routes method calls accordingly.",
+      "tags": ["api-handler", "middleware", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:sidecar/src/weaver-scheduler.ts",
+      "type": "file",
+      "name": "weaver-scheduler.ts",
+      "filePath": "sidecar/src/weaver-scheduler.ts",
+      "summary": "Provides the WeaverScheduler class that periodically triggers memory consolidation (GOP consolidation) and frame decay/strengthening via setInterval timers, coordinating the background memory maintenance lifecycle.",
+      "tags": ["service", "scheduler", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:sidecar/src/weaver-scheduler.ts:WeaverScheduler",
+      "type": "class",
+      "name": "WeaverScheduler",
+      "filePath": "sidecar/src/weaver-scheduler.ts",
+      "lineRange": [14, 64],
+      "summary": "Schedules periodic weaver operations (GOP consolidation and frame decay/strengthening) using setInterval, with start/stop lifecycle control and active session awareness.",
+      "tags": ["service", "scheduler", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:tests/sidecar/mcp-manager.test.ts",
+      "type": "file",
+      "name": "mcp-manager.test.ts",
+      "filePath": "tests/sidecar/mcp-manager.test.ts",
+      "summary": "Unit tests for the McpManager class, verifying add/remove/get/list operations and JSON serialization/deserialization behavior.",
+      "tags": ["test", "unit-test", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:tests/sidecar/rpc-handler.test.ts",
+      "type": "file",
+      "name": "rpc-handler.test.ts",
+      "filePath": "tests/sidecar/rpc-handler.test.ts",
+      "summary": "Unit tests for the RpcHandler class, covering dispatch routing for agent chat, MCP management commands, and error handling for unknown methods.",
+      "tags": ["test", "unit-test", "api-handler"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:sidecar/src/agent-session.ts",
+      "target": "class:sidecar/src/agent-session.ts:AgentSession",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:sidecar/src/agent-session.ts",
+      "target": "class:sidecar/src/agent-session.ts:AgentSession",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:sidecar/src/mcp-manager.ts",
+      "target": "class:sidecar/src/mcp-manager.ts:McpManager",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:sidecar/src/mcp-manager.ts",
+      "target": "class:sidecar/src/mcp-manager.ts:McpManager",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:sidecar/src/rpc-handler.ts",
+      "target": "class:sidecar/src/rpc-handler.ts:RpcHandler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:sidecar/src/rpc-handler.ts",
+      "target": "class:sidecar/src/rpc-handler.ts:RpcHandler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:sidecar/src/weaver-scheduler.ts",
+      "target": "class:sidecar/src/weaver-scheduler.ts:WeaverScheduler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:sidecar/src/weaver-scheduler.ts",
+      "target": "class:sidecar/src/weaver-scheduler.ts:WeaverScheduler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:sidecar/src/main.ts",
+      "target": "file:sidecar/src/rpc-handler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sidecar/src/main.ts",
+      "target": "file:sidecar/src/weaver-scheduler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sidecar/src/rpc-handler.ts",
+      "target": "file:sidecar/src/agent-session.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sidecar/src/rpc-handler.ts",
+      "target": "file:sidecar/src/mcp-manager.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/sidecar/mcp-manager.test.ts",
+      "target": "file:sidecar/src/mcp-manager.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:tests/sidecar/rpc-handler.test.ts",
+      "target": "file:sidecar/src/rpc-handler.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:sidecar/src/mcp-manager.ts",
+      "target": "file:tests/sidecar/mcp-manager.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:sidecar/src/rpc-handler.ts",
+      "target": "file:tests/sidecar/rpc-handler.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:sidecar/src/rpc-handler.ts:RpcHandler",
+      "target": "class:sidecar/src/agent-session.ts:AgentSession",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "class:sidecar/src/rpc-handler.ts:RpcHandler",
+      "target": "class:sidecar/src/mcp-manager.ts:McpManager",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

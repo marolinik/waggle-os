@@ -1,0 +1,4793 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-cli/assets/mcp-health-check-fixed.js",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 651,
+      "nonEmptyLines": 560,
+      "functions": [
+        {
+          "name": "envNumber",
+          "startLine": 61,
+          "endLine": 64,
+          "params": [
+            "name",
+            "fallback"
+          ]
+        },
+        {
+          "name": "stateFilePath",
+          "startLine": 66,
+          "endLine": 71,
+          "params": []
+        },
+        {
+          "name": "configPaths",
+          "startLine": 73,
+          "endLine": 91,
+          "params": []
+        },
+        {
+          "name": "readJsonFile",
+          "startLine": 93,
+          "endLine": 99,
+          "params": [
+            "filePath"
+          ]
+        },
+        {
+          "name": "loadState",
+          "startLine": 101,
+          "endLine": 112,
+          "params": [
+            "filePath"
+          ]
+        },
+        {
+          "name": "saveState",
+          "startLine": 114,
+          "endLine": 121,
+          "params": [
+            "filePath",
+            "state"
+          ]
+        },
+        {
+          "name": "readRawStdin",
+          "startLine": 123,
+          "endLine": 142,
+          "params": []
+        },
+        {
+          "name": "safeParse",
+          "startLine": 144,
+          "endLine": 150,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "extractMcpTarget",
+          "startLine": 152,
+          "endLine": 186,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "extractMcpTargetFromRaw",
+          "startLine": 188,
+          "endLine": 198,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "resolveServerConfig",
+          "startLine": 200,
+          "endLine": 216,
+          "params": [
+            "serverName"
+          ]
+        },
+        {
+          "name": "markHealthy",
+          "startLine": 218,
+          "endLine": 230,
+          "params": [
+            "state",
+            "serverName",
+            "now"
+          ]
+        },
+        {
+          "name": "markUnhealthy",
+          "startLine": 232,
+          "endLine": 248,
+          "params": [
+            "state",
+            "serverName",
+            "now",
+            "failureCode",
+            "errorMessage"
+          ]
+        },
+        {
+          "name": "failureSummary",
+          "startLine": 250,
+          "endLine": 263,
+          "params": [
+            "input"
+          ]
+        },
+        {
+          "name": "detectFailureCode",
+          "startLine": 265,
+          "endLine": 273,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "requestHttp",
+          "startLine": 275,
+          "endLine": 318,
+          "params": [
+            "urlString",
+            "headers",
+            "timeoutMs"
+          ]
+        },
+        {
+          "name": "probeCommandServer",
+          "startLine": 320,
+          "endLine": 412,
+          "params": [
+            "serverName",
+            "config"
+          ]
+        },
+        {
+          "name": "probeServer",
+          "startLine": 414,
+          "endLine": 445,
+          "params": [
+            "serverName",
+            "resolvedConfig"
+          ]
+        },
+        {
+          "name": "reconnectCommand",
+          "startLine": 447,
+          "endLine": 457,
+          "params": [
+            "serverName"
+          ]
+        },
+        {
+          "name": "attemptReconnect",
+          "startLine": 459,
+          "endLine": 486,
+          "params": [
+            "serverName"
+          ]
+        },
+        {
+          "name": "shouldFailOpen",
+          "startLine": 488,
+          "endLine": 490,
+          "params": []
+        },
+        {
+          "name": "emitLogs",
+          "startLine": 492,
+          "endLine": 496,
+          "params": [
+            "logs"
+          ]
+        },
+        {
+          "name": "handlePreToolUse",
+          "startLine": 498,
+          "endLine": 561,
+          "params": [
+            "rawInput",
+            "input",
+            "target",
+            "statePathValue",
+            "now"
+          ]
+        },
+        {
+          "name": "handlePostToolUseFailure",
+          "startLine": 563,
+          "endLine": 609,
+          "params": [
+            "rawInput",
+            "input",
+            "target",
+            "statePathValue",
+            "now"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 611,
+          "endLine": 646,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "envNumber",
+          "callee": "Number",
+          "lineNumber": 62
+        },
+        {
+          "caller": "envNumber",
+          "callee": "Number.isFinite",
+          "lineNumber": 63
+        },
+        {
+          "caller": "stateFilePath",
+          "callee": "path.resolve",
+          "lineNumber": 68
+        },
+        {
+          "caller": "stateFilePath",
+          "callee": "path.join",
+          "lineNumber": 70
+        },
+        {
+          "caller": "stateFilePath",
+          "callee": "os.homedir",
+          "lineNumber": 70
+        },
+        {
+          "caller": "configPaths",
+          "callee": "process.env.ECC_MCP_CONFIG_PATH\r\n      .split(path.delimiter)\r\n      .map(entry => entry.trim())\r\n      .filter(Boolean)\r\n      .map",
+          "lineNumber": 75
+        },
+        {
+          "caller": "configPaths",
+          "callee": "process.env.ECC_MCP_CONFIG_PATH\r\n      .split(path.delimiter)\r\n      .map(entry => entry.trim())\r\n      .filter",
+          "lineNumber": 75
+        },
+        {
+          "caller": "configPaths",
+          "callee": "process.env.ECC_MCP_CONFIG_PATH\r\n      .split(path.delimiter)\r\n      .map",
+          "lineNumber": 75
+        },
+        {
+          "caller": "configPaths",
+          "callee": "process.env.ECC_MCP_CONFIG_PATH\r\n      .split",
+          "lineNumber": 75
+        },
+        {
+          "caller": "configPaths",
+          "callee": "entry.trim",
+          "lineNumber": 77
+        },
+        {
+          "caller": "configPaths",
+          "callee": "path.resolve",
+          "lineNumber": 79
+        },
+        {
+          "caller": "configPaths",
+          "callee": "process.cwd",
+          "lineNumber": 82
+        },
+        {
+          "caller": "configPaths",
+          "callee": "os.homedir",
+          "lineNumber": 83
+        },
+        {
+          "caller": "configPaths",
+          "callee": "path.join",
+          "lineNumber": 86
+        },
+        {
+          "caller": "configPaths",
+          "callee": "path.join",
+          "lineNumber": 87
+        },
+        {
+          "caller": "configPaths",
+          "callee": "path.join",
+          "lineNumber": 88
+        },
+        {
+          "caller": "configPaths",
+          "callee": "path.join",
+          "lineNumber": 89
+        },
+        {
+          "caller": "readJsonFile",
+          "callee": "JSON.parse",
+          "lineNumber": 95
+        },
+        {
+          "caller": "readJsonFile",
+          "callee": "fs.readFileSync",
+          "lineNumber": 95
+        },
+        {
+          "caller": "loadState",
+          "callee": "readJsonFile",
+          "lineNumber": 102
+        },
+        {
+          "caller": "loadState",
+          "callee": "Array.isArray",
+          "lineNumber": 103
+        },
+        {
+          "caller": "loadState",
+          "callee": "Array.isArray",
+          "lineNumber": 107
+        },
+        {
+          "caller": "saveState",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 116
+        },
+        {
+          "caller": "saveState",
+          "callee": "path.dirname",
+          "lineNumber": 116
+        },
+        {
+          "caller": "saveState",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 117
+        },
+        {
+          "caller": "saveState",
+          "callee": "JSON.stringify",
+          "lineNumber": 117
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "/^(1|true|yes)$/i.test",
+          "lineNumber": 126
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "String",
+          "lineNumber": 126
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "process.stdin.setEncoding",
+          "lineNumber": 127
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "process.stdin.on",
+          "lineNumber": 128
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "chunk.substring",
+          "lineNumber": 131
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "process.stdin.on",
+          "lineNumber": 139
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "resolve",
+          "lineNumber": 139
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "process.stdin.on",
+          "lineNumber": 140
+        },
+        {
+          "caller": "readRawStdin",
+          "callee": "resolve",
+          "lineNumber": 140
+        },
+        {
+          "caller": "safeParse",
+          "callee": "raw.trim",
+          "lineNumber": 146
+        },
+        {
+          "caller": "safeParse",
+          "callee": "JSON.parse",
+          "lineNumber": 146
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "String",
+          "lineNumber": 153
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "String",
+          "lineNumber": 168
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "String",
+          "lineNumber": 169
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "toolName.startsWith",
+          "lineNumber": 173
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "toolName.slice(5).split",
+          "lineNumber": 177
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "toolName.slice",
+          "lineNumber": 177
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "segments.slice(1).join",
+          "lineNumber": 184
+        },
+        {
+          "caller": "extractMcpTarget",
+          "callee": "segments.slice",
+          "lineNumber": 184
+        },
+        {
+          "caller": "extractMcpTargetFromRaw",
+          "callee": "raw.match",
+          "lineNumber": 189
+        },
+        {
+          "caller": "extractMcpTargetFromRaw",
+          "callee": "raw.match",
+          "lineNumber": 190
+        },
+        {
+          "caller": "extractMcpTargetFromRaw",
+          "callee": "raw.match",
+          "lineNumber": 191
+        },
+        {
+          "caller": "extractMcpTargetFromRaw",
+          "callee": "extractMcpTarget",
+          "lineNumber": 193
+        },
+        {
+          "caller": "resolveServerConfig",
+          "callee": "configPaths",
+          "lineNumber": 201
+        },
+        {
+          "caller": "resolveServerConfig",
+          "callee": "readJsonFile",
+          "lineNumber": 202
+        },
+        {
+          "caller": "resolveServerConfig",
+          "callee": "Array.isArray",
+          "lineNumber": 207
+        },
+        {
+          "caller": "markHealthy",
+          "callee": "envNumber",
+          "lineNumber": 222
+        },
+        {
+          "caller": "markUnhealthy",
+          "callee": "Number",
+          "lineNumber": 234
+        },
+        {
+          "caller": "markUnhealthy",
+          "callee": "envNumber",
+          "lineNumber": 235
+        },
+        {
+          "caller": "markUnhealthy",
+          "callee": "Math.min",
+          "lineNumber": 236
+        },
+        {
+          "caller": "markUnhealthy",
+          "callee": "Math.max",
+          "lineNumber": 236
+        },
+        {
+          "caller": "failureSummary",
+          "callee": "[\r\n    typeof input.error === 'string' ? input.error : '',\r\n    typeof input.message === 'string' ? input.message : '',\r\n    typeof input.tool_response === 'string' ? input.tool_response : '',\r\n    typeof output === 'string' ? output : '',\r\n    typeof output?.output === 'string' ? output.output : '',\r\n    typeof output?.stderr === 'string' ? output.stderr : '',\r\n    typeof input.tool_input?.error === 'string' ? input.tool_input.error : ''\r\n  ].filter",
+          "lineNumber": 252
+        },
+        {
+          "caller": "failureSummary",
+          "callee": "pieces.join",
+          "lineNumber": 262
+        },
+        {
+          "caller": "detectFailureCode",
+          "callee": "String",
+          "lineNumber": 266
+        },
+        {
+          "caller": "detectFailureCode",
+          "callee": "entry.pattern.test",
+          "lineNumber": 268
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "client.request",
+          "lineNumber": 283
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "res.resume",
+          "lineNumber": 292
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "resolve",
+          "lineNumber": 293
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "HEALTHY_HTTP_CODES.has",
+          "lineNumber": 294
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "req.setTimeout",
+          "lineNumber": 301
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "req.destroy",
+          "lineNumber": 303
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "req.on",
+          "lineNumber": 306
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "resolve",
+          "lineNumber": 309
+        },
+        {
+          "caller": "requestHttp",
+          "callee": "req.end",
+          "lineNumber": 316
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "Array.isArray",
+          "lineNumber": 323
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "config.args.map",
+          "lineNumber": 323
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "String",
+          "lineNumber": 323
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "envNumber",
+          "lineNumber": 324
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "Array.isArray",
+          "lineNumber": 327
+        },
+        {
+          "caller": "finish",
+          "callee": "resolve",
+          "lineNumber": 336
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "process.cwd",
+          "lineNumber": 341
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "spawn",
+          "lineNumber": 353
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "finish",
+          "lineNumber": 355
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "child.stderr.on",
+          "lineNumber": 363
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "String(chunk).slice",
+          "lineNumber": 366
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "String",
+          "lineNumber": 366
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "child.on",
+          "lineNumber": 370
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "finish",
+          "lineNumber": 371
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "child.on",
+          "lineNumber": 378
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "finish",
+          "lineNumber": 379
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "stderr.trim",
+          "lineNumber": 382
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "setTimeout",
+          "lineNumber": 386
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "child.kill",
+          "lineNumber": 388
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "setTimeout(() => {\r\n        try {\r\n          child.kill('SIGKILL');\r\n        } catch {\r\n          // ignore\r\n        }\r\n      }, 200).unref",
+          "lineNumber": 393
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "setTimeout",
+          "lineNumber": 393
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "child.kill",
+          "lineNumber": 395
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "finish",
+          "lineNumber": 401
+        },
+        {
+          "caller": "probeCommandServer",
+          "callee": "timer.unref",
+          "lineNumber": 409
+        },
+        {
+          "caller": "probeServer",
+          "callee": "requestHttp",
+          "lineNumber": 418
+        },
+        {
+          "caller": "probeServer",
+          "callee": "envNumber",
+          "lineNumber": 418
+        },
+        {
+          "caller": "probeServer",
+          "callee": "RECONNECT_STATUS_CODES.has",
+          "lineNumber": 422
+        },
+        {
+          "caller": "probeServer",
+          "callee": "probeCommandServer",
+          "lineNumber": 429
+        },
+        {
+          "caller": "probeServer",
+          "callee": "RECONNECT_STATUS_CODES.has",
+          "lineNumber": 433
+        },
+        {
+          "caller": "reconnectCommand",
+          "callee": "String(serverName).toUpperCase().replace",
+          "lineNumber": 448
+        },
+        {
+          "caller": "reconnectCommand",
+          "callee": "String(serverName).toUpperCase",
+          "lineNumber": 448
+        },
+        {
+          "caller": "reconnectCommand",
+          "callee": "String",
+          "lineNumber": 448
+        },
+        {
+          "caller": "reconnectCommand",
+          "callee": "command.trim",
+          "lineNumber": 450
+        },
+        {
+          "caller": "reconnectCommand",
+          "callee": "command.includes",
+          "lineNumber": 454
+        },
+        {
+          "caller": "reconnectCommand",
+          "callee": "command.replace",
+          "lineNumber": 455
+        },
+        {
+          "caller": "attemptReconnect",
+          "callee": "reconnectCommand",
+          "lineNumber": 460
+        },
+        {
+          "caller": "attemptReconnect",
+          "callee": "spawnSync",
+          "lineNumber": 465
+        },
+        {
+          "caller": "attemptReconnect",
+          "callee": "process.cwd",
+          "lineNumber": 468
+        },
+        {
+          "caller": "attemptReconnect",
+          "callee": "envNumber",
+          "lineNumber": 470
+        },
+        {
+          "caller": "attemptReconnect",
+          "callee": "(result.stderr || result.stdout || `reconnect exited ${result.status}`).trim",
+          "lineNumber": 481
+        },
+        {
+          "caller": "shouldFailOpen",
+          "callee": "/^(1|true|yes)$/i.test",
+          "lineNumber": 489
+        },
+        {
+          "caller": "shouldFailOpen",
+          "callee": "String",
+          "lineNumber": 489
+        },
+        {
+          "caller": "emitLogs",
+          "callee": "process.stderr.write",
+          "lineNumber": 494
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "loadState",
+          "lineNumber": 500
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "Number",
+          "lineNumber": 503
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "Number",
+          "lineNumber": 507
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "logs.push",
+          "lineNumber": 508
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "new Date(previous.nextRetryAt).toISOString",
+          "lineNumber": 509
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "shouldFailOpen",
+          "lineNumber": 511
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "resolveServerConfig",
+          "lineNumber": 514
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "logs.push",
+          "lineNumber": 516
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "probeServer",
+          "lineNumber": 520
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "markHealthy",
+          "lineNumber": 522
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "saveState",
+          "lineNumber": 523
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "logs.push",
+          "lineNumber": 526
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "attemptReconnect",
+          "lineNumber": 534
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "probeServer",
+          "lineNumber": 536
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "markHealthy",
+          "lineNumber": 538
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "saveState",
+          "lineNumber": 542
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "logs.push",
+          "lineNumber": 543
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "markUnhealthy",
+          "lineNumber": 550
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "saveState",
+          "lineNumber": 551
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "logs.push",
+          "lineNumber": 556
+        },
+        {
+          "caller": "handlePreToolUse",
+          "callee": "shouldFailOpen",
+          "lineNumber": 560
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "failureSummary",
+          "lineNumber": 565
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "detectFailureCode",
+          "lineNumber": 566
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "loadState",
+          "lineNumber": 572
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "markUnhealthy",
+          "lineNumber": 573
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "summary.slice",
+          "lineNumber": 573
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "saveState",
+          "lineNumber": 574
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "logs.push",
+          "lineNumber": 576
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "attemptReconnect",
+          "lineNumber": 578
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "logs.push",
+          "lineNumber": 580
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "logs.push",
+          "lineNumber": 585
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "resolveServerConfig",
+          "lineNumber": 589
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "logs.push",
+          "lineNumber": 591
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "probeServer",
+          "lineNumber": 595
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "logs.push",
+          "lineNumber": 597
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "loadState",
+          "lineNumber": 601
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "markHealthy",
+          "lineNumber": 602
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "saveState",
+          "lineNumber": 606
+        },
+        {
+          "caller": "handlePostToolUseFailure",
+          "callee": "logs.push",
+          "lineNumber": 607
+        },
+        {
+          "caller": "main",
+          "callee": "readRawStdin",
+          "lineNumber": 612
+        },
+        {
+          "caller": "main",
+          "callee": "safeParse",
+          "lineNumber": 613
+        },
+        {
+          "caller": "main",
+          "callee": "extractMcpTarget",
+          "lineNumber": 614
+        },
+        {
+          "caller": "main",
+          "callee": "extractMcpTargetFromRaw",
+          "lineNumber": 614
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 617
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 618
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 623
+        },
+        {
+          "caller": "main",
+          "callee": "shouldFailOpen",
+          "lineNumber": 625
+        },
+        {
+          "caller": "main",
+          "callee": "emitLogs",
+          "lineNumber": 629
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 630
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 631
+        },
+        {
+          "caller": "main",
+          "callee": "shouldFailOpen",
+          "lineNumber": 631
+        },
+        {
+          "caller": "main",
+          "callee": "Date.now",
+          "lineNumber": 636
+        },
+        {
+          "caller": "main",
+          "callee": "stateFilePath",
+          "lineNumber": 637
+        },
+        {
+          "caller": "main",
+          "callee": "handlePostToolUseFailure",
+          "lineNumber": 640
+        },
+        {
+          "caller": "main",
+          "callee": "handlePreToolUse",
+          "lineNumber": 641
+        },
+        {
+          "caller": "main",
+          "callee": "emitLogs",
+          "lineNumber": 643
+        },
+        {
+          "caller": "main",
+          "callee": "process.stdout.write",
+          "lineNumber": 644
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 645
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 25,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/docs/WINDOWS-QUIRKS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 115,
+      "nonEmptyLines": 83,
+      "sections": [
+        {
+          "heading": "Windows Quirks — hive-mind-cli on Windows 10/11",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What's different on Windows",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "1. npm-global CLIs are `.cmd` shims, not symlinks",
+          "level": 3,
+          "line": 13
+        },
+        {
+          "heading": "2. The Claude Code MCP health-check hook had this bug",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "3. Quarantine state file must be cleared after first install",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Verifying hive-mind-cli is healthy in <10 seconds",
+          "level": 2,
+          "line": 71
+        },
+        {
+          "heading": "Unsupported Windows configurations",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "Reporting bugs",
+          "level": 2,
+          "line": 106
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "packages/hive-mind-cli/NOTICE",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 36,
+      "nonEmptyLines": 28,
+      "metrics": {}
+    },
+    {
+      "path": "packages/hive-mind-cli/postinstall.cjs",
+      "language": "javascript",
+      "fileCategory": "code",
+      "totalLines": 135,
+      "nonEmptyLines": 120,
+      "functions": [
+        {
+          "name": "log",
+          "startLine": 60,
+          "endLine": 62,
+          "params": [
+            "msg"
+          ]
+        },
+        {
+          "name": "fileContains",
+          "startLine": 64,
+          "endLine": 70,
+          "params": [
+            "filePath",
+            "needle"
+          ]
+        },
+        {
+          "name": "ensureDir",
+          "startLine": 72,
+          "endLine": 76,
+          "params": [
+            "dir"
+          ]
+        },
+        {
+          "name": "dropOverride",
+          "startLine": 78,
+          "endLine": 103,
+          "params": [
+            "reason"
+          ]
+        },
+        {
+          "name": "detectAndPatch",
+          "startLine": 105,
+          "endLine": 125,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "log",
+          "callee": "console.log",
+          "lineNumber": 61
+        },
+        {
+          "caller": "fileContains",
+          "callee": "fs.readFileSync(filePath, 'utf8').includes",
+          "lineNumber": 66
+        },
+        {
+          "caller": "fileContains",
+          "callee": "fs.readFileSync",
+          "lineNumber": 66
+        },
+        {
+          "caller": "ensureDir",
+          "callee": "fs.existsSync",
+          "lineNumber": 73
+        },
+        {
+          "caller": "ensureDir",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 74
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "fs.existsSync",
+          "lineNumber": 79
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "log",
+          "lineNumber": 80
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "ensureDir",
+          "lineNumber": 83
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "fs.existsSync",
+          "lineNumber": 86
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "fileContains",
+          "lineNumber": 86
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "log",
+          "lineNumber": 87
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "fs.existsSync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "new Date().toISOString().replace",
+          "lineNumber": 93
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "new Date().toISOString",
+          "lineNumber": 93
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "fs.copyFileSync",
+          "lineNumber": 95
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "log",
+          "lineNumber": 96
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "fs.copyFileSync",
+          "lineNumber": 99
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "log",
+          "lineNumber": 100
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "log",
+          "lineNumber": 101
+        },
+        {
+          "caller": "dropOverride",
+          "callee": "log",
+          "lineNumber": 102
+        },
+        {
+          "caller": "detectAndPatch",
+          "callee": "fs.existsSync",
+          "lineNumber": 108
+        },
+        {
+          "caller": "detectAndPatch",
+          "callee": "fileContains",
+          "lineNumber": 109
+        },
+        {
+          "caller": "detectAndPatch",
+          "callee": "log",
+          "lineNumber": 111
+        },
+        {
+          "caller": "detectAndPatch",
+          "callee": "fs.existsSync",
+          "lineNumber": 116
+        },
+        {
+          "caller": "detectAndPatch",
+          "callee": "dropOverride",
+          "lineNumber": 117
+        },
+        {
+          "caller": "detectAndPatch",
+          "callee": "dropOverride",
+          "lineNumber": 124
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/harvest/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 14,
+      "nonEmptyLines": 14,
+      "exports": [
+        {
+          "name": "HarvestSourceStore",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRunStore",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRun",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRunStatus",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "ChatGPTAdapter",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeAdapter",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeCodeAdapter",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "GeminiAdapter",
+          "line": 7,
+          "isDefault": false
+        },
+        {
+          "name": "PerplexityAdapter",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "UniversalAdapter",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "MarkdownAdapter",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "PlaintextAdapter",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "UrlAdapter",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "PdfAdapter",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestPipeline",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 15,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 132,
+      "nonEmptyLines": 128,
+      "exports": [
+        {
+          "name": "createCoreLogger",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "CoreLogger",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "scanForInjection",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "ScanResult",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "MindDB",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingDimMismatchError",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingFingerprint",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "FingerprintCheck",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "IdentityLayer",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "Identity",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "AwarenessLayer",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "AwarenessItem",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "AwarenessCategory",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "FrameStore",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "stripHmPrefix",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "MemoryFrame",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "FrameType",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "Importance",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "FrameSource",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "hashFrameContent",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "SessionStore",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "Session",
+          "line": 22,
+          "isDefault": false
+        },
+        {
+          "name": "HybridSearch",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "SearchResult",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "chunkRetrievalEnabled",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "rechunkAllFrames",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "RechunkResult",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "chunkText",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "ChunkOptions",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "FrameChunk",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeGraph",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "Entity",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "Relation",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "ValidationSchema",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "SCHEMA_SQL",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "VEC_TABLE_SQL",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "CHUNKS_VEC_TABLE_SQL",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "SCHEMA_VERSION",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "vecTableSqlForDim",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "chunksVecTableSqlForDim",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "computeRelevance",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "computeTemporalScore",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "computePopularityScore",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "computeContextualScore",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "computeImportanceScore",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "SCORING_PROFILES",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "ScoringProfile",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "ScoringWeights",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "Embedder",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "createLiteLLMEmbedder",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "LiteLLMEmbedderConfig",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "createInProcessEmbedder",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "normalizeDimensions",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "InProcessEmbedderConfig",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "createOllamaEmbedder",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "OllamaEmbedderConfig",
+          "line": 47,
+          "isDefault": false
+        },
+        {
+          "name": "createApiEmbedder",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "ApiEmbedderConfig",
+          "line": 48,
+          "isDefault": false
+        },
+        {
+          "name": "createEmbeddingProvider",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingQuotaExceededError",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "getMinimumTierForProvider",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "maxEmbedCharsForModel",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "capEmbedText",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "reembedPerText",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderConfig",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderStatus",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderType",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingProviderInstance",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "EmbeddingQuotaStatus",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "normalizeEntityName",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "findDuplicates",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "isNoiseName",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "isLikelyAcronym",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "Ontology",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "validateEntity",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "EntitySchema",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "ValidationResult",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "ImprovementSignalStore",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "ImprovementSignal",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "ActionableSignal",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "SignalCategory",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "ActionableThresholds",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "ExecutionTraceStore",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "EXECUTION_TRACES_TABLE_SQL",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "ExecutionTrace",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "ParsedExecutionTrace",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "TraceOutcome",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "TracePayload",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "TraceToolCall",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "TraceReasoningStep",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "StartTraceInput",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "FinalizeTraceInput",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "TraceQueryFilter",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunStore",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "EVOLUTION_RUNS_TABLE_SQL",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRun",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunStatus",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunTarget",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "CreateEvolutionRunInput",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "EvolutionRunFilter",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileIndexes",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileFtsIndex",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "reconcileVecIndex",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "cleanOrphanVectors",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "cleanOrphanFts",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "ReconcileResult",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "ConceptTracker",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "CONCEPT_MASTERY_TABLE_SQL",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "ConceptEntry",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "ConceptUpdate",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "TEMPORAL_GUIDANCE",
+          "line": 75,
+          "isDefault": false
+        },
+        {
+          "name": "toDatePrefix",
+          "line": 75,
+          "isDefault": false
+        },
+        {
+          "name": "renderDatedSnippet",
+          "line": 75,
+          "isDefault": false
+        },
+        {
+          "name": "referenceDate",
+          "line": 75,
+          "isDefault": false
+        },
+        {
+          "name": "renderReferenceDateLine",
+          "line": 75,
+          "isDefault": false
+        },
+        {
+          "name": "resolveRelativeDate",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvedDate",
+          "line": 82,
+          "isDefault": false
+        },
+        {
+          "name": "parseDateWindow",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "DateWindow",
+          "line": 83,
+          "isDefault": false
+        },
+        {
+          "name": "createInProcessReranker",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "Reranker",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "InProcessRerankerConfig",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestSourceStore",
+          "line": 87,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRunStore",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRun",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestRunStatus",
+          "line": 88,
+          "isDefault": false
+        },
+        {
+          "name": "ChatGPTAdapter",
+          "line": 89,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeAdapter",
+          "line": 90,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeCodeAdapter",
+          "line": 91,
+          "isDefault": false
+        },
+        {
+          "name": "GeminiAdapter",
+          "line": 92,
+          "isDefault": false
+        },
+        {
+          "name": "UniversalAdapter",
+          "line": 93,
+          "isDefault": false
+        },
+        {
+          "name": "MarkdownAdapter",
+          "line": 94,
+          "isDefault": false
+        },
+        {
+          "name": "PlaintextAdapter",
+          "line": 95,
+          "isDefault": false
+        },
+        {
+          "name": "UrlAdapter",
+          "line": 96,
+          "isDefault": false
+        },
+        {
+          "name": "PdfAdapter",
+          "line": 97,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestPipeline",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "LLMCallFn",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "PipelineOptions",
+          "line": 98,
+          "isDefault": false
+        },
+        {
+          "name": "extractMemoryLanes",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "writeMemoryLaneFrames",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_FACT_PREFIX",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_EVENT_PREFIX",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_PROFILE_PREFIX",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "MemoryLaneExtraction",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedEvent",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedFact",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedProfile",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "WriteLaneFramesResult",
+          "line": 99,
+          "isDefault": false
+        },
+        {
+          "name": "extractKgEntities",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "writeKgEntities",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "KG_ENTITY_TYPES",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "KgEntity",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "KgEntityType",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "KgEntityExtraction",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "WriteKgEntitiesResult",
+          "line": 105,
+          "isDefault": false
+        },
+        {
+          "name": "writeRawTurnFrames",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnHeader",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "parseRawTurnHeader",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnConvKey",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "MIND_RAWTURN_PREFIX",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "MAX_TURNS_PER_ITEM",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "RAWDETAIL_KILL_SWITCH",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "WriteRawTurnsResult",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "ParsedRawTurnHeader",
+          "line": 109,
+          "isDefault": false
+        },
+        {
+          "name": "fetchRawDetailLane",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "rawTurnBody",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "RAW_DETAIL_K",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "RawTurnHit",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "RawDetailLaneOptions",
+          "line": 114,
+          "isDefault": false
+        },
+        {
+          "name": "dedup",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "harvestSetHash",
+          "line": 118,
+          "isDefault": false
+        },
+        {
+          "name": "HARVEST_FRAME_CONTENT_CAP",
+          "line": 119,
+          "isDefault": false
+        },
+        {
+          "name": "ImportSourceType",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "ImportItemType",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "UniversalImportItem",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "DistilledKnowledge",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestPipelineResult",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "HarvestSource",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "SourceAdapter",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "FilesystemAdapter",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "ClassifiedItem",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "ExtractedContent",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "KnowledgeProvenance",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMind",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMindSearchResult",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "MindSource",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "SearchScope",
+          "line": 130,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMindCache",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "MultiMindCacheConfig",
+          "line": 131,
+          "isDefault": false
+        },
+        {
+          "name": "WorkspaceManager",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "WorkspaceConfig",
+          "line": 132,
+          "isDefault": false
+        },
+        {
+          "name": "CreateWorkspaceOptions",
+          "line": 132,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 192,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/parse-date-window.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 113,
+      "nonEmptyLines": 102,
+      "functions": [
+        {
+          "name": "lastDayOfMonth",
+          "startLine": 40,
+          "endLine": 42,
+          "params": [
+            "y",
+            "m"
+          ]
+        },
+        {
+          "name": "isoOf",
+          "startLine": 44,
+          "endLine": 46,
+          "params": [
+            "y",
+            "m",
+            "d"
+          ]
+        },
+        {
+          "name": "parseDateWindow",
+          "startLine": 52,
+          "endLine": 113,
+          "params": [
+            "query"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "parseDateWindow",
+          "line": 52,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "lastDayOfMonth",
+          "callee": "new Date(Date.UTC(y, m, 0)).getUTCDate",
+          "lineNumber": 41
+        },
+        {
+          "caller": "lastDayOfMonth",
+          "callee": "Date.UTC",
+          "lineNumber": 41
+        },
+        {
+          "caller": "isoOf",
+          "callee": "String(m).padStart",
+          "lineNumber": 45
+        },
+        {
+          "caller": "isoOf",
+          "callee": "String",
+          "lineNumber": 45
+        },
+        {
+          "caller": "isoOf",
+          "callee": "String(d).padStart",
+          "lineNumber": 45
+        },
+        {
+          "caller": "isoOf",
+          "callee": "String",
+          "lineNumber": 45
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "String(query).toLowerCase",
+          "lineNumber": 53
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "String",
+          "lineNumber": 53
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "t.match",
+          "lineNumber": 56
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "parseInt",
+          "lineNumber": 58
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "lastDayOfMonth",
+          "lineNumber": 59
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "Math.max",
+          "lineNumber": 62
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "isoOf",
+          "lineNumber": 65
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "isoOf",
+          "lineNumber": 65
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "Math.min",
+          "lineNumber": 65
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "t.match",
+          "lineNumber": 69
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "parseInt",
+          "lineNumber": 71
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "lastDayOfMonth",
+          "lineNumber": 72
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "isoOf",
+          "lineNumber": 75
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "isoOf",
+          "lineNumber": 75
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "t.match",
+          "lineNumber": 79
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "t.match",
+          "lineNumber": 80
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "/^\\d/.test",
+          "lineNumber": 82
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "parseInt",
+          "lineNumber": 83
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "parseInt",
+          "lineNumber": 85
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "Date.UTC",
+          "lineNumber": 87
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "lo.toISOString().slice",
+          "lineNumber": 90
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "lo.toISOString",
+          "lineNumber": 90
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "hi.toISOString().slice",
+          "lineNumber": 91
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "hi.toISOString",
+          "lineNumber": 91
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "t.match",
+          "lineNumber": 98
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "parseInt",
+          "lineNumber": 100
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "isoOf",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "isoOf",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "lastDayOfMonth",
+          "lineNumber": 101
+        },
+        {
+          "caller": "parseDateWindow",
+          "callee": "t.match",
+          "lineNumber": 106
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/recall-context.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 100,
+      "nonEmptyLines": 94,
+      "functions": [
+        {
+          "name": "toDatePrefix",
+          "startLine": 60,
+          "endLine": 63,
+          "params": [
+            "createdAt"
+          ]
+        },
+        {
+          "name": "renderDatedSnippet",
+          "startLine": 71,
+          "endLine": 74,
+          "params": [
+            "createdAt",
+            "text"
+          ]
+        },
+        {
+          "name": "referenceDate",
+          "startLine": 81,
+          "endLine": 88,
+          "params": [
+            "createdAts"
+          ]
+        },
+        {
+          "name": "renderReferenceDateLine",
+          "startLine": 95,
+          "endLine": 100,
+          "params": [
+            "createdAts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "TEMPORAL_GUIDANCE",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "toDatePrefix",
+          "line": 60,
+          "isDefault": false
+        },
+        {
+          "name": "renderDatedSnippet",
+          "line": 71,
+          "isDefault": false
+        },
+        {
+          "name": "referenceDate",
+          "line": 81,
+          "isDefault": false
+        },
+        {
+          "name": "renderReferenceDateLine",
+          "line": 95,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "toDatePrefix",
+          "callee": "createdAt.slice",
+          "lineNumber": 62
+        },
+        {
+          "caller": "renderDatedSnippet",
+          "callee": "toDatePrefix",
+          "lineNumber": 72
+        },
+        {
+          "caller": "referenceDate",
+          "callee": "toDatePrefix",
+          "lineNumber": 84
+        },
+        {
+          "caller": "renderReferenceDateLine",
+          "callee": "referenceDate",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 5,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/mind/resolve-relative-date.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 131,
+      "nonEmptyLines": 116,
+      "functions": [
+        {
+          "name": "parseReference",
+          "startLine": 33,
+          "endLine": 39,
+          "params": [
+            "referenceDate"
+          ]
+        },
+        {
+          "name": "toIso",
+          "startLine": 42,
+          "endLine": 44,
+          "params": [
+            "dt"
+          ]
+        },
+        {
+          "name": "addDays",
+          "startLine": 46,
+          "endLine": 50,
+          "params": [
+            "dt",
+            "n"
+          ]
+        },
+        {
+          "name": "addMonths",
+          "startLine": 52,
+          "endLine": 61,
+          "params": [
+            "dt",
+            "n"
+          ]
+        },
+        {
+          "name": "addYears",
+          "startLine": 63,
+          "endLine": 67,
+          "params": [
+            "dt",
+            "n"
+          ]
+        },
+        {
+          "name": "lastWeekday",
+          "startLine": 70,
+          "endLine": 74,
+          "params": [
+            "dt",
+            "weekday"
+          ]
+        },
+        {
+          "name": "resolveRelativeDate",
+          "startLine": 85,
+          "endLine": 131,
+          "params": [
+            "text",
+            "referenceDate"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "resolveRelativeDate",
+          "line": 85,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseReference",
+          "callee": "ISO_DATE.test",
+          "lineNumber": 34
+        },
+        {
+          "caller": "parseReference",
+          "callee": "referenceDate.slice(0, 10).split('-').map",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parseReference",
+          "callee": "referenceDate.slice(0, 10).split",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parseReference",
+          "callee": "referenceDate.slice",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parseReference",
+          "callee": "Date.UTC",
+          "lineNumber": 37
+        },
+        {
+          "caller": "parseReference",
+          "callee": "Number.isNaN",
+          "lineNumber": 38
+        },
+        {
+          "caller": "parseReference",
+          "callee": "dt.getTime",
+          "lineNumber": 38
+        },
+        {
+          "caller": "toIso",
+          "callee": "dt.toISOString().slice",
+          "lineNumber": 43
+        },
+        {
+          "caller": "toIso",
+          "callee": "dt.toISOString",
+          "lineNumber": 43
+        },
+        {
+          "caller": "addDays",
+          "callee": "dt.getTime",
+          "lineNumber": 47
+        },
+        {
+          "caller": "addDays",
+          "callee": "out.setUTCDate",
+          "lineNumber": 48
+        },
+        {
+          "caller": "addDays",
+          "callee": "out.getUTCDate",
+          "lineNumber": 48
+        },
+        {
+          "caller": "addMonths",
+          "callee": "dt.getTime",
+          "lineNumber": 53
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.getUTCDate",
+          "lineNumber": 54
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.setUTCDate",
+          "lineNumber": 55
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.setUTCMonth",
+          "lineNumber": 56
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.getUTCMonth",
+          "lineNumber": 56
+        },
+        {
+          "caller": "addMonths",
+          "callee": "new Date(Date.UTC(out.getUTCFullYear(), out.getUTCMonth() + 1, 0)).getUTCDate",
+          "lineNumber": 58
+        },
+        {
+          "caller": "addMonths",
+          "callee": "Date.UTC",
+          "lineNumber": 58
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.getUTCFullYear",
+          "lineNumber": 58
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.getUTCMonth",
+          "lineNumber": 58
+        },
+        {
+          "caller": "addMonths",
+          "callee": "out.setUTCDate",
+          "lineNumber": 59
+        },
+        {
+          "caller": "addMonths",
+          "callee": "Math.min",
+          "lineNumber": 59
+        },
+        {
+          "caller": "addYears",
+          "callee": "dt.getTime",
+          "lineNumber": 64
+        },
+        {
+          "caller": "addYears",
+          "callee": "out.setUTCFullYear",
+          "lineNumber": 65
+        },
+        {
+          "caller": "addYears",
+          "callee": "out.getUTCFullYear",
+          "lineNumber": 65
+        },
+        {
+          "caller": "lastWeekday",
+          "callee": "dt.getUTCDay",
+          "lineNumber": 71
+        },
+        {
+          "caller": "lastWeekday",
+          "callee": "addDays",
+          "lineNumber": 73
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "parseReference",
+          "lineNumber": 89
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "text.toLowerCase",
+          "lineNumber": 91
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "/\\bday before yesterday\\b/.test",
+          "lineNumber": 94
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 94
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addDays",
+          "lineNumber": 94
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "/\\byesterday\\b/.test",
+          "lineNumber": 95
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 95
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addDays",
+          "lineNumber": 95
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "t.match",
+          "lineNumber": 98
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "parseInt",
+          "lineNumber": 100
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 103
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addDays",
+          "lineNumber": 103
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 104
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addDays",
+          "lineNumber": 104
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 105
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addMonths",
+          "lineNumber": 105
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 106
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addYears",
+          "lineNumber": 106
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "t.match",
+          "lineNumber": 111
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 114
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addDays",
+          "lineNumber": 114
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 114
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addMonths",
+          "lineNumber": 114
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 114
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addYears",
+          "lineNumber": 114
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "t.match",
+          "lineNumber": 119
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "WEEKDAYS.indexOf",
+          "lineNumber": 121
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 122
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "lastWeekday",
+          "lineNumber": 122
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "/\\blast\\s+week\\b/.test",
+          "lineNumber": 126
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 126
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addDays",
+          "lineNumber": 126
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "/\\blast\\s+month\\b/.test",
+          "lineNumber": 127
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 127
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addMonths",
+          "lineNumber": 127
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "/\\blast\\s+year\\b/.test",
+          "lineNumber": 128
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "toIso",
+          "lineNumber": 128
+        },
+        {
+          "caller": "resolveRelativeDate",
+          "callee": "addYears",
+          "lineNumber": 128
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/src/workspace-manager.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 398,
+      "nonEmptyLines": 346,
+      "classes": [
+        {
+          "name": "WorkspaceManager",
+          "startLine": 133,
+          "endLine": 398,
+          "methods": [
+            "constructor",
+            "create",
+            "ensure",
+            "createWithId",
+            "list",
+            "listByGroup",
+            "listGroups",
+            "get",
+            "update",
+            "delete",
+            "isTeamWorkspace",
+            "listTeamWorkspaces",
+            "getMindPath",
+            "setDefault",
+            "getDefault",
+            "ensureDefault",
+            "generateId",
+            "workspaceExists",
+            "loadMeta",
+            "saveMeta"
+          ],
+          "properties": [
+            "workspacesDir",
+            "metaPath"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "WorkspaceManager",
+          "line": 133,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 138
+        },
+        {
+          "caller": "constructor",
+          "callee": "path.join",
+          "lineNumber": 139
+        },
+        {
+          "caller": "constructor",
+          "callee": "fs.existsSync",
+          "lineNumber": 141
+        },
+        {
+          "caller": "constructor",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 142
+        },
+        {
+          "caller": "create",
+          "callee": "this.createWithId",
+          "lineNumber": 150
+        },
+        {
+          "caller": "create",
+          "callee": "this.generateId",
+          "lineNumber": 150
+        },
+        {
+          "caller": "ensure",
+          "callee": "this.get",
+          "lineNumber": 167
+        },
+        {
+          "caller": "ensure",
+          "callee": "this.createWithId",
+          "lineNumber": 170
+        },
+        {
+          "caller": "createWithId",
+          "callee": "path.join",
+          "lineNumber": 181
+        },
+        {
+          "caller": "createWithId",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 183
+        },
+        {
+          "caller": "createWithId",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 184
+        },
+        {
+          "caller": "createWithId",
+          "callee": "path.join",
+          "lineNumber": 184
+        },
+        {
+          "caller": "createWithId",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 187
+        },
+        {
+          "caller": "createWithId",
+          "callee": "path.join",
+          "lineNumber": 187
+        },
+        {
+          "caller": "createWithId",
+          "callee": "new Date().toISOString",
+          "lineNumber": 211
+        },
+        {
+          "caller": "createWithId",
+          "callee": "new Date().toISOString",
+          "lineNumber": 213
+        },
+        {
+          "caller": "createWithId",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 216
+        },
+        {
+          "caller": "createWithId",
+          "callee": "path.join",
+          "lineNumber": 217
+        },
+        {
+          "caller": "createWithId",
+          "callee": "JSON.stringify",
+          "lineNumber": 218
+        },
+        {
+          "caller": "list",
+          "callee": "fs.existsSync",
+          "lineNumber": 229
+        },
+        {
+          "caller": "list",
+          "callee": "fs.readdirSync",
+          "lineNumber": 231
+        },
+        {
+          "caller": "list",
+          "callee": "entry.isDirectory",
+          "lineNumber": 235
+        },
+        {
+          "caller": "list",
+          "callee": "path.join",
+          "lineNumber": 236
+        },
+        {
+          "caller": "list",
+          "callee": "fs.existsSync",
+          "lineNumber": 237
+        },
+        {
+          "caller": "list",
+          "callee": "fs.readFileSync",
+          "lineNumber": 238
+        },
+        {
+          "caller": "list",
+          "callee": "configs.push",
+          "lineNumber": 239
+        },
+        {
+          "caller": "list",
+          "callee": "JSON.parse",
+          "lineNumber": 239
+        },
+        {
+          "caller": "listByGroup",
+          "callee": "this.list().filter",
+          "lineNumber": 250
+        },
+        {
+          "caller": "listByGroup",
+          "callee": "this.list",
+          "lineNumber": 250
+        },
+        {
+          "caller": "listGroups",
+          "callee": "this.list().map",
+          "lineNumber": 257
+        },
+        {
+          "caller": "listGroups",
+          "callee": "this.list",
+          "lineNumber": 257
+        },
+        {
+          "caller": "get",
+          "callee": "path.join",
+          "lineNumber": 265
+        },
+        {
+          "caller": "get",
+          "callee": "fs.existsSync",
+          "lineNumber": 266
+        },
+        {
+          "caller": "get",
+          "callee": "fs.readFileSync",
+          "lineNumber": 268
+        },
+        {
+          "caller": "get",
+          "callee": "JSON.parse",
+          "lineNumber": 269
+        },
+        {
+          "caller": "update",
+          "callee": "this.get",
+          "lineNumber": 278
+        },
+        {
+          "caller": "update",
+          "callee": "new Date().toISOString",
+          "lineNumber": 281
+        },
+        {
+          "caller": "update",
+          "callee": "path.join",
+          "lineNumber": 288
+        },
+        {
+          "caller": "update",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 289
+        },
+        {
+          "caller": "update",
+          "callee": "JSON.stringify",
+          "lineNumber": 289
+        },
+        {
+          "caller": "delete",
+          "callee": "path.join",
+          "lineNumber": 296
+        },
+        {
+          "caller": "delete",
+          "callee": "fs.existsSync",
+          "lineNumber": 297
+        },
+        {
+          "caller": "delete",
+          "callee": "fs.rmSync",
+          "lineNumber": 298
+        },
+        {
+          "caller": "isTeamWorkspace",
+          "callee": "this.get",
+          "lineNumber": 306
+        },
+        {
+          "caller": "listTeamWorkspaces",
+          "callee": "this.list().filter",
+          "lineNumber": 314
+        },
+        {
+          "caller": "listTeamWorkspaces",
+          "callee": "this.list",
+          "lineNumber": 314
+        },
+        {
+          "caller": "getMindPath",
+          "callee": "path.join",
+          "lineNumber": 321
+        },
+        {
+          "caller": "setDefault",
+          "callee": "this.get",
+          "lineNumber": 328
+        },
+        {
+          "caller": "setDefault",
+          "callee": "this.loadMeta",
+          "lineNumber": 329
+        },
+        {
+          "caller": "setDefault",
+          "callee": "this.saveMeta",
+          "lineNumber": 331
+        },
+        {
+          "caller": "getDefault",
+          "callee": "this.loadMeta",
+          "lineNumber": 338
+        },
+        {
+          "caller": "ensureDefault",
+          "callee": "this.list",
+          "lineNumber": 347
+        },
+        {
+          "caller": "ensureDefault",
+          "callee": "this.getDefault",
+          "lineNumber": 349
+        },
+        {
+          "caller": "ensureDefault",
+          "callee": "this.get",
+          "lineNumber": 350
+        },
+        {
+          "caller": "ensureDefault",
+          "callee": "this.create",
+          "lineNumber": 354
+        },
+        {
+          "caller": "ensureDefault",
+          "callee": "this.setDefault",
+          "lineNumber": 360
+        },
+        {
+          "caller": "generateId",
+          "callee": "name\r\n      .toLowerCase()\r\n      .replace(/[^a-z0-9]+/g, '-')\r\n      .replace",
+          "lineNumber": 369
+        },
+        {
+          "caller": "generateId",
+          "callee": "name\r\n      .toLowerCase()\r\n      .replace",
+          "lineNumber": 369
+        },
+        {
+          "caller": "generateId",
+          "callee": "name\r\n      .toLowerCase",
+          "lineNumber": 369
+        },
+        {
+          "caller": "generateId",
+          "callee": "this.workspaceExists",
+          "lineNumber": 374
+        },
+        {
+          "caller": "generateId",
+          "callee": "this.workspaceExists",
+          "lineNumber": 377
+        },
+        {
+          "caller": "workspaceExists",
+          "callee": "fs.existsSync",
+          "lineNumber": 384
+        },
+        {
+          "caller": "workspaceExists",
+          "callee": "path.join",
+          "lineNumber": 384
+        },
+        {
+          "caller": "loadMeta",
+          "callee": "fs.existsSync",
+          "lineNumber": 388
+        },
+        {
+          "caller": "loadMeta",
+          "callee": "fs.readFileSync",
+          "lineNumber": 389
+        },
+        {
+          "caller": "loadMeta",
+          "callee": "JSON.parse",
+          "lineNumber": 390
+        },
+        {
+          "caller": "saveMeta",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 396
+        },
+        {
+          "caller": "saveMeta",
+          "callee": "JSON.stringify",
+          "lineNumber": 396
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/parse-date-window.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 63,
+      "nonEmptyLines": 51,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/resolve-relative-date.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 76,
+      "nonEmptyLines": 60,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/workspace-manager.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 374,
+      "nonEmptyLines": 306,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 51,
+      "nonEmptyLines": 46,
+      "exports": [
+        {
+          "name": "InstallOptions",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "InstallResult",
+          "line": 9,
+          "isDefault": false
+        },
+        {
+          "name": "install",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallOptions",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallResult",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "uninstall",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyOptions",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyResult",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyCheck",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "verify",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "ShimPaths",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvePathsOptions",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "HookBasename",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "allHookBasenames",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "ClaudeCodeSettings",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "HookGroup",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "HookEntrySpec",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_MIND_MARKER",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "HOOK_EVENT_BY_BASENAME",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "defaultHookEntries",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "hasHiveHooks",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "mergeHiveHooks",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 25,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/upstream-pr/0001-fix-resolve-windows-cmd-shims.patch",
+      "language": "patch",
+      "fileCategory": "code",
+      "totalLines": 55,
+      "nonEmptyLines": 50,
+      "metrics": {}
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/upstream-pr/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 76,
+      "nonEmptyLines": 57,
+      "sections": [
+        {
+          "heading": "Upstream PR materials — `everything-claude-code` mcp-health-check.js Windows .cmd shim fix",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The bug",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "The fix",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Files in this directory",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "How to submit",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Verification (already done locally on Marko's machine 2026-04-29)",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "License",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "Related",
+          "level": 2,
+          "line": 71
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-desktop/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 11,
+      "nonEmptyLines": 10,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-codex-desktop/src/bin/codex-desktop-hooks.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 185,
+      "nonEmptyLines": 172,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 32,
+          "endLine": 57,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 59,
+          "endLine": 83,
+          "params": []
+        },
+        {
+          "name": "printInstallSummary",
+          "startLine": 85,
+          "endLine": 109,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "printUninstallSummary",
+          "startLine": 111,
+          "endLine": 124,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "printVerifySummary",
+          "startLine": 126,
+          "endLine": 137,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 139,
+          "endLine": 183,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseArgs",
+          "callee": "valid.includes",
+          "lineNumber": 37
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.startsWith",
+          "lineNumber": 42
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.indexOf",
+          "lineNumber": 43
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 45
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 45
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "next.startsWith",
+          "lineNumber": 48
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 49
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 52
+        },
+        {
+          "caller": "printHelp",
+          "callee": "process.stdout.write",
+          "lineNumber": 60
+        },
+        {
+          "caller": "printHelp",
+          "callee": "[\r\n    'Usage: codex-desktop-hooks <command> [options]',\r\n    '',\r\n    'Codex Desktop shares ~/.codex/ with the Codex CLI; this delegates to',\r\n    'the @waggle/hive-mind-hooks-codex installer and behaves identically.',\r\n    '',\r\n    'Commands:',\r\n    '  install     Patch ~/.codex/hooks.json (additive, create-if-missing, with backup).',\r\n    '  uninstall   Restore the byte-identical pre-install hooks.json (or remove it if created).',\r\n    '  verify      Smoke-check the install + hive-mind-cli reachability.',\r\n    '',\r\n    'Options:',\r\n    '  --help, -h           Show this help.',\r\n    '  --hooks-dir <PATH>   Override compiled hooks directory (testing).',\r\n    '  --hook-timeout <S>   Override per-hook timeout in seconds (default 5).',\r\n    '  --cli-path <PATH>    Absolute path to the hive-mind-cli binary or its',\r\n    '                       compiled JS entry. Required on Windows (npm bin',\r\n    '                       is a .cmd shim) and recommended for production',\r\n    '                       installs. Threaded into every hook command.',\r\n    '',\r\n    'Repo: https://github.com/marolinik/waggle-os',\r\n    '',\r\n  ].join",
+          "lineNumber": 60
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "result.installedHooks.join",
+          "lineNumber": 91
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 108
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "lines.join",
+          "lineNumber": 108
+        },
+        {
+          "caller": "printUninstallSummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 123
+        },
+        {
+          "caller": "printUninstallSummary",
+          "callee": "lines.join",
+          "lineNumber": 123
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 131
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 133
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 134
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 135
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 136
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.join",
+          "lineNumber": 136
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 140
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 140
+        },
+        {
+          "caller": "main",
+          "callee": "printHelp",
+          "lineNumber": 142
+        },
+        {
+          "caller": "main",
+          "callee": "Number.parseInt",
+          "lineNumber": 149
+        },
+        {
+          "caller": "main",
+          "callee": "install",
+          "lineNumber": 164
+        },
+        {
+          "caller": "main",
+          "callee": "printInstallSummary",
+          "lineNumber": 165
+        },
+        {
+          "caller": "main",
+          "callee": "uninstall",
+          "lineNumber": 169
+        },
+        {
+          "caller": "main",
+          "callee": "printUninstallSummary",
+          "lineNumber": 170
+        },
+        {
+          "caller": "main",
+          "callee": "verify",
+          "lineNumber": 174
+        },
+        {
+          "caller": "main",
+          "callee": "printVerifySummary",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 176
+        },
+        {
+          "caller": "main",
+          "callee": "process.stderr.write",
+          "lineNumber": 180
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 180
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 181
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-codex-desktop/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 17,
+      "nonEmptyLines": 16,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-codex-desktop/tests/parity.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 167,
+      "nonEmptyLines": 145,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 23,
+          "endLine": 34,
+          "params": [
+            "initial"
+          ]
+        },
+        {
+          "name": "sha256",
+          "startLine": 36,
+          "endLine": 38,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 24
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 24
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 24
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 25
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 26
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 27
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 29
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "JSON.stringify",
+          "lineNumber": 29
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "resolve",
+          "lineNumber": 31
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 32
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 33
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update(s, 'utf-8').digest",
+          "lineNumber": 37
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 37
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-codex/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 49,
+      "nonEmptyLines": 44,
+      "exports": [
+        {
+          "name": "InstallOptions",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "InstallResult",
+          "line": 11,
+          "isDefault": false
+        },
+        {
+          "name": "install",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallOptions",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallResult",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "uninstall",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyOptions",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyResult",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyCheck",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "verify",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "CodexPaths",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvePathsOptions",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "HookBasename",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "allHookBasenames",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "codexAdapter",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "codexRegisterSpec",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "extractTrigger",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "CODEX_EVENT_NAME",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_MIND_MARKER",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "SESSION_START_MATCHER",
+          "line": 42,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 23,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-core/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 23,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-cursor/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 45,
+      "exports": [
+        {
+          "name": "InstallOptions",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "InstallResult",
+          "line": 14,
+          "isDefault": false
+        },
+        {
+          "name": "install",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallOptions",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallResult",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "uninstall",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyOptions",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyResult",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyCheck",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "verify",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "CursorPaths",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvePathsOptions",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "HookBasename",
+          "line": 33,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "allHookBasenames",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "cursorAdapter",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "cursorRegisterSpec",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "CURSOR_EVENT_NAME",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_MIND_MARKER",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 21,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-hermes/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 85,
+      "nonEmptyLines": 78,
+      "exports": [
+        {
+          "name": "InstallOptions",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "InstallResult",
+          "line": 26,
+          "isDefault": false
+        },
+        {
+          "name": "install",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallOptions",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallResult",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "uninstall",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyOptions",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyResult",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyCheck",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "verify",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "HermesPaths",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvePathsOptions",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "HookBasename",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "allHookBasenames",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 50,
+          "isDefault": false
+        },
+        {
+          "name": "hermesAdapter",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "HERMES_EVENT_NAME",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "HERMES_SESSION_START_OBSERVE_EVENT",
+          "line": 57,
+          "isDefault": false
+        },
+        {
+          "name": "MaybeCompactOptions",
+          "line": 63,
+          "isDefault": false
+        },
+        {
+          "name": "maybeCompactOnStop",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "compactStatePath",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "isCompactEnabled",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "resolveWindowMs",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "DEFAULT_WINDOW_MS",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "HermesHookEntry",
+          "line": 72,
+          "isDefault": false
+        },
+        {
+          "name": "HermesRegisterEntry",
+          "line": 72,
+          "isDefault": false
+        },
+        {
+          "name": "parseConfig",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "serializeConfig",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "yamlRegister",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "yamlUnregister",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "hasHiveEntries",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "isHiveEntry",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_MIND_MARKER",
+          "line": 76,
+          "isDefault": false
+        },
+        {
+          "name": "HOOKS_KEY",
+          "line": 76,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 36,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-openclaw/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 86,
+      "nonEmptyLines": 78,
+      "exports": [
+        {
+          "name": "InstallOptions",
+          "line": 25,
+          "isDefault": false
+        },
+        {
+          "name": "InstallResult",
+          "line": 25,
+          "isDefault": false
+        },
+        {
+          "name": "install",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallOptions",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "UninstallResult",
+          "line": 31,
+          "isDefault": false
+        },
+        {
+          "name": "uninstall",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyOptions",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyResult",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "VerifyCheck",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "verify",
+          "line": 42,
+          "isDefault": false
+        },
+        {
+          "name": "OpenclawPaths",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "ResolvePathsOptions",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "HookBasename",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "allHookBasenames",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_HOOK_DIR_NAME",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_HOOK_ENTRY_KEY",
+          "line": 49,
+          "isDefault": false
+        },
+        {
+          "name": "openclawAdapter",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "OPENCLAW_EVENT_NAME",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "OPENCLAW_PROVENANCE",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "HiveEntryEnv",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "RegisterOptions",
+          "line": 64,
+          "isDefault": false
+        },
+        {
+          "name": "parseConfig",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "serializeConfig",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "jsonRegister",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "jsonUnregister",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "hasHiveEntries",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "HIVE_ENTRY_KEY",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "HOOKS_KEY",
+          "line": 68,
+          "isDefault": false
+        },
+        {
+          "name": "renderHookMd",
+          "line": 78,
+          "isDefault": false
+        },
+        {
+          "name": "HOOK_MD_EVENTS",
+          "line": 78,
+          "isDefault": false
+        },
+        {
+          "name": "openclawHook",
+          "line": 86,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 34,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

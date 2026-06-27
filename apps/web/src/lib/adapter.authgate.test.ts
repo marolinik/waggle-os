@@ -12,7 +12,11 @@
  * themselves and are structurally blind to the fetch-layer semantics.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import LocalAdapter, { AdapterHttpError, adapter as singletonAdapter } from './adapter';
+import LocalAdapter, {
+  AdapterHttpError,
+  adapter as singletonAdapter,
+  resolveDefaultServerUrl,
+} from './adapter';
 
 const BASE = 'http://test-server:4242';
 
@@ -47,6 +51,42 @@ describe('P1b auth gate', () => {
   afterEach(() => {
     fetchSpy.mockRestore();
     vi.useRealTimers();
+  });
+
+  it('fresh local web sessions default to the current HTTP origin', () => {
+    expect(resolveDefaultServerUrl({
+      protocol: 'http:',
+      hostname: '127.0.0.1',
+      port: '3344',
+      origin: 'http://127.0.0.1:3344',
+    } as Location)).toBe('http://127.0.0.1:3344');
+    expect(resolveDefaultServerUrl({
+      protocol: 'http:',
+      hostname: 'localhost',
+      port: '8081',
+      origin: 'http://localhost:8081',
+    } as Location)).toBe('http://localhost:8081');
+  });
+
+  it('non-local or non-HTTP browser origins keep the sidecar fallback', () => {
+    expect(resolveDefaultServerUrl({
+      protocol: 'https:',
+      hostname: 'localhost',
+      port: '3344',
+      origin: 'https://localhost:3344',
+    } as Location)).toBe('http://127.0.0.1:3333');
+    expect(resolveDefaultServerUrl({
+      protocol: 'tauri:',
+      hostname: 'localhost',
+      port: '',
+      origin: 'tauri://localhost',
+    } as Location)).toBe('http://127.0.0.1:3333');
+    expect(resolveDefaultServerUrl({
+      protocol: 'http:',
+      hostname: 'localhost.evil.com',
+      port: '3344',
+      origin: 'http://localhost.evil.com:3344',
+    } as Location)).toBe('http://127.0.0.1:3333');
   });
 
   /** Standard happy-path connect: /health ok + token ok. */

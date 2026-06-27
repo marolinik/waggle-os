@@ -1,0 +1,54 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "scripts/oss-drift-check.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 123,
+      "nonEmptyLines": 107,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/oss-subtree-split.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 153,
+      "nonEmptyLines": 139,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "scripts/parity-check.sh",
+      "language": "shell",
+      "fileCategory": "script",
+      "totalLines": 140,
+      "nonEmptyLines": 128,
+      "functions": [
+        {
+          "name": "is_allowlisted",
+          "startLine": 77,
+          "endLine": 83,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

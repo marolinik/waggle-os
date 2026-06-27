@@ -1,0 +1,47 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/design_handoff_waggle_app/DESIGN_POV.md",
+      "type": "document",
+      "name": "DESIGN_POV.md",
+      "filePath": "docs/design_handoff_waggle_app/DESIGN_POV.md",
+      "summary": "Strategic design point-of-view notes for the Waggle app covering five themes: memory trust, cold-start inversion, voice and lexicon, inference billing model, and the morning briefing as a user ritual.",
+      "tags": ["documentation", "design", "product-management", "ux-strategy"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/design_handoff_waggle_app/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "docs/design_handoff_waggle_app/README.md",
+      "summary": "Comprehensive design handoff document for the Waggle app and landing site 'warm Hive' refactor, covering information architecture, 18 screens, design tokens (colors, typography, radius/shadow), cross-cutting behaviors, and tech mapping to the existing monorepo.",
+      "tags": ["documentation", "design", "handoff", "design-system"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/design_handoff_waggle_app/SCREENS.md",
+      "type": "document",
+      "name": "SCREENS.md",
+      "filePath": "docs/design_handoff_waggle_app/SCREENS.md",
+      "summary": "Per-screen specifications for all 18 screens in the Waggle app UI redesign, including Home/Cockpit, Chat, Workspace, Marketplace, Onboarding, Settings, Auth (Clerk), Billing (Stripe), and more, with ship-variation decisions for each screen.",
+      "tags": ["documentation", "design", "ui-specification", "screens"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/design_handoff_waggle_app/README.md",
+      "target": "document:docs/design_handoff_waggle_app/DESIGN_POV.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/design_handoff_waggle_app/README.md",
+      "target": "document:docs/design_handoff_waggle_app/SCREENS.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

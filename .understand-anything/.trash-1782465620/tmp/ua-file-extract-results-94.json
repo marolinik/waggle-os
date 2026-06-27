@@ -1,0 +1,206 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "app/src-tauri/gen/schemas/acl-manifests.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "sections": [
+        {
+          "heading": "autostart",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:app",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:event",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:image",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:menu",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:path",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:resources",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:tray",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:webview",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "core:window",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "dialog",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "global-shortcut",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "notification",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "shell",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "updater",
+          "level": 1,
+          "line": 1
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "app/src-tauri/gen/schemas/capabilities.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "sections": [
+        {
+          "heading": "default",
+          "level": 1,
+          "line": 1
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "app/src-tauri/gen/schemas/desktop-schema.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 2990,
+      "nonEmptyLines": 2990,
+      "sections": [
+        {
+          "heading": "$schema",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "title",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "anyOf",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "definitions",
+          "level": 1,
+          "line": 38
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "app/src-tauri/gen/schemas/windows-schema.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 2990,
+      "nonEmptyLines": 2990,
+      "sections": [
+        {
+          "heading": "$schema",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "title",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "anyOf",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "definitions",
+          "level": 1,
+          "line": 38
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    }
+  ]
+}

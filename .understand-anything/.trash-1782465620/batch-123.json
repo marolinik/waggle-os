@@ -1,0 +1,169 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "summary": "Index and overview for the Agentic Knowledge Work Pilot (N=3), describing the purpose of the pilot, files in the folder, hypotheses being validated, cost/time envelope, sequencing, and notes on synthetic materials.",
+      "tags": ["documentation", "overview", "pilot", "research"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md",
+      "type": "document",
+      "name": "cc1-brief-amendment-2026-04-26.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md",
+      "summary": "First amendment to the CC-1 execution brief, superseding the original cc1-brief.md where in conflict; covers agent loop specification for Cells B/D, wrapper script location, hive-mind import paths, manifest anchor scope, revised cost ceiling, and amended execution sequence.",
+      "tags": ["documentation", "pilot", "amendment", "execution-spec"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md",
+      "type": "document",
+      "name": "cc1-brief-amendment-v2-2026-04-26.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md",
+      "summary": "Second amendment to the CC-1 brief, binding for Cells C/D restart and Tasks 2/3 execution; provides explicit Qwen model configuration, retroactive scope notes, revised cost ceiling, and restart sequence.",
+      "tags": ["documentation", "pilot", "amendment", "execution-spec"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "type": "document",
+      "name": "cc1-brief.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "summary": "Primary execution brief for the CC-1 Agentic Knowledge Work Pilot, covering substrate readiness gates, goals, pre-registered hypotheses, cell specifications, tasks, judge ensemble setup, output schema, cost/halt rules, reproducibility requirements, and PM ratification actions.",
+      "tags": ["documentation", "pilot", "execution-spec", "benchmark"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md",
+      "type": "document",
+      "name": "judge-rubric.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md",
+      "summary": "Scoring rubric for the trio judge ensemble, defining six Likert 1-5 dimensions (Completeness, Accuracy, Synthesis quality, Judgment quality, Recommendation actionability, Structure/Communication), overall scoring rules, judge prompt template, and JSONL output schema.",
+      "tags": ["documentation", "benchmark", "evaluation", "rubric"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md",
+      "type": "document",
+      "name": "task-1-strategic-synthesis.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md",
+      "summary": "Synthetic source materials for Task 1 (Multi-Document Strategic Synthesis), comprising seven internal business documents (P&L, sales pipeline, customer health, engineering velocity, marketing efficiency, board feedback, and competitor intelligence) used as agent input.",
+      "tags": ["documentation", "pilot", "benchmark", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md",
+      "type": "document",
+      "name": "task-2-cross-thread-coordination.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md",
+      "summary": "Synthetic source materials for Task 2 (Cross-Thread Project Coordination), containing four conversation threads (scoping call notes, workshop notes, CFO email exchange, and Slack messages) across a consulting engagement used as agent input.",
+      "tags": ["documentation", "pilot", "benchmark", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md",
+      "type": "document",
+      "name": "task-3-decision-support.md",
+      "filePath": "docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md",
+      "summary": "Synthetic source materials for Task 3 (Decision Support Under Conflict), presenting three conflicting executive memos (CFO, CMO, CTO) that agents must reconcile and synthesize a recommendation from.",
+      "tags": ["documentation", "pilot", "benchmark", "evaluation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/README.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-v2-2026-04-26.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief-amendment-2026-04-26.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/judge-rubric.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-1-strategic-synthesis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-2-cross-thread-coordination.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/cc1-brief.md",
+      "target": "document:docs/briefs/2026-04-26-agentic-knowledge-work-pilot/task-3-decision-support.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

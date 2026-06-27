@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waggle OS — Mental Model</title>
+<style>
+  :root{
+    --bg:#14120d; --bg2:#0f0e0a;
+    --panel:#1d1a13; --panel-2:#211d15;
+    --ink:#ece7dd; --muted:#a59e8e; --faint:#6f685a;
+    --honey:#e9a52c; --honey-soft:#f4c66a;
+    --bridge:#5cc8e8; --brain:#b69bff; --memory:#4fd1a8; --storage:#9aa3b2; --cross:#f7849a;
+    --line:#2c2820;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:"Hanken Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:
+    radial-gradient(1200px 600px at 50% -10%, #221d12 0%, var(--bg) 45%, var(--bg2) 100%);
+    color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1200px;margin:0 auto;padding:26px 26px 40px;}
+  /* ── header ─────────────────────────────── */
+  .head{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:18px;}
+  .head h1{margin:0;font-size:25px;font-weight:700;letter-spacing:.2px;}
+  .head h1 .b{color:var(--honey);}
+  .head .tag{color:var(--muted);font-size:14px;max-width:560px;line-height:1.4;}
+  .head .meta{margin-left:auto;font-size:11.5px;color:var(--faint);text-align:right;line-height:1.6;}
+  .head .meta b{color:var(--honey);font-weight:600;}
+
+  /* ── a layer band ───────────────────────── */
+  .band{position:relative;display:grid;grid-template-columns:188px 1fr;gap:18px;
+    background:linear-gradient(180deg,var(--panel) 0%,var(--panel-2) 100%);
+    border:1px solid var(--line);border-radius:16px;padding:16px 18px 16px 16px;margin:11px 0;
+    box-shadow:0 1px 0 rgba(255,255,255,.02) inset, 0 8px 26px rgba(0,0,0,.28);}
+  .band::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:4px;border-radius:4px;background:var(--c);}
+  .band .who{display:flex;gap:12px;align-items:flex-start;}
+  .badge{flex:0 0 auto;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font-size:21px;
+    background:color-mix(in srgb,var(--c) 18%,transparent);border:1px solid color-mix(in srgb,var(--c) 45%,transparent);}
+  .who .t{min-width:0;}
+  .who .name{font-weight:700;font-size:15.5px;line-height:1.25;}
+  .who .role{color:var(--c);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-top:3px;}
+  .who .line{color:var(--muted);font-size:12px;line-height:1.45;margin-top:7px;}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;align-content:flex-start;}
+  .chip{font-size:12px;padding:5px 10px;border-radius:8px;background:#0e0d09;border:1px solid var(--line);color:#d8d2c4;
+    line-height:1.2;transition:.15s border-color,.15s transform;}
+  .chip:hover{border-color:color-mix(in srgb,var(--c) 60%,transparent);transform:translateY(-1px);}
+  .chip.code{font-family:var(--mono);font-size:11px;color:var(--honey-soft);background:#100f0a;}
+  .chip.grp{background:transparent;border-color:transparent;color:var(--faint);font-weight:600;
+    text-transform:uppercase;letter-spacing:.5px;font-size:10px;padding:5px 2px 5px 4px;}
+
+  /* ── the waterline ──────────────────────── */
+  .waterline{position:relative;display:flex;justify-content:center;margin:18px 0 6px;}
+  .waterline::before{content:"";position:absolute;top:50%;left:0;right:0;height:0;
+    border-top:2px dashed color-mix(in srgb,var(--honey) 55%,transparent);}
+  .waterline .lbl{position:relative;background:var(--bg);border:1px solid color-mix(in srgb,var(--honey) 40%,transparent);
+    border-radius:999px;padding:7px 16px;font-size:12px;color:var(--honey-soft);font-weight:600;display:flex;gap:14px;align-items:center;}
+  .waterline .lbl .up{color:var(--ink);} .waterline .lbl .dn{color:var(--muted);}
+
+  .deep{opacity:.985;}
+  /* ── flow strip ─────────────────────────── */
+  .flow{margin-top:24px;border:1px solid var(--line);border-radius:16px;padding:16px 18px;
+    background:linear-gradient(180deg,#1a1710,#141109);}
+  .flow h3{margin:0 0 12px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:var(--honey);font-weight:700;}
+  .steps{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;}
+  .step{flex:1 1 150px;min-width:150px;background:#100e09;border:1px solid var(--line);border-radius:11px;padding:10px 12px;position:relative;}
+  .step .n{font-family:var(--mono);font-size:11px;color:var(--honey);font-weight:700;}
+  .step .s{font-size:12.5px;color:var(--ink);margin-top:4px;line-height:1.35;}
+  .step .z{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.5px;margin-top:6px;}
+  .step .arr{position:absolute;right:-8px;top:50%;transform:translateY(-50%);color:var(--faint);font-size:16px;z-index:2;}
+  .step:last-child .arr{display:none;}
+  .loop{margin-top:11px;font-size:12px;color:var(--memory);display:flex;align-items:center;gap:8px;}
+  footer{margin-top:22px;font-size:11px;color:var(--faint);line-height:1.6;}
+  footer code{color:var(--honey);font-family:var(--mono);}
+  @media (max-width:760px){.band{grid-template-columns:1fr;} .band .who{margin-bottom:6px;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <h1><span class="b">🐝</span> Waggle&nbsp;OS — the mental model</h1>
+    <div class="tag">One picture: the thin layer you <b style="color:var(--honey)">see</b>, and the deep system that
+      <b style="color:var(--honey)">actually runs</b> beneath it. Read top → down.</div>
+    <div class="meta">Grounded in <b>CLAUDE.md</b> + source<br/>Frontstage = UX · Backstage = system</div>
+  </div>
+
+  <!-- ===== FRONTSTAGE / UX ===== -->
+  <div class="band" style="--c:var(--honey)">
+    <div class="who">
+      <div class="badge">👁️</div>
+      <div class="t">
+        <div class="name">What the user sees</div>
+        <div class="role">Frontstage · the Desktop OS</div>
+        <div class="line">A workspace-native desktop OS. A React 19 web app running inside a Tauri shell — chat, files, memory, all in one window.</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip">🏠 Home / Cockpit</span>
+      <span class="chip">🗂️ Workspaces · 15 templates</span>
+      <span class="chip">💬 Chat (artifact-first)</span>
+      <span class="chip">🧠 Memory Center</span>
+      <span class="chip">👤 Persona Switcher · 22</span>
+      <span class="chip">🛒 Marketplace</span>
+      <span class="chip">🚀 Launcher</span>
+      <span class="chip">📎 Files &amp; Artifacts</span>
+      <span class="chip">✅ Tasks board</span>
+      <span class="chip">⚙️ Settings · Onboarding</span>
+      <span class="chip">⌘K command bar</span>
+      <span class="chip code">apps/web · Tauri 2.0 · base-ui</span>
+    </div>
+  </div>
+
+  <!-- ===== WATERLINE ===== -->
+  <div class="waterline">
+    <div class="lbl"><span class="up">▲ what you touch</span> · <span class="dn">▼ invisible, but does all the work</span></div>
+  </div>
+
+  <!-- ===== BRIDGE ===== -->
+  <div class="band deep" style="--c:var(--bridge)">
+    <div class="who">
+      <div class="badge">🔌</div>
+      <div class="t">
+        <div class="name">The bridge</div>
+        <div class="role">API · Sidecar</div>
+        <div class="line">The UI never touches the brain directly — it calls routes. A Fastify Node server bundled inside the desktop binary.</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip code">/api/* Fastify routes</span>
+      <span class="chip">🔑 device-token auth</span>
+      <span class="chip">📡 SSE live streams</span>
+      <span class="chip">🔀 LiteLLM model router</span>
+      <span class="chip">🗂️ workspace context API</span>
+    </div>
+  </div>
+
+  <!-- ===== AGENT RUNTIME ===== -->
+  <div class="band deep" style="--c:var(--brain)">
+    <div class="who">
+      <div class="badge">🤖</div>
+      <div class="t">
+        <div class="name">The brain that acts</div>
+        <div class="role">Agent Runtime · packages/agent</div>
+        <div class="line">Turns one request into action: picks a persona, assembles the prompt, recalls memory, runs tools, then checks its own work.</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip grp">loop</span>
+      <span class="chip code">agent-loop</span>
+      <span class="chip code">orchestrator · buildSystemPrompt / recallMemory</span>
+      <span class="chip">👤 22 personas</span>
+      <span class="chip grp">guard</span>
+      <span class="chip">🛡️ injection-scanner</span>
+      <span class="chip">🔒 capability &amp; trust</span>
+      <span class="chip">🧹 quality · contradiction · correction</span>
+      <span class="chip grp">scale</span>
+      <span class="chip">🧬 evolution loop</span>
+      <span class="chip">🐝 subagents · WaggleDance</span>
+    </div>
+  </div>
+
+  <!-- ===== MEMORY SUBSTRATE ===== -->
+  <div class="band deep" style="--c:var(--memory)">
+    <div class="who">
+      <div class="badge">🧠</div>
+      <div class="t">
+        <div class="name">What makes it remember</div>
+        <div class="role">Memory Substrate · "Hive-Mind" — the moat</div>
+        <div class="line">Persistent, per-workspace memory. Free forever (the lock-in moat). Open-sourced as <code style="color:var(--honey-soft);font-family:var(--mono)">marolinik/hive-mind</code>.</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip grp">mind/</span>
+      <span class="chip">FrameStore</span>
+      <span class="chip">HybridSearch · vector+keyword+rerank</span>
+      <span class="chip">KnowledgeGraph</span>
+      <span class="chip">IdentityLayer</span>
+      <span class="chip">AwarenessLayer</span>
+      <span class="chip grp">harvest/</span>
+      <span class="chip">ChatGPT · Claude · Gemini · PDF · URL</span>
+      <span class="chip">Cognify · extraction</span>
+    </div>
+  </div>
+
+  <!-- ===== STORAGE ===== -->
+  <div class="band deep" style="--c:var(--storage)">
+    <div class="who">
+      <div class="badge">🗄️</div>
+      <div class="t">
+        <div class="name">Where it all lives</div>
+        <div class="role">Storage · Foundations</div>
+        <div class="line">Local-first. One isolated SQLite mind per workspace — memory never crosses between projects.</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip code">SQLite · better-sqlite3 + sqlite-vec</span>
+      <span class="chip">🔐 Vault · secrets</span>
+      <span class="chip">📁 file-store</span>
+      <span class="chip">🧱 per-workspace isolation</span>
+    </div>
+  </div>
+
+  <!-- ===== CROSS-CUTTING ===== -->
+  <div class="band deep" style="--c:var(--cross)">
+    <div class="who">
+      <div class="badge">🧩</div>
+      <div class="t">
+        <div class="name">Cuts across every layer</div>
+        <div class="role">Cross-cutting concerns</div>
+        <div class="line">Not a layer — these touch UX, bridge, brain and storage all at once.</div>
+      </div>
+    </div>
+    <div class="chips">
+      <span class="chip">🔐 Security · vault-only · injection · IPC allowlist · param SQL</span>
+      <span class="chip">💳 Stripe billing</span>
+      <span class="chip">🪜 Tiers · Trial→Free→Pro→Teams→Enterprise</span>
+      <span class="chip">🏰 KVARK funnel · gated Teams/Ent</span>
+    </div>
+  </div>
+
+  <!-- ===== FLOW ===== -->
+  <div class="flow">
+    <h3>What happens when you send one message</h3>
+    <div class="steps">
+      <div class="step"><div class="n">01</div><div class="s">You type in Chat</div><div class="z">UX</div><div class="arr">→</div></div>
+      <div class="step"><div class="n">02</div><div class="s">Sidecar route receives it</div><div class="z">Bridge</div><div class="arr">→</div></div>
+      <div class="step"><div class="n">03</div><div class="s">Brain picks persona + recalls relevant memory</div><div class="z">Agent Runtime</div><div class="arr">→</div></div>
+      <div class="step"><div class="n">04</div><div class="s">Runs tools · calls the model via LiteLLM</div><div class="z">Agent + Bridge</div><div class="arr">→</div></div>
+      <div class="step"><div class="n">05</div><div class="s">Saves new facts to the workspace mind</div><div class="z">Memory</div><div class="arr">→</div></div>
+      <div class="step"><div class="n">06</div><div class="s">Streams the answer + artifacts back</div><div class="z">UX</div></div>
+    </div>
+    <div class="loop">↺ Next session starts smarter — the memory persisted in step 05 is recalled in step 03.</div>
+  </div>
+
+  <footer>
+    Self-contained · works offline · branches verified against <code>CLAUDE.md</code> &amp; source (June 2026).
+    Edit the bands in this file to adjust. Maintained by Egzakta Group.
+  </footer>
+
+</div>
+</body>
+</html>

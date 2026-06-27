@@ -102,8 +102,9 @@ const Sidebar = ({
 
   return (
     <nav
+      role="navigation"
       aria-label="Primary"
-      className="relative z-10 flex w-[248px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-3.5"
+      className="waggle-sidebar relative z-10 flex w-[248px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line-soft)] bg-[var(--bg-2)] px-3 py-3.5"
     >
       {/* Workspace switcher pill */}
       <button

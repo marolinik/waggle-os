@@ -1,0 +1,211 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/wiki-test/entities/egzakta-group.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 58,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "Egzakta Group",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Key Facts",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Strategic Positioning",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Products",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Business Model (for Waggle)",
+          "level": 2,
+          "line": 44
+        },
+        {
+          "heading": "Relations",
+          "level": 2,
+          "line": 54
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/wiki-test/entities/kvark.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 46,
+      "sections": [
+        {
+          "heading": "KVARK",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "Summary",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Key Facts",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Funnel from Waggle",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Enterprise Pitch",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "Technical Integration",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Relations",
+          "level": 2,
+          "line": 56
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/wiki-test/entities/marko-markovic.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 81,
+      "nonEmptyLines": 64,
+      "sections": [
+        {
+          "heading": "Marko Markovic",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "Who He Is",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "What He's Building",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "LinkedIn Presence",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "How He Works (observed across 422 messages, 20 sessions)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "Key Decisions Made",
+          "level": 2,
+          "line": 68
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/wiki-test/entities/waggle-os.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 100,
+      "nonEmptyLines": 78,
+      "sections": [
+        {
+          "heading": "Waggle OS",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "What It Is",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Tech Stack",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "What's Built (verified April 13)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "Monetization",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "The Journey (what actually happened)",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "What's Left",
+          "level": 2,
+          "line": 87
+        },
+        {
+          "heading": "Known Architectural Decisions",
+          "level": 2,
+          "line": 94
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    }
+  ]
+}

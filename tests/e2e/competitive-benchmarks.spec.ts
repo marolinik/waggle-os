@@ -26,7 +26,7 @@
 
 import { test, expect, type APIRequestContext } from '@playwright/test';
 
-const API = 'http://127.0.0.1:3333';
+const API = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 // ── Benchmark thresholds (what Waggle must achieve to win each dimension) ──
 

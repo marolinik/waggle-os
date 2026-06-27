@@ -1,0 +1,698 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/admin-web/src/App.tsx",
+      "type": "file",
+      "name": "App.tsx",
+      "filePath": "packages/admin-web/src/App.tsx",
+      "summary": "Root application shell for the admin-web panel that handles authentication state, team slug selection, and client-side routing between all admin pages via a sidebar navigation.",
+      "tags": ["component", "entry-point", "routing", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/App.tsx:App",
+      "type": "function",
+      "name": "App",
+      "filePath": "packages/admin-web/src/App.tsx",
+      "lineRange": [22, 138],
+      "summary": "Top-level React component managing login state, team slug, navigation, and rendering the active admin page.",
+      "tags": ["component", "routing", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/admin-web/src/api.ts",
+      "type": "file",
+      "name": "api.ts",
+      "filePath": "packages/admin-web/src/api.ts",
+      "summary": "Centralized API client for the admin-web panel exposing typed fetch helpers and a comprehensive `api` object covering team, member, task, job, analytics, audit, and capability management endpoints.",
+      "tags": ["service", "api-handler", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/api.ts:apiMutate",
+      "type": "function",
+      "name": "apiMutate",
+      "filePath": "packages/admin-web/src/api.ts",
+      "lineRange": [28, 48],
+      "summary": "Generic HTTP mutation helper (POST/PUT/DELETE) with JSON body serialization, bearer token auth, and error propagation for admin API calls.",
+      "tags": ["utility", "api-handler", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/admin-web/src/main.tsx",
+      "type": "file",
+      "name": "main.tsx",
+      "filePath": "packages/admin-web/src/main.tsx",
+      "summary": "React entry point for the admin-web application that mounts the root App component into the DOM.",
+      "tags": ["entry-point"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "type": "file",
+      "name": "Analytics.tsx",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "summary": "Admin analytics dashboard page rendering cards for active users, token usage by user, top tools, top commands, capability gaps, and performance trends fetched from the API.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:Analytics",
+      "type": "function",
+      "name": "Analytics",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [287, 376],
+      "summary": "Main analytics page component that loads analytics data and composes the six metric cards into a responsive grid layout.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:TokenUsageCard",
+      "type": "function",
+      "name": "TokenUsageCard",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [85, 126],
+      "summary": "Renders a card showing total token consumption in millions and a per-user breakdown with cost estimates.",
+      "tags": ["component", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:TopToolsCard",
+      "type": "function",
+      "name": "TopToolsCard",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [128, 169],
+      "summary": "Renders a horizontal bar chart card for the most-used agent tools ranked by usage count.",
+      "tags": ["component", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:TopCommandsCard",
+      "type": "function",
+      "name": "TopCommandsCard",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [171, 210],
+      "summary": "Renders a horizontal bar chart card showing the most-issued commands across the team.",
+      "tags": ["component", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:CapabilityGapsCard",
+      "type": "function",
+      "name": "CapabilityGapsCard",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [212, 253],
+      "summary": "Renders a card listing capability gap signals — tool or skill areas frequently requested but unavailable.",
+      "tags": ["component", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:PerformanceTrendsCard",
+      "type": "function",
+      "name": "PerformanceTrendsCard",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [255, 283],
+      "summary": "Renders a performance trend card showing correction rate, trend direction, and average agent response time.",
+      "tags": ["component", "admin"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Analytics.tsx:ActiveUsersCard",
+      "type": "function",
+      "name": "ActiveUsersCard",
+      "filePath": "packages/admin-web/src/pages/Analytics.tsx",
+      "lineRange": [63, 83],
+      "summary": "Renders a card showing the count and list of active users over the reporting period.",
+      "tags": ["component", "admin"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/Audit.tsx",
+      "type": "file",
+      "name": "Audit.tsx",
+      "filePath": "packages/admin-web/src/pages/Audit.tsx",
+      "summary": "Admin audit log page that fetches and displays agent approval/rejection history with color-coded status badges and timestamps.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Audit.tsx:Audit",
+      "type": "function",
+      "name": "Audit",
+      "filePath": "packages/admin-web/src/pages/Audit.tsx",
+      "lineRange": [50, 161],
+      "summary": "Audit log page component that loads audit entries from the API and renders them with approval labels and color-coded badges.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "type": "file",
+      "name": "Capabilities.tsx",
+      "filePath": "packages/admin-web/src/pages/Capabilities.tsx",
+      "summary": "Admin capability governance page with three tabs: Policies (per-role source and tool restrictions), Overrides (manual allow/deny entries), and Requests (pending and decided capability approval queue).",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Capabilities.tsx:Capabilities",
+      "type": "function",
+      "name": "Capabilities",
+      "filePath": "packages/admin-web/src/pages/Capabilities.tsx",
+      "lineRange": [826, 886],
+      "summary": "Top-level Capabilities page component that renders a tabbed navigation over PoliciesTab, OverridesTab, and RequestsTab.",
+      "tags": ["component", "admin"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Capabilities.tsx:PoliciesTab",
+      "type": "function",
+      "name": "PoliciesTab",
+      "filePath": "packages/admin-web/src/pages/Capabilities.tsx",
+      "lineRange": [113, 342],
+      "summary": "Tab component for viewing and editing per-role capability policies including allowed sources, blocked tools, and approval thresholds.",
+      "tags": ["component", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Capabilities.tsx:OverridesTab",
+      "type": "function",
+      "name": "OverridesTab",
+      "filePath": "packages/admin-web/src/pages/Capabilities.tsx",
+      "lineRange": [346, 593],
+      "summary": "Tab component for creating and removing manual capability overrides that allow or deny specific tool/skill names.",
+      "tags": ["component", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Capabilities.tsx:RequestsTab",
+      "type": "function",
+      "name": "RequestsTab",
+      "filePath": "packages/admin-web/src/pages/Capabilities.tsx",
+      "lineRange": [597, 822],
+      "summary": "Tab component for reviewing pending capability requests from team agents and recording approve/deny decisions with reasons.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "type": "file",
+      "name": "Dashboard.tsx",
+      "filePath": "packages/admin-web/src/pages/Dashboard.tsx",
+      "summary": "Admin dashboard overview page showing team stats (members, active tasks, completed tasks), recent member list, and a recent tasks table.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Dashboard.tsx:Dashboard",
+      "type": "function",
+      "name": "Dashboard",
+      "filePath": "packages/admin-web/src/pages/Dashboard.tsx",
+      "lineRange": [40, 217],
+      "summary": "Dashboard page component that fetches team and task data concurrently and renders summary stat cards, member list, and recent task table.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "type": "file",
+      "name": "Jobs.tsx",
+      "filePath": "packages/admin-web/src/pages/Jobs.tsx",
+      "summary": "Admin job queue page displaying background jobs with their status, type, timestamps, and error messages.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Jobs.tsx:Jobs",
+      "type": "function",
+      "name": "Jobs",
+      "filePath": "packages/admin-web/src/pages/Jobs.tsx",
+      "lineRange": [43, 147],
+      "summary": "Job queue page component that loads and displays all background jobs with status badges, error details, and timestamps.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/Members.tsx",
+      "type": "file",
+      "name": "Members.tsx",
+      "filePath": "packages/admin-web/src/pages/Members.tsx",
+      "summary": "Admin member management page supporting member listing, email invitation, role changes, and member removal with confirmation.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/Members.tsx:Members",
+      "type": "function",
+      "name": "Members",
+      "filePath": "packages/admin-web/src/pages/Members.tsx",
+      "lineRange": [18, 249],
+      "summary": "Members page component that manages team membership via invite, role update, and remove actions backed by the admin API.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "type": "file",
+      "name": "TeamSettings.tsx",
+      "filePath": "packages/admin-web/src/pages/TeamSettings.tsx",
+      "summary": "Admin team settings page allowing administrators to view and update the team display name, with metadata display and save confirmation.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/admin-web/src/pages/TeamSettings.tsx:TeamSettings",
+      "type": "function",
+      "name": "TeamSettings",
+      "filePath": "packages/admin-web/src/pages/TeamSettings.tsx",
+      "lineRange": [16, 142],
+      "summary": "TeamSettings page component that loads team data and allows updating the team name, propagating changes via an onTeamUpdated callback.",
+      "tags": ["component", "api-handler", "admin"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "file",
+      "name": "admin-pages.test.ts",
+      "filePath": "packages/admin-web/tests/admin-pages.test.ts",
+      "summary": "Comprehensive Vitest test suite for all admin-web pages (Dashboard, Members, Jobs, Audit, TeamSettings, Analytics, Capabilities) verifying rendering, data loading, error states, and user interactions against a mocked fetch layer.",
+      "tags": ["test", "component", "admin"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "function:packages/admin-web/src/App.tsx:App",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "function:packages/admin-web/src/App.tsx:App",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/api.ts",
+      "target": "function:packages/admin-web/src/api.ts:apiMutate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:Analytics",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:Analytics",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:TokenUsageCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:TopToolsCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:TopCommandsCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:CapabilityGapsCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:PerformanceTrendsCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "function:packages/admin-web/src/pages/Analytics.tsx:ActiveUsersCard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Audit.tsx",
+      "target": "function:packages/admin-web/src/pages/Audit.tsx:Audit",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Audit.tsx",
+      "target": "function:packages/admin-web/src/pages/Audit.tsx:Audit",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "function:packages/admin-web/src/pages/Capabilities.tsx:Capabilities",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "function:packages/admin-web/src/pages/Capabilities.tsx:Capabilities",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "function:packages/admin-web/src/pages/Capabilities.tsx:PoliciesTab",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "function:packages/admin-web/src/pages/Capabilities.tsx:OverridesTab",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "function:packages/admin-web/src/pages/Capabilities.tsx:RequestsTab",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "target": "function:packages/admin-web/src/pages/Dashboard.tsx:Dashboard",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "target": "function:packages/admin-web/src/pages/Dashboard.tsx:Dashboard",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "target": "function:packages/admin-web/src/pages/Jobs.tsx:Jobs",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "target": "function:packages/admin-web/src/pages/Jobs.tsx:Jobs",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Members.tsx",
+      "target": "function:packages/admin-web/src/pages/Members.tsx:Members",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Members.tsx",
+      "target": "function:packages/admin-web/src/pages/Members.tsx:Members",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "target": "function:packages/admin-web/src/pages/TeamSettings.tsx:TeamSettings",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "target": "function:packages/admin-web/src/pages/TeamSettings.tsx:TeamSettings",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/Audit.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/Members.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/App.tsx",
+      "target": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/main.tsx",
+      "target": "file:packages/admin-web/src/App.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Audit.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Members.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/api.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/App.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/Audit.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/Members.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "target": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "file:packages/admin-web/src/App.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Dashboard.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Members.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Capabilities.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Analytics.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Audit.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/Jobs.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/pages/TeamSettings.tsx",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/admin-web/src/api.ts",
+      "target": "file:packages/admin-web/tests/admin-pages.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,1830 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/results/stage3-gate-p-plus-probe-log.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 50,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/stage3-gate-p-plus-probe-v2-log.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 30,
+      "nonEmptyLines": 30,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/v6-self-judge-rebench/apples-to-apples-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 40,
+      "nonEmptyLines": 25,
+      "sections": [
+        {
+          "heading": "Apples-to-Apples vs Mem0 — Memo",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What we did",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "What we found",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Reading the result",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Operations",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Sources",
+          "level": 2,
+          "line": 36
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "benchmarks/results/v6-self-judge-rebench/qwen-self-judge-results.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 2000,
+      "nonEmptyLines": 2000,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/v6-self-judge-rebench/self-judge-vs-trio-comparison.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 78,
+      "nonEmptyLines": 62,
+      "sections": [
+        {
+          "heading": "Self-judge vs Trio-strict — Side-by-Side Comparison",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Per-cell side-by-side",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Methodology-bias finding",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "By-question-category breakdown",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "Operational stats (re-judge run)",
+          "level": 2,
+          "line": 46
+        },
+        {
+          "heading": "Reproducibility footer",
+          "level": 2,
+          "line": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "benchmarks/scripts/migrate-cell-names.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 245,
+      "nonEmptyLines": 224,
+      "functions": [
+        {
+          "name": "walkJsonlFiles",
+          "startLine": 54,
+          "endLine": 73,
+          "params": [
+            "root"
+          ]
+        },
+        {
+          "name": "copyTree",
+          "startLine": 75,
+          "endLine": 95,
+          "params": [
+            "src",
+            "dest"
+          ]
+        },
+        {
+          "name": "migrateFile",
+          "startLine": 97,
+          "endLine": 146,
+          "params": [
+            "filePath",
+            "stats"
+          ]
+        },
+        {
+          "name": "parseCliArgs",
+          "startLine": 148,
+          "endLine": 169,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 171,
+          "endLine": 243,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "fs.existsSync",
+          "lineNumber": 55
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "stack.pop",
+          "lineNumber": 59
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "fs.readdirSync",
+          "lineNumber": 60
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "path.join",
+          "lineNumber": 62
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "entry.isDirectory",
+          "lineNumber": 63
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "entry.name.endsWith",
+          "lineNumber": 65
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "stack.push",
+          "lineNumber": 66
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "entry.isFile",
+          "lineNumber": 67
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "entry.name.endsWith",
+          "lineNumber": 67
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "out.push",
+          "lineNumber": 68
+        },
+        {
+          "caller": "walkJsonlFiles",
+          "callee": "out.sort",
+          "lineNumber": 72
+        },
+        {
+          "caller": "copyTree",
+          "callee": "fs.existsSync",
+          "lineNumber": 76
+        },
+        {
+          "caller": "copyTree",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 77
+        },
+        {
+          "caller": "copyTree",
+          "callee": "stack.pop",
+          "lineNumber": 80
+        },
+        {
+          "caller": "copyTree",
+          "callee": "path.join",
+          "lineNumber": 81
+        },
+        {
+          "caller": "copyTree",
+          "callee": "path.join",
+          "lineNumber": 82
+        },
+        {
+          "caller": "copyTree",
+          "callee": "fs.statSync",
+          "lineNumber": 83
+        },
+        {
+          "caller": "copyTree",
+          "callee": "stat.isDirectory",
+          "lineNumber": 84
+        },
+        {
+          "caller": "copyTree",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 85
+        },
+        {
+          "caller": "copyTree",
+          "callee": "fs.readdirSync",
+          "lineNumber": 86
+        },
+        {
+          "caller": "copyTree",
+          "callee": "child.endsWith",
+          "lineNumber": 88
+        },
+        {
+          "caller": "copyTree",
+          "callee": "stack.push",
+          "lineNumber": 89
+        },
+        {
+          "caller": "copyTree",
+          "callee": "path.join",
+          "lineNumber": 89
+        },
+        {
+          "caller": "copyTree",
+          "callee": "fs.copyFileSync",
+          "lineNumber": 92
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "fs.readFileSync",
+          "lineNumber": 101
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "raw.split",
+          "lineNumber": 102
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "out.push",
+          "lineNumber": 109
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "line.startsWith",
+          "lineNumber": 113
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "out.push",
+          "lineNumber": 114
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "JSON.parse",
+          "lineNumber": 119
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "console.warn",
+          "lineNumber": 122
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "out.push",
+          "lineNumber": 123
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "out.push",
+          "lineNumber": 131
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "JSON.stringify",
+          "lineNumber": 131
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "out.push",
+          "lineNumber": 134
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 143
+        },
+        {
+          "caller": "migrateFile",
+          "callee": "out.join",
+          "lineNumber": 143
+        },
+        {
+          "caller": "parseCliArgs",
+          "callee": "console.log",
+          "lineNumber": 160
+        },
+        {
+          "caller": "parseCliArgs",
+          "callee": "process.exit",
+          "lineNumber": 165
+        },
+        {
+          "caller": "main",
+          "callee": "parseCliArgs",
+          "lineNumber": 172
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 172
+        },
+        {
+          "caller": "main",
+          "callee": "url.fileURLToPath",
+          "lineNumber": 173
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 174
+        },
+        {
+          "caller": "main",
+          "callee": "path.dirname",
+          "lineNumber": 174
+        },
+        {
+          "caller": "main",
+          "callee": "path.isAbsolute",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "path.resolve",
+          "lineNumber": 175
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 187
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 188
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 190
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 191
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 192
+        },
+        {
+          "caller": "main",
+          "callee": "walkJsonlFiles",
+          "lineNumber": 196
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 200
+        },
+        {
+          "caller": "main",
+          "callee": "absPath.replace",
+          "lineNumber": 205
+        },
+        {
+          "caller": "main",
+          "callee": "fs.existsSync",
+          "lineNumber": 207
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 208
+        },
+        {
+          "caller": "main",
+          "callee": "copyTree",
+          "lineNumber": 213
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 215
+        },
+        {
+          "caller": "main",
+          "callee": "migrateFile",
+          "lineNumber": 220
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 223
+        },
+        {
+          "caller": "main",
+          "callee": "path.relative",
+          "lineNumber": 223
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 225
+        },
+        {
+          "caller": "main",
+          "callee": "path.relative",
+          "lineNumber": 225
+        },
+        {
+          "caller": "main",
+          "callee": "Object.values(stats.rowsLegacyFound).reduce",
+          "lineNumber": 229
+        },
+        {
+          "caller": "main",
+          "callee": "Object.values",
+          "lineNumber": 229
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 231
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 232
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 233
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 234
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 235
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 236
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 238
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 241
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "decisions/2026-04-26-agent-fix-sprint-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 237,
+      "nonEmptyLines": 172,
+      "sections": [
+        {
+          "heading": "Agent-Fix Sprint — Phasing Plan",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "Phase ordering — dependency-driven",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Phase 1 detail — proposed deliverables (3-4 days)",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "1.1 — `packages/agent/src/output-normalize.ts` (NEW)",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "1.2 — `packages/agent/src/prompt-shapes/` (NEW directory)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "1.3 — `packages/agent/src/run-meta.ts` (NEW)",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "Phase 1 commit boundaries (proposed)",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "Phase 1 acceptance gates (must pass before Phase 2 kick)",
+          "level": 2,
+          "line": 124
+        },
+        {
+          "heading": "Phase 2-5 high-level scope (briefed for PM situational awareness; full plans drafted phase-by-phase)",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "Phase 2 — Multi-step agent loop unification (3-5 days)",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "Phase 3 — Long-task persistence (2-3 days)",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "Phase 4 — Skills/tools audit + failure taxonomy (1-2 days)",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "Phase 4 acceptance gate — pilot 2026-04-26 RE-SCORE (PM addendum 2026-04-26, BINDING)",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "Phase 5 — Mini re-pilot validation (1-2 days)",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "What does NOT happen in this sprint (deferred to SECONDARY)",
+          "level": 2,
+          "line": 186
+        },
+        {
+          "heading": "Halt-and-ping triggers (binding for whole sprint)",
+          "level": 2,
+          "line": 197
+        },
+        {
+          "heading": "What is NOT permitted (hard rules from work order)",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "Proposed start point — PM RATIFICATION REQUESTED",
+          "level": 2,
+          "line": 217
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "decisions/2026-04-26-pilot-verdict-FAIL.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 175,
+      "nonEmptyLines": 126,
+      "sections": [
+        {
+          "heading": "Pilot 2026-04-26 — Final Verdict: FAIL",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "1. Result table (binding)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "2. What this pilot did and did not test",
+          "level": 2,
+          "line": 36
+        },
+        {
+          "heading": "3. Methodology audit findings (binding for future work)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "3.1 Original smoke had 2 confounds — addressed via amendment v2",
+          "level": 3,
+          "line": 57
+        },
+        {
+          "heading": "3.2 Confounds NOT eliminated by amendment v2",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "3.3 What the FAIL verdict means",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "4. Operational findings (binding for successor benchmarks)",
+          "level": 2,
+          "line": 83
+        },
+        {
+          "heading": "5. Halt expansion — full N=400 multiplier benchmark NOT authorized",
+          "level": 2,
+          "line": 96
+        },
+        {
+          "heading": "6. Successor work — agent-fix sprint authorized",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "7. Substrate claim — paper claim #1 STANDS",
+          "level": 2,
+          "line": 138
+        },
+        {
+          "heading": "8. Artefacts (binding evidence)",
+          "level": 2,
+          "line": 146
+        },
+        {
+          "heading": "9. Audit chain (per amendment v2 §8)",
+          "level": 2,
+          "line": 162
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "docs/audits/2026-05-29-prod-readiness/REPORT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 162,
+      "nonEmptyLines": 134,
+      "sections": [
+        {
+          "heading": "1. Executive Summary",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "2. Gate Results",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "3. Findings (severity-sorted, post-dedup)",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "4. Themes",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "5. Proposed Remediation Phases",
+          "level": 2,
+          "line": 131
+        },
+        {
+          "heading": "Phase 1 - Network exposure & auth boundary (CRITICAL/HIGH)",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "Phase 2 - fs-boundary input validation (HIGH/MEDIUM)",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "Phase 3 - Billing correctness (HIGH)",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "Phase 4 - Memory/agent core + AI-OS hooks (HIGH/MEDIUM)",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "Phase 5 - Desktop lifecycle, updater & frontend resilience (HIGH/MEDIUM)",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "Phase 6 - Dependency hygiene, security polish & light-mode/a11y (MEDIUM/LOW)",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "Cross-cutting gate repair (alongside Phase 1)",
+          "level": 3,
+          "line": 161
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/briefs/e2e-persona-tests/2026-04-25-e2e-persona-test-matrix.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 504,
+      "nonEmptyLines": 388,
+      "sections": [
+        {
+          "heading": "E2E Persona Test Matrix — 3 Tier × 3 Proficiency × Persona Mapping",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 Architecture",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "3 monetization tiers (LOCKED per `project_locked_decisions`)",
+          "level": 3,
+          "line": 11
+        },
+        {
+          "heading": "3 user proficiency levels (per Marko brief)",
+          "level": 3,
+          "line": 16
+        },
+        {
+          "heading": "3 × 3 = 9 archetype matrix",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "Persona overlay (13 bee personas iz DS spec)",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "§1 Pre-test setup checklist",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Friction log JSON schema",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "§2 Coverage area inventory",
+          "level": 2,
+          "line": 118
+        },
+        {
+          "heading": "§3 Per-archetype test scripts",
+          "level": 2,
+          "line": 147
+        },
+        {
+          "heading": "A1 — FREE Starter (bee-confused)",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "A2 — FREE Pro (bee-researcher)",
+          "level": 3,
+          "line": 205
+        },
+        {
+          "heading": "A3 — FREE Professional / Power User (bee-architect)",
+          "level": 3,
+          "line": 237
+        },
+        {
+          "heading": "A4 — PRO Starter (bee-builder)",
+          "level": 3,
+          "line": 273
+        },
+        {
+          "heading": "A5 — PRO Pro (bee-writer)",
+          "level": 3,
+          "line": 301
+        },
+        {
+          "heading": "A6 — PRO Professional / Power User (bee-orchestrator)",
+          "level": 3,
+          "line": 325
+        },
+        {
+          "heading": "A7 — TEAMS Starter (bee-marketer)",
+          "level": 3,
+          "line": 350
+        },
+        {
+          "heading": "A8 — TEAMS Pro (bee-analyst)",
+          "level": 3,
+          "line": 372
+        },
+        {
+          "heading": "A9 — TEAMS Professional / Admin (bee-team)",
+          "level": 3,
+          "line": 392
+        },
+        {
+          "heading": "§4 Cross-cutting test scenarios",
+          "level": 2,
+          "line": 418
+        },
+        {
+          "heading": "CC-1 — Full upgrade journey (Free → Pro → Teams)",
+          "level": 3,
+          "line": 422
+        },
+        {
+          "heading": "CC-2 — Light/dark mode toggle (CA-10) across all apps",
+          "level": 3,
+          "line": 425
+        },
+        {
+          "heading": "CC-3 — Network resilience (CA-16)",
+          "level": 3,
+          "line": 428
+        },
+        {
+          "heading": "CC-4 — Multi-window paradigm stress (CA-7)",
+          "level": 3,
+          "line": 431
+        },
+        {
+          "heading": "CC-5 — Onboarding abandonment recovery",
+          "level": 3,
+          "line": 434
+        },
+        {
+          "heading": "CC-6 — Tier downgrade graceful (CA-12)",
+          "level": 3,
+          "line": 437
+        },
+        {
+          "heading": "CC-7 — Keyboard shortcut discoverability (CA-15)",
+          "level": 3,
+          "line": 440
+        },
+        {
+          "heading": "CC-8 — Provenance replay (CA-9)",
+          "level": 3,
+          "line": 443
+        },
+        {
+          "heading": "CC-9 — Cost meter accuracy",
+          "level": 3,
+          "line": 446
+        },
+        {
+          "heading": "CC-10 — Persona switch mid-flow",
+          "level": 3,
+          "line": 449
+        },
+        {
+          "heading": "§5 Execution sequencing",
+          "level": 2,
+          "line": 454
+        },
+        {
+          "heading": "§6 Pre-execution prerequisites — Marko side",
+          "level": 2,
+          "line": 475
+        },
+        {
+          "heading": "§7 Output deliverables (post-execution)",
+          "level": 2,
+          "line": 491
+        },
+        {
+          "heading": "§8 Authorized by",
+          "level": 2,
+          "line": 500
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/design_handoff_waggle_app/design-files/styles/waggle.css",
+      "language": "css",
+      "fileCategory": "markup",
+      "totalLines": 154,
+      "nonEmptyLines": 128,
+      "metrics": {}
+    },
+    {
+      "path": "docs/design_handoff_waggle_app/design-files/Waggle Landing.html",
+      "language": "html",
+      "fileCategory": "markup",
+      "totalLines": 648,
+      "nonEmptyLines": 608,
+      "metrics": {}
+    },
+    {
+      "path": "docs/design_handoff_waggle_app/design-files/Waggle Reimagined.html",
+      "language": "html",
+      "fileCategory": "markup",
+      "totalLines": 905,
+      "nonEmptyLines": 850,
+      "metrics": {}
+    },
+    {
+      "path": "docs/design_handoff_waggle_app/screenshots/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 34,
+      "nonEmptyLines": 31,
+      "sections": [
+        {
+          "heading": "Screenshots",
+          "level": 1,
+          "line": 1
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 1
+      }
+    },
+    {
+      "path": "docs/evidence/2026-04-30-cc-sesija-A-apps-web-integration-evidence.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 301,
+      "nonEmptyLines": 212,
+      "sections": [
+        {
+          "heading": "CC Sesija A — apps/web Integration Preflight Evidence",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — Executive verdict",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "§0.1 — Substrate readiness verification",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "§0.1.1 — `apps/web` Tauri 2.0 framework",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "§0.1.2 — Agent loop with `runRetrievalAgentLoop`",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "§0.1.3 — `packages/hive-mind-core` or `packages/core` substrate",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "§0.1.4 — `packages/agent` exports `registerShape` (Amendment 8 native)",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "§0.1.5 — `apps/web/src` React + TypeScript",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "§0.1 aggregate",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "§0.2 — UI/UX spec dependency check",
+          "level": 2,
+          "line": 104
+        },
+        {
+          "heading": "§0.3 — Cost projection (PM ratification 2026-04-30: synthetic projection, no live 3-call probe)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "§1 — Working tree contamination diagnostic",
+          "level": 2,
+          "line": 161
+        },
+        {
+          "heading": "Scope of damage",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "Per-directory disk vs HEAD",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "Reflog evidence (recent — most recent first)",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "Cause hypothesis",
+          "level": 3,
+          "line": 201
+        },
+        {
+          "heading": "What's preserved",
+          "level": 3,
+          "line": 211
+        },
+        {
+          "heading": "What's at risk (forensic concern)",
+          "level": 3,
+          "line": 219
+        },
+        {
+          "heading": "§2 — Brief structural ambiguity (needs PM ratification)",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "§2.1 — Tauri location mismatch",
+          "level": 3,
+          "line": 228
+        },
+        {
+          "heading": "§2.2 — React version drift",
+          "level": 3,
+          "line": 251
+        },
+        {
+          "heading": "§3 — Recovery options (PM choose)",
+          "level": 2,
+          "line": 261
+        },
+        {
+          "heading": "§4 — Cross-stream coordination notes",
+          "level": 2,
+          "line": 278
+        },
+        {
+          "heading": "§5 — Awaiting PM ratification",
+          "level": 2,
+          "line": 286
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    },
+    {
+      "path": "docs/evidence/2026-04-30-cc-sesija-A-PHASE-5-SMOKE-COMPLETE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 166,
+      "nonEmptyLines": 118,
+      "sections": [
+        {
+          "heading": "PHASE 5 SESIJA A SMOKE-COMPLETE — Handoff to Track G",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Build artifacts (Windows, this host)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "§2 — Smoke validation log",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "§3 — Sesija A 17-commit branch summary",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "§4 — Acceptance against brief §4 criteria",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "§5 — Open follow-ups (file in next backlog batch, NOT blocking handoff)",
+          "level": 2,
+          "line": 117
+        },
+        {
+          "heading": "§6 — Architectural patterns established this Sesija (memory-worth observations per PM)",
+          "level": 2,
+          "line": 127
+        },
+        {
+          "heading": "§7 — Track G handoff signal",
+          "level": 2,
+          "line": 141
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/OPS/stripe-smoke.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 185,
+      "nonEmptyLines": 127,
+      "sections": [
+        {
+          "heading": "Stripe Smoke Test — Local End-to-End Verification",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Prerequisites",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Test-mode price IDs",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Smoke flow",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "1 · Start the webhook forwarder",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "2 · Trigger a checkout-completed event",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "3 · Trigger a subscription-updated event",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "4 · Trigger a subscription-cancelled event",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "5 · Idempotency check",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "6 · Checkout session creation",
+          "level": 3,
+          "line": 92
+        },
+        {
+          "heading": "7 · Billing portal",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "Checklist",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "Next steps after smoke passes",
+          "level": 2,
+          "line": 123
+        },
+        {
+          "heading": "Known gaps",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "Executed results (2026-04-18)",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "Re-running the smoke",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "Production cutover checklist ([M]-01)",
+          "level": 3,
+          "line": 179
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/pilot/data-handling-policy.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 188,
+      "nonEmptyLines": 138,
+      "sections": [
+        {
+          "heading": "Waggle OS Pilot — Data Handling Policy",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. What gets stored, and where",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "1.1 The data dir",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "1.2 Files inside the data dir",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "1.3 What is **never** written to disk",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "Where to look in the code",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "2. What leaves your machine, and when",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "What we never send off-device",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "Where to look in the code",
+          "level": 3,
+          "line": 67
+        },
+        {
+          "heading": "3. Backup",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "3.1 Manual backup (recommended weekly during pilot)",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "3.2 Restore",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "3.3 What we recommend for pilot users",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Where to look in the code",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "4. Erasure (right to delete your data)",
+          "level": 2,
+          "line": 98
+        },
+        {
+          "heading": "4.1 What gets erased",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "4.2 What does NOT get erased automatically",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "4.3 The confirmation gate",
+          "level": 3,
+          "line": 115
+        },
+        {
+          "heading": "4.4 The receipt",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "Where to look in the code",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "5. EU AI Act + GDPR — how this maps",
+          "level": 2,
+          "line": 137
+        },
+        {
+          "heading": "Where to look in the code",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "6. Pilot-specific commitments",
+          "level": 2,
+          "line": 156
+        },
+        {
+          "heading": "7. Roadmap items NOT yet implemented (as of 2026-05-08)",
+          "level": 2,
+          "line": 168
+        },
+        {
+          "heading": "8. Contact",
+          "level": 2,
+          "line": 178
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 25
+      }
+    },
+    {
+      "path": "docs/pilot/nda-template.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 133,
+      "nonEmptyLines": 93,
+      "sections": [
+        {
+          "heading": "Pilot Mutual Non-Disclosure Agreement — Template",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Mutual Non-Disclosure Agreement",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Waggle OS Pilot Program",
+          "level": 3,
+          "line": 8
+        },
+        {
+          "heading": "1. Purpose of Disclosure",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "2. Definition of \"Confidential Information\"",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "3. Use Restrictions",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "4. Required Disclosure (Court / Regulator)",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "5. Pilot Data Specifics",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "6. Term",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "7. Return / Destruction",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "8. No License / No Warranty",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "9. Remedies",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "10. General",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "Companion checklist (delete before sending)",
+          "level": 2,
+          "line": 120
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 14
+      }
+    },
+    {
+      "path": "docs/qa-polish-2026-06-24/FIX-PLAN.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 45,
+      "nonEmptyLines": 36,
+      "sections": [
+        {
+          "heading": "Waggle OS — QA Polish Pass (2026-06-24) · Fix Plan + Tracker",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Batch 1 — KG graph (P0) · server contract projection",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Batch 2 — Home \"Waggle suggests\" (P0) · text derivation",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Batch 3 — scheduling / timeline / notif / ⌘K (P1/P2)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Batch 4 — memory content (P1/P2)",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Batch 5 — chat / identity / i18n / copy / askbar / dup-ws (P2/P3)",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "Batch 6 — 4-state audit + ⌘K coachmark + similar sweep",
+          "level": 2,
+          "line": 38
+        },
+        {
+          "heading": "Final",
+          "level": 2,
+          "line": 42
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/qa-polish-2026-06-24/SMOKE-REPORT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 26,
+      "nonEmptyLines": 20,
+      "sections": [
+        {
+          "heading": "QA Polish — Live Smoke (2026-06-24/25)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Result: PASS — every smoked fix renders correctly, **0 console errors** on all surfaces.",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Verified at the API layer (live sidecar)",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Not exercised (deliberate)",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Gates at smoke time",
+          "level": 2,
+          "line": 25
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/smoke-20260615/FILE-CHOOSER-ROOT-CAUSE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 44,
+      "nonEmptyLines": 36,
+      "sections": [
+        {
+          "heading": "Root-cause: \"file-chooser storm\" during the PR1 live smoke",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Symptom",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Investigation (systematic-debugging skill)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Root cause",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "Action",
+          "level": 2,
+          "line": 41
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/smoke-pr3-20260616/SMOKE-RESULTS.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 55,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "PR3 live smoke — 2026-06-16",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Screens verified",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "What rendered (real data, not mocks)",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Theme",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "Console",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Note",
+          "level": 2,
+          "line": 53
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/smoke-pr35-20260616/SMOKE.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 43,
+      "nonEmptyLines": 35,
+      "sections": [
+        {
+          "heading": "PR3.5 Memory-Trust — Live Smoke Evidence (2026-06-16)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verdict: PASS (UI) — 0 console errors, dark + light",
+          "level": 2,
+          "line": 7
+        },
+        {
+          "heading": "Constraint — live verification of the NEW sidecar routes deferred",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Notes",
+          "level": 2,
+          "line": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "docs/redesign-warm-hive/smoke-pr35-routes-live-20260616/REPORT.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 85,
+      "nonEmptyLines": 66,
+      "sections": [
+        {
+          "heading": "PR3.5 — Live route verification against a FRESH sidecar (2026-06-16)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Environment (verified, not assumed)",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "1A — `GET /api/workspaces/:id/context` projects `frame.source`  ✅",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "1.5 — `POST /api/memory/:id/confirm` + `GET /api/memory/:id/trace`  ✅",
+          "level": 2,
+          "line": 40
+        },
+        {
+          "heading": "UI smoke — Memory-Trust front door vs the FRESH sidecar  ✅",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Notes",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Next (ship)",
+          "level": 2,
+          "line": 82
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    }
+  ]
+}

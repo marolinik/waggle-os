@@ -6,7 +6,17 @@ import { MindDB, FrameStore, SessionStore } from '@waggle/core';
 import { buildLocalServer } from '../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
-import { applyContextWindow, MAX_CONTEXT_MESSAGES } from '../src/local/routes/chat.js';
+import {
+  applyContextWindow,
+  filterGatedToolsForConversationalTurn,
+  filterPluginToolsForConversationalTurn,
+  isExplicitExternalResearchRequest,
+  isExplicitGatedToolRequest,
+  isExplicitMemoryRecallRequest,
+  isExplicitMemorySaveRequest,
+  MAX_CONTEXT_MESSAGES,
+} from '../src/local/routes/chat.js';
+import { loadSessionMessages } from '../src/local/routes/chat-persistence.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
 /**
@@ -156,6 +166,45 @@ describe('Chat Streaming API', () => {
 
     // Restore original runner
     server.agentRunner = originalRunner;
+  });
+
+  it('persists an assistant error turn when generation fails', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const workspaceId = `error-workspace-${Date.now()}`;
+    const sessionId = `error-session-${Date.now()}`;
+    server.agentRunner = async () => {
+      throw new Error('LLM error (400): invalid tool call arguments');
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: {
+          message: 'Please remember that this turn failed visibly.',
+          workspace: workspaceId,
+          session: sessionId,
+        },
+      });
+
+      const errorEvents = parseSSE(res.body).filter(e => e.event === 'error');
+      expect(errorEvents.length).toBe(1);
+
+      const inMemory = server.agentState.sessionHistories.get(sessionId) ?? [];
+      expect(inMemory).toHaveLength(2);
+      expect(inMemory[0]).toMatchObject({
+        role: 'user',
+        content: 'Please remember that this turn failed visibly.',
+      });
+      expect(inMemory[1].role).toBe('assistant');
+      expect(inMemory[1].content).toContain('Generation failed: LLM error (400): invalid tool call arguments');
+
+      const onDisk = loadSessionMessages(tmpDir, workspaceId, sessionId);
+      expect(onDisk).toEqual(inMemory);
+    } finally {
+      server.agentRunner = originalRunner;
+    }
   });
 
   // #3 launch-blocker: memory capture must NOT depend on generation success.
@@ -539,5 +588,111 @@ describe('applyContextWindow', () => {
     expect(result[0].role).toBe('system');
     expect(result[0].content).toContain('5 earlier messages');
     expect(result[1].content).toBe('msg-5');
+  });
+});
+
+describe('conversational gated tool filtering', () => {
+  const tools = [
+    { name: 'search_memory' },
+    { name: 'save_memory' },
+    { name: 'web_search' },
+    { name: 'web_fetch' },
+    { name: 'query_knowledge' },
+    { name: 'git_log' },
+    { name: 'write_file' },
+    { name: 'bash' },
+    { name: 'git_push' },
+    { name: 'create_plan' },
+    { name: 'spawn_agent' },
+  ];
+
+  it('hides gated system tools for normal conversational turns', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      "Prove you're not just a ChatGPT wrapper. What can you concretely do?",
+      'normal',
+    ).map(t => t.name);
+
+    expect(filtered).toEqual([]);
+  });
+
+  it('keeps memory search when the user explicitly asks for memory recall', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Search memory for my product notes',
+      'normal',
+    ).map(t => t.name);
+
+    expect(filtered).toEqual(['search_memory']);
+  });
+
+  it('keeps web tools when the user explicitly asks for external research', () => {
+    expect(isExplicitExternalResearchRequest('Research the latest MCP connector options online')).toBe(true);
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Research the latest MCP connector options online',
+      'normal',
+    ).map(t => t.name);
+
+    expect(filtered).toEqual(['web_search', 'web_fetch']);
+  });
+
+  it('keeps memory save when the user explicitly asks to remember something', () => {
+    expect(isExplicitMemorySaveRequest('Remember this: I prefer concise launch reports')).toBe(true);
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Remember this: I prefer concise launch reports',
+      'normal',
+    ).map(t => t.name);
+
+    expect(filtered).toEqual(['save_memory']);
+  });
+
+  it('keeps gated tools when the user explicitly asks for an action', () => {
+    expect(isExplicitGatedToolRequest('Write this as a file and export a document')).toBe(true);
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Write this as a file and export a document',
+      'normal',
+    ).map(t => t.name);
+
+    expect(filtered).toEqual(tools.map(t => t.name));
+  });
+
+  it('keeps gated tools when elevated autonomy is active', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Give me a concise answer',
+      'trusted',
+    ).map(t => t.name);
+
+    expect(filtered).toEqual(tools.map(t => t.name));
+  });
+
+  it('recognizes explicit memory recall requests separately from topical memory discussion', () => {
+    expect(isExplicitMemoryRecallRequest('What do you remember about me?')).toBe(true);
+    expect(isExplicitMemoryRecallRequest('Search memory for my product notes')).toBe(true);
+    expect(isExplicitMemoryRecallRequest('How does persistent memory affect agent reliability?')).toBe(false);
+  });
+
+  it('applies the same conversational narrowing to plugin tools', () => {
+    const provider = {
+      getAllTools: () => [
+        { name: 'bash', description: '', parameters: {}, execute: async () => 'ok' },
+        { name: 'web_search', description: '', parameters: {}, execute: async () => 'ok' },
+        { name: 'save_memory', description: '', parameters: {}, execute: async () => 'ok' },
+      ],
+    };
+    const withheld: number[] = [];
+
+    const filteredProvider = filterPluginToolsForConversationalTurn(
+      provider,
+      "Prove you're not just a ChatGPT wrapper. What can you concretely do?",
+      'normal',
+      count => withheld.push(count),
+    );
+
+    expect(filteredProvider.getAllTools().map(t => t.name)).toEqual([]);
+    expect(withheld).toEqual([3]);
   });
 });

@@ -1,0 +1,714 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "file",
+      "name": "setup.ts",
+      "filePath": "packages/memory-mcp/src/core/setup.ts",
+      "summary": "Singleton initialization module for the memory-mcp package that bootstraps all hive-mind subsystems (SQLite database, FrameStore, HybridSearch, KnowledgeGraph, IdentityLayer, AwarenessLayer, Sessions, WorkspaceManager, embedder, and harvest source store), providing lazy accessor functions consumed by every tool and resource module.",
+      "tags": ["singleton", "service", "initialization", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/memory-mcp/src/index.ts",
+      "summary": "Entry point for the memory-mcp MCP server process that wires up the McpServer, registers all tools and resources, connects via stdio transport, and handles graceful shutdown on SIGINT/SIGTERM.",
+      "tags": ["entry-point", "service", "mcp-server", "process-lifecycle"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/resources/memory.ts",
+      "type": "file",
+      "name": "memory.ts",
+      "filePath": "packages/memory-mcp/src/resources/memory.ts",
+      "summary": "Registers MCP resource endpoints that expose read-only views of the memory substrate including frame statistics, identity data, awareness items, workspace lists, and per-workspace memory stats.",
+      "tags": ["api-handler", "mcp-server", "memory-substrate", "read-only"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/awareness.ts",
+      "type": "file",
+      "name": "awareness.ts",
+      "filePath": "packages/memory-mcp/src/tools/awareness.ts",
+      "summary": "Registers MCP tools for reading, writing, and clearing awareness items (tasks, actions, pending flags) in the AwarenessLayer, including priority scoring and time-to-live expiry.",
+      "tags": ["api-handler", "mcp-server", "awareness", "memory-substrate"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/cleanup.ts",
+      "type": "file",
+      "name": "cleanup.ts",
+      "filePath": "packages/memory-mcp/src/tools/cleanup.ts",
+      "summary": "Registers MCP tools for memory maintenance operations including frame compaction, import wipe, full wipe, index reconciliation, entity noise removal, deduplication, orphan retirement, and knowledge graph wipe.",
+      "tags": ["api-handler", "mcp-server", "maintenance", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/harvest.ts",
+      "type": "file",
+      "name": "harvest.ts",
+      "filePath": "packages/memory-mcp/src/tools/harvest.ts",
+      "summary": "Registers MCP tools for ingesting conversation exports from ChatGPT, Claude, Claude Code, Gemini, and universal adapters, writing frames and entities into the memory substrate and tracking harvest source provenance.",
+      "tags": ["api-handler", "mcp-server", "harvest", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/identity.ts",
+      "type": "file",
+      "name": "identity.ts",
+      "filePath": "packages/memory-mcp/src/tools/identity.ts",
+      "summary": "Registers MCP tools for reading and writing the personal identity record (name, profession, location, goals, traits, context) in the IdentityLayer.",
+      "tags": ["api-handler", "mcp-server", "identity", "memory-substrate"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/ingest.ts",
+      "type": "file",
+      "name": "ingest.ts",
+      "filePath": "packages/memory-mcp/src/tools/ingest.ts",
+      "summary": "Registers an MCP tool for ingesting arbitrary documents (markdown, plaintext, PDF, URL, or auto-detected) into the memory substrate, including content-type detection and frame/entity creation.",
+      "tags": ["api-handler", "mcp-server", "ingest", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/knowledge.ts",
+      "type": "file",
+      "name": "knowledge.ts",
+      "filePath": "packages/memory-mcp/src/tools/knowledge.ts",
+      "summary": "Registers MCP tools for querying, creating, and relating knowledge graph entities across workspace and personal minds, with typed entity filtering and upsert semantics.",
+      "tags": ["api-handler", "mcp-server", "knowledge-graph", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/memory.ts",
+      "type": "file",
+      "name": "memory.ts",
+      "filePath": "packages/memory-mcp/src/tools/memory.ts",
+      "summary": "Registers MCP tools for saving new memory frames and performing hybrid search across current workspace, personal, or all workspace minds with configurable retrieval strategy.",
+      "tags": ["api-handler", "mcp-server", "memory-substrate", "search"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/wiki.ts",
+      "type": "file",
+      "name": "wiki.ts",
+      "filePath": "packages/memory-mcp/src/tools/wiki.ts",
+      "summary": "Registers MCP tools for compiling, retrieving, searching, and health-checking the personal wiki derived from memory frames, entities, and synthesized concepts.",
+      "tags": ["api-handler", "mcp-server", "wiki", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/memory-mcp/src/tools/workspace.ts",
+      "type": "file",
+      "name": "workspace.ts",
+      "filePath": "packages/memory-mcp/src/tools/workspace.ts",
+      "summary": "Registers MCP tools for listing all workspaces with per-workspace memory statistics and creating new workspaces via the WorkspaceManager.",
+      "tags": ["api-handler", "mcp-server", "workspace", "memory-substrate"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/core/setup.ts:initialize",
+      "type": "function",
+      "name": "initialize",
+      "filePath": "packages/memory-mcp/src/core/setup.ts",
+      "lineRange": [93, 170],
+      "summary": "Bootstraps the memory substrate by resolving the data directory, opening the personal SQLite database, initializing all hive-mind layers (FrameStore, HybridSearch, KnowledgeGraph, IdentityLayer, AwarenessLayer, Sessions, WorkspaceManager), creating the embedding provider, and opening the default workspace mind.",
+      "tags": ["initialization", "singleton", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/core/setup.ts:getAdapter",
+      "type": "function",
+      "name": "getAdapter",
+      "filePath": "packages/memory-mcp/src/core/setup.ts",
+      "lineRange": [77, 89],
+      "summary": "Returns the appropriate harvest adapter (chatgpt, claude, claude-code, gemini, or universal) based on the source identifier string.",
+      "tags": ["factory", "harvest", "adapter"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "function",
+      "name": "getWorkspaceMind",
+      "filePath": "packages/memory-mcp/src/core/setup.ts",
+      "lineRange": [207, 224],
+      "summary": "Lazily opens and caches the full mind layer set (FrameStore, HybridSearch, KnowledgeGraph) for a given workspace ID, using the MindCache for the underlying database and a local Map for the layer bundle.",
+      "tags": ["factory", "workspace", "memory-substrate", "singleton"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/core/setup.ts:shutdown",
+      "type": "function",
+      "name": "shutdown",
+      "filePath": "packages/memory-mcp/src/core/setup.ts",
+      "lineRange": [228, 233],
+      "summary": "Gracefully shuts down the memory substrate by clearing workspace mind caches, closing all MindCache databases, and closing the personal database connection.",
+      "tags": ["lifecycle", "cleanup"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/index.ts:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "packages/memory-mcp/src/index.ts",
+      "lineRange": [80, 91],
+      "summary": "Initializes the memory substrate then connects the MCP server to the stdio transport, bootstrapping the full memory-mcp process.",
+      "tags": ["entry-point", "process-lifecycle", "mcp-server"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/resources/memory.ts:registerResources",
+      "type": "function",
+      "name": "registerResources",
+      "filePath": "packages/memory-mcp/src/resources/memory.ts",
+      "lineRange": [22, 189],
+      "summary": "Registers four MCP resource endpoints: memory://stats (frame and entity counts), memory://identity (personal profile), memory://awareness (active tasks/flags), and memory://workspaces/{id}/stats (per-workspace memory stats).",
+      "tags": ["api-handler", "mcp-server", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/awareness.ts:registerAwarenessTools",
+      "type": "function",
+      "name": "registerAwarenessTools",
+      "filePath": "packages/memory-mcp/src/tools/awareness.ts",
+      "lineRange": [11, 139],
+      "summary": "Registers three MCP tools: get_awareness (list by category), set_awareness (add item with priority and expiry), and clear_awareness (remove by ID or category).",
+      "tags": ["api-handler", "mcp-server", "awareness"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/cleanup.ts:registerCleanupTools",
+      "type": "function",
+      "name": "registerCleanupTools",
+      "filePath": "packages/memory-mcp/src/tools/cleanup.ts",
+      "lineRange": [63, 422],
+      "summary": "Registers two MCP tools: cleanup_frames (compact, wipe_imports, wipe_all, reconcile frame indexes) and cleanup_entities (audit, remove_noise, dedup, retire_orphans, wipe_all knowledge graph operations).",
+      "tags": ["api-handler", "mcp-server", "maintenance", "memory-substrate"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/cleanup.ts:isNoiseEntity",
+      "type": "function",
+      "name": "isNoiseEntity",
+      "filePath": "packages/memory-mcp/src/tools/cleanup.ts",
+      "lineRange": [40, 61],
+      "summary": "Heuristic predicate that returns true for knowledge graph entities that are noise: known noise names set, pure numeric names, generic step/task/phase prefixes, or article-led names.",
+      "tags": ["utility", "validation", "knowledge-graph"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/harvest.ts:registerHarvestTools",
+      "type": "function",
+      "name": "registerHarvestTools",
+      "filePath": "packages/memory-mcp/src/tools/harvest.ts",
+      "lineRange": [20, 226],
+      "summary": "Registers two MCP tools: harvest_import (parse conversation export files from ChatGPT/Claude/Gemini/universal and bulk-write frames + entities) and harvest_sources (list previously harvested sources with sync history).",
+      "tags": ["api-handler", "mcp-server", "harvest", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/identity.ts:registerIdentityTools",
+      "type": "function",
+      "name": "registerIdentityTools",
+      "filePath": "packages/memory-mcp/src/tools/identity.ts",
+      "lineRange": [10, 122],
+      "summary": "Registers two MCP tools: get_identity (read current personal identity or return 'not set') and set_identity (create or update the personal identity record with structured profile fields).",
+      "tags": ["api-handler", "mcp-server", "identity"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/ingest.ts:registerIngestTools",
+      "type": "function",
+      "name": "registerIngestTools",
+      "filePath": "packages/memory-mcp/src/tools/ingest.ts",
+      "lineRange": [24, 173],
+      "summary": "Registers the ingest_source MCP tool that accepts content or a file path, auto-detects format (markdown, plaintext, PDF, URL), parses it through the appropriate adapter, and writes frames and entities to the memory substrate.",
+      "tags": ["api-handler", "mcp-server", "ingest", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/ingest.ts:detectContentType",
+      "type": "function",
+      "name": "detectContentType",
+      "filePath": "packages/memory-mcp/src/tools/ingest.ts",
+      "lineRange": [176, 207],
+      "summary": "Heuristic that inspects a string input to determine whether it is a URL, a file path (with PDF/markdown extension), inline markdown, or plaintext.",
+      "tags": ["utility", "validation", "content-detection"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/knowledge.ts:registerKnowledgeTools",
+      "type": "function",
+      "name": "registerKnowledgeTools",
+      "filePath": "packages/memory-mcp/src/tools/knowledge.ts",
+      "lineRange": [15, 181],
+      "summary": "Registers three MCP tools: search_entities (query knowledge graph by type/text), save_entity (upsert entity with attributes and source attribution), and create_relation (link two entities with a typed relation and optional weight).",
+      "tags": ["api-handler", "mcp-server", "knowledge-graph"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/memory.ts:registerMemoryTools",
+      "type": "function",
+      "name": "registerMemoryTools",
+      "filePath": "packages/memory-mcp/src/tools/memory.ts",
+      "lineRange": [18, 190],
+      "summary": "Registers two MCP tools: save_memory (create a frame with importance, source, and session tagging) and recall_memory (hybrid search across current workspace, personal, or all workspace minds with configurable strategy).",
+      "tags": ["api-handler", "mcp-server", "memory-substrate", "search"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/wiki.ts:registerWikiTools",
+      "type": "function",
+      "name": "registerWikiTools",
+      "filePath": "packages/memory-mcp/src/tools/wiki.ts",
+      "lineRange": [50, 232],
+      "summary": "Registers four MCP tools: compile_wiki (incremental or full compilation), get_page (retrieve or fuzzy-search wiki pages), search_wiki (full-text search with optional type filter), and compile_health (health report with issue severity breakdown).",
+      "tags": ["api-handler", "mcp-server", "wiki"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/wiki.ts:getCompiler",
+      "type": "function",
+      "name": "getCompiler",
+      "filePath": "packages/memory-mcp/src/tools/wiki.ts",
+      "lineRange": [36, 48],
+      "summary": "Constructs and returns a WikiCompiler instance wired to the personal database, synthesizer, knowledge graph, frame store, and search index.",
+      "tags": ["factory", "wiki"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/memory-mcp/src/tools/workspace.ts:registerWorkspaceTools",
+      "type": "function",
+      "name": "registerWorkspaceTools",
+      "filePath": "packages/memory-mcp/src/tools/workspace.ts",
+      "lineRange": [10, 96],
+      "summary": "Registers two MCP tools: list_workspaces (enumerate all workspaces with frame and entity counts) and create_workspace (create a new named workspace via WorkspaceManager).",
+      "tags": ["api-handler", "mcp-server", "workspace"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/resources/memory.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/awareness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/cleanup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/harvest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/identity.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/ingest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/knowledge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/memory.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/wiki.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "file:packages/memory-mcp/src/tools/workspace.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/resources/memory.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/awareness.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/cleanup.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/harvest.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/identity.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/ingest.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/knowledge.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/memory.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/wiki.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/workspace.ts",
+      "target": "file:packages/memory-mcp/src/core/setup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:initialize",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getAdapter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:shutdown",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:initialize",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getAdapter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/core/setup.ts",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:shutdown",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/index.ts",
+      "target": "function:packages/memory-mcp/src/index.ts:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/resources/memory.ts",
+      "target": "function:packages/memory-mcp/src/resources/memory.ts:registerResources",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/resources/memory.ts",
+      "target": "function:packages/memory-mcp/src/resources/memory.ts:registerResources",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/awareness.ts",
+      "target": "function:packages/memory-mcp/src/tools/awareness.ts:registerAwarenessTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/awareness.ts",
+      "target": "function:packages/memory-mcp/src/tools/awareness.ts:registerAwarenessTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/cleanup.ts",
+      "target": "function:packages/memory-mcp/src/tools/cleanup.ts:registerCleanupTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/cleanup.ts",
+      "target": "function:packages/memory-mcp/src/tools/cleanup.ts:isNoiseEntity",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/cleanup.ts",
+      "target": "function:packages/memory-mcp/src/tools/cleanup.ts:registerCleanupTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/harvest.ts",
+      "target": "function:packages/memory-mcp/src/tools/harvest.ts:registerHarvestTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/harvest.ts",
+      "target": "function:packages/memory-mcp/src/tools/harvest.ts:registerHarvestTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/identity.ts",
+      "target": "function:packages/memory-mcp/src/tools/identity.ts:registerIdentityTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/identity.ts",
+      "target": "function:packages/memory-mcp/src/tools/identity.ts:registerIdentityTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/ingest.ts",
+      "target": "function:packages/memory-mcp/src/tools/ingest.ts:registerIngestTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/ingest.ts",
+      "target": "function:packages/memory-mcp/src/tools/ingest.ts:detectContentType",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/ingest.ts",
+      "target": "function:packages/memory-mcp/src/tools/ingest.ts:registerIngestTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/knowledge.ts",
+      "target": "function:packages/memory-mcp/src/tools/knowledge.ts:registerKnowledgeTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/knowledge.ts",
+      "target": "function:packages/memory-mcp/src/tools/knowledge.ts:registerKnowledgeTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/memory.ts",
+      "target": "function:packages/memory-mcp/src/tools/memory.ts:registerMemoryTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/memory.ts",
+      "target": "function:packages/memory-mcp/src/tools/memory.ts:registerMemoryTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/wiki.ts",
+      "target": "function:packages/memory-mcp/src/tools/wiki.ts:registerWikiTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/wiki.ts",
+      "target": "function:packages/memory-mcp/src/tools/wiki.ts:getCompiler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/wiki.ts",
+      "target": "function:packages/memory-mcp/src/tools/wiki.ts:registerWikiTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/workspace.ts",
+      "target": "function:packages/memory-mcp/src/tools/workspace.ts:registerWorkspaceTools",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/memory-mcp/src/tools/workspace.ts",
+      "target": "function:packages/memory-mcp/src/tools/workspace.ts:registerWorkspaceTools",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/index.ts:main",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:initialize",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/tools/harvest.ts:registerHarvestTools",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getAdapter",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/tools/ingest.ts:registerIngestTools",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getAdapter",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/tools/cleanup.ts:registerCleanupTools",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/tools/knowledge.ts:registerKnowledgeTools",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/tools/memory.ts:registerMemoryTools",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "function:packages/memory-mcp/src/tools/wiki.ts:getCompiler",
+      "target": "function:packages/memory-mcp/src/core/setup.ts:getWorkspaceMind",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

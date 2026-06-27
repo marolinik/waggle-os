@@ -1,0 +1,792 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 31,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-core/tests/mind/chunker.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 113,
+      "nonEmptyLines": 99,
+      "functions": [
+        {
+          "name": "para",
+          "startLine": 11,
+          "endLine": 16,
+          "params": [
+            "topic",
+            "sentences"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "para",
+          "callee": "Array.from(\r\n    { length: sentences },\r\n    (_, i) => `The ${topic} system processes record number ${i} every day.`\r\n  ).join",
+          "lineNumber": 12
+        },
+        {
+          "caller": "para",
+          "callee": "Array.from",
+          "lineNumber": 12
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/concept-tracker-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 120,
+      "nonEmptyLines": 102,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/concept-tracker.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 209,
+      "nonEmptyLines": 179,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/content-hash-dedup.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 93,
+      "nonEmptyLines": 82,
+      "callGraph": [
+        {
+          "caller": "freshMind",
+          "callee": "cleanups.push",
+          "lineNumber": 23
+        },
+        {
+          "caller": "freshMind",
+          "callee": "db.close",
+          "lineNumber": 23
+        },
+        {
+          "caller": "freshMind",
+          "callee": "new SessionStore(db).create",
+          "lineNumber": 25
+        },
+        {
+          "caller": "row",
+          "callee": "raw.prepare('SELECT content_hash FROM memory_frames WHERE id = ?').get",
+          "lineNumber": 59
+        },
+        {
+          "caller": "row",
+          "callee": "raw.prepare",
+          "lineNumber": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/db.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 244,
+      "nonEmptyLines": 220,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/embedding-provider.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 145,
+      "nonEmptyLines": 134,
+      "callGraph": [
+        {
+          "caller": "embed",
+          "callee": "realFirstByte",
+          "lineNumber": 132
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/entity-normalizer.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 88,
+      "nonEmptyLines": 79,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/evolution-runs.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 266,
+      "nonEmptyLines": 224,
+      "callGraph": [
+        {
+          "caller": "seed",
+          "callee": "store.create",
+          "lineNumber": 22
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/execution-traces.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 356,
+      "nonEmptyLines": 294,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/frames-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 315,
+      "nonEmptyLines": 275,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/frames.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 375,
+      "nonEmptyLines": 323,
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/identity-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 120,
+      "nonEmptyLines": 108,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/identity.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 126,
+      "nonEmptyLines": 107,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/improvement-signals.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 201,
+      "nonEmptyLines": 164,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/inprocess-embedder.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 46,
+      "nonEmptyLines": 42,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/knowledge-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 189,
+      "nonEmptyLines": 155,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/knowledge.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 414,
+      "nonEmptyLines": 346,
+      "callGraph": [
+        {
+          "caller": "upsert",
+          "callee": "kg.findEntityByName",
+          "lineNumber": 130
+        },
+        {
+          "caller": "upsert",
+          "callee": "JSON.parse",
+          "lineNumber": 132
+        },
+        {
+          "caller": "upsert",
+          "callee": "kg.updateEntity",
+          "lineNumber": 133
+        },
+        {
+          "caller": "upsert",
+          "callee": "Number",
+          "lineNumber": 134
+        },
+        {
+          "caller": "upsert",
+          "callee": "kg.createEntity",
+          "lineNumber": 137
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/raw-detail-lane.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 144,
+      "nonEmptyLines": 131,
+      "functions": [
+        {
+          "name": "markerReranker",
+          "startLine": 15,
+          "endLine": 20,
+          "params": [
+            "markers"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "markerReranker",
+          "callee": "docs.map",
+          "lineNumber": 18
+        },
+        {
+          "caller": "markerReranker",
+          "callee": "markers.reduce",
+          "lineNumber": 18
+        },
+        {
+          "caller": "markerReranker",
+          "callee": "d.includes",
+          "lineNumber": 18
+        },
+        {
+          "caller": "seedConv",
+          "callee": "texts.forEach",
+          "lineNumber": 38
+        },
+        {
+          "caller": "seedConv",
+          "callee": "String(baseDay + i).padStart",
+          "lineNumber": 39
+        },
+        {
+          "caller": "seedConv",
+          "callee": "String",
+          "lineNumber": 39
+        },
+        {
+          "caller": "seedConv",
+          "callee": "frames.createIFrame",
+          "lineNumber": 40
+        },
+        {
+          "caller": "seedConv",
+          "callee": "rawTurnHeader",
+          "lineNumber": 42
+        },
+        {
+          "caller": "seedConv",
+          "callee": "ids.push",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/reconcile-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 243,
+      "nonEmptyLines": 213,
+      "callGraph": [
+        {
+          "caller": "insertRawFrame",
+          "callee": "db\r\n      .getDatabase()\r\n      .prepare(\r\n        `INSERT INTO memory_frames (frame_type, gop_id, t, content, importance)\r\n         VALUES ('I', 'gop-recon', (SELECT COALESCE(MAX(t), -1) + 1 FROM memory_frames WHERE gop_id = 'gop-recon'), ?, 'normal')`,\r\n      )\r\n      .run",
+          "lineNumber": 60
+        },
+        {
+          "caller": "insertRawFrame",
+          "callee": "db\r\n      .getDatabase()\r\n      .prepare",
+          "lineNumber": 60
+        },
+        {
+          "caller": "insertRawFrame",
+          "callee": "db\r\n      .getDatabase",
+          "lineNumber": 60
+        },
+        {
+          "caller": "ftsCount",
+          "callee": "db.getDatabase().prepare('SELECT COUNT(*) as n FROM memory_frames_fts').get",
+          "lineNumber": 72
+        },
+        {
+          "caller": "ftsCount",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 72
+        },
+        {
+          "caller": "ftsCount",
+          "callee": "db.getDatabase",
+          "lineNumber": 72
+        },
+        {
+          "caller": "vecCount",
+          "callee": "db.getDatabase().prepare('SELECT COUNT(*) as n FROM memory_frames_vec').get",
+          "lineNumber": 80
+        },
+        {
+          "caller": "vecCount",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 80
+        },
+        {
+          "caller": "vecCount",
+          "callee": "db.getDatabase",
+          "lineNumber": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/reconcile.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 216,
+      "nonEmptyLines": 173,
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/schema.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 230,
+      "nonEmptyLines": 206,
+      "functions": [
+        {
+          "name": "getColumns",
+          "startLine": 221,
+          "endLine": 230,
+          "params": [
+            "db",
+            "table"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getColumns",
+          "callee": "db.getDatabase().prepare(`PRAGMA table_info('${table}')`).all",
+          "lineNumber": 222
+        },
+        {
+          "caller": "getColumns",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 222
+        },
+        {
+          "caller": "getColumns",
+          "callee": "db.getDatabase",
+          "lineNumber": 222
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/scoring.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 136,
+      "nonEmptyLines": 123,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/search-chunks.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 276,
+      "nonEmptyLines": 236,
+      "functions": [
+        {
+          "name": "para",
+          "startLine": 17,
+          "endLine": 22,
+          "params": [
+            "topic",
+            "sentences"
+          ]
+        },
+        {
+          "name": "longContent",
+          "startLine": 25,
+          "endLine": 27,
+          "params": [
+            "topic"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "para",
+          "callee": "Array.from(\r\n    { length: sentences },\r\n    (_, i) => `The ${topic} system processes record number ${i} every day.`\r\n  ).join",
+          "lineNumber": 18
+        },
+        {
+          "caller": "para",
+          "callee": "Array.from",
+          "lineNumber": 18
+        },
+        {
+          "caller": "longContent",
+          "callee": "para",
+          "lineNumber": 26
+        },
+        {
+          "caller": "longContent",
+          "callee": "para",
+          "lineNumber": 26
+        },
+        {
+          "caller": "chunkRowCount",
+          "callee": "db.getDatabase().prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks').get",
+          "lineNumber": 56
+        },
+        {
+          "caller": "chunkRowCount",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 56
+        },
+        {
+          "caller": "chunkRowCount",
+          "callee": "db.getDatabase",
+          "lineNumber": 56
+        },
+        {
+          "caller": "chunkVecCount",
+          "callee": "db.getDatabase().prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks_vec').get",
+          "lineNumber": 60
+        },
+        {
+          "caller": "chunkVecCount",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 60
+        },
+        {
+          "caller": "chunkVecCount",
+          "callee": "db.getDatabase",
+          "lineNumber": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/search-date-window.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 130,
+      "nonEmptyLines": 115,
+      "callGraph": [
+        {
+          "caller": "setCreatedAt",
+          "callee": "db.getDatabase()\n      .prepare('UPDATE memory_frames SET created_at = ? WHERE id = ?')\n      .run",
+          "lineNumber": 43
+        },
+        {
+          "caller": "setCreatedAt",
+          "callee": "db.getDatabase()\n      .prepare",
+          "lineNumber": 43
+        },
+        {
+          "caller": "setCreatedAt",
+          "callee": "db.getDatabase",
+          "lineNumber": 43
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/search-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 160,
+      "nonEmptyLines": 137,
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/search-reranker.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 107,
+      "nonEmptyLines": 94,
+      "callGraph": [
+        {
+          "caller": "scoreOf",
+          "callee": "doc.includes",
+          "lineNumber": 40
+        },
+        {
+          "caller": "markerReranker",
+          "callee": "scoreOf",
+          "lineNumber": 42
+        },
+        {
+          "caller": "markerReranker",
+          "callee": "docs.map",
+          "lineNumber": 43
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/search.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 357,
+      "nonEmptyLines": 307,
+      "functions": [
+        {
+          "name": "getTopicContent",
+          "startLine": 343,
+          "endLine": 357,
+          "params": [
+            "i"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "seedFrames",
+          "callee": "sessions.create",
+          "lineNumber": 36
+        },
+        {
+          "caller": "seedFrames",
+          "callee": "frames.createIFrame",
+          "lineNumber": 54
+        },
+        {
+          "caller": "seedFrames",
+          "callee": "createdFrames.push",
+          "lineNumber": 55
+        },
+        {
+          "caller": "seedFrames",
+          "callee": "search.indexFramesBatch",
+          "lineNumber": 59
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/sessions-hive-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 96,
+      "nonEmptyLines": 84,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/sessions.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 65,
+      "nonEmptyLines": 53,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/temporal-knowledge.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 61,
+      "nonEmptyLines": 50,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/multi-mind.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 296,
+      "nonEmptyLines": 238,
+      "callGraph": [
+        {
+          "caller": "addMemory",
+          "callee": "db.getDatabase().prepare(\r\n        \"INSERT OR IGNORE INTO sessions (gop_id, status) VALUES (?, 'active')\"\r\n      ).run",
+          "lineNumber": 123
+        },
+        {
+          "caller": "addMemory",
+          "callee": "db.getDatabase().prepare",
+          "lineNumber": 123
+        },
+        {
+          "caller": "addMemory",
+          "callee": "db.getDatabase",
+          "lineNumber": 123
+        },
+        {
+          "caller": "addMemory",
+          "callee": "frames.createIFrame",
+          "lineNumber": 127
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

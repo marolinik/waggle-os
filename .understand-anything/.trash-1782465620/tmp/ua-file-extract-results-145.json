@@ -1,0 +1,2460 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 13,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/research/01-oss-memory-packaging-strategy.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 428,
+      "nonEmptyLines": 287,
+      "sections": [
+        {
+          "heading": "Open-Source Packaging Strategy — `hive-mind` Memory System",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Why open source at all?",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "1.1 Set the terms of the ecosystem",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "1.2 Inbound talent + credibility",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "1.3 Enterprise sales lubricant",
+          "level": 3,
+          "line": 36
+        },
+        {
+          "heading": "1.4 Harvest corpus expansion",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "1.5 What open source is NOT for",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "2. What goes OSS and what stays proprietary",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "2.1 In scope for hive-mind OSS",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "2.2 Kept proprietary",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "2.3 Why this split works",
+          "level": 3,
+          "line": 97
+        },
+        {
+          "heading": "2.4 Repository structure",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "3. License selection",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "3.1 Options surveyed",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "3.2 Recommendation: Apache 2.0 (refined: consider Mastra's dual-license pattern)",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "3.3 What about the historical cases?",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "3.4 Contributor agreements",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "4. Positioning vs the OSS competition",
+          "level": 2,
+          "line": 174
+        },
+        {
+          "heading": "4.1 The neighboring projects (verified April 2026)",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "4.2 Where hive-mind would differentiate",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "4.3 What hive-mind should NOT claim",
+          "level": 3,
+          "line": 211
+        },
+        {
+          "heading": "5. Brand, naming, identity",
+          "level": 2,
+          "line": 219
+        },
+        {
+          "heading": "5.1 Name: `hive-mind`",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "5.2 Tagline options",
+          "level": 3,
+          "line": 231
+        },
+        {
+          "heading": "5.3 Visual identity",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "5.4 Relationship to Waggle brand",
+          "level": 3,
+          "line": 245
+        },
+        {
+          "heading": "6. Launch tactics",
+          "level": 2,
+          "line": 253
+        },
+        {
+          "heading": "6.1 Pre-launch (T-60 days)",
+          "level": 3,
+          "line": 255
+        },
+        {
+          "heading": "6.2 Launch day (T+0)",
+          "level": 3,
+          "line": 265
+        },
+        {
+          "heading": "6.3 Launch +7 days",
+          "level": 3,
+          "line": 275
+        },
+        {
+          "heading": "6.4 Launch +30 days",
+          "level": 3,
+          "line": 282
+        },
+        {
+          "heading": "6.5 Launch +90 days",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "7. Governance",
+          "level": 2,
+          "line": 297
+        },
+        {
+          "heading": "7.1 Maintainer model",
+          "level": 3,
+          "line": 299
+        },
+        {
+          "heading": "7.2 Feature-contribution policy",
+          "level": 3,
+          "line": 307
+        },
+        {
+          "heading": "7.3 Handling \"enterprise wants X feature\" in OSS",
+          "level": 3,
+          "line": 314
+        },
+        {
+          "heading": "8. Metrics",
+          "level": 2,
+          "line": 322
+        },
+        {
+          "heading": "8.1 Vanity metrics (track but don't optimize for)",
+          "level": 3,
+          "line": 324
+        },
+        {
+          "heading": "8.2 Leading indicators (actually matter)",
+          "level": 3,
+          "line": 329
+        },
+        {
+          "heading": "8.3 Strategic (compound)",
+          "level": 3,
+          "line": 337
+        },
+        {
+          "heading": "9. Risks + mitigations",
+          "level": 2,
+          "line": 345
+        },
+        {
+          "heading": "10. Interaction with Waggle commercial strategy",
+          "level": 2,
+          "line": 360
+        },
+        {
+          "heading": "10.1 Freemium funnel",
+          "level": 3,
+          "line": 362
+        },
+        {
+          "heading": "10.2 Cross-promotion",
+          "level": 3,
+          "line": 373
+        },
+        {
+          "heading": "10.3 Support / SLA",
+          "level": 3,
+          "line": 380
+        },
+        {
+          "heading": "11. Open questions for Marko",
+          "level": 2,
+          "line": 390
+        },
+        {
+          "heading": "12. Action plan — 12-week sprint",
+          "level": 2,
+          "line": 401
+        },
+        {
+          "heading": "Closing",
+          "level": 2,
+          "line": 422
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 49
+      }
+    },
+    {
+      "path": "docs/research/02-memory-system-scientific-draft.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 445,
+      "nonEmptyLines": 301,
+      "sections": [
+        {
+          "heading": "Hive-Mind: Persistent, Multi-Tenant, Compliance-First Memory for Autonomous AI Agents",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Abstract",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "1. Introduction",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "Verified scope numbers (from code inventory, 2026-04-15)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "2. System architecture",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "2.1 High-level",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "2.2 The frame model",
+          "level": 3,
+          "line": 70
+        },
+        {
+          "heading": "2.2.1 Why this model",
+          "level": 4,
+          "line": 93
+        },
+        {
+          "heading": "2.2.2 Formal properties",
+          "level": 4,
+          "line": 99
+        },
+        {
+          "heading": "2.3 MemoryWeaver — consolidation, decay, strengthening",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "2.4 HybridSearch with RRF",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "2.5 Knowledge graph with SCD-2",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "2.6 Identity and awareness layers",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "2.7 Harvest pipeline",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "2.8 Write-path contradiction detection",
+          "level": 3,
+          "line": 163
+        },
+        {
+          "heading": "2.9 Compliance-by-default interaction store",
+          "level": 3,
+          "line": 173
+        },
+        {
+          "heading": "2.10 Multi-mind protocol",
+          "level": 3,
+          "line": 188
+        },
+        {
+          "heading": "2.11 Wiki compiler",
+          "level": 3,
+          "line": 196
+        },
+        {
+          "heading": "3. Skill promotion: organizational memory",
+          "level": 2,
+          "line": 210
+        },
+        {
+          "heading": "4. Closed-loop prompt evolution integration",
+          "level": 2,
+          "line": 229
+        },
+        {
+          "heading": "5. Evaluation",
+          "level": 2,
+          "line": 241
+        },
+        {
+          "heading": "5.1 Evaluation plan",
+          "level": 3,
+          "line": 245
+        },
+        {
+          "heading": "5.1.1 Retrieval quality",
+          "level": 4,
+          "line": 249
+        },
+        {
+          "heading": "5.1.2 Consolidation quality",
+          "level": 4,
+          "line": 257
+        },
+        {
+          "heading": "5.1.3 Compliance report fidelity",
+          "level": 4,
+          "line": 263
+        },
+        {
+          "heading": "5.2 Preliminary numbers",
+          "level": 3,
+          "line": 269
+        },
+        {
+          "heading": "6. Related work",
+          "level": 2,
+          "line": 282
+        },
+        {
+          "heading": "7. Limitations",
+          "level": 2,
+          "line": 296
+        },
+        {
+          "heading": "8. Conclusion",
+          "level": 2,
+          "line": 308
+        },
+        {
+          "heading": "9. Code availability",
+          "level": 2,
+          "line": 318
+        },
+        {
+          "heading": "Acknowledgments",
+          "level": 2,
+          "line": 327
+        },
+        {
+          "heading": "References",
+          "level": 2,
+          "line": 333
+        },
+        {
+          "heading": "Appendix A — SQL schema excerpt (illustrative)",
+          "level": 2,
+          "line": 352
+        },
+        {
+          "heading": "Appendix B — Hive-Mind public API sketch (TypeScript)",
+          "level": 2,
+          "line": 414
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/research/03-memory-harvesting-strategy.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 281,
+      "nonEmptyLines": 191,
+      "sections": [
+        {
+          "heading": "Memory Harvesting — Strategy, Action Plan, and UX",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Why Memory Harvest is strategic, not just a feature",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "1.1 The lock-in thesis",
+          "level": 3,
+          "line": 19
+        },
+        {
+          "heading": "1.2 Adjacent strategic wins",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "2. Current state (April 2026)",
+          "level": 2,
+          "line": 35
+        },
+        {
+          "heading": "2.1 What's shipped",
+          "level": 3,
+          "line": 37
+        },
+        {
+          "heading": "2.2 What's missing",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "2.3 Pipeline state",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "2.4 UX state today",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "3. Target state — six UX principles",
+          "level": 2,
+          "line": 86
+        },
+        {
+          "heading": "3.1 Principle 1: **Harvest-first onboarding.**",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "3.2 Principle 2: **Privacy is the headline.**",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "3.3 Principle 3: **Dedup is a feature, not a footnote.**",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "3.4 Principle 4: **Progress is tactile.**",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "3.5 Principle 5: **Recovery is resumable.**",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "3.6 Principle 6: **Identity and awareness auto-populate.**",
+          "level": 3,
+          "line": 117
+        },
+        {
+          "heading": "4. User journeys",
+          "level": 2,
+          "line": 123
+        },
+        {
+          "heading": "4.1 First-time user, 10-minute onboarding",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "4.2 Ongoing power user — weekly drift",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "4.3 Team knowledge worker — shared mind",
+          "level": 3,
+          "line": 148
+        },
+        {
+          "heading": "5. Privacy surface — the explanations users need",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "The trust chart",
+          "level": 3,
+          "line": 172
+        },
+        {
+          "heading": "6. Action plan — phased",
+          "level": 2,
+          "line": 188
+        },
+        {
+          "heading": "Phase A (1 week) — ship the first-run hook",
+          "level": 3,
+          "line": 190
+        },
+        {
+          "heading": "Phase B (1 week) — ship the reliability layer",
+          "level": 3,
+          "line": 200
+        },
+        {
+          "heading": "Phase C (2 weeks) — ship the missing adapters",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "Phase D (2-3 weeks) — ship the auto-sync advanced features",
+          "level": 3,
+          "line": 214
+        },
+        {
+          "heading": "Phase E (ongoing) — harder data shapes",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "Phase F (Q3+) — export / portability",
+          "level": 3,
+          "line": 228
+        },
+        {
+          "heading": "7. Metrics that should drive roadmap priority",
+          "level": 2,
+          "line": 237
+        },
+        {
+          "heading": "8. Competitive positioning of harvest specifically",
+          "level": 2,
+          "line": 249
+        },
+        {
+          "heading": "9. Open questions / decisions for Marko",
+          "level": 2,
+          "line": 265
+        },
+        {
+          "heading": "Closing",
+          "level": 2,
+          "line": 277
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 34
+      }
+    },
+    {
+      "path": "docs/research/03-paper-skeleton-v2-2026-04-30.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 328,
+      "nonEmptyLines": 235,
+      "sections": [
+        {
+          "heading": "Arxiv Paper Skeleton v2 — Pre-Launch Submission Ready",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 — Marko 7 decision points — RATIFIED 2026-05-02",
+          "level": 2,
+          "line": 13
+        },
+        {
+          "heading": "§1bis — Endorsement path actionables (PM follow-up za Decision 3)",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "§2 — Section structure (10 sekcija, ~10-13 strana)",
+          "level": 2,
+          "line": 136
+        },
+        {
+          "heading": "Abstract (≤ 250 words)",
+          "level": 3,
+          "line": 138
+        },
+        {
+          "heading": "1. Introduction (~1 page)",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "2. Related Work (~1 page)",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "3. Architecture (~2 pages)",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "4. Methodology (~1 page)",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "5. Experiments & Results (~4-5 pages)",
+          "level": 3,
+          "line": 185
+        },
+        {
+          "heading": "5.1 Substrate quality (oracle ceiling)",
+          "level": 4,
+          "line": 187
+        },
+        {
+          "heading": "5.2 Methodology bias quantification",
+          "level": 4,
+          "line": 193
+        },
+        {
+          "heading": "5.3 V1 retrieval performance",
+          "level": 4,
+          "line": 199
+        },
+        {
+          "heading": "5.4 GEPA Evolution + Cross-Family Generalization (NEW, ~1.5 page)",
+          "level": 4,
+          "line": 204
+        },
+        {
+          "heading": "5.5 Scoping Discussion (NEW, ~1.2 page)",
+          "level": 4,
+          "line": 219
+        },
+        {
+          "heading": "5.6 Phase 5 Production Validation Hook (NEW, ~0.2 page)",
+          "level": 4,
+          "line": 226
+        },
+        {
+          "heading": "6. Discussion (~1-2 pages)",
+          "level": 3,
+          "line": 229
+        },
+        {
+          "heading": "7. Future Work (~0.5 page)",
+          "level": 3,
+          "line": 237
+        },
+        {
+          "heading": "8. Conclusion (~0.25 page)",
+          "level": 3,
+          "line": 245
+        },
+        {
+          "heading": "9. Acknowledgments",
+          "level": 3,
+          "line": 249
+        },
+        {
+          "heading": "10. References (~30-50 BibTeX entries)",
+          "level": 3,
+          "line": 255
+        },
+        {
+          "heading": "§3 — Claim trace (where each numerical claim comes from)",
+          "level": 2,
+          "line": 269
+        },
+        {
+          "heading": "§4 — Authoring sequence",
+          "level": 2,
+          "line": 293
+        },
+        {
+          "heading": "§5 — Cross-references",
+          "level": 2,
+          "line": 317
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    },
+    {
+      "path": "docs/research/04-competitive-landscape.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 198,
+      "nonEmptyLines": 150,
+      "sections": [
+        {
+          "heading": "Competitive Landscape: hive-mind vs. the 2025-2026 AI Memory Market",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. Competitor Profiles",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "1.1 mem0 (mem0.ai)",
+          "level": 3,
+          "line": 14
+        },
+        {
+          "heading": "1.2 Letta (formerly MemGPT)",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "1.3 Zep / Graphiti (getzep.com)",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "1.4 Cognee (cognee.ai)",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "1.5 Supermemory (supermemory.com)",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "1.6 LlamaIndex Memory Modules",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "1.7 LangMem (LangChain)",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "1.8 OpenAI ChatGPT Memory",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "1.9 Anthropic Claude Memory + Memory Tool",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "1.10 Basic Memory (basicmachines-co)",
+          "level": 3,
+          "line": 74
+        },
+        {
+          "heading": "1.11 Hermes Agent (Nous Research) — added 2026-05-02",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "2. Positioning Matrix",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "2.1 Axes: Local-first ↔ Cloud-first vs. Flat (chat/vector) ↔ Graph/Structured",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "2.2 Axes: Benchmark-chasing ↔ Opinionated epistemology",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "3. SWOT — hive-mind",
+          "level": 2,
+          "line": 116
+        },
+        {
+          "heading": "Strengths",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "Weaknesses",
+          "level": 3,
+          "line": 128
+        },
+        {
+          "heading": "Opportunities",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "Threats",
+          "level": 3,
+          "line": 146
+        },
+        {
+          "heading": "4. Positioning Taglines (5 options)",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "5. Bottom Line",
+          "level": 2,
+          "line": 177
+        },
+        {
+          "heading": "Sources",
+          "level": 2,
+          "line": 185
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    },
+    {
+      "path": "docs/research/04-gepa-public-reveal-strategy.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 392,
+      "nonEmptyLines": 261,
+      "sections": [
+        {
+          "heading": "GEPA + ACE Self-Improvement Proof — Public Reveal Strategy",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "⚠ Critical corrections from research-agent returns (post-draft)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "1. The claim space",
+          "level": 2,
+          "line": 30
+        },
+        {
+          "heading": "1.1 What v1 proved",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "1.2 What v1 didn't prove",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "1.3 What v2 will prove",
+          "level": 3,
+          "line": 48
+        },
+        {
+          "heading": "2. Audiences and what each needs",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "2.1 AI researchers (for trust / credibility)",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "2.2 Technical buyers — CTOs, VPs of Engineering, AI platform leads (for sales)",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "2.3 Prompt engineers + applied ML engineers (for virality)",
+          "level": 3,
+          "line": 89
+        },
+        {
+          "heading": "2.4 The skeptic class (to survive)",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "3. The research note — structure",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "3.1 Abstract (200 words)",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "3.2 Introduction (1 page)",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "3.3 Methods (3 pages)",
+          "level": 3,
+          "line": 129
+        },
+        {
+          "heading": "3.4 Results (3 pages)",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "3.5 Limitations (1 page)",
+          "level": 3,
+          "line": 147
+        },
+        {
+          "heading": "3.6 Related work (1 page)",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "3.7 Conclusion (0.5 page)",
+          "level": 3,
+          "line": 164
+        },
+        {
+          "heading": "3.8 Appendices",
+          "level": 3,
+          "line": 170
+        },
+        {
+          "heading": "4. The Twitter thread (12-18 tweets)",
+          "level": 2,
+          "line": 180
+        },
+        {
+          "heading": "Example draft — tweets 1-5",
+          "level": 3,
+          "line": 182
+        },
+        {
+          "heading": "Thread-writing rules",
+          "level": 3,
+          "line": 196
+        },
+        {
+          "heading": "5. The LinkedIn long-form (2000-3000 words)",
+          "level": 2,
+          "line": 207
+        },
+        {
+          "heading": "6. The HN post",
+          "level": 2,
+          "line": 233
+        },
+        {
+          "heading": "7. Demo assets",
+          "level": 2,
+          "line": 245
+        },
+        {
+          "heading": "8. Pre-publication warm list",
+          "level": 2,
+          "line": 263
+        },
+        {
+          "heading": "9. Handling criticism and follow-up",
+          "level": 2,
+          "line": 286
+        },
+        {
+          "heading": "9.1 Likely objections and ready responses",
+          "level": 3,
+          "line": 288
+        },
+        {
+          "heading": "9.2 If H₃ fires (negative result)",
+          "level": 3,
+          "line": 302
+        },
+        {
+          "heading": "9.3 If H₁ passes weakly (within noise of 0.95)",
+          "level": 3,
+          "line": 317
+        },
+        {
+          "heading": "9.4 If H₂ passes strongly (>1.0 across domains)",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "10. Timing and cadence",
+          "level": 2,
+          "line": 327
+        },
+        {
+          "heading": "11. Success criteria",
+          "level": 2,
+          "line": 345
+        },
+        {
+          "heading": "12. Waggle's narrative after the reveal",
+          "level": 2,
+          "line": 358
+        },
+        {
+          "heading": "13. Open decisions for Marko",
+          "level": 2,
+          "line": 372
+        },
+        {
+          "heading": "Closing",
+          "level": 2,
+          "line": 384
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 38
+      }
+    },
+    {
+      "path": "docs/research/05-user-personas-ai-os.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 272,
+      "nonEmptyLines": 196,
+      "sections": [
+        {
+          "heading": "What Users Want from an AI Operating Workspace — Persona Voice-of-Customer",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Persona 1 — The Product Owner / Strategic Operator *(the Marko archetype)*",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "Persona 2 — The Knowledge Worker *(legal / finance / HR / compliance)*",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "Persona 3 — The Developer *(IDE power user, CLI native)*",
+          "level": 2,
+          "line": 81
+        },
+        {
+          "heading": "Persona 4 — The Research Scientist *(AI researcher / analyst / management consultant)*",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "Persona 5 — The Startup Founder *(solo or 2-10 team)*",
+          "level": 2,
+          "line": 143
+        },
+        {
+          "heading": "Persona 6 — The Enterprise IT Admin / CIO / CISO",
+          "level": 2,
+          "line": 175
+        },
+        {
+          "heading": "Persona 7 — The Consumer Prosumer *(creator, writer, entrepreneur-of-one)*",
+          "level": 2,
+          "line": 207
+        },
+        {
+          "heading": "Cross-persona observations",
+          "level": 2,
+          "line": 237
+        },
+        {
+          "heading": "Persona-to-roadmap heat map",
+          "level": 2,
+          "line": 253
+        },
+        {
+          "heading": "Closing note",
+          "level": 2,
+          "line": 268
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "docs/research/06-waggle-os-product-overview.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 406,
+      "nonEmptyLines": 287,
+      "sections": [
+        {
+          "heading": "Waggle OS — Product Overview",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. The pitch",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "1.1 One-sentence pitches per audience",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "1.2 The strategic function",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "2. Architecture — verified April 2026",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "2.1 Why local-first",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "3. The memory stack — the core differentiator",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "3.1 FrameStore (`frames.ts`)",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "3.2 SessionStore (`sessions.ts`)",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "3.3 HybridSearch (`search.ts`)",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "3.4 KnowledgeGraph (`knowledge.ts`)",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "3.5 IdentityLayer + AwarenessLayer (`identity.ts`, `awareness.ts`)",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "3.6 CognifyPipeline (`agent/src/cognify.ts`)",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "3.7 MemoryWeaver (`@waggle/weaver`)",
+          "level": 3,
+          "line": 108
+        },
+        {
+          "heading": "3.8 Wiki Compiler (`@waggle/wiki-compiler`)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "3.9 Multi-mind layer",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "4. The evolution stack — Waggle's research differentiator",
+          "level": 2,
+          "line": 135
+        },
+        {
+          "heading": "Why this matters commercially",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "5. Features — taxonomy",
+          "level": 2,
+          "line": 160
+        },
+        {
+          "heading": "5.1 Core features (all tiers)",
+          "level": 3,
+          "line": 162
+        },
+        {
+          "heading": "5.2 Pro-tier adds ($19/mo)",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "5.3 Teams-tier adds ($49/seat/mo)",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "5.4 Enterprise / KVARK adds (consultative)",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "5.5 Notable feature deep-dives",
+          "level": 3,
+          "line": 203
+        },
+        {
+          "heading": "5.6 Trial / Free / Pro differentiation",
+          "level": 3,
+          "line": 212
+        },
+        {
+          "heading": "6. User patterns",
+          "level": 2,
+          "line": 228
+        },
+        {
+          "heading": "6.1 Solo pattern (Free / Pro)",
+          "level": 3,
+          "line": 230
+        },
+        {
+          "heading": "6.2 Team pattern (Teams)",
+          "level": 3,
+          "line": 238
+        },
+        {
+          "heading": "6.3 Enterprise pattern (KVARK)",
+          "level": 3,
+          "line": 246
+        },
+        {
+          "heading": "7. Competitive positioning",
+          "level": 2,
+          "line": 257
+        },
+        {
+          "heading": "7.1 Nearest competitors and how Waggle differs",
+          "level": 3,
+          "line": 259
+        },
+        {
+          "heading": "7.2 Defensibility layers",
+          "level": 3,
+          "line": 275
+        },
+        {
+          "heading": "7.3 What could disrupt Waggle",
+          "level": 3,
+          "line": 284
+        },
+        {
+          "heading": "8. Shipping state as of 2026-04-15",
+          "level": 2,
+          "line": 295
+        },
+        {
+          "heading": "8.1 Production-ready",
+          "level": 3,
+          "line": 297
+        },
+        {
+          "heading": "8.2 Blocked on external action",
+          "level": 3,
+          "line": 308
+        },
+        {
+          "heading": "8.3 Deferred with clear triggers",
+          "level": 3,
+          "line": 314
+        },
+        {
+          "heading": "8.4 Planned but not started",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "9. Metrics the product should hit in 2026-2027",
+          "level": 2,
+          "line": 328
+        },
+        {
+          "heading": "9.1 Activation",
+          "level": 3,
+          "line": 330
+        },
+        {
+          "heading": "9.2 Retention",
+          "level": 3,
+          "line": 335
+        },
+        {
+          "heading": "9.3 Revenue",
+          "level": 3,
+          "line": 341
+        },
+        {
+          "heading": "9.4 Research / brand",
+          "level": 3,
+          "line": 348
+        },
+        {
+          "heading": "10. Strategic risks + mitigations",
+          "level": 2,
+          "line": 357
+        },
+        {
+          "heading": "11. The one-paragraph strategic thesis",
+          "level": 2,
+          "line": 370
+        },
+        {
+          "heading": "Appendix A — 16-package workspace map",
+          "level": 2,
+          "line": 376
+        },
+        {
+          "heading": "Appendix B — links",
+          "level": 2,
+          "line": 398
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 48
+      }
+    },
+    {
+      "path": "docs/research/07-skills-connectors-strategy.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 355,
+      "nonEmptyLines": 244,
+      "sections": [
+        {
+          "heading": "Skills + Connectors — Shipping Strategy, User Extension, Self-Evolution",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Strategic framing",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "1.1 Why Skills matter",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "1.2 Why Connectors matter",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "2. Skills — shipping strategy",
+          "level": 2,
+          "line": 49
+        },
+        {
+          "heading": "2.1 The starter pack (~20 skills)",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "2.2 Explanation to the user — per persona",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "2.3 Tier gates",
+          "level": 3,
+          "line": 103
+        },
+        {
+          "heading": "2.4 The creation loop (how users extend)",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "2.5 Promotion flow (Gap E, shipped)",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "2.6 Self-evolution loop",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "2.7 Decay (Gap F, shipped)",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "3. Connectors — shipping strategy",
+          "level": 2,
+          "line": 156
+        },
+        {
+          "heading": "3.1 Native starter pack (12 hero connectors)",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "3.2 Explanation to the user — per persona",
+          "level": 3,
+          "line": 179
+        },
+        {
+          "heading": "3.3 Tier gates",
+          "level": 3,
+          "line": 191
+        },
+        {
+          "heading": "3.4 Custom connector SDK",
+          "level": 3,
+          "line": 198
+        },
+        {
+          "heading": "3.5 MCP catalog — the long tail",
+          "level": 3,
+          "line": 211
+        },
+        {
+          "heading": "3.6 Approval gates",
+          "level": 3,
+          "line": 220
+        },
+        {
+          "heading": "3.7 Self-evolution for connectors?",
+          "level": 3,
+          "line": 229
+        },
+        {
+          "heading": "4. Marketplace strategy",
+          "level": 2,
+          "line": 237
+        },
+        {
+          "heading": "4.1 Positioning",
+          "level": 3,
+          "line": 239
+        },
+        {
+          "heading": "4.2 Quality control",
+          "level": 3,
+          "line": 249
+        },
+        {
+          "heading": "4.3 Starter seeding",
+          "level": 3,
+          "line": 256
+        },
+        {
+          "heading": "5. Explanation assets to build",
+          "level": 2,
+          "line": 262
+        },
+        {
+          "heading": "6. Phased action plan",
+          "level": 2,
+          "line": 277
+        },
+        {
+          "heading": "Phase 1 (2 weeks) — launch the starter pack",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "Phase 2 (2 weeks) — creation loop polish",
+          "level": 3,
+          "line": 286
+        },
+        {
+          "heading": "Phase 3 (3 weeks) — marketplace v1",
+          "level": 3,
+          "line": 293
+        },
+        {
+          "heading": "Phase 4 (ongoing) — evolution visibility",
+          "level": 3,
+          "line": 300
+        },
+        {
+          "heading": "Phase 5 (Q3+) — ecosystem",
+          "level": 3,
+          "line": 307
+        },
+        {
+          "heading": "7. Metrics",
+          "level": 2,
+          "line": 316
+        },
+        {
+          "heading": "8. Risks + mitigations",
+          "level": 2,
+          "line": 328
+        },
+        {
+          "heading": "9. Open decisions for Marko",
+          "level": 2,
+          "line": 341
+        },
+        {
+          "heading": "Closing",
+          "level": 2,
+          "line": 351
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 36
+      }
+    },
+    {
+      "path": "docs/research/PAPER-1-CONCEPT_hive-mind-memory.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 131,
+      "nonEmptyLines": 107,
+      "sections": [
+        {
+          "heading": "Paper 1 — Hive-Mind: Frame-Graph Memory for Autonomous AI Agents",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Thesis",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Section Skeleton",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "1. Abstract (~250 words)",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "2. Introduction",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "3. The Frame Model",
+          "level": 3,
+          "line": 32
+        },
+        {
+          "heading": "4. Multi-Mind Isolation",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "5. Hybrid Retrieval",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "6. Wiki Compilation",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "7. Compliance-by-Default",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "8. Harvest Pipeline",
+          "level": 3,
+          "line": 77
+        },
+        {
+          "heading": "9. Evaluation (TO BE COMPLETED)",
+          "level": 3,
+          "line": 83
+        },
+        {
+          "heading": "10. Related Work",
+          "level": 3,
+          "line": 91
+        },
+        {
+          "heading": "11. Limitations",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "12. Conclusion",
+          "level": 3,
+          "line": 105
+        },
+        {
+          "heading": "Key Claims (must be defensible with data)",
+          "level": 2,
+          "line": 112
+        },
+        {
+          "heading": "What Needs to Happen Before Full Write-Up",
+          "level": 2,
+          "line": 125
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "docs/research/PAPER-2-CONCEPT_gepa-evolution.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 174,
+      "nonEmptyLines": 143,
+      "sections": [
+        {
+          "heading": "Paper 2 — Closed-Loop Prompt Evolution: Can Smaller Models Match Flagships?",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Thesis",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Section Skeleton",
+          "level": 2,
+          "line": 16
+        },
+        {
+          "heading": "1. Abstract (~250 words)",
+          "level": 3,
+          "line": 18
+        },
+        {
+          "heading": "2. Introduction",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "3. Background and Related Work",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "4. System Architecture",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "5. The Evolution Pipeline in Detail",
+          "level": 3,
+          "line": 54
+        },
+        {
+          "heading": "5.1 Trace Collection",
+          "level": 4,
+          "line": 56
+        },
+        {
+          "heading": "5.2 Dataset Construction",
+          "level": 4,
+          "line": 60
+        },
+        {
+          "heading": "5.3 GEPA Iterative Evolution",
+          "level": 4,
+          "line": 65
+        },
+        {
+          "heading": "5.4 EvolveSchema Integration",
+          "level": 4,
+          "line": 71
+        },
+        {
+          "heading": "5.5 Constraint Gates",
+          "level": 4,
+          "line": 76
+        },
+        {
+          "heading": "5.6 Deploy and Monitor",
+          "level": 4,
+          "line": 82
+        },
+        {
+          "heading": "6. Experimental Design",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "6.1 v1 (completed, preliminary)",
+          "level": 4,
+          "line": 89
+        },
+        {
+          "heading": "6.2 v2 (designed, budget approved, not yet run)",
+          "level": 4,
+          "line": 96
+        },
+        {
+          "heading": "7. Results (TO BE COMPLETED)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "8. Discussion",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "9. Limitations",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "10. Reproducibility",
+          "level": 3,
+          "line": 139
+        },
+        {
+          "heading": "11. Conclusion",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "Key Claims (must be defensible with data)",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "What Needs to Happen Before Full Write-Up",
+          "level": 2,
+          "line": 165
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 24
+      }
+    },
+    {
+      "path": "docs/research/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 215,
+      "nonEmptyLines": 133,
+      "sections": [
+        {
+          "heading": "Waggle OS — Deep Research Series (2026-04-15)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "The reports",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "01 — Open-source memory packaging strategy",
+          "level": 3,
+          "line": 11
+        },
+        {
+          "heading": "02 — Memory system scientific paper draft",
+          "level": 3,
+          "line": 20
+        },
+        {
+          "heading": "03 — Memory harvesting strategy + UX",
+          "level": 3,
+          "line": 29
+        },
+        {
+          "heading": "04 — GEPA public reveal strategy",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "05 — User personas voice-of-customer",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "06 — Waggle OS product overview",
+          "level": 3,
+          "line": 56
+        },
+        {
+          "heading": "07 — Skills + connectors shipping strategy",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "Cross-cutting themes",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "Theme 1 — Memory is the moat, compliance is the multiplier",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "Theme 2 — Local-first is structural, not a marketing tagline",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "Theme 3 — Evolution is the research credibility layer",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "Theme 4 — The four-tier ladder maps to user reality",
+          "level": 3,
+          "line": 90
+        },
+        {
+          "heading": "Theme 5 — `hive-mind` OSS + Waggle product + KVARK enterprise is a coherent three-layer stack",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "Open decisions consolidated — what Marko needs to answer",
+          "level": 2,
+          "line": 106
+        },
+        {
+          "heading": "What's NOT in these reports",
+          "level": 2,
+          "line": 130
+        },
+        {
+          "heading": "Post-draft corrections from research agents (2026-04-15)",
+          "level": 2,
+          "line": 141
+        },
+        {
+          "heading": "Factual corrections (reports 2 + 4)",
+          "level": 3,
+          "line": 145
+        },
+        {
+          "heading": "OSS competitor data (report 1)",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "Waggle features inventory (affects reports 6 + 7 — not yet folded in; do so in a morning refinement pass if time permits)",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "Competitive landscape enrichments (affects report 6 — not yet folded in)",
+          "level": 3,
+          "line": 181
+        },
+        {
+          "heading": "How these were produced",
+          "level": 2,
+          "line": 189
+        },
+        {
+          "heading": "Rollback + revision",
+          "level": 2,
+          "line": 202
+        },
+        {
+          "heading": "Acknowledgment",
+          "level": 2,
+          "line": 210
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 25
+      }
+    },
+    {
+      "path": "docs/research/waggle-hive-mind-paper.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 1144,
+      "nonEmptyLines": 785,
+      "sections": [
+        {
+          "heading": "Hive-Mind: Frame-Graph Memory with Compliance-by-Default and Closed-Loop Prompt Evolution for Autonomous AI Agents",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Abstract",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. Introduction",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "1.1 Contributions",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "1.2 Design philosophy",
+          "level": 3,
+          "line": 43
+        },
+        {
+          "heading": "2. System Architecture",
+          "level": 2,
+          "line": 51
+        },
+        {
+          "heading": "2.1 High-level overview",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "2.2 Storage model",
+          "level": 3,
+          "line": 96
+        },
+        {
+          "heading": "2.3 Component inventory",
+          "level": 3,
+          "line": 120
+        },
+        {
+          "heading": "3. The Frame Model",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "3.1 Motivation",
+          "level": 3,
+          "line": 136
+        },
+        {
+          "heading": "3.2 Definitions",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "3.3 Formal properties",
+          "level": 3,
+          "line": 165
+        },
+        {
+          "heading": "3.4 The video compression analogy",
+          "level": 3,
+          "line": 177
+        },
+        {
+          "heading": "3.5 Source provenance and confidence",
+          "level": 3,
+          "line": 192
+        },
+        {
+          "heading": "3.6 Deduplication",
+          "level": 3,
+          "line": 204
+        },
+        {
+          "heading": "4. Multi-Mind Isolation",
+          "level": 2,
+          "line": 218
+        },
+        {
+          "heading": "4.1 Scope hierarchy",
+          "level": 3,
+          "line": 220
+        },
+        {
+          "heading": "4.2 The MultiMindCache",
+          "level": 3,
+          "line": 232
+        },
+        {
+          "heading": "4.3 Cross-mind read protocol",
+          "level": 3,
+          "line": 248
+        },
+        {
+          "heading": "4.4 Write-path contradiction detection",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "4.5 Skill promotion chain",
+          "level": 3,
+          "line": 270
+        },
+        {
+          "heading": "5. Hybrid Retrieval",
+          "level": 2,
+          "line": 289
+        },
+        {
+          "heading": "5.1 Query pipeline",
+          "level": 3,
+          "line": 291
+        },
+        {
+          "heading": "5.2 Scoring components",
+          "level": 3,
+          "line": 315
+        },
+        {
+          "heading": "5.3 Scoring profiles",
+          "level": 3,
+          "line": 327
+        },
+        {
+          "heading": "5.4 Temporal filtering",
+          "level": 3,
+          "line": 340
+        },
+        {
+          "heading": "5.5 Knowledge graph overlay",
+          "level": 3,
+          "line": 344
+        },
+        {
+          "heading": "5.6 Knowledge graph with SCD-2 temporal validity",
+          "level": 3,
+          "line": 348
+        },
+        {
+          "heading": "6. Consolidation, Decay, and Strengthening",
+          "level": 2,
+          "line": 358
+        },
+        {
+          "heading": "6.1 Consolidation",
+          "level": 3,
+          "line": 362
+        },
+        {
+          "heading": "6.2 Decay",
+          "level": 3,
+          "line": 370
+        },
+        {
+          "heading": "6.3 Strengthening",
+          "level": 3,
+          "line": 374
+        },
+        {
+          "heading": "6.4 Automatic linking",
+          "level": 3,
+          "line": 378
+        },
+        {
+          "heading": "7. Wiki Compilation",
+          "level": 2,
+          "line": 384
+        },
+        {
+          "heading": "7.1 Overview",
+          "level": 3,
+          "line": 386
+        },
+        {
+          "heading": "7.2 Incremental compilation",
+          "level": 3,
+          "line": 396
+        },
+        {
+          "heading": "7.3 Health reports",
+          "level": 3,
+          "line": 400
+        },
+        {
+          "heading": "7.4 Browsability",
+          "level": 3,
+          "line": 409
+        },
+        {
+          "heading": "8. Compliance-by-Default",
+          "level": 2,
+          "line": 415
+        },
+        {
+          "heading": "8.1 Design principle",
+          "level": 3,
+          "line": 417
+        },
+        {
+          "heading": "8.2 EU AI Act article mapping",
+          "level": 3,
+          "line": 423
+        },
+        {
+          "heading": "8.3 Append-only enforcement",
+          "level": 3,
+          "line": 435
+        },
+        {
+          "heading": "8.4 ComplianceStatusChecker",
+          "level": 3,
+          "line": 459
+        },
+        {
+          "heading": "8.5 Audit report generation",
+          "level": 3,
+          "line": 480
+        },
+        {
+          "heading": "9. Identity and Awareness Layers",
+          "level": 2,
+          "line": 492
+        },
+        {
+          "heading": "9.1 IdentityLayer",
+          "level": 3,
+          "line": 494
+        },
+        {
+          "heading": "9.2 AwarenessLayer",
+          "level": 3,
+          "line": 507
+        },
+        {
+          "heading": "10. Harvest Pipeline",
+          "level": 2,
+          "line": 515
+        },
+        {
+          "heading": "10.1 Overview",
+          "level": 3,
+          "line": 517
+        },
+        {
+          "heading": "10.2 Adapter architecture",
+          "level": 3,
+          "line": 521
+        },
+        {
+          "heading": "10.3 Supported sources",
+          "level": 3,
+          "line": 534
+        },
+        {
+          "heading": "10.4 Provenance tracking",
+          "level": 3,
+          "line": 550
+        },
+        {
+          "heading": "10.5 Multi-layer deduplication",
+          "level": 3,
+          "line": 554
+        },
+        {
+          "heading": "11. Closed-Loop Prompt Evolution",
+          "level": 2,
+          "line": 560
+        },
+        {
+          "heading": "11.1 Overview",
+          "level": 3,
+          "line": 562
+        },
+        {
+          "heading": "11.2 Evolution pipeline",
+          "level": 3,
+          "line": 570
+        },
+        {
+          "heading": "11.3 LLM-as-Judge",
+          "level": 3,
+          "line": 620
+        },
+        {
+          "heading": "11.4 Boot-time integration",
+          "level": 3,
+          "line": 634
+        },
+        {
+          "heading": "12. Experimental Results",
+          "level": 2,
+          "line": 640
+        },
+        {
+          "heading": "12.1 Preliminary result (v1)",
+          "level": 3,
+          "line": 642
+        },
+        {
+          "heading": "12.2 Limitations of v1",
+          "level": 3,
+          "line": 664
+        },
+        {
+          "heading": "12.3 v2 experimental design (in progress)",
+          "level": 3,
+          "line": 677
+        },
+        {
+          "heading": "13. Related Work",
+          "level": 2,
+          "line": 718
+        },
+        {
+          "heading": "13.1 Memory systems for AI agents",
+          "level": 3,
+          "line": 720
+        },
+        {
+          "heading": "13.2 Prompt optimization",
+          "level": 3,
+          "line": 734
+        },
+        {
+          "heading": "13.3 AI governance and compliance",
+          "level": 3,
+          "line": 750
+        },
+        {
+          "heading": "14. Limitations and Future Work",
+          "level": 2,
+          "line": 756
+        },
+        {
+          "heading": "14.1 Single-node architecture",
+          "level": 3,
+          "line": 760
+        },
+        {
+          "heading": "14.2 LLM dependency",
+          "level": 3,
+          "line": 770
+        },
+        {
+          "heading": "14.3 Language coverage",
+          "level": 3,
+          "line": 780
+        },
+        {
+          "heading": "14.4 Adapter coverage",
+          "level": 3,
+          "line": 784
+        },
+        {
+          "heading": "14.5 Compliance scope",
+          "level": 3,
+          "line": 788
+        },
+        {
+          "heading": "14.6 Experimental evidence",
+          "level": 3,
+          "line": 792
+        },
+        {
+          "heading": "14.7 Frame content type",
+          "level": 3,
+          "line": 796
+        },
+        {
+          "heading": "14.8 Organizational fit",
+          "level": 3,
+          "line": 800
+        },
+        {
+          "heading": "15. Conclusion",
+          "level": 2,
+          "line": 806
+        },
+        {
+          "heading": "Acknowledgments",
+          "level": 2,
+          "line": 824
+        },
+        {
+          "heading": "References",
+          "level": 2,
+          "line": 830
+        },
+        {
+          "heading": "Appendix A: SQL Schema (Authoritative)",
+          "level": 2,
+          "line": 860
+        },
+        {
+          "heading": "Appendix B: Hive-Mind Public API (TypeScript)",
+          "level": 2,
+          "line": 1052
+        },
+        {
+          "heading": "Appendix C: Scoring Profile Weight Vectors",
+          "level": 2,
+          "line": 1103
+        },
+        {
+          "heading": "Appendix D: Evolution Gate Defaults",
+          "level": 2,
+          "line": 1122
+        },
+        {
+          "heading": "Appendix E: Code Availability",
+          "level": 2,
+          "line": 1139
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 84
+      }
+    }
+  ]
+}

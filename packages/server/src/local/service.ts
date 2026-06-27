@@ -10,6 +10,7 @@ import { startLiteLLM, stopLiteLLM, type LiteLLMStatus } from './lifecycle.js';
 import { createLogger } from './logger.js';
 import { resolveBindHost } from './net-config.js';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
+import { listOllamaChatModelIds } from './model-availability.js';
 import {
   readEraseMarker,
   performWipe,
@@ -234,7 +235,7 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   } catch { /* non-blocking */ }
 
   // 8. Determine LLM provider — truthful, not optimistic
-  let providerName: 'litellm' | 'anthropic-proxy' = 'anthropic-proxy';
+  let providerName: 'litellm' | 'anthropic-proxy' | 'ollama' = 'anthropic-proxy';
   let providerHealth: LlmHealthStatus = 'unavailable';
   let providerDetail = 'No working LLM path';
 
@@ -264,8 +265,16 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
       providerHealth = 'healthy';
       providerDetail = 'Built-in Anthropic proxy (API key configured)';
     } else {
-      providerHealth = 'degraded';
+      const localModels = await listOllamaChatModelIds();
+      if (localModels.length > 0) {
+        providerName = 'ollama';
+        providerHealth = 'healthy';
+        providerDetail = `Local Ollama model (${localModels[0]})`;
+        server.agentState.currentModel = localModels[0];
+      } else {
+        providerHealth = 'degraded';
       providerDetail = 'Built-in Anthropic proxy (no API key — configure in Settings > API Keys)';
+      }
     }
 
     if (litellm.status !== 'running' && litellm.status !== 'started') {

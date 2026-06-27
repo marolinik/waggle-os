@@ -1,0 +1,822 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 5,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "waggle-cowork/claude-code-deep-dive.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 495,
+      "nonEmptyLines": 355,
+      "sections": [
+        {
+          "heading": "Claude Code Source — Deep Architecture Analysis for Waggle OS",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "1. AGENT ORCHESTRATION — The Complete Picture",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "1.1 Agent Definition Schema",
+          "level": 3,
+          "line": 12
+        },
+        {
+          "heading": "1.2 Agent Tool Pool Assembly",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "1.3 Coordinator Mode (Feature-Gated)",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "1.4 Fork Subagent Pattern",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "1.5 Agent Memory (Per-Agent Persistent State)",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "2. MEMORY SYSTEM — Production-Grade Patterns",
+          "level": 2,
+          "line": 129
+        },
+        {
+          "heading": "2.1 Four-Type Taxonomy (Enforced)",
+          "level": 3,
+          "line": 131
+        },
+        {
+          "heading": "2.2 Side-Query Relevance (The Key Innovation)",
+          "level": 3,
+          "line": 149
+        },
+        {
+          "heading": "2.3 Memory Freshness and Staleness",
+          "level": 3,
+          "line": 164
+        },
+        {
+          "heading": "2.4 Team Memory",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "3. QUERY ENGINE — The Brain",
+          "level": 2,
+          "line": 189
+        },
+        {
+          "heading": "3.1 Architecture",
+          "level": 3,
+          "line": 191
+        },
+        {
+          "heading": "3.2 Multi-Layer Compaction Strategy",
+          "level": 3,
+          "line": 208
+        },
+        {
+          "heading": "3.3 Token Budget Management",
+          "level": 3,
+          "line": 219
+        },
+        {
+          "heading": "3.4 Streaming Tool Execution",
+          "level": 3,
+          "line": 229
+        },
+        {
+          "heading": "4. TOOL HARNESS — The Execution Layer",
+          "level": 2,
+          "line": 238
+        },
+        {
+          "heading": "4.1 buildTool() Factory",
+          "level": 3,
+          "line": 240
+        },
+        {
+          "heading": "4.2 Permission System",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "4.3 Deferred Tool Loading (ToolSearch)",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "5. SKILLS FRAMEWORK",
+          "level": 2,
+          "line": 297
+        },
+        {
+          "heading": "5.1 Skill Definition (Markdown with Frontmatter)",
+          "level": 3,
+          "line": 299
+        },
+        {
+          "heading": "5.2 Skill Sources and Priority",
+          "level": 3,
+          "line": 320
+        },
+        {
+          "heading": "5.3 Skill Discovery and Prefetch",
+          "level": 3,
+          "line": 331
+        },
+        {
+          "heading": "6. TASK SYSTEM",
+          "level": 2,
+          "line": 339
+        },
+        {
+          "heading": "6.1 Seven Task Types",
+          "level": 3,
+          "line": 341
+        },
+        {
+          "heading": "6.2 Task Lifecycle",
+          "level": 3,
+          "line": 352
+        },
+        {
+          "heading": "6.3 Notification Pattern",
+          "level": 3,
+          "line": 362
+        },
+        {
+          "heading": "7. ARCHITECTURE BLUEPRINT FOR WAGGLE",
+          "level": 2,
+          "line": 383
+        },
+        {
+          "heading": "P0 — Foundation (Blocks Everything Else)",
+          "level": 3,
+          "line": 387
+        },
+        {
+          "heading": "P1 — Orchestration (Enables Workflows)",
+          "level": 3,
+          "line": 398
+        },
+        {
+          "heading": "P2 — Memory Maturation",
+          "level": 3,
+          "line": 408
+        },
+        {
+          "heading": "P3 — Context Management",
+          "level": 3,
+          "line": 422
+        },
+        {
+          "heading": "P4 — Enterprise",
+          "level": 3,
+          "line": 433
+        },
+        {
+          "heading": "8. WHAT WAGGLE HAS THAT CLAUDE CODE DOESN'T",
+          "level": 2,
+          "line": 445
+        },
+        {
+          "heading": "CORRECTION: Section 2 Memory Assessment (Updated)",
+          "level": 2,
+          "line": 464
+        },
+        {
+          "heading": "What Waggle Has That Claude Code Cannot Match",
+          "level": 3,
+          "line": 470
+        },
+        {
+          "heading": "Patterns to Adopt FROM Claude Code (as graph-layer enhancements)",
+          "level": 3,
+          "line": 482
+        },
+        {
+          "heading": "Implementation Fixes Required (Bugs, Not Architecture)",
+          "level": 3,
+          "line": 490
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 40
+      }
+    },
+    {
+      "path": "waggle-cowork/claude-code-source-analysis.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 185,
+      "nonEmptyLines": 135,
+      "sections": [
+        {
+          "heading": "Claude Code Source Analysis — Strategic Relevance to Waggle OS",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Executive Summary",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Architecture Breakdown (What Matters for Waggle)",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "1. Agent System — The Core Differentiator",
+          "level": 3,
+          "line": 19
+        },
+        {
+          "heading": "2. Memory System — The Competitive Moat",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "3. Tool Harness — The Execution Layer",
+          "level": 3,
+          "line": 60
+        },
+        {
+          "heading": "4. QueryEngine — The Brain",
+          "level": 3,
+          "line": 79
+        },
+        {
+          "heading": "5. Session & Task Management",
+          "level": 3,
+          "line": 98
+        },
+        {
+          "heading": "Cross-Reference: Three Repositories Compared",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "Strategic Recommendations for Waggle",
+          "level": 2,
+          "line": 128
+        },
+        {
+          "heading": "Immediate (adopt patterns, not code):",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "Near-term (architecture alignment):",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "Strategic (differentiation layer):",
+          "level": 3,
+          "line": 144
+        },
+        {
+          "heading": "What NOT to do:",
+          "level": 3,
+          "line": 150
+        },
+        {
+          "heading": "Verdict on open-multi-agent (Updated)",
+          "level": 2,
+          "line": 158
+        },
+        {
+          "heading": "Verdict on claw-code (Unchanged)",
+          "level": 2,
+          "line": 164
+        },
+        {
+          "heading": "CORRECTION: Memory System Assessment (Updated)",
+          "level": 2,
+          "line": 169
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 17
+      }
+    },
+    {
+      "path": "waggle-cowork/system-prompt-comparison.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 338,
+      "nonEmptyLines": 256,
+      "sections": [
+        {
+          "heading": "System Prompt Comparison: Waggle OS vs Claude Code",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "EXECUTIVE VERDICT",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "ARCHITECTURE COMPARISON",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Waggle OS Prompt Assembly",
+          "level": 3,
+          "line": 17
+        },
+        {
+          "heading": "Claude Code Prompt Assembly",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "HEAD-TO-HEAD: WHAT EACH DOES BETTER",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "Where Waggle Is Ahead",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "Where Claude Code Is Ahead",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "BEHAVIORAL SPEC DEEP COMPARISON",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "Waggle's BEHAVIORAL_SPEC.rules (280 lines)",
+          "level": 3,
+          "line": 154
+        },
+        {
+          "heading": "Claude Code's System Prompt Sections (~500 lines across 7+ sections)",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "PERSONA COMPARISON",
+          "level": 2,
+          "line": 205
+        },
+        {
+          "heading": "Waggle Personas (13)",
+          "level": 3,
+          "line": 218
+        },
+        {
+          "heading": "Claude Code Agents (5)",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "SPECIFIC IMPROVEMENTS FOR WAGGLE",
+          "level": 2,
+          "line": 228
+        },
+        {
+          "heading": "P0: Prompt Caching (Immediate ROI)",
+          "level": 3,
+          "line": 230
+        },
+        {
+          "heading": "P0: Break Up BEHAVIORAL_SPEC",
+          "level": 3,
+          "line": 241
+        },
+        {
+          "heading": "P1: Add Safety Boundaries to Personas",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "P1: Add Verification Persona",
+          "level": 3,
+          "line": 263
+        },
+        {
+          "heading": "P1: Add Coordinator Persona",
+          "level": 3,
+          "line": 271
+        },
+        {
+          "heading": "P2: Implement Compaction Prompt",
+          "level": 3,
+          "line": 279
+        },
+        {
+          "heading": "P2: Fix Disclaimer Contamination",
+          "level": 3,
+          "line": 286
+        },
+        {
+          "heading": "P2: Add Memory Conflict Resolution to Core Loop",
+          "level": 3,
+          "line": 292
+        },
+        {
+          "heading": "P3: Feature Gate Progressive Enhancement",
+          "level": 3,
+          "line": 299
+        },
+        {
+          "heading": "SUMMARY MATRIX",
+          "level": 2,
+          "line": 311
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 25
+      }
+    },
+    {
+      "path": "waggle-cowork/waggle-os-improvement-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 370,
+      "nonEmptyLines": 280,
+      "sections": [
+        {
+          "heading": "Waggle OS — Consolidated Improvement Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "EXECUTIVE SUMMARY",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "WORKSTREAM 1: AGENT DEFINITION & ORCHESTRATION",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "What Claude Code Proves Works",
+          "level": 3,
+          "line": 25
+        },
+        {
+          "heading": "Actions",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "WORKSTREAM 2: MEMORY SYSTEM OPTIMIZATION",
+          "level": 2,
+          "line": 62
+        },
+        {
+          "heading": "Current State (Waggle's Advantage)",
+          "level": 3,
+          "line": 64
+        },
+        {
+          "heading": "What Waggle Should Adopt (Intelligence Layer, Not Storage Replacement)",
+          "level": 3,
+          "line": 69
+        },
+        {
+          "heading": "Implementation Bugs to Fix",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "Enhancement Actions",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 3,
+          "line": 100
+        },
+        {
+          "heading": "WORKSTREAM 3: CONTEXT & TOKEN MANAGEMENT",
+          "level": 2,
+          "line": 107
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 109
+        },
+        {
+          "heading": "What Claude Code Implements",
+          "level": 3,
+          "line": 112
+        },
+        {
+          "heading": "Actions",
+          "level": 3,
+          "line": 132
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 3,
+          "line": 143
+        },
+        {
+          "heading": "WORKSTREAM 4: TOOL HARNESS & MCP MATURATION",
+          "level": 2,
+          "line": 150
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "What Claude Code Implements",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "Actions",
+          "level": 3,
+          "line": 168
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "WORKSTREAM 5: SKILLS FRAMEWORK",
+          "level": 2,
+          "line": 184
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 186
+        },
+        {
+          "heading": "What Claude Code Implements",
+          "level": 3,
+          "line": 189
+        },
+        {
+          "heading": "Actions",
+          "level": 3,
+          "line": 210
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 3,
+          "line": 220
+        },
+        {
+          "heading": "WORKSTREAM 6: TASK SYSTEM & SESSION MANAGEMENT",
+          "level": 2,
+          "line": 226
+        },
+        {
+          "heading": "Problem",
+          "level": 3,
+          "line": 228
+        },
+        {
+          "heading": "What Claude Code Implements",
+          "level": 3,
+          "line": 231
+        },
+        {
+          "heading": "Actions",
+          "level": 3,
+          "line": 246
+        },
+        {
+          "heading": "Success Criteria",
+          "level": 3,
+          "line": 257
+        },
+        {
+          "heading": "PRIORITY MATRIX — ALL ACTIONS RANKED",
+          "level": 2,
+          "line": 263
+        },
+        {
+          "heading": "P0 — Foundation (Blocks Everything Else)",
+          "level": 3,
+          "line": 265
+        },
+        {
+          "heading": "P1 — Core Quality (Production Readiness)",
+          "level": 3,
+          "line": 273
+        },
+        {
+          "heading": "P2 — Maturation (Competitive Quality)",
+          "level": 3,
+          "line": 285
+        },
+        {
+          "heading": "P3 — Polish (Production Finish)",
+          "level": 3,
+          "line": 309
+        },
+        {
+          "heading": "P4 — Enterprise",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "WAGGLE'S STRUCTURAL ADVANTAGES — DO NOT LOSE THESE",
+          "level": 2,
+          "line": 329
+        },
+        {
+          "heading": "WHAT NOT TO DO",
+          "level": 2,
+          "line": 347
+        },
+        {
+          "heading": "EXECUTION SEQUENCE",
+          "level": 2,
+          "line": 357
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 42
+      }
+    },
+    {
+      "path": "waggle-cowork/waggle-prompt-improvement-plan.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 551,
+      "nonEmptyLines": 444,
+      "sections": [
+        {
+          "heading": "Waggle OS — System Prompt & Persona Improvement Plan",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "PART 1: NEW PERSONAS",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "1A. General Purpose Agent",
+          "level": 3,
+          "line": 10
+        },
+        {
+          "heading": "1B. Planner Agent",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "1C. Verifier Agent",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "1D. Coordinator Agent (Mission Control)",
+          "level": 3,
+          "line": 187
+        },
+        {
+          "heading": "PART 2: EXISTING PERSONA HARDENING",
+          "level": 2,
+          "line": 252
+        },
+        {
+          "heading": "2A. Add Safety Blocks to Read-Only Personas",
+          "level": 3,
+          "line": 256
+        },
+        {
+          "heading": "2B. Add Documented Failure Patterns to All Personas",
+          "level": 3,
+          "line": 277
+        },
+        {
+          "heading": "2C. Add disallowedTools to AgentPersona Schema",
+          "level": 3,
+          "line": 305
+        },
+        {
+          "heading": "PART 3: BEHAVIORAL SPEC IMPROVEMENTS",
+          "level": 2,
+          "line": 320
+        },
+        {
+          "heading": "3A. Break the Monolith (P0)",
+          "level": 3,
+          "line": 322
+        },
+        {
+          "heading": "3B. Add Section Caching to buildSystemPrompt() (P0)",
+          "level": 3,
+          "line": 361
+        },
+        {
+          "heading": "3C. Add Context Compaction Prompt (P1)",
+          "level": 3,
+          "line": 394
+        },
+        {
+          "heading": "3D. Fix Disclaimer Contamination (P1)",
+          "level": 3,
+          "line": 424
+        },
+        {
+          "heading": "3E. Elevate Memory Conflict Resolution (P2)",
+          "level": 3,
+          "line": 439
+        },
+        {
+          "heading": "3F. Add Feature Gating (P2)",
+          "level": 3,
+          "line": 455
+        },
+        {
+          "heading": "PART 4: REVISED COMPARISON MATRIX (After Implementation)",
+          "level": 2,
+          "line": 473
+        },
+        {
+          "heading": "PART 5: IMPLEMENTATION PRIORITY",
+          "level": 2,
+          "line": 500
+        },
+        {
+          "heading": "Phase 1 — P0 (Week 1-2)",
+          "level": 3,
+          "line": 502
+        },
+        {
+          "heading": "Phase 2 — P1 (Week 3-4)",
+          "level": 3,
+          "line": 511
+        },
+        {
+          "heading": "Phase 3 — P2 (Week 5-6)",
+          "level": 3,
+          "line": 522
+        },
+        {
+          "heading": "PART 6: FILES TO MODIFY",
+          "level": 2,
+          "line": 534
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    }
+  ]
+}

@@ -1,0 +1,300 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [
+    "docs/briefs/landing-auth-infra-brief-2026-04-19.md"
+  ],
+  "results": [
+    {
+      "path": "docs/briefs/WAGGLE-RECONCILIATION-BRIEF-V2.txt",
+      "language": "txt",
+      "fileCategory": "docs",
+      "totalLines": 272,
+      "nonEmptyLines": 272,
+      "metrics": {}
+    },
+    {
+      "path": "docs/briefs/WAGGLE-RECONCILIATION-BRIEF.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 308,
+      "nonEmptyLines": 209,
+      "sections": [
+        {
+          "heading": "Brief za Claude Code — Reconciliation sa Master Backlog",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Zašto ovaj dokument postoji",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "1. Moja iskrena korekcija — prethodno pogrešan pogled",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "2. Šta naš razgovor DODAJE backlog-u (nove stavke koje treba uneti)",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "2.1 Benchmark portfolio — nije u backlog-u",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "2.2 Qwen3 finding — needs elevation",
+          "level": 3,
+          "line": 82
+        },
+        {
+          "heading": "2.3 \"Memory + harness = novi LLM sloj\" — core thesis formulacija",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "3. Kontradikcije koje treba rešiti",
+          "level": 2,
+          "line": 111
+        },
+        {
+          "heading": "3.1 Stripe pricing — dve verzije postoje",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "3.2 hive-mind timing — [M]-07 je otvoren",
+          "level": 3,
+          "line": 125
+        },
+        {
+          "heading": "3.3 Memory harvest scope — ChatGPT export wait",
+          "level": 3,
+          "line": 142
+        },
+        {
+          "heading": "4. Šta treba dodati u Marko-side queue",
+          "level": 2,
+          "line": 152
+        },
+        {
+          "heading": "5. Overlap sa existing research — šta NE treba duplirati",
+          "level": 2,
+          "line": 183
+        },
+        {
+          "heading": "6. Rekalkulacija critical path — sa dodacima",
+          "level": 2,
+          "line": 199
+        },
+        {
+          "heading": "7. Akcioni items za sledeću sesiju sa Claude Code",
+          "level": 2,
+          "line": 249
+        },
+        {
+          "heading": "8. Šta ostaje otvoreno — real questions",
+          "level": 2,
+          "line": 264
+        },
+        {
+          "heading": "9. Zaključak — kako ovaj brief treba tretirati",
+          "level": 2,
+          "line": 276
+        },
+        {
+          "heading": "Dodatak — file reference",
+          "level": 2,
+          "line": 294
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 18
+      }
+    },
+    {
+      "path": "docs/briefs/hive-mind-ci-npm-publish-brief-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 154,
+      "nonEmptyLines": 113,
+      "sections": [
+        {
+          "heading": "Brief za Claude Code — hive-mind CI pipeline + npm publish",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Session goal (one sentence)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Why now",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Current state (as of H-34 closure)",
+          "level": 2,
+          "line": 23
+        },
+        {
+          "heading": "Non-goals (strict)",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "Acceptance criteria",
+          "level": 2,
+          "line": 42
+        },
+        {
+          "heading": "A. GitHub Actions CI pipeline",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "B. npm publish readiness (dry-run first, then publish)",
+          "level": 3,
+          "line": 62
+        },
+        {
+          "heading": "C. Root README normalization",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "D. First-run smoke script",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "E. CHANGELOG.md",
+          "level": 3,
+          "line": 104
+        },
+        {
+          "heading": "F. Release notes + GitHub Release",
+          "level": 3,
+          "line": 121
+        },
+        {
+          "heading": "Order of operations (recommended)",
+          "level": 2,
+          "line": 127
+        },
+        {
+          "heading": "Definition of done",
+          "level": 2,
+          "line": 136
+        },
+        {
+          "heading": "Escalation triggers (when to stop and ask Marko)",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "Reporting at session end",
+          "level": 2,
+          "line": 152
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 16
+      }
+    },
+    {
+      "path": "docs/briefs/track-b-benchmarks-brief-2026-04-19.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 105,
+      "nonEmptyLines": 73,
+      "sections": [
+        {
+          "heading": "Brief za Claude Code — Track B (v2 GEPA + LoCoMo benchmark)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Session goal (one sentence)",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Why now",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Prerequisite — HARD GATE",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Scope (what this brief covers)",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Step 1 — v2 GEPA experiment rerun",
+          "level": 3,
+          "line": 30
+        },
+        {
+          "heading": "Step 2 — LoCoMo benchmark (H-42/43/44 block)",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "Step 3 — Reporting artifact (for launch announcement)",
+          "level": 3,
+          "line": 53
+        },
+        {
+          "heading": "Non-goals (strict)",
+          "level": 2,
+          "line": 65
+        },
+        {
+          "heading": "Order of operations",
+          "level": 2,
+          "line": 74
+        },
+        {
+          "heading": "Escalation triggers (when to STOP and ask Marko)",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Definition of done (session-complete)",
+          "level": 2,
+          "line": 91
+        },
+        {
+          "heading": "Reporting at session end",
+          "level": 2,
+          "line": 99
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    }
+  ]
+}

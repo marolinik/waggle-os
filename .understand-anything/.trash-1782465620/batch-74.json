@@ -1,0 +1,95 @@
+{
+  "nodes": [
+    {
+      "id": "file:vitest.aliases.ts",
+      "type": "file",
+      "name": "vitest.aliases.ts",
+      "filePath": "vitest.aliases.ts",
+      "summary": "Utility module that dynamically generates Vite/Vitest path aliases for every @waggle/* workspace package, mapping them to their src/ directory so tests resolve from TypeScript source without a prior build step.",
+      "tags": ["utility", "configuration", "build-system", "test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:vitest.aliases.ts:waggleSrcAliases",
+      "type": "function",
+      "name": "waggleSrcAliases",
+      "filePath": "vitest.aliases.ts",
+      "lineRange": [25, 35],
+      "summary": "Scans the packages/ directory and returns a Record mapping each @waggle/<pkg> alias to its src/ directory, guarded by the presence of src/index.ts.",
+      "tags": ["utility", "configuration", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "vitest.config.ts",
+      "summary": "Root Vitest configuration for the waggle-os monorepo, covering all packages with a 30-second timeout and v8 coverage, while explicitly excluding infrastructure-dependent test suites that require live PostgreSQL and Redis.",
+      "tags": ["configuration", "test", "build-system", "ci-cd"],
+      "complexity": "moderate",
+      "languageNotes": "Separates infra-gated tests from the default gate so npm test stays green on boxes without Docker, using a dedicated INFRA_TEST_SUITES exclude list."
+    },
+    {
+      "id": "file:vitest.infra-suites.ts",
+      "type": "file",
+      "name": "vitest.infra-suites.ts",
+      "filePath": "vitest.infra-suites.ts",
+      "summary": "Canonical list of 19 test suite paths that hard-require live PostgreSQL (port 5434) and Redis (port 6381), exported as INFRA_TEST_SUITES and shared between the default and infra-only Vitest configs.",
+      "tags": ["configuration", "test", "infrastructure", "data-model"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:vitest.infra.config.ts",
+      "type": "file",
+      "name": "vitest.infra.config.ts",
+      "filePath": "vitest.infra.config.ts",
+      "summary": "Dedicated Vitest configuration that runs only the infrastructure-dependent test suites, intended for use after docker-compose brings up PostgreSQL and Redis for a full integration test pass.",
+      "tags": ["configuration", "test", "infrastructure", "ci-cd"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:vitest.aliases.ts",
+      "target": "function:vitest.aliases.ts:waggleSrcAliases",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:vitest.aliases.ts",
+      "target": "function:vitest.aliases.ts:waggleSrcAliases",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:vitest.config.ts",
+      "target": "file:vitest.aliases.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:vitest.config.ts",
+      "target": "file:vitest.infra-suites.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:vitest.infra.config.ts",
+      "target": "file:vitest.aliases.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:vitest.infra.config.ts",
+      "target": "file:vitest.infra-suites.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

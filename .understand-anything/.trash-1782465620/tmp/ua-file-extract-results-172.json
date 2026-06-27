@@ -1,0 +1,236 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-hooks-openclaw/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 104,
+      "nonEmptyLines": 87,
+      "sections": [
+        {
+          "heading": "@waggle/hive-mind-hooks-openclaw",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Install",
+          "level": 2,
+          "line": 25
+        },
+        {
+          "heading": "Capture fidelity",
+          "level": 2,
+          "line": 57
+        },
+        {
+          "heading": "How it works",
+          "level": 2,
+          "line": 93
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-openclaw/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 65,
+      "nonEmptyLines": 65,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "bin",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "exports",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 18
+        },
+        {
+          "heading": "engines",
+          "level": 1,
+          "line": 25
+        },
+        {
+          "heading": "publishConfig",
+          "level": 1,
+          "line": 28
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 31
+        },
+        {
+          "heading": "peerDependencies",
+          "level": 1,
+          "line": 36
+        },
+        {
+          "heading": "peerDependenciesMeta",
+          "level": 1,
+          "line": 39
+        },
+        {
+          "heading": "repository",
+          "level": 1,
+          "line": 44
+        },
+        {
+          "heading": "homepage",
+          "level": 1,
+          "line": 49
+        },
+        {
+          "heading": "bugs",
+          "level": 1,
+          "line": 50
+        },
+        {
+          "heading": "author",
+          "level": 1,
+          "line": 53
+        },
+        {
+          "heading": "keywords",
+          "level": 1,
+          "line": 54
+        },
+        {
+          "heading": "types",
+          "level": 1,
+          "line": 13
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-openclaw/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 15,
+      "nonEmptyLines": 15,
+      "sections": [
+        {
+          "heading": "extends",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "references",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-openclaw/tsconfig.test.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 12,
+      "nonEmptyLines": 12,
+      "sections": [
+        {
+          "heading": "extends",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/hive-mind-hooks-openclaw/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/hive-mind-hooks-openclaw/README.md",
+      "summary": "Documentation for the @waggle/hive-mind-hooks-openclaw package, describing how it registers in-process TypeScript hooks into the OpenClaw gateway to silently capture conversation lifecycle events (bootstrap, message:received, message:sent, compact:before) into hive-mind frames, including install/uninstall instructions, capture fidelity table, and known limitations.",
+      "tags": ["documentation", "hooks", "memory-capture", "openclaw", "hive-mind"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-openclaw/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/hive-mind-hooks-openclaw/package.json",
+      "summary": "Package manifest for @waggle/hive-mind-hooks-openclaw v0.1.0, an OpenClaw silent-capture shim for hive-mind that depends on @waggle/hive-mind-hooks-core and @waggle/hive-mind-shim-core, exposing a CLI binary (openclaw-hooks) and an in-process handler export, built with TypeScript and tested with Vitest.",
+      "tags": ["configuration", "package-manifest", "build-system", "hooks"],
+      "complexity": "simple",
+      "languageNotes": "Declares both a main entry and a named ./handler export for the in-process hook file that OpenClaw dynamically imports at runtime."
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-openclaw/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/hive-mind-hooks-openclaw/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the hive-mind-hooks-openclaw package, extending the monorepo base tsconfig with project references and build output settings for compiling the hook installer and in-process handler.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-openclaw/tsconfig.test.json",
+      "type": "config",
+      "name": "tsconfig.test.json",
+      "filePath": "packages/hive-mind-hooks-openclaw/tsconfig.test.json",
+      "summary": "TypeScript configuration for test files in the hive-mind-hooks-openclaw package, extending the main tsconfig and including test source files for Vitest type-checking.",
+      "tags": ["configuration", "typescript", "test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/hive-mind-hooks-openclaw/README.md",
+      "target": "config:packages/hive-mind-hooks-openclaw/package.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

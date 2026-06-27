@@ -1,0 +1,56 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/hive-mind-hooks-claude-code/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/hive-mind-hooks-claude-code/README.md",
+      "summary": "Documentation for the @hive-mind/claude-code-hooks package, describing the four lifecycle hooks (SessionStart, UserPromptSubmit, Stop, PreCompact) that silently capture Claude Code session memory into the local hive-mind substrate via the shim-core CLI bridge. Covers installation, Windows path pinning, reversibility via SHA-256-verified backup, and MEMORY.md coexistence.",
+      "tags": ["documentation", "hooks", "claude-code", "memory-capture", "installation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-claude-code/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/hive-mind-hooks-claude-code/package.json",
+      "summary": "Package manifest for @hive-mind/claude-code-hooks, a Wave 1 MVP pre-1.0 OSS package that patches ~/.claude/settings.json with four hook entries to route Claude Code lifecycle events into the hive-mind memory substrate. Declares a bin entry point, ESM exports, and a peer dependency on @hive-mind/cli.",
+      "tags": ["configuration", "package-manifest", "build-system", "hooks"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-claude-code/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/hive-mind-hooks-claude-code/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the hive-mind-hooks-claude-code package, extending a shared base config with project references for build-order enforcement.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-claude-code/tsconfig.test.json",
+      "type": "config",
+      "name": "tsconfig.test.json",
+      "filePath": "packages/hive-mind-hooks-claude-code/tsconfig.test.json",
+      "summary": "TypeScript compiler configuration for test files in the hive-mind-hooks-claude-code package, extending tsconfig.json with test-specific includes and a vitest types reference.",
+      "tags": ["configuration", "typescript", "test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/hive-mind-hooks-claude-code/README.md",
+      "target": "config:packages/hive-mind-hooks-claude-code/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/hive-mind-hooks-claude-code/tsconfig.test.json",
+      "target": "config:packages/hive-mind-hooks-claude-code/tsconfig.json",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

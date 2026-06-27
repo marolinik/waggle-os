@@ -1,0 +1,323 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/probes/judge-swap-validation/_summary-split.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 210,
+      "nonEmptyLines": 210,
+      "sections": [
+        {
+          "heading": "aggregate_verdict",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "aggregate_reason",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "n_split",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "per_candidate",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "per_candidate_aggregate",
+          "level": 1,
+          "line": 175
+        },
+        {
+          "heading": "ranking_by_k_cons_desc",
+          "level": 1,
+          "line": 201
+        },
+        {
+          "heading": "recommended_primary",
+          "level": 1,
+          "line": 207
+        },
+        {
+          "heading": "recommended_backup",
+          "level": 1,
+          "line": 208
+        },
+        {
+          "heading": "minimax_routing_resolution",
+          "level": 1,
+          "line": 209
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/deepseek-mt-comparison-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 24,
+      "nonEmptyLines": 15,
+      "sections": [
+        {
+          "heading": "DeepSeek `max_tokens` 1024→2048 — Comparison Memo",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Parse issue: **truncation_fixable**",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Finding",
+          "level": 2,
+          "line": 16
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/kappa-analysis.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 68,
+      "sections": [
+        {
+          "heading": "§1.3g Judge Swap κ Analysis (4-Candidate Roster)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Per-candidate results (ranked by κ descending)",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Aggregate verdict: **MULTI_PASS**",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "Sample-selection caveat (transparent)",
+          "level": 3,
+          "line": 27
+        },
+        {
+          "heading": "Secondary criteria (tie-break at κ=1.0)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Per-cell breakdown (top-2 by κ)",
+          "level": 2,
+          "line": 69
+        },
+        {
+          "heading": "kimi (kimi-k2.6)",
+          "level": 3,
+          "line": 71
+        },
+        {
+          "heading": "minimax (minimax/minimax-m2.7)",
+          "level": 3,
+          "line": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/kappa-split-analysis.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 158,
+      "nonEmptyLines": 106,
+      "sections": [
+        {
+          "heading": "§1.3h Judge Swap Stratified Re-Probe — Dual-κ Split Analysis",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§1 Per-candidate split metrics",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "§1.1 Why κ on split-only is mathematically degenerate",
+          "level": 3,
+          "line": 23
+        },
+        {
+          "heading": "§1.2 BIAS INTERPRETATION (actionable)",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "§2 Aggregate κ on combined sample (27 = 20 unanimous + 7 splits)",
+          "level": 2,
+          "line": 50
+        },
+        {
+          "heading": "§3 Operational snapshot (split-case specific)",
+          "level": 2,
+          "line": 67
+        },
+        {
+          "heading": "§3.1 MiniMax direct routing verdict",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "§3.2 Parse rate on challenging vs unanimous (regression check)",
+          "level": 3,
+          "line": 86
+        },
+        {
+          "heading": "§4 Aggregate verdict: **INCONCLUSIVE_BUT_OPERATIONAL_SIGNAL**",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "§5 Revised recommendation (integrating §1.3g + §1.3h)",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "§5.1 Two viable paths, each with a clear trade-off",
+          "level": 3,
+          "line": 118
+        },
+        {
+          "heading": "§5.2 PM adjudication required",
+          "level": 3,
+          "line": 129
+        },
+        {
+          "heading": "§6 Halt ping data (machine-readable summary)",
+          "level": 2,
+          "line": 146
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/reprobe-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 39,
+      "nonEmptyLines": 24,
+      "sections": [
+        {
+          "heading": "§1.3h Judge Swap Re-Probe — Exit Memo",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Verdict: **INCONCLUSIVE_BUT_OPERATIONAL_SIGNAL**",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Novel finding (supersedes §1.3g heuristic)",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Recommendation",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "MiniMax routing",
+          "level": 2,
+          "line": 27
+        },
+        {
+          "heading": "Cost / wall-clock",
+          "level": 2,
+          "line": 31
+        },
+        {
+          "heading": "PM next step",
+          "level": 2,
+          "line": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "benchmarks/probes/judge-swap-validation/validation-memo.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 30,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "§1.3g Judge Swap Validation — Memo",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Aggregate verdict: **MULTI_PASS** — all 4 candidates κ=1.0 vs Opus+GPT consensus (parsed subset).",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Ranking (κ-tied → speed × parse × direct)",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Notes",
+          "level": 2,
+          "line": 25
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    }
+  ]
+}

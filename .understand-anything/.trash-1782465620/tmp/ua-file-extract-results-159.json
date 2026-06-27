@@ -1,0 +1,413 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "judging/round3/judge-1-novice.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 145,
+      "nonEmptyLines": 121,
+      "sections": [
+        {
+          "heading": "Round 3 — Judge 1: The Complete Novice",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Persona",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Scores",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "Per-criterion reasoning",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "1. First-session clarity — 4",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "2. \"It knows me\" feeling — 4",
+          "level": 3,
+          "line": 41
+        },
+        {
+          "heading": "3. Visible agent growth — 2",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "4. Desire to return — 4",
+          "level": 3,
+          "line": 73
+        },
+        {
+          "heading": "5. Absence of friction — 2",
+          "level": 3,
+          "line": 87
+        },
+        {
+          "heading": "Numbered complaints (concrete, actionable)",
+          "level": 2,
+          "line": 103
+        },
+        {
+          "heading": "Verdict in one line",
+          "level": 2,
+          "line": 141
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "judging/round3/judge-2-casual-professional.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 67,
+      "nonEmptyLines": 46,
+      "sections": [
+        {
+          "heading": "Judge 2 — Casual Non-Technical Professional (Round 3)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Persona summary",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Scores",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Per-criterion reasoning",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "1. First-session clarity — 4",
+          "level": 3,
+          "line": 21
+        },
+        {
+          "heading": "2. \"It knows me\" feeling — 4",
+          "level": 3,
+          "line": 26
+        },
+        {
+          "heading": "3. Visible agent growth — 3",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "4. Desire to return — 3",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "5. Absence of friction — 2",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Numbered complaints (concrete, actionable)",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "Verdict in one sentence",
+          "level": 2,
+          "line": 65
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "judging/round3/judge-3-power-user.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 140,
+      "nonEmptyLines": 111,
+      "sections": [
+        {
+          "heading": "Judge 3 — Non-Developer Power User (Round 3)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Persona",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Scores",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "Per-criterion reasoning",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "1. First-session clarity — 4",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "2. \"It knows me\" — 4",
+          "level": 3,
+          "line": 42
+        },
+        {
+          "heading": "3. Visible agent growth — 3",
+          "level": 3,
+          "line": 61
+        },
+        {
+          "heading": "4. Desire to return — 4",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "5. Absence of friction — 3",
+          "level": 3,
+          "line": 94
+        },
+        {
+          "heading": "Numbered complaints (concrete, actionable)",
+          "level": 2,
+          "line": 113
+        },
+        {
+          "heading": "Verdict in one line",
+          "level": 2,
+          "line": 136
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "judging/round3/judge-4-junior-developer.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 60,
+      "nonEmptyLines": 37,
+      "sections": [
+        {
+          "heading": "Judge 4 — Junior Developer Verdict (Round 3)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Persona",
+          "level": 2,
+          "line": 3
+        },
+        {
+          "heading": "Scores",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Per-criterion reasoning",
+          "level": 2,
+          "line": 20
+        },
+        {
+          "heading": "1. First-session clarity — 4",
+          "level": 3,
+          "line": 22
+        },
+        {
+          "heading": "2. \"It knows me\" — 4",
+          "level": 3,
+          "line": 28
+        },
+        {
+          "heading": "3. Visible agent growth — 3",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "4. Desire to return — 4",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "5. Absence of friction — 3",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Numbered complaints",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Bottom line",
+          "level": 2,
+          "line": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "judging/round3/judge-5-senior-skeptic.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 104,
+      "nonEmptyLines": 63,
+      "sections": [
+        {
+          "heading": "Judge 5 — Senior Engineer / Professional Skeptic (Round 3)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Scores",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "Per-criterion reasoning",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "1. First-session clarity — 4",
+          "level": 3,
+          "line": 24
+        },
+        {
+          "heading": "2. \"It knows me\" — 4",
+          "level": 3,
+          "line": 38
+        },
+        {
+          "heading": "3. Visible agent growth — 2",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "4. Desire to return — 3",
+          "level": 3,
+          "line": 63
+        },
+        {
+          "heading": "5. Absence of friction — 2",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "Numbered complaints (concrete, actionable)",
+          "level": 2,
+          "line": 82
+        },
+        {
+          "heading": "Bottom line",
+          "level": 2,
+          "line": 100
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "judging/round3/verifier-report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 125,
+      "nonEmptyLines": 102,
+      "sections": [
+        {
+          "heading": "Round-3 Verifier Report — commit 8996f7e",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "VERDICT: PASS",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "1. Diff audit — traceability, deps, flags",
+          "level": 2,
+          "line": 14
+        },
+        {
+          "heading": "Special-attention items",
+          "level": 3,
+          "line": 33
+        },
+        {
+          "heading": "2. Test runs (executed by this verifier, HEAD = 8996f7e)",
+          "level": 2,
+          "line": 73
+        },
+        {
+          "heading": "3. Typechecks",
+          "level": 2,
+          "line": 84
+        },
+        {
+          "heading": "4. New tests read — do they assert the new behavior?",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "5. Findings (all minor, non-blocking)",
+          "level": 2,
+          "line": 107
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    }
+  ]
+}

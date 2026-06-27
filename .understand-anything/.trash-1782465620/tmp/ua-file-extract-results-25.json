@@ -1,0 +1,1703 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 31,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/agent/tests/eval/hermes-skill-reuse-eval.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 506,
+      "nonEmptyLines": 471,
+      "functions": [
+        {
+          "name": "traceTask",
+          "startLine": 101,
+          "endLine": 118,
+          "params": [
+            "pipe"
+          ]
+        },
+        {
+          "name": "flounderTask",
+          "startLine": 160,
+          "endLine": 177,
+          "params": [
+            "pipe"
+          ]
+        },
+        {
+          "name": "pooledPairs",
+          "startLine": 219,
+          "endLine": 223,
+          "params": [
+            "n"
+          ]
+        },
+        {
+          "name": "makeTools",
+          "startLine": 226,
+          "endLine": 283,
+          "params": [
+            "skillDir",
+            "withCreateSkill",
+            "counter"
+          ]
+        },
+        {
+          "name": "runTask",
+          "startLine": 303,
+          "endLine": 326,
+          "params": [
+            "task",
+            "skillDir",
+            "withCreateSkill",
+            "cost",
+            "openrouterKey"
+          ]
+        },
+        {
+          "name": "runDistillTurn",
+          "startLine": 335,
+          "endLine": 358,
+          "params": [
+            "taskPrompt",
+            "priorAnswer",
+            "directive",
+            "skillDir",
+            "cost",
+            "key"
+          ]
+        },
+        {
+          "name": "signTestP",
+          "startLine": 361,
+          "endLine": 372,
+          "params": [
+            "wins",
+            "losses"
+          ]
+        },
+        {
+          "name": "median",
+          "startLine": 374,
+          "endLine": 379,
+          "params": [
+            "xs"
+          ]
+        },
+        {
+          "name": "runPair",
+          "startLine": 386,
+          "endLine": 422,
+          "params": [
+            "fam",
+            "idx",
+            "cost",
+            "key"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 424,
+          "endLine": 504,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "flounderTask",
+          "callee": "pipe.toUpperCase",
+          "lineNumber": 171
+        },
+        {
+          "caller": "flounderTask",
+          "callee": "pipe.toUpperCase",
+          "lineNumber": 173
+        },
+        {
+          "caller": "pooledPairs",
+          "callee": "out.push",
+          "lineNumber": 221
+        },
+        {
+          "caller": "makeTools",
+          "callee": "String",
+          "lineNumber": 234
+        },
+        {
+          "caller": "makeTools",
+          "callee": "Object.entries",
+          "lineNumber": 236
+        },
+        {
+          "caller": "makeTools",
+          "callee": "body.split('\\n').forEach",
+          "lineNumber": 237
+        },
+        {
+          "caller": "makeTools",
+          "callee": "body.split",
+          "lineNumber": 237
+        },
+        {
+          "caller": "makeTools",
+          "callee": "re.test",
+          "lineNumber": 237
+        },
+        {
+          "caller": "makeTools",
+          "callee": "hits.push",
+          "lineNumber": 237
+        },
+        {
+          "caller": "makeTools",
+          "callee": "line.trim",
+          "lineNumber": 237
+        },
+        {
+          "caller": "makeTools",
+          "callee": "hits.slice(0, 25).join",
+          "lineNumber": 239
+        },
+        {
+          "caller": "makeTools",
+          "callee": "hits.slice",
+          "lineNumber": 239
+        },
+        {
+          "caller": "makeTools",
+          "callee": "String",
+          "lineNumber": 248
+        },
+        {
+          "caller": "makeTools",
+          "callee": "Object.keys(ACTIVE_CORPUS).join",
+          "lineNumber": 249
+        },
+        {
+          "caller": "makeTools",
+          "callee": "Object.keys",
+          "lineNumber": 249
+        },
+        {
+          "caller": "makeTools",
+          "callee": "fs.existsSync",
+          "lineNumber": 258
+        },
+        {
+          "caller": "makeTools",
+          "callee": "fs.readdirSync(skillDir).filter",
+          "lineNumber": 258
+        },
+        {
+          "caller": "makeTools",
+          "callee": "fs.readdirSync",
+          "lineNumber": 258
+        },
+        {
+          "caller": "makeTools",
+          "callee": "f.endsWith",
+          "lineNumber": 258
+        },
+        {
+          "caller": "makeTools",
+          "callee": "files.map(f => `# skill: ${f}\\n${fs.readFileSync(path.join(skillDir, f), 'utf-8')}`).join",
+          "lineNumber": 260
+        },
+        {
+          "caller": "makeTools",
+          "callee": "files.map",
+          "lineNumber": 260
+        },
+        {
+          "caller": "makeTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 260
+        },
+        {
+          "caller": "makeTools",
+          "callee": "path.join",
+          "lineNumber": 260
+        },
+        {
+          "caller": "makeTools",
+          "callee": "tools.push",
+          "lineNumber": 265
+        },
+        {
+          "caller": "makeTools",
+          "callee": "String(args.name).replace(/[^a-z0-9-]/gi, '-').slice",
+          "lineNumber": 275
+        },
+        {
+          "caller": "makeTools",
+          "callee": "String(args.name).replace",
+          "lineNumber": 275
+        },
+        {
+          "caller": "makeTools",
+          "callee": "String",
+          "lineNumber": 275
+        },
+        {
+          "caller": "makeTools",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 276
+        },
+        {
+          "caller": "makeTools",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 277
+        },
+        {
+          "caller": "makeTools",
+          "callee": "path.join",
+          "lineNumber": 277
+        },
+        {
+          "caller": "makeTools",
+          "callee": "String",
+          "lineNumber": 277
+        },
+        {
+          "caller": "runTask",
+          "callee": "cost.checkBudget",
+          "lineNumber": 307
+        },
+        {
+          "caller": "runTask",
+          "callee": "runAgentLoop",
+          "lineNumber": 310
+        },
+        {
+          "caller": "runTask",
+          "callee": "makeTools",
+          "lineNumber": 315
+        },
+        {
+          "caller": "runTask",
+          "callee": "cost.checkBudget",
+          "lineNumber": 319
+        },
+        {
+          "caller": "runTask",
+          "callee": "cost.addUsage",
+          "lineNumber": 321
+        },
+        {
+          "caller": "runTask",
+          "callee": "cost.checkBudget",
+          "lineNumber": 322
+        },
+        {
+          "caller": "runTask",
+          "callee": "task.requiredFacts.every",
+          "lineNumber": 324
+        },
+        {
+          "caller": "runTask",
+          "callee": "re.test",
+          "lineNumber": 324
+        },
+        {
+          "caller": "runDistillTurn",
+          "callee": "cost.checkBudget",
+          "lineNumber": 339
+        },
+        {
+          "caller": "runDistillTurn",
+          "callee": "runAgentLoop",
+          "lineNumber": 341
+        },
+        {
+          "caller": "runDistillTurn",
+          "callee": "makeTools",
+          "lineNumber": 346
+        },
+        {
+          "caller": "runDistillTurn",
+          "callee": "cost.checkBudget",
+          "lineNumber": 354
+        },
+        {
+          "caller": "runDistillTurn",
+          "callee": "cost.addUsage",
+          "lineNumber": 356
+        },
+        {
+          "caller": "runDistillTurn",
+          "callee": "cost.checkBudget",
+          "lineNumber": 357
+        },
+        {
+          "caller": "signTestP",
+          "callee": "choose",
+          "lineNumber": 370
+        },
+        {
+          "caller": "signTestP",
+          "callee": "Math.pow",
+          "lineNumber": 370
+        },
+        {
+          "caller": "median",
+          "callee": "[...xs].sort",
+          "lineNumber": 376
+        },
+        {
+          "caller": "median",
+          "callee": "Math.floor",
+          "lineNumber": 377
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 387
+        },
+        {
+          "caller": "runPair",
+          "callee": "path.join",
+          "lineNumber": 387
+        },
+        {
+          "caller": "runPair",
+          "callee": "os.tmpdir",
+          "lineNumber": 387
+        },
+        {
+          "caller": "runPair",
+          "callee": "path.join",
+          "lineNumber": 388
+        },
+        {
+          "caller": "runPair",
+          "callee": "path.join",
+          "lineNumber": 389
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 390
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 391
+        },
+        {
+          "caller": "runPair",
+          "callee": "runTask",
+          "lineNumber": 395
+        },
+        {
+          "caller": "runPair",
+          "callee": "planSkillDistillation",
+          "lineNumber": 397
+        },
+        {
+          "caller": "runPair",
+          "callee": "Array(distill.toolCalls).fill",
+          "lineNumber": 397
+        },
+        {
+          "caller": "runPair",
+          "callee": "Array",
+          "lineNumber": 397
+        },
+        {
+          "caller": "runPair",
+          "callee": "runDistillTurn",
+          "lineNumber": 404
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.readdirSync(famSkillDir).filter",
+          "lineNumber": 405
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.readdirSync",
+          "lineNumber": 405
+        },
+        {
+          "caller": "runPair",
+          "callee": "f.endsWith",
+          "lineNumber": 405
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.readdirSync",
+          "lineNumber": 409
+        },
+        {
+          "caller": "runPair",
+          "callee": "runTask",
+          "lineNumber": 411
+        },
+        {
+          "caller": "runPair",
+          "callee": "runTask",
+          "lineNumber": 412
+        },
+        {
+          "caller": "runPair",
+          "callee": "Math.max",
+          "lineNumber": 417
+        },
+        {
+          "caller": "runPair",
+          "callee": "fs.statSync",
+          "lineNumber": 420
+        },
+        {
+          "caller": "runPair",
+          "callee": "path.join",
+          "lineNumber": 420
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 425
+        },
+        {
+          "caller": "main",
+          "callee": "new VaultStore(WAGGLE_DATA_DIR).get",
+          "lineNumber": 428
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 429
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 429
+        },
+        {
+          "caller": "main",
+          "callee": "fetch",
+          "lineNumber": 433
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 436
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 438
+        },
+        {
+          "caller": "main",
+          "callee": "r.text",
+          "lineNumber": 438
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 438
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 439
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 439
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 442
+        },
+        {
+          "caller": "main",
+          "callee": "cost.setBudget",
+          "lineNumber": 445
+        },
+        {
+          "caller": "main",
+          "callee": "pooledPairs",
+          "lineNumber": 447
+        },
+        {
+          "caller": "main",
+          "callee": "ACTIVE_FAMILIES.slice",
+          "lineNumber": 447
+        },
+        {
+          "caller": "main",
+          "callee": "outcomes.push",
+          "lineNumber": 452
+        },
+        {
+          "caller": "main",
+          "callee": "runPair",
+          "lineNumber": 452
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 454
+        },
+        {
+          "caller": "main",
+          "callee": "outcomes.push",
+          "lineNumber": 455
+        },
+        {
+          "caller": "main",
+          "callee": "outcomes.filter",
+          "lineNumber": 459
+        },
+        {
+          "caller": "main",
+          "callee": "counted.map",
+          "lineNumber": 460
+        },
+        {
+          "caller": "main",
+          "callee": "counted.filter",
+          "lineNumber": 461
+        },
+        {
+          "caller": "main",
+          "callee": "counted.filter",
+          "lineNumber": 462
+        },
+        {
+          "caller": "main",
+          "callee": "median",
+          "lineNumber": 463
+        },
+        {
+          "caller": "main",
+          "callee": "signTestP",
+          "lineNumber": 464
+        },
+        {
+          "caller": "main",
+          "callee": "cost.getDailyTotal",
+          "lineNumber": 465
+        },
+        {
+          "caller": "main",
+          "callee": "counted.map",
+          "lineNumber": 468
+        },
+        {
+          "caller": "main",
+          "callee": "Math.max",
+          "lineNumber": 469
+        },
+        {
+          "caller": "main",
+          "callee": "new Date().toISOString",
+          "lineNumber": 491
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 492
+        },
+        {
+          "caller": "main",
+          "callee": "dailyTotal.toFixed",
+          "lineNumber": 492
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 494
+        },
+        {
+          "caller": "main",
+          "callee": "(med || 0).toFixed",
+          "lineNumber": 494
+        },
+        {
+          "caller": "main",
+          "callee": "Number",
+          "lineNumber": 494
+        },
+        {
+          "caller": "main",
+          "callee": "p.toFixed",
+          "lineNumber": 494
+        },
+        {
+          "caller": "main",
+          "callee": "path.join",
+          "lineNumber": 497
+        },
+        {
+          "caller": "main",
+          "callee": "process.cwd",
+          "lineNumber": 497
+        },
+        {
+          "caller": "main",
+          "callee": "fs.writeFileSync",
+          "lineNumber": 498
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 498
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 499
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 500
+        },
+        {
+          "caller": "main",
+          "callee": "JSON.stringify",
+          "lineNumber": 500
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 502
+        },
+        {
+          "caller": "main",
+          "callee": "console.log",
+          "lineNumber": 503
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 10,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/evolution-deploy.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 303,
+      "nonEmptyLines": 257,
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/feedback-handler.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 75,
+      "nonEmptyLines": 62,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/git-tools.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 203,
+      "nonEmptyLines": 163,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/governance-enforcement.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 185,
+      "nonEmptyLines": 166,
+      "functions": [
+        {
+          "name": "mockFetch",
+          "startLine": 8,
+          "endLine": 37,
+          "params": [
+            "responses"
+          ]
+        },
+        {
+          "name": "makeConfig",
+          "startLine": 39,
+          "endLine": 49,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn",
+          "lineNumber": 16
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/harness-trace-bridge.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 336,
+      "nonEmptyLines": 281,
+      "functions": [
+        {
+          "name": "makeRecorder",
+          "startLine": 17,
+          "endLine": 22,
+          "params": []
+        },
+        {
+          "name": "makeBasicOutput",
+          "startLine": 24,
+          "endLine": 36,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeCompleteEvent",
+          "startLine": 38,
+          "endLine": 50,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeFailEvent",
+          "startLine": 52,
+          "endLine": 66,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeCompleteEvent",
+          "callee": "makeBasicOutput",
+          "lineNumber": 44
+        },
+        {
+          "caller": "makeFailEvent",
+          "callee": "makeBasicOutput",
+          "lineNumber": 58
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/hook-loader.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 112,
+      "nonEmptyLines": 94,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/hooks-expansion.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 210,
+      "nonEmptyLines": 166,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/hooks-integration.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 147,
+      "nonEmptyLines": 130,
+      "functions": [
+        {
+          "name": "mockFetch",
+          "startLine": 9,
+          "endLine": 38,
+          "params": [
+            "responses"
+          ]
+        },
+        {
+          "name": "makeConfig",
+          "startLine": 40,
+          "endLine": 50,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeEchoTool",
+          "startLine": 52,
+          "endLine": 63,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn",
+          "lineNumber": 17
+        },
+        {
+          "caller": "makeEchoTool",
+          "callee": "vi.fn",
+          "lineNumber": 61
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/hooks.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 88,
+      "nonEmptyLines": 67,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/integration-local.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 344,
+      "nonEmptyLines": 293,
+      "functions": [
+        {
+          "name": "mockFetch",
+          "startLine": 12,
+          "endLine": 41,
+          "params": [
+            "responses"
+          ]
+        },
+        {
+          "name": "makeConfig",
+          "startLine": 43,
+          "endLine": 53,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn",
+          "lineNumber": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/integration/phase6-capability-truth.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 451,
+      "nonEmptyLines": 366,
+      "functions": [
+        {
+          "name": "makeDeps",
+          "startLine": 30,
+          "endLine": 39,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeTestPlugin",
+          "startLine": 41,
+          "endLine": 52,
+          "params": [
+            "name",
+            "tools"
+          ]
+        },
+        {
+          "name": "makeTmpDir",
+          "startLine": 58,
+          "endLine": 62,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeTestPlugin",
+          "callee": "tools.map",
+          "lineNumber": 46
+        },
+        {
+          "caller": "makeTmpDir",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 59
+        },
+        {
+          "caller": "makeTmpDir",
+          "callee": "path.join",
+          "lineNumber": 59
+        },
+        {
+          "caller": "makeTmpDir",
+          "callee": "os.tmpdir",
+          "lineNumber": 59
+        },
+        {
+          "caller": "makeTmpDir",
+          "callee": "tmpDirs.push",
+          "lineNumber": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 5,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/kvark-pipeline-smoke.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 138,
+      "nonEmptyLines": 128,
+      "functions": [
+        {
+          "name": "memStub",
+          "startLine": 11,
+          "endLine": 14,
+          "params": [
+            "r"
+          ]
+        },
+        {
+          "name": "kStub",
+          "startLine": 16,
+          "endLine": 19,
+          "params": [
+            "r"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "memStub",
+          "callee": "r.map",
+          "lineNumber": 12
+        },
+        {
+          "caller": "memStub",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 13
+        },
+        {
+          "caller": "memStub",
+          "callee": "vi.fn",
+          "lineNumber": 13
+        },
+        {
+          "caller": "kStub",
+          "callee": "r.map",
+          "lineNumber": 17
+        },
+        {
+          "caller": "kStub",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 18
+        },
+        {
+          "caller": "kStub",
+          "callee": "vi.fn",
+          "lineNumber": 18
+        },
+        {
+          "caller": "kStub",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 18
+        },
+        {
+          "caller": "kStub",
+          "callee": "vi.fn",
+          "lineNumber": 18
+        },
+        {
+          "caller": "kStub",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 18
+        },
+        {
+          "caller": "kStub",
+          "callee": "vi.fn",
+          "lineNumber": 18
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/kvark-tools.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 431,
+      "nonEmptyLines": 344,
+      "functions": [
+        {
+          "name": "mockClient",
+          "startLine": 19,
+          "endLine": 26,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockClient",
+          "callee": "vi.fn",
+          "lineNumber": 21
+        },
+        {
+          "caller": "mockClient",
+          "callee": "vi.fn",
+          "lineNumber": 22
+        },
+        {
+          "caller": "mockClient",
+          "callee": "vi.fn",
+          "lineNumber": 23
+        },
+        {
+          "caller": "mockClient",
+          "callee": "vi.fn",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/loop-guard-window.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 123,
+      "nonEmptyLines": 98,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/loop-guard.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 38,
+      "nonEmptyLines": 34,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/lsp-tools.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 128,
+      "nonEmptyLines": 102,
+      "callGraph": [
+        {
+          "caller": "getTool",
+          "callee": "tools.find",
+          "lineNumber": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/marketplace-commands.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 303,
+      "nonEmptyLines": 240,
+      "functions": [
+        {
+          "name": "mockContext",
+          "startLine": 5,
+          "endLine": 10,
+          "params": []
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/mcp-runtime.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 455,
+      "nonEmptyLines": 362,
+      "functions": [
+        {
+          "name": "createMockMcpProcess",
+          "startLine": 14,
+          "endLine": 86,
+          "params": []
+        },
+        {
+          "name": "createMockSpawn",
+          "startLine": 88,
+          "endLine": 95,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "vi.fn",
+          "lineNumber": 24
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "vi.fn",
+          "lineNumber": 25
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "vi.fn",
+          "lineNumber": 30
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "stdin.on",
+          "lineNumber": 47
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "chunk.toString().trim",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "chunk.toString",
+          "lineNumber": 48
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "JSON.parse",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "JSON.stringify",
+          "lineNumber": 80
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "setImmediate",
+          "lineNumber": 82
+        },
+        {
+          "caller": "createMockMcpProcess",
+          "callee": "stdout.write",
+          "lineNumber": 82
+        },
+        {
+          "caller": "spawn",
+          "callee": "createMockMcpProcess",
+          "lineNumber": 91
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/multi-edit.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 195,
+      "nonEmptyLines": 179,
+      "callGraph": [
+        {
+          "caller": "getTool",
+          "callee": "tools.find",
+          "lineNumber": 29
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/optimization-capture.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 280,
+      "nonEmptyLines": 240,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/performance/perf-baselines.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 182,
+      "nonEmptyLines": 157,
+      "functions": [
+        {
+          "name": "createMockVault",
+          "startLine": 51,
+          "endLine": 62,
+          "params": [
+            "connectedIds"
+          ]
+        },
+        {
+          "name": "timeMs",
+          "startLine": 64,
+          "endLine": 68,
+          "params": [
+            "fn"
+          ]
+        },
+        {
+          "name": "timeMsAsync",
+          "startLine": 70,
+          "endLine": 74,
+          "params": [
+            "fn"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "PerfConnector",
+          "startLine": 19,
+          "endLine": 49,
+          "methods": [
+            "constructor",
+            "connect",
+            "healthCheck",
+            "execute"
+          ],
+          "properties": [
+            "id",
+            "name",
+            "description",
+            "service",
+            "authType",
+            "substrate",
+            "actions"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 29
+        },
+        {
+          "caller": "constructor",
+          "callee": "Array.from",
+          "lineNumber": 34
+        },
+        {
+          "caller": "healthCheck",
+          "callee": "new Date().toISOString",
+          "lineNumber": 44
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 53
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "connectedIds.includes",
+          "lineNumber": 54
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 57
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 58
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 58
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 58
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 59
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 59
+        },
+        {
+          "caller": "createMockVault",
+          "callee": "vi.fn",
+          "lineNumber": 60
+        },
+        {
+          "caller": "timeMs",
+          "callee": "performance.now",
+          "lineNumber": 65
+        },
+        {
+          "caller": "timeMs",
+          "callee": "fn",
+          "lineNumber": 66
+        },
+        {
+          "caller": "timeMs",
+          "callee": "performance.now",
+          "lineNumber": 67
+        },
+        {
+          "caller": "timeMsAsync",
+          "callee": "performance.now",
+          "lineNumber": 71
+        },
+        {
+          "caller": "timeMsAsync",
+          "callee": "fn",
+          "lineNumber": 72
+        },
+        {
+          "caller": "timeMsAsync",
+          "callee": "performance.now",
+          "lineNumber": 73
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/agent/tests/permissions.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 70,
+      "nonEmptyLines": 63,
+      "functions": [
+        {
+          "name": "makeTool",
+          "startLine": 5,
+          "endLine": 12,
+          "params": [
+            "name"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/personas.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 222,
+      "nonEmptyLines": 191,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/phase4-retry-after-nan.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 86,
+      "nonEmptyLines": 72,
+      "functions": [
+        {
+          "name": "rateLimitedResponse",
+          "startLine": 10,
+          "endLine": 14,
+          "params": [
+            "retryAfter"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "rateLimitedResponse",
+          "callee": "headers.set",
+          "lineNumber": 12
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/phase4-subagent-dup-worker.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 87,
+      "functions": [
+        {
+          "name": "makeMockTools",
+          "startLine": 6,
+          "endLine": 11,
+          "params": []
+        },
+        {
+          "name": "makeMockRunner",
+          "startLine": 13,
+          "endLine": 19,
+          "params": []
+        },
+        {
+          "name": "makeConfig",
+          "startLine": 21,
+          "endLine": 29,
+          "params": [
+            "runLoop"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeMockRunner",
+          "callee": "vi.fn",
+          "lineNumber": 14
+        },
+        {
+          "caller": "makeConfig",
+          "callee": "makeMockTools",
+          "lineNumber": 23
+        },
+        {
+          "caller": "makeConfig",
+          "callee": "makeMockRunner",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/plan-tools.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 60,
+      "nonEmptyLines": 51,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/plan.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 80,
+      "nonEmptyLines": 63,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/premium-contract-e2e.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 96,
+      "nonEmptyLines": 86,
+      "functions": [
+        {
+          "name": "mockFetch",
+          "startLine": 22,
+          "endLine": 34,
+          "params": [
+            "turns"
+          ]
+        },
+        {
+          "name": "cfg",
+          "startLine": 44,
+          "endLine": 51,
+          "params": [
+            "fetch"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/prompt-loader.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 140,
+      "nonEmptyLines": 121,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/search-memory-combined.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 179,
+      "nonEmptyLines": 156,
+      "functions": [
+        {
+          "name": "makeCombinedResult",
+          "startLine": 14,
+          "endLine": 22,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeRetrievalResult",
+          "startLine": 24,
+          "endLine": 34,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

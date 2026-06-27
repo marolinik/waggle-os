@@ -1,0 +1,180 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/harness/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 125,
+      "nonEmptyLines": 91,
+      "sections": [
+        {
+          "heading": "@waggle/benchmarks-harness",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Four cells — the ablation grid",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "Controls (not cells — diagnostic)",
+          "level": 2,
+          "line": 19
+        },
+        {
+          "heading": "CLI",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "Flags",
+          "level": 3,
+          "line": 51
+        },
+        {
+          "heading": "Environment",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "Output — per-instance JSONL",
+          "level": 2,
+          "line": 75
+        },
+        {
+          "heading": "Aggregate summary",
+          "level": 2,
+          "line": 89
+        },
+        {
+          "heading": "Datasets",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "Reproducibility",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "Smoke test",
+          "level": 2,
+          "line": 119
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "benchmarks/harness/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 28,
+      "nonEmptyLines": 28,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "private",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "engines",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "bin",
+          "level": 1,
+          "line": 11
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "devDependencies",
+          "level": 1,
+          "line": 23
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "benchmarks/harness/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 22,
+      "nonEmptyLines": 22,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 20
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,1218 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "type": "file",
+      "name": "evolution-runs.ts",
+      "filePath": "packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "summary": "Provides the EvolutionRunStore class for persisting and managing AI self-improvement evolution run records in SQLite, including lifecycle transitions (propose, accept, reject, deploy, fail) with status tracking and querying.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/evolution-runs.ts:EvolutionRunStore",
+      "type": "class",
+      "name": "EvolutionRunStore",
+      "filePath": "packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "lineRange": [111, 293],
+      "summary": "SQLite-backed store for evolution run records that manages full lifecycle (proposed → accepted/rejected → deployed/failed) with UUID-keyed lookups, filtered listing, and status count aggregation.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/execution-traces.ts",
+      "type": "file",
+      "name": "execution-traces.ts",
+      "filePath": "packages/hive-mind-core/src/mind/execution-traces.ts",
+      "summary": "Provides the ExecutionTraceStore class for recording, appending to, and querying agent execution traces stored in SQLite, capturing session context, cost, duration, and outcome for each agent invocation.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/execution-traces.ts:ExecutionTraceStore",
+      "type": "class",
+      "name": "ExecutionTraceStore",
+      "filePath": "packages/hive-mind-core/src/mind/execution-traces.ts",
+      "lineRange": [166, 414],
+      "summary": "Manages execution trace records in SQLite, supporting start/append/finalize lifecycle, correction marking, filtered querying, and outcome count aggregation per persona/workspace/model.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "file",
+      "name": "frames.ts",
+      "filePath": "packages/hive-mind-core/src/mind/frames.ts",
+      "summary": "Core memory frame storage layer providing the FrameStore class that implements I/P/B-frame video-codec-inspired memory compression, FTS indexing, deduplication via content hashing, and compaction of older memory groups.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "complex",
+      "languageNotes": "Uses a video codec (I/P/B-frame) metaphor for memory compression: I-frames are full snapshots, P-frames are incremental patches, and B-frames are bidirectional references."
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/frames.ts:FrameStore",
+      "type": "class",
+      "name": "FrameStore",
+      "filePath": "packages/hive-mind-core/src/mind/frames.ts",
+      "lineRange": [63, 467],
+      "summary": "SQLite-backed memory frame store implementing I/P/B-frame creation, GOP (group of pictures) reconstruction, FTS indexing, content-hash deduplication, access tracking, importance-based compaction, and vector index maintenance.",
+      "tags": ["data-model", "database", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/identity.ts",
+      "type": "file",
+      "name": "identity.ts",
+      "filePath": "packages/hive-mind-core/src/mind/identity.ts",
+      "summary": "Provides the IdentityLayer class for persisting and retrieving a single personal identity record (name, role, department, personality, capabilities) that can be injected into agent system prompts.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/identity.ts:IdentityLayer",
+      "type": "class",
+      "name": "IdentityLayer",
+      "filePath": "packages/hive-mind-core/src/mind/identity.ts",
+      "lineRange": [25, 80],
+      "summary": "SQLite-backed singleton identity store that creates, reads, and partially updates the user's personal identity record, with a toContext helper for agent prompt injection.",
+      "tags": ["data-model", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "type": "file",
+      "name": "improvement-signals.ts",
+      "filePath": "packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "summary": "Provides the ImprovementSignalStore class for tracking recurring agent behavior patterns (correction, confusion, tool failures) with frequency counters and actionable signal surfacing for the evolution subsystem.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/improvement-signals.ts:ImprovementSignalStore",
+      "type": "class",
+      "name": "ImprovementSignalStore",
+      "filePath": "packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "lineRange": [38, 166],
+      "summary": "Persists improvement signal patterns with upsert-on-conflict frequency counting, category-based retrieval, and actionable threshold filtering to surface the most impactful patterns for evolution.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "type": "file",
+      "name": "inprocess-embedder.ts",
+      "filePath": "packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "summary": "Provides an in-process HuggingFace Transformers.js embedding provider that loads a model locally and produces normalized float32 vectors, with optional dimension reduction via subarray truncation.",
+      "tags": ["service", "utility", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/inprocess-embedder.ts:createInProcessEmbedder",
+      "type": "function",
+      "name": "createInProcessEmbedder",
+      "filePath": "packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "lineRange": [30, 67],
+      "summary": "Factory that lazily loads a Transformers.js feature-extraction pipeline and returns an Embedder with embed/embedBatch methods that truncate or pad embeddings to the target dimension.",
+      "tags": ["factory", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "type": "file",
+      "name": "inprocess-reranker.ts",
+      "filePath": "packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "summary": "Provides an in-process cross-encoder reranker using Transformers.js AutoModelForSequenceClassification, scoring query-document pairs with sigmoid normalization for memory retrieval re-ranking.",
+      "tags": ["service", "middleware", "utility"],
+      "complexity": "moderate",
+      "languageNotes": "Uses a cross-encoder (sequence classification) model rather than a bi-encoder, providing higher quality reranking at the cost of running inference per query-document pair."
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/inprocess-reranker.ts:createInProcessReranker",
+      "type": "function",
+      "name": "createInProcessReranker",
+      "filePath": "packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "lineRange": [51, 129],
+      "summary": "Factory that loads a Transformers.js sequence classification model and tokenizer, returning a Reranker with score/scoreBatch methods that compute sigmoid-normalized relevance scores for query-document pairs.",
+      "tags": ["factory", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "type": "file",
+      "name": "knowledge.ts",
+      "filePath": "packages/hive-mind-core/src/mind/knowledge.ts",
+      "summary": "Provides the KnowledgeGraph class implementing entity-relation graph storage in SQLite with temporal validity windows, entity deduplication, BFS traversal, and schema-based property validation.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/knowledge.ts:KnowledgeGraph",
+      "type": "class",
+      "name": "KnowledgeGraph",
+      "filePath": "packages/hive-mind-core/src/mind/knowledge.ts",
+      "lineRange": [54, 377],
+      "summary": "SQLite knowledge graph with typed entities, directed relations, temporal validity (valid_from/valid_to), automated deduplication by normalized name, graph traversal (BFS), and optional JSON Schema validation of entity properties.",
+      "tags": ["data-model", "database", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "type": "file",
+      "name": "litellm-embedder.ts",
+      "filePath": "packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "summary": "Provides a LiteLLM-backed embedding provider factory that calls the OpenAI-compatible /embeddings endpoint, with a deterministic mock fallback for development/testing when the API is unavailable.",
+      "tags": ["service", "middleware", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/litellm-embedder.ts:createLiteLLMEmbedder",
+      "type": "function",
+      "name": "createLiteLLMEmbedder",
+      "filePath": "packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "lineRange": [29, 93],
+      "summary": "Factory that constructs an HTTP-based embedder calling LiteLLM's /embeddings API, with mock fallback for non-OK responses or test mode; supports single and batch embedding.",
+      "tags": ["factory", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "type": "file",
+      "name": "ollama-embedder.ts",
+      "filePath": "packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "summary": "Provides a local Ollama embedding provider factory that calls the Ollama HTTP API with a configurable timeout and delegates to an in-process embedder fallback when the model is not available remotely.",
+      "tags": ["service", "middleware", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/ollama-embedder.ts:createOllamaEmbedder",
+      "type": "function",
+      "name": "createOllamaEmbedder",
+      "filePath": "packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "lineRange": [15, 58],
+      "summary": "Factory returning an embedder that calls the Ollama HTTP API with timeout and applies dimension normalization, with embed and embedBatch methods.",
+      "tags": ["factory", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "type": "file",
+      "name": "raw-detail-lane.ts",
+      "filePath": "packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "summary": "Implements the raw detail retrieval lane that fetches verbatim conversation turns from SQLite using FTS and date-window pooling, then re-ranks them with a cross-encoder reranker for high-fidelity memory recall.",
+      "tags": ["service", "middleware", "data-pipeline"],
+      "complexity": "complex",
+      "languageNotes": "The raw-detail lane is the primary driver of LoCoMo benchmark accuracy; ablation showed it contributes ~+14pp over the semantic lane alone."
+    },
+    {
+      "id": "function:packages/hive-mind-core/src/mind/raw-detail-lane.ts:fetchRawDetailLane",
+      "type": "function",
+      "name": "fetchRawDetailLane",
+      "filePath": "packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "lineRange": [134, 205],
+      "summary": "Retrieves and reranks raw conversation turns from SQLite using a hybrid date-window+FTS pool, cross-encoder scoring, and surrounding-context expansion per conversation to maximize recall fidelity.",
+      "tags": ["service", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/reconcile.ts",
+      "type": "file",
+      "name": "reconcile.ts",
+      "filePath": "packages/hive-mind-core/src/mind/reconcile.ts",
+      "summary": "Provides index reconciliation utilities to repair out-of-sync FTS and vector indexes by backfilling missing entries and removing orphaned records that no longer have corresponding memory frames.",
+      "tags": ["utility", "service", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/schema.ts",
+      "type": "file",
+      "name": "schema.ts",
+      "filePath": "packages/hive-mind-core/src/mind/schema.ts",
+      "summary": "Exports the canonical SQLite DDL for the hive-mind memory substrate schema (version-stamped), including memory_frames, sessions, knowledge entities/relations, and vector table SQL generators parameterized by embedding dimension.",
+      "tags": ["database", "schema-definition", "configuration"],
+      "complexity": "complex",
+      "languageNotes": "The vecTableSqlForDim and chunksVecTableSqlForDim functions generate sqlite-vec virtual table DDL dynamically based on the embedding dimension, enabling runtime model switching."
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/scoring.ts",
+      "type": "file",
+      "name": "scoring.ts",
+      "filePath": "packages/hive-mind-core/src/mind/scoring.ts",
+      "summary": "Provides memory frame scoring functions (temporal decay, popularity, contextual graph distance, importance tier) combined into a weighted relevance score used by HybridSearch to rank retrieved frames.",
+      "tags": ["utility", "service", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/search.ts",
+      "type": "file",
+      "name": "search.ts",
+      "filePath": "packages/hive-mind-core/src/mind/search.ts",
+      "summary": "Core HybridSearch implementation combining FTS5 keyword search, ANN vector search, chunk-level retrieval, RRF fusion, optional cross-encoder reranking, and multi-dimensional relevance scoring for memory frame retrieval.",
+      "tags": ["service", "data-pipeline", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/search.ts:HybridSearch",
+      "type": "class",
+      "name": "HybridSearch",
+      "filePath": "packages/hive-mind-core/src/mind/search.ts",
+      "lineRange": [79, 596],
+      "summary": "Orchestrates hybrid memory retrieval using parallel FTS5 + ANN vector search with RRF score fusion, optional chunk-level vector indexing for long frames, cross-encoder reranking, temporal date-window filtering, and GOPid scoping.",
+      "tags": ["service", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/mind/sessions.ts",
+      "type": "file",
+      "name": "sessions.ts",
+      "filePath": "packages/hive-mind-core/src/mind/sessions.ts",
+      "summary": "Provides the SessionStore class for managing agent work sessions (GOP-linked) in SQLite, supporting session lifecycle (create, close, archive) and idempotent ensure-active semantics.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "simple"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/mind/sessions.ts:SessionStore",
+      "type": "class",
+      "name": "SessionStore",
+      "filePath": "packages/hive-mind-core/src/mind/sessions.ts",
+      "lineRange": [13, 107],
+      "summary": "SQLite session store that links sessions to GOP IDs and project IDs, with transactional ensureActive for idempotent session bootstrapping and methods for listing active, project-scoped, and archived sessions.",
+      "tags": ["data-model", "service", "database"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/multi-mind-cache.ts",
+      "type": "file",
+      "name": "multi-mind-cache.ts",
+      "filePath": "packages/hive-mind-core/src/multi-mind-cache.ts",
+      "summary": "Provides the MultiMindCache class implementing an LRU cache of open MindDB connections keyed by workspace path, with path traversal prevention and automatic eviction when the connection limit is reached.",
+      "tags": ["service", "middleware", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/multi-mind-cache.ts:MultiMindCache",
+      "type": "class",
+      "name": "MultiMindCache",
+      "filePath": "packages/hive-mind-core/src/multi-mind-cache.ts",
+      "lineRange": [28, 133],
+      "summary": "LRU connection cache for MindDB instances keyed by workspace path, with configurable max-open limit, path-traversal guard against directory escape, last-accessed timestamps, and graceful eviction.",
+      "tags": ["service", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "type": "file",
+      "name": "multi-mind.ts",
+      "filePath": "packages/hive-mind-core/src/multi-mind.ts",
+      "summary": "Provides the MultiMind class that federates search across personal and workspace MindDB instances, merging FTS results by recency and exposing unified awareness and identity accessors for dual-context agent operation.",
+      "tags": ["service", "middleware", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/hive-mind-core/src/multi-mind.ts:MultiMind",
+      "type": "class",
+      "name": "MultiMind",
+      "filePath": "packages/hive-mind-core/src/multi-mind.ts",
+      "lineRange": [21, 207],
+      "summary": "Dual-mind façade that runs FTS search over both personal and workspace SQLite databases, merges results sorted by recency, and provides unified getters for identity, awareness, frames, and sessions.",
+      "tags": ["service", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/entity-normalizer.test.ts",
+      "type": "file",
+      "name": "entity-normalizer.test.ts",
+      "filePath": "packages/hive-mind-core/tests/entity-normalizer.test.ts",
+      "summary": "Unit tests for entity name normalization and deduplication logic (normalizeEntityName, findDuplicates, isLikelyAcronym, isNoiseName).",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "type": "file",
+      "name": "caption-parity.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "summary": "Tests caption extraction parity across ChatGPT, Claude, Gemini, and Universal harvest adapters, verifying that each adapter produces consistent conversation captions.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/claude-adapter.test.ts",
+      "type": "file",
+      "name": "claude-adapter.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/claude-adapter.test.ts",
+      "summary": "Unit tests for the Claude conversation export harvest adapter, verifying correct parsing, turn extraction, and metadata handling from Claude export JSON format.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "type": "file",
+      "name": "extract-kg-entities.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "summary": "Integration tests for KG entity extraction from harvested conversations using a static LLM mock, verifying that entities are correctly extracted and written to the knowledge graph.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "type": "file",
+      "name": "extract-memory-lanes.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "summary": "Integration tests for memory lane extraction (facts, events, profiles) from harvested conversations using mock LLMs, verifying correct frame writing and lane classification.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/perplexity-adapter.test.ts",
+      "type": "file",
+      "name": "perplexity-adapter.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/perplexity-adapter.test.ts",
+      "summary": "Unit tests for the Perplexity conversation export harvest adapter, verifying parsing and extraction of search conversations with citations.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/pipeline-injection.test.ts",
+      "type": "file",
+      "name": "pipeline-injection.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/pipeline-injection.test.ts",
+      "summary": "Security tests verifying the HarvestPipeline blocks prompt injection attacks embedded in conversation content before they reach the LLM extraction step.",
+      "tags": ["test", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/pipeline-progress.test.ts",
+      "type": "file",
+      "name": "pipeline-progress.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/pipeline-progress.test.ts",
+      "summary": "Unit tests for HarvestPipeline progress tracking and callback invocation, verifying correct stage reporting during multi-step harvest operations.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "type": "file",
+      "name": "raw-turns.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "summary": "Integration tests for raw turn frame writing and retrieval, verifying that raw conversation turns are correctly stored in memory_frames with proper MIND_RAWTURN_PREFIX headers and per-conversation limits.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/run-store.test.ts",
+      "type": "file",
+      "name": "run-store.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/run-store.test.ts",
+      "summary": "Integration tests for HarvestRunStore covering run creation, status transitions (pending → done/error), deduplication, and listing across multiple harvest sources.",
+      "tags": ["test", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/harvest/set-hash.test.ts",
+      "type": "file",
+      "name": "set-hash.test.ts",
+      "filePath": "packages/hive-mind-core/tests/harvest/set-hash.test.ts",
+      "summary": "Unit tests for the harvestSetHash and dedup utilities verifying content-hash computation and set-based deduplication of harvest items.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/logger.test.ts",
+      "type": "file",
+      "name": "logger.test.ts",
+      "filePath": "packages/hive-mind-core/tests/logger.test.ts",
+      "summary": "Unit tests for createCoreLogger verifying log level filtering, output format, and muting/unmuting behavior.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/mind/awareness-hive-mind.test.ts",
+      "type": "file",
+      "name": "awareness-hive-mind.test.ts",
+      "filePath": "packages/hive-mind-core/tests/mind/awareness-hive-mind.test.ts",
+      "summary": "Integration tests for AwarenessLayer in a real MindDB context, verifying set/get/clear operations for active task and context state across multiple workspaces.",
+      "tags": ["test", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-core/tests/mind/awareness.test.ts",
+      "type": "file",
+      "name": "awareness.test.ts",
+      "filePath": "packages/hive-mind-core/tests/mind/awareness.test.ts",
+      "summary": "Unit tests for AwarenessLayer covering full CRUD of awareness items, expiry filtering, and clearing behavior against an in-memory SQLite database.",
+      "tags": ["test", "service"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "target": "class:packages/hive-mind-core/src/mind/evolution-runs.ts:EvolutionRunStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "target": "class:packages/hive-mind-core/src/mind/evolution-runs.ts:EvolutionRunStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/execution-traces.ts",
+      "target": "class:packages/hive-mind-core/src/mind/execution-traces.ts:ExecutionTraceStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/execution-traces.ts",
+      "target": "class:packages/hive-mind-core/src/mind/execution-traces.ts:ExecutionTraceStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/execution-traces.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "target": "class:packages/hive-mind-core/src/mind/frames.ts:FrameStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "target": "class:packages/hive-mind-core/src/mind/frames.ts:FrameStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "target": "file:packages/hive-mind-core/src/mind/content-hash.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/identity.ts",
+      "target": "class:packages/hive-mind-core/src/mind/identity.ts:IdentityLayer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/identity.ts",
+      "target": "class:packages/hive-mind-core/src/mind/identity.ts:IdentityLayer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/identity.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "target": "class:packages/hive-mind-core/src/mind/improvement-signals.ts:ImprovementSignalStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "target": "class:packages/hive-mind-core/src/mind/improvement-signals.ts:ImprovementSignalStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/inprocess-embedder.ts:createInProcessEmbedder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/inprocess-embedder.ts:createInProcessEmbedder",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "target": "function:packages/hive-mind-core/src/mind/inprocess-reranker.ts:createInProcessReranker",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "target": "function:packages/hive-mind-core/src/mind/inprocess-reranker.ts:createInProcessReranker",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "target": "class:packages/hive-mind-core/src/mind/knowledge.ts:KnowledgeGraph",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "target": "class:packages/hive-mind-core/src/mind/knowledge.ts:KnowledgeGraph",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "target": "file:packages/hive-mind-core/src/mind/entity-normalizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/litellm-embedder.ts:createLiteLLMEmbedder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/litellm-embedder.ts:createLiteLLMEmbedder",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/litellm-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/ollama-embedder.ts:createOllamaEmbedder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "target": "function:packages/hive-mind-core/src/mind/ollama-embedder.ts:createOllamaEmbedder",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/ollama-embedder.ts",
+      "target": "file:packages/hive-mind-core/src/mind/inprocess-embedder.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "target": "function:packages/hive-mind-core/src/mind/raw-detail-lane.ts:fetchRawDetailLane",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "target": "function:packages/hive-mind-core/src/mind/raw-detail-lane.ts:fetchRawDetailLane",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "target": "file:packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/reconcile.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/reconcile.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/scoring.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "class:packages/hive-mind-core/src/mind/search.ts:HybridSearch",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "class:packages/hive-mind-core/src/mind/search.ts:HybridSearch",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/chunker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/embeddings.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/inprocess-reranker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/scoring.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/sessions.ts",
+      "target": "class:packages/hive-mind-core/src/mind/sessions.ts:SessionStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/sessions.ts",
+      "target": "class:packages/hive-mind-core/src/mind/sessions.ts:SessionStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/sessions.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind-cache.ts",
+      "target": "class:packages/hive-mind-core/src/multi-mind-cache.ts:MultiMindCache",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind-cache.ts",
+      "target": "class:packages/hive-mind-core/src/multi-mind-cache.ts:MultiMindCache",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind-cache.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind-cache.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "class:packages/hive-mind-core/src/multi-mind.ts:MultiMind",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "class:packages/hive-mind-core/src/multi-mind.ts:MultiMind",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/multi-mind.ts",
+      "target": "file:packages/hive-mind-core/src/mind/identity.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/entity-normalizer.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/entity-normalizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/entity-normalizer.ts",
+      "target": "file:packages/hive-mind-core/tests/entity-normalizer.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/chatgpt-adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/gemini-adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/caption-parity.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/universal-adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/claude-adapter.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/claude-adapter.ts",
+      "target": "file:packages/hive-mind-core/tests/harvest/claude-adapter.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/extract-kg-entities.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/knowledge.ts",
+      "target": "file:packages/hive-mind-core/tests/harvest/extract-kg-entities.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/extract-memory-lanes.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "target": "file:packages/hive-mind-core/tests/harvest/extract-memory-lanes.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/perplexity-adapter.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/perplexity-adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/pipeline-injection.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/pipeline-injection.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/pipeline-progress.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/pipeline.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/pipeline-progress.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/frames.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/raw-turns.ts",
+      "target": "file:packages/hive-mind-core/tests/harvest/raw-turns.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/run-store.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/run-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/run-store.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/harvest/set-hash.test.ts",
+      "target": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/harvest/dedup.ts",
+      "target": "file:packages/hive-mind-core/tests/harvest/set-hash.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/logger.test.ts",
+      "target": "file:packages/hive-mind-core/src/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/logger.ts",
+      "target": "file:packages/hive-mind-core/tests/logger.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/mind/awareness-hive-mind.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/mind/awareness-hive-mind.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/mind/awareness.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/tests/mind/awareness.test.ts",
+      "target": "file:packages/hive-mind-core/src/mind/db.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/awareness.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/awareness.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/awareness-hive-mind.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/search.ts",
+      "target": "file:packages/hive-mind-core/src/mind/raw-detail-lane.ts",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/evolution-runs.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/evolution-runs.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/execution-traces.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/execution-traces.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-core/src/mind/improvement-signals.ts",
+      "target": "file:packages/hive-mind-core/tests/mind/improvement-signals.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

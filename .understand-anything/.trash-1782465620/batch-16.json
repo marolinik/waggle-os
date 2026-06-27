@@ -1,0 +1,1258 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/web/src/lib/workspace-briefing-state.test.ts",
+      "type": "file",
+      "name": "workspace-briefing-state.test.ts",
+      "filePath": "apps/web/src/lib/workspace-briefing-state.test.ts",
+      "summary": "Unit tests for the workspace briefing collapsed-state persistence helpers, covering localStorage read/write and key generation.",
+      "tags": ["test", "utility", "workspace"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "type": "file",
+      "name": "workspace-briefing-state.ts",
+      "filePath": "apps/web/src/lib/workspace-briefing-state.ts",
+      "summary": "Provides localStorage-backed helpers for persisting the collapsed/expanded state of the workspace briefing panel per workspace.",
+      "tags": ["utility", "workspace", "state-management"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/workspace-briefing-state.ts:workspaceBriefingStorageKey",
+      "type": "function",
+      "name": "workspaceBriefingStorageKey",
+      "filePath": "apps/web/src/lib/workspace-briefing-state.ts",
+      "lineRange": [14, 20],
+      "summary": "Generates a localStorage key scoped to the given workspace ID for the briefing collapsed state.",
+      "tags": ["utility", "workspace", "storage"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/workspace-briefing-state.ts:readWorkspaceBriefingCollapsed",
+      "type": "function",
+      "name": "readWorkspaceBriefingCollapsed",
+      "filePath": "apps/web/src/lib/workspace-briefing-state.ts",
+      "lineRange": [23, 30],
+      "summary": "Reads the briefing collapsed boolean from localStorage for the given workspace, returning null if absent.",
+      "tags": ["utility", "workspace", "storage"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/workspace-briefing-state.ts:writeWorkspaceBriefingCollapsed",
+      "type": "function",
+      "name": "writeWorkspaceBriefingCollapsed",
+      "filePath": "apps/web/src/lib/workspace-briefing-state.ts",
+      "lineRange": [33, 43],
+      "summary": "Persists the briefing collapsed state for a workspace to localStorage, removing the key when the value matches the default.",
+      "tags": ["utility", "workspace", "storage"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/workspace-groups.ts",
+      "type": "file",
+      "name": "workspace-groups.ts",
+      "filePath": "apps/web/src/lib/workspace-groups.ts",
+      "summary": "Defines the standard workspace group constants and a helper to merge them with any custom groups from the user's workspaces.",
+      "tags": ["utility", "workspace", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/workspace-groups.ts:getAllGroups",
+      "type": "function",
+      "name": "getAllGroups",
+      "filePath": "apps/web/src/lib/workspace-groups.ts",
+      "lineRange": [25, 30],
+      "summary": "Returns a merged, deduplicated, sorted list of standard and custom workspace groups from the provided existing groups array.",
+      "tags": ["utility", "workspace"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/providers/InstallProvider.tsx",
+      "type": "file",
+      "name": "InstallProvider.tsx",
+      "filePath": "apps/web/src/providers/InstallProvider.tsx",
+      "summary": "React context provider managing the install/uninstall lifecycle for connectors, MCPs, and marketplace packages, including optimistic state tracking, hydration, and toast notifications.",
+      "tags": ["middleware", "component", "service", "installation"],
+      "complexity": "complex",
+      "languageNotes": "Uses Set-based optimistic state (installing/installed sets) and a useRef-based pending queue to coordinate concurrent install operations."
+    },
+    {
+      "id": "function:apps/web/src/providers/InstallProvider.tsx:useInstallStore",
+      "type": "function",
+      "name": "useInstallStore",
+      "filePath": "apps/web/src/providers/InstallProvider.tsx",
+      "lineRange": [51, 55],
+      "summary": "Custom hook that exposes the InstallContext value, throwing if used outside the provider.",
+      "tags": ["hook", "service", "installation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/providers/InstallProvider.tsx:InstallProvider",
+      "type": "function",
+      "name": "InstallProvider",
+      "filePath": "apps/web/src/providers/InstallProvider.tsx",
+      "lineRange": [71, 302],
+      "summary": "React provider component that orchestrates install, uninstall, and hydration operations for connectors, MCPs, and marketplace packages, exposing them through InstallContext.",
+      "tags": ["component", "middleware", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "file",
+      "name": "ServiceProvider.tsx",
+      "filePath": "apps/web/src/providers/ServiceProvider.tsx",
+      "summary": "React context provider managing the adapter connection lifecycle with auto-reconnect logic, exposing connection state (connecting, connected, error) to child components.",
+      "tags": ["middleware", "component", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/providers/ServiceProvider.tsx:useService",
+      "type": "function",
+      "name": "useService",
+      "filePath": "apps/web/src/providers/ServiceProvider.tsx",
+      "lineRange": [16, 20],
+      "summary": "Custom hook that returns the ServiceContext value with the connection state and connect trigger.",
+      "tags": ["hook", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/providers/ServiceProvider.tsx:ServiceProvider",
+      "type": "function",
+      "name": "ServiceProvider",
+      "filePath": "apps/web/src/providers/ServiceProvider.tsx",
+      "lineRange": [28, 79],
+      "summary": "React provider that initiates adapter connection on mount and implements exponential-backoff reconnect on failure, dispatching connection settled events.",
+      "tags": ["component", "middleware", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "file",
+      "name": "ShellContext.tsx",
+      "filePath": "apps/web/src/providers/ShellContext.tsx",
+      "summary": "Central shell context provider aggregating workspace list, agent status, notifications, onboarding state, offline status, tier/billing information, permissions, and overlay state for the entire OS shell.",
+      "tags": ["middleware", "component", "service", "entry-point"],
+      "complexity": "complex",
+      "languageNotes": "Consolidates 8+ hooks into a single context to avoid prop-drilling across the OS shell layer."
+    },
+    {
+      "id": "function:apps/web/src/providers/ShellContext.tsx:useShell",
+      "type": "function",
+      "name": "useShell",
+      "filePath": "apps/web/src/providers/ShellContext.tsx",
+      "lineRange": [100, 104],
+      "summary": "Custom hook for consuming the ShellContext, providing access to workspaces, tier, overlays, and agent status from any child component.",
+      "tags": ["hook", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/providers/ShellContext.tsx:ShellProvider",
+      "type": "function",
+      "name": "ShellProvider",
+      "filePath": "apps/web/src/providers/ShellContext.tsx",
+      "lineRange": [106, 182],
+      "summary": "Provider component that composes workspace, agent, notification, onboarding, offline, billing tier, permissions, and overlay state into a single shell context value.",
+      "tags": ["component", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/routes/AgentsRoute.tsx",
+      "type": "file",
+      "name": "AgentsRoute.tsx",
+      "filePath": "apps/web/src/routes/AgentsRoute.tsx",
+      "summary": "Route component for the Agents screen, mounting the AgentsApp within a SurfaceBoundary and passing the active workspace ID from shell context.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/ApprovalsRoute.tsx",
+      "type": "file",
+      "name": "ApprovalsRoute.tsx",
+      "filePath": "apps/web/src/routes/ApprovalsRoute.tsx",
+      "summary": "Route component wrapping the ApprovalsApp within a SurfaceBoundary for error handling.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/ArtifactsRoute.tsx",
+      "type": "file",
+      "name": "ArtifactsRoute.tsx",
+      "filePath": "apps/web/src/routes/ArtifactsRoute.tsx",
+      "summary": "Route component for the Artifact Center, resolving workspace context from URL search params and shell state before mounting ArtifactCenterApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/AutomationsRoute.tsx",
+      "type": "file",
+      "name": "AutomationsRoute.tsx",
+      "filePath": "apps/web/src/routes/AutomationsRoute.tsx",
+      "summary": "Route component for the Automation Center that stashes deep-link parameters (action and target) before mounting AutomationCenterApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/ConnectorsRoute.tsx",
+      "type": "file",
+      "name": "ConnectorsRoute.tsx",
+      "filePath": "apps/web/src/routes/ConnectorsRoute.tsx",
+      "summary": "Route component for the Connectors Hub, passing the active workspace from shell context to ConnectorsApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/EventsRoute.tsx",
+      "type": "file",
+      "name": "EventsRoute.tsx",
+      "filePath": "apps/web/src/routes/EventsRoute.tsx",
+      "summary": "Route component for the Events/Timeline screen, providing abort-agent capability and event stream data to EventsApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/FilesRoute.tsx",
+      "type": "file",
+      "name": "FilesRoute.tsx",
+      "filePath": "apps/web/src/routes/FilesRoute.tsx",
+      "summary": "Route component for Storage and Files, resolving workspace from URL params and wiring context rail target updates to the StorageAndFilesApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/MarketplaceRoute.tsx",
+      "type": "file",
+      "name": "MarketplaceRoute.tsx",
+      "filePath": "apps/web/src/routes/MarketplaceRoute.tsx",
+      "summary": "Minimal route component mounting the MarketplaceApp within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/McpsRoute.tsx",
+      "type": "file",
+      "name": "McpsRoute.tsx",
+      "filePath": "apps/web/src/routes/McpsRoute.tsx",
+      "summary": "Route component for the MCP Hub, passing the active workspace from shell context to MCPHubApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "type": "file",
+      "name": "MemoryRoute.tsx",
+      "filePath": "apps/web/src/routes/MemoryRoute.tsx",
+      "summary": "Route component for the Memory Center that handles view switching, deep-link stashing, knowledge graph and memory hook wiring, and context rail integration for MemoryCenterApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/routes/MemoryRoute.tsx:MemoryRoute",
+      "type": "function",
+      "name": "MemoryRoute",
+      "filePath": "apps/web/src/routes/MemoryRoute.tsx",
+      "lineRange": [31, 126],
+      "summary": "React component managing the full memory route: validates view params, stashes deep links, wires memory and knowledge graph hooks, and handles view navigation with workspace context.",
+      "tags": ["component", "routing", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/routes/MissionControlRoute.tsx",
+      "type": "file",
+      "name": "MissionControlRoute.tsx",
+      "filePath": "apps/web/src/routes/MissionControlRoute.tsx",
+      "summary": "Minimal route component mounting the CockpitApp (Mission Control) within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/PaymentSuccessRoute.tsx",
+      "type": "file",
+      "name": "PaymentSuccessRoute.tsx",
+      "filePath": "apps/web/src/routes/PaymentSuccessRoute.tsx",
+      "summary": "Route component shown after successful Stripe payment, mounting PaymentSuccessApp within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/ProfileRoute.tsx",
+      "type": "file",
+      "name": "ProfileRoute.tsx",
+      "filePath": "apps/web/src/routes/ProfileRoute.tsx",
+      "summary": "Route component mounting the UserProfileApp within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/SettingsRoute.tsx",
+      "type": "file",
+      "name": "SettingsRoute.tsx",
+      "filePath": "apps/web/src/routes/SettingsRoute.tsx",
+      "summary": "Route component mounting the SettingsApp within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/SkillsRoute.tsx",
+      "type": "file",
+      "name": "SkillsRoute.tsx",
+      "filePath": "apps/web/src/routes/SkillsRoute.tsx",
+      "summary": "Minimal route component mounting the CapabilitiesApp (Skills Hub) within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "file",
+      "name": "SurfaceBoundary.tsx",
+      "filePath": "apps/web/src/routes/SurfaceBoundary.tsx",
+      "summary": "Shared error boundary wrapper used by all route components to catch render errors and navigate back to home, displaying an ErrorBoundary fallback UI.",
+      "tags": ["component", "middleware", "error-handler"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/TeamRoute.tsx",
+      "type": "file",
+      "name": "TeamRoute.tsx",
+      "filePath": "apps/web/src/routes/TeamRoute.tsx",
+      "summary": "Route component mounting the TeamGovernanceApp within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/TimelineRoute.tsx",
+      "type": "file",
+      "name": "TimelineRoute.tsx",
+      "filePath": "apps/web/src/routes/TimelineRoute.tsx",
+      "summary": "Route component for the Timeline screen, passing active workspace context from the shell to TimelineApp.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/UsageRoute.tsx",
+      "type": "file",
+      "name": "UsageRoute.tsx",
+      "filePath": "apps/web/src/routes/UsageRoute.tsx",
+      "summary": "Minimal route component mounting the TelemetryApp (Usage screen) within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/VaultRoute.tsx",
+      "type": "file",
+      "name": "VaultRoute.tsx",
+      "filePath": "apps/web/src/routes/VaultRoute.tsx",
+      "summary": "Route component mounting the VaultApp (secret management UI) within a SurfaceBoundary.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "type": "file",
+      "name": "WorkspaceRoute.tsx",
+      "filePath": "apps/web/src/routes/WorkspaceRoute.tsx",
+      "summary": "Route component for the active workspace, handling workspace selection, tab validation, and redirects before rendering WorkspaceDesktopApp with embedded chat.",
+      "tags": ["api-handler", "component", "routing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/routes/WorkspaceRoute.tsx:WorkspaceRoute",
+      "type": "function",
+      "name": "WorkspaceRoute",
+      "filePath": "apps/web/src/routes/WorkspaceRoute.tsx",
+      "lineRange": [25, 66],
+      "summary": "Main workspace route component that resolves workspace by URL param, validates tab selection, auto-redirects to default tab when missing, and passes context to WorkspaceDesktopApp.",
+      "tags": ["component", "routing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/chat-artifact-block.test.tsx",
+      "type": "file",
+      "name": "chat-artifact-block.test.tsx",
+      "filePath": "apps/web/src/test/chat-artifact-block.test.tsx",
+      "summary": "Tests for the ArtifactBlock chat component and BlockRenderer, verifying artifact card rendering, deep-link navigation, and tool-call block detection.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/chat-work-canvas.test.tsx",
+      "type": "file",
+      "name": "chat-work-canvas.test.tsx",
+      "filePath": "apps/web/src/test/chat-work-canvas.test.tsx",
+      "summary": "Tests for the ChatWorkCanvas component verifying artifact selection, canvas rendering, and write-block message display behavior.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/file-utils-path.test.ts",
+      "type": "file",
+      "name": "file-utils-path.test.ts",
+      "filePath": "apps/web/src/test/file-utils-path.test.ts",
+      "summary": "Unit tests for the normalizeWorkspacePath file utility, covering path traversal prevention and normalization edge cases.",
+      "tags": ["test", "utility", "security"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/files-deeplink.test.tsx",
+      "type": "file",
+      "name": "files-deeplink.test.tsx",
+      "filePath": "apps/web/src/test/files-deeplink.test.tsx",
+      "summary": "Integration tests for the FilesApp deep-link behavior, verifying that stashed deep links are consumed and the correct file is highlighted on mount.",
+      "tags": ["test", "component"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/p1a-chat-state.test.tsx",
+      "type": "file",
+      "name": "p1a-chat-state.test.tsx",
+      "filePath": "apps/web/src/test/p1a-chat-state.test.tsx",
+      "summary": "Comprehensive Phase 1A tests for chat state management in WorkspaceDesktopApp, covering chat entry loading, writing, merging, and useChatWidgetState hook behavior.",
+      "tags": ["test", "component"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:apps/web/src/test/p1a-workspace-route.test.tsx",
+      "type": "file",
+      "name": "p1a-workspace-route.test.tsx",
+      "filePath": "apps/web/src/test/p1a-workspace-route.test.tsx",
+      "summary": "Phase 1A integration tests for WorkspaceRoute, verifying workspace selection, tab redirect logic, and navigation behavior across multiple workspace configurations.",
+      "tags": ["test", "component", "routing"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "function:apps/web/src/lib/workspace-briefing-state.ts:workspaceBriefingStorageKey",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "function:apps/web/src/lib/workspace-briefing-state.ts:readWorkspaceBriefingCollapsed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "function:apps/web/src/lib/workspace-briefing-state.ts:writeWorkspaceBriefingCollapsed",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "function:apps/web/src/lib/workspace-briefing-state.ts:workspaceBriefingStorageKey",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "function:apps/web/src/lib/workspace-briefing-state.ts:readWorkspaceBriefingCollapsed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "function:apps/web/src/lib/workspace-briefing-state.ts:writeWorkspaceBriefingCollapsed",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-groups.ts",
+      "target": "function:apps/web/src/lib/workspace-groups.ts:getAllGroups",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-groups.ts",
+      "target": "function:apps/web/src/lib/workspace-groups.ts:getAllGroups",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "function:apps/web/src/providers/InstallProvider.tsx:useInstallStore",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "function:apps/web/src/providers/InstallProvider.tsx:InstallProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "function:apps/web/src/providers/InstallProvider.tsx:useInstallStore",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "function:apps/web/src/providers/InstallProvider.tsx:InstallProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "target": "function:apps/web/src/providers/ServiceProvider.tsx:useService",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "target": "function:apps/web/src/providers/ServiceProvider.tsx:ServiceProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "target": "function:apps/web/src/providers/ServiceProvider.tsx:useService",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "target": "function:apps/web/src/providers/ServiceProvider.tsx:ServiceProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "function:apps/web/src/providers/ShellContext.tsx:useShell",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "function:apps/web/src/providers/ShellContext.tsx:ShellProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "function:apps/web/src/providers/ShellContext.tsx:useShell",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "function:apps/web/src/providers/ShellContext.tsx:ShellProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "function:apps/web/src/routes/MemoryRoute.tsx:MemoryRoute",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "target": "function:apps/web/src/routes/WorkspaceRoute.tsx:WorkspaceRoute",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.test.ts",
+      "target": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "file:apps/web/src/hooks/use-toast.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "file:apps/web/src/hooks/useRevalidateOnError.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "file:apps/web/src/lib/extension-catalog.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "file:apps/web/src/lib/install-store.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/InstallProvider.tsx",
+      "target": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "target": "file:apps/web/src/hooks/useRevalidateOnError.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ServiceProvider.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/components/os/overlays/ContextRail.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useAgentStatus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useNotifications.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useOfflineStatus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useOnboarding.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useOverlayState.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useRevalidateOnError.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/hooks/useWorkspaces.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/providers/ShellContext.tsx",
+      "target": "file:apps/web/src/lib/dock-tiers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/AgentsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/AgentsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/AgentsRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/AgentsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ApprovalsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/ApprovalsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ApprovalsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ArtifactsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/ArtifactCenterApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ArtifactsRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ArtifactsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/AutomationsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/AutomationCenterApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/AutomationsRoute.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/AutomationsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ConnectorsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ConnectorsRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ConnectorsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/EventsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/EventsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/EventsRoute.tsx",
+      "target": "file:apps/web/src/hooks/useEvents.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/EventsRoute.tsx",
+      "target": "file:apps/web/src/lib/adapter.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/EventsRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/EventsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/FilesRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/FilesRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/FilesRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MarketplaceRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MarketplaceRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/McpsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/MCPHubApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/McpsRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/McpsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/MemoryCenterApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "file:apps/web/src/hooks/useKnowledgeGraph.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "file:apps/web/src/hooks/useMemory.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MemoryRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MissionControlRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/CockpitApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/MissionControlRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/PaymentSuccessRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/PaymentSuccessApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/PaymentSuccessRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ProfileRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/UserProfileApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/ProfileRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/SettingsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/SettingsApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/SettingsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/SkillsRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/SkillsRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "target": "file:apps/web/src/components/os/ErrorBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/TeamRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/TeamGovernanceApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/TeamRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/TimelineRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/TimelineApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/TimelineRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/TimelineRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/UsageRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/TelemetryApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/UsageRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/VaultRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/VaultApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/VaultRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/WorkspaceDesktopApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "target": "file:apps/web/src/components/os/ChatHost.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "target": "file:apps/web/src/providers/ShellContext.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-artifact-block.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/ArtifactBlock.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-artifact-block.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/BlockRenderer.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-artifact-block.test.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-artifact-block.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-work-canvas.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/ChatWorkCanvas.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-work-canvas.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/chat-blocks/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/chat-work-canvas.test.tsx",
+      "target": "file:apps/web/src/lib/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/file-utils-path.test.ts",
+      "target": "file:apps/web/src/components/os/apps/files/file-utils.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/files-deeplink.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/files-deeplink.test.tsx",
+      "target": "file:apps/web/src/components/ui/tooltip.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/files-deeplink.test.tsx",
+      "target": "file:apps/web/src/lib/app-deeplink.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p1a-chat-state.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/WorkspaceDesktopApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p1a-chat-state.test.tsx",
+      "target": "file:apps/web/src/hooks/useChatWidgetState.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/test/p1a-workspace-route.test.tsx",
+      "target": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/lib/workspace-briefing-state.ts",
+      "target": "file:apps/web/src/lib/workspace-briefing-state.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/chat-blocks/ArtifactBlock.tsx",
+      "target": "file:apps/web/src/test/chat-artifact-block.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/chat-blocks/ChatWorkCanvas.tsx",
+      "target": "file:apps/web/src/test/chat-work-canvas.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/files/file-utils.ts",
+      "target": "file:apps/web/src/test/file-utils-path.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/FilesApp.tsx",
+      "target": "file:apps/web/src/test/files-deeplink.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/WorkspaceDesktopApp.tsx",
+      "target": "file:apps/web/src/test/p1a-chat-state.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/routes/WorkspaceRoute.tsx",
+      "target": "file:apps/web/src/test/p1a-workspace-route.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

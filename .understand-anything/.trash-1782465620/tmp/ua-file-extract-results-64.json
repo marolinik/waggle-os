@@ -1,0 +1,502 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 7,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "sidecar/src/agent-session.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 124,
+      "nonEmptyLines": 106,
+      "classes": [
+        {
+          "name": "AgentSession",
+          "startLine": 12,
+          "endLine": 124,
+          "methods": [
+            "constructor",
+            "init",
+            "sendMessage",
+            "getOrchestrator"
+          ],
+          "properties": [
+            "orchestrator",
+            "initPromise"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AgentSession",
+          "line": 12,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.init",
+          "lineNumber": 17
+        },
+        {
+          "caller": "init",
+          "callee": "createEmbeddingProvider",
+          "lineNumber": 21
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "this.orchestrator.buildSystemPrompt",
+          "lineNumber": 37
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "this.orchestrator.getTools",
+          "lineNumber": 38
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "import",
+          "lineNumber": 41
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "tools.map",
+          "lineNumber": 44
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "client.messages.create",
+          "lineNumber": 60
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "response.content.filter",
+          "lineNumber": 68
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "response.content.filter",
+          "lineNumber": 69
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "textBlocks.map((b) => (b as { text: string }).text).join",
+          "lineNumber": 72
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "textBlocks.map",
+          "lineNumber": 72
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "onStream",
+          "lineNumber": 73
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "onStream",
+          "lineNumber": 80
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "this.orchestrator.executeTool",
+          "lineNumber": 83
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "onStream",
+          "lineNumber": 84
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "toolResults.push",
+          "lineNumber": 85
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "onStream",
+          "lineNumber": 92
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "toolResults.push",
+          "lineNumber": 93
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "onStream",
+          "lineNumber": 112
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "errMsg.includes",
+          "lineNumber": 114
+        },
+        {
+          "caller": "sendMessage",
+          "callee": "errMsg.includes",
+          "lineNumber": 114
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "sidecar/src/main.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 51,
+      "nonEmptyLines": 43,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "sidecar/src/mcp-manager.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 48,
+      "nonEmptyLines": 40,
+      "classes": [
+        {
+          "name": "McpManager",
+          "startLine": 10,
+          "endLine": 48,
+          "methods": [
+            "constructor",
+            "addServer",
+            "removeServer",
+            "getServer",
+            "listServers",
+            "toJSON",
+            "fromJSON"
+          ],
+          "properties": [
+            "servers"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "McpManager",
+          "line": 10,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "addServer",
+          "callee": "this.servers.has",
+          "lineNumber": 18
+        },
+        {
+          "caller": "addServer",
+          "callee": "this.servers.set",
+          "lineNumber": 21
+        },
+        {
+          "caller": "removeServer",
+          "callee": "this.servers.delete",
+          "lineNumber": 25
+        },
+        {
+          "caller": "getServer",
+          "callee": "this.servers.get",
+          "lineNumber": 29
+        },
+        {
+          "caller": "listServers",
+          "callee": "Array.from",
+          "lineNumber": 33
+        },
+        {
+          "caller": "listServers",
+          "callee": "this.servers.values",
+          "lineNumber": 33
+        },
+        {
+          "caller": "toJSON",
+          "callee": "JSON.stringify",
+          "lineNumber": 37
+        },
+        {
+          "caller": "toJSON",
+          "callee": "Array.from",
+          "lineNumber": 37
+        },
+        {
+          "caller": "toJSON",
+          "callee": "this.servers.values",
+          "lineNumber": 37
+        },
+        {
+          "caller": "fromJSON",
+          "callee": "JSON.parse",
+          "lineNumber": 42
+        },
+        {
+          "caller": "fromJSON",
+          "callee": "manager.servers.set",
+          "lineNumber": 44
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "sidecar/src/rpc-handler.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 139,
+      "nonEmptyLines": 121,
+      "classes": [
+        {
+          "name": "RpcHandler",
+          "startLine": 32,
+          "endLine": 132,
+          "methods": [
+            "constructor",
+            "handle",
+            "dispatch"
+          ],
+          "properties": [
+            "db",
+            "identity",
+            "awareness",
+            "frames",
+            "sessions",
+            "knowledge",
+            "settings",
+            "agentSession",
+            "mcpManager"
+          ]
+        },
+        {
+          "name": "MethodNotFoundError",
+          "startLine": 134,
+          "endLine": 139,
+          "methods": [
+            "constructor"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "RpcHandler",
+          "line": 32,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "handle",
+          "callee": "this.dispatch",
+          "lineNumber": 57
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.identity.exists",
+          "lineNumber": 81
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.identity.toContext",
+          "lineNumber": 81
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.awareness.toContext",
+          "lineNumber": 84
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.agentSession.sendMessage",
+          "lineNumber": 91
+        },
+        {
+          "caller": "dispatch",
+          "callee": "streamEvents.push",
+          "lineNumber": 96
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.mcpManager.listServers",
+          "lineNumber": 116
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.mcpManager.addServer",
+          "lineNumber": 120
+        },
+        {
+          "caller": "dispatch",
+          "callee": "this.mcpManager.removeServer",
+          "lineNumber": 125
+        },
+        {
+          "caller": "constructor",
+          "callee": "super",
+          "lineNumber": 136
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "sidecar/src/weaver-scheduler.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 64,
+      "nonEmptyLines": 56,
+      "classes": [
+        {
+          "name": "WeaverScheduler",
+          "startLine": 14,
+          "endLine": 64,
+          "methods": [
+            "constructor",
+            "start",
+            "stop",
+            "runConsolidation",
+            "runDecay"
+          ],
+          "properties": [
+            "weaver",
+            "sessions",
+            "timers",
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "WeaverScheduler",
+          "line": 14,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "start",
+          "callee": "this.timers.push",
+          "lineNumber": 29
+        },
+        {
+          "caller": "start",
+          "callee": "setInterval",
+          "lineNumber": 30
+        },
+        {
+          "caller": "start",
+          "callee": "this.runConsolidation",
+          "lineNumber": 30
+        },
+        {
+          "caller": "start",
+          "callee": "this.timers.push",
+          "lineNumber": 32
+        },
+        {
+          "caller": "start",
+          "callee": "setInterval",
+          "lineNumber": 33
+        },
+        {
+          "caller": "start",
+          "callee": "this.runDecay",
+          "lineNumber": 33
+        },
+        {
+          "caller": "start",
+          "callee": "process.stderr.write",
+          "lineNumber": 35
+        },
+        {
+          "caller": "stop",
+          "callee": "clearInterval",
+          "lineNumber": 40
+        },
+        {
+          "caller": "runConsolidation",
+          "callee": "this.sessions.getActive",
+          "lineNumber": 47
+        },
+        {
+          "caller": "runConsolidation",
+          "callee": "this.weaver.consolidateGop",
+          "lineNumber": 49
+        },
+        {
+          "caller": "runConsolidation",
+          "callee": "process.stderr.write",
+          "lineNumber": 52
+        },
+        {
+          "caller": "runDecay",
+          "callee": "this.weaver.decayFrames",
+          "lineNumber": 58
+        },
+        {
+          "caller": "runDecay",
+          "callee": "this.weaver.strengthenFrames",
+          "lineNumber": 59
+        },
+        {
+          "caller": "runDecay",
+          "callee": "process.stderr.write",
+          "lineNumber": 61
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "tests/sidecar/mcp-manager.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 61,
+      "nonEmptyLines": 50,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "tests/sidecar/rpc-handler.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 107,
+      "nonEmptyLines": 96,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

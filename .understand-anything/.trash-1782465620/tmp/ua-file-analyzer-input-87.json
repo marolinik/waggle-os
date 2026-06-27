@@ -1,0 +1,13 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/weaver/src/consolidation.ts", "language": "typescript", "sizeLines": 255, "fileCategory": "code"},
+    {"path": "packages/weaver/tests/consolidation-enhanced.test.ts", "language": "typescript", "sizeLines": 167, "fileCategory": "code"},
+    {"path": "packages/weaver/tests/consolidation.test.ts", "language": "typescript", "sizeLines": 254, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/weaver/src/consolidation.ts": [],
+    "packages/weaver/tests/consolidation-enhanced.test.ts": ["packages/weaver/src/consolidation.ts"],
+    "packages/weaver/tests/consolidation.test.ts": ["packages/weaver/src/consolidation.ts"]
+  }
+}

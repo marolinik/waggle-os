@@ -1,0 +1,211 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 4,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-core/CONTRIBUTING.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "Contributing to `@waggle/hive-mind-core`",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "How the package is distributed",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "Direction of development (maintainers — ratified 2026-06-11)",
+          "level": 2,
+          "line": 15
+        },
+        {
+          "heading": "Setting up the dev environment",
+          "level": 2,
+          "line": 24
+        },
+        {
+          "heading": "Code style",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "Pull request guidelines",
+          "level": 2,
+          "line": 58
+        },
+        {
+          "heading": "Code of Conduct",
+          "level": 2,
+          "line": 72
+        },
+        {
+          "heading": "License",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "Quick links",
+          "level": 2,
+          "line": 82
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/README.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 45,
+      "nonEmptyLines": 35,
+      "sections": [
+        {
+          "heading": "@waggle/hive-mind-core",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "What this is",
+          "level": 2,
+          "line": 5
+        },
+        {
+          "heading": "What's inside",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "SOTA claim (placeholder until arxiv preprint)",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "Status",
+          "level": 2,
+          "line": 41
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 29,
+      "nonEmptyLines": 29,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "exports",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 13
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 17
+        },
+        {
+          "heading": "devDependencies",
+          "level": 1,
+          "line": 23
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 27
+        },
+        {
+          "heading": "types",
+          "level": 1,
+          "line": 9
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 21,
+      "nonEmptyLines": 21,
+      "sections": [
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 19
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 3
+      }
+    }
+  ]
+}

@@ -1,0 +1,1227 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/compose-evolution.ts",
+      "type": "file",
+      "name": "compose-evolution.ts",
+      "filePath": "packages/agent/src/compose-evolution.ts",
+      "summary": "Orchestrates the two-phase self-improvement pipeline by sequencing EvolveSchema (schema optimization) and IterativeGEPA (prompt evolution), filtering judge feedback, and assembling aborted results when early termination occurs.",
+      "tags": ["service", "factory", "evolution", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/compose-evolution.ts:ComposeEvolution",
+      "type": "class",
+      "name": "ComposeEvolution",
+      "filePath": "packages/agent/src/compose-evolution.ts",
+      "lineRange": [167, 213],
+      "summary": "Class that runs the full two-phase GEPA evolution (schema + instruction prompt) in sequence, forwarding progress events and returning a combined result.",
+      "tags": ["service", "evolution", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/compose-evolution.ts:defaultFeedbackFilter",
+      "type": "function",
+      "name": "defaultFeedbackFilter",
+      "filePath": "packages/agent/src/compose-evolution.ts",
+      "lineRange": [94, 117],
+      "summary": "Classifies individual lines of judge feedback as 'noise', 'structure', or 'value' using regex patterns, used to strip boilerplate from feedback before passing it to mutation.",
+      "tags": ["utility", "validation", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/compose-evolution.ts:filterJudgeFeedback",
+      "type": "function",
+      "name": "filterJudgeFeedback",
+      "filePath": "packages/agent/src/compose-evolution.ts",
+      "lineRange": [130, 150],
+      "summary": "Wraps a judge to also apply a feedback filter, enriching each score result with filtered weakness strings before returning.",
+      "tags": ["utility", "evolution", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/compose-evolution.ts:schemaExecutorFromInstructionRunner",
+      "type": "function",
+      "name": "schemaExecutorFromInstructionRunner",
+      "filePath": "packages/agent/src/compose-evolution.ts",
+      "lineRange": [227, 240],
+      "summary": "Adapts an instruction-runner function to the SchemaExecuteFn contract so the schema evolution phase can use it for scoring.",
+      "tags": ["utility", "factory", "evolution"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/eval-dataset.ts",
+      "type": "file",
+      "name": "eval-dataset.ts",
+      "filePath": "packages/agent/src/eval-dataset.ts",
+      "summary": "Provides the EvalDatasetBuilder class and associated utilities for constructing, filtering, deduplicating, and splitting training datasets from agent execution traces, including secret detection/redaction.",
+      "tags": ["data-model", "utility", "evaluation", "serialization"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/eval-dataset.ts:EvalDatasetBuilder",
+      "type": "class",
+      "name": "EvalDatasetBuilder",
+      "filePath": "packages/agent/src/eval-dataset.ts",
+      "lineRange": [171, 326],
+      "summary": "Builds evaluation datasets from agent trace stores; applies secret scanning, heuristic filtering, optional judge-based quality gating, and deduplication before returning train/validation/test splits.",
+      "tags": ["data-model", "evaluation", "factory"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/eval-dataset.ts:detectSecrets",
+      "type": "function",
+      "name": "detectSecrets",
+      "filePath": "packages/agent/src/eval-dataset.ts",
+      "lineRange": [117, 122],
+      "summary": "Detects the presence of secrets (API keys, tokens) in a text string using compiled regex patterns, returning the first matching pattern name.",
+      "tags": ["security", "validation", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/eval-dataset.ts:redactSecrets",
+      "type": "function",
+      "name": "redactSecrets",
+      "filePath": "packages/agent/src/eval-dataset.ts",
+      "lineRange": [133, 145],
+      "summary": "Replaces secret values in text with redaction placeholders and returns the sanitized text along with the list of matched pattern names.",
+      "tags": ["security", "utility", "serialization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/evolution-gates.ts",
+      "type": "file",
+      "name": "evolution-gates.ts",
+      "filePath": "packages/agent/src/evolution-gates.ts",
+      "summary": "Implements a suite of quality gate checks (non-empty, size limits, growth ratio, balanced fences, placeholder detection, TODO detection, score regression) applied to evolved prompt candidates before they are accepted.",
+      "tags": ["validation", "evolution", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-gates.ts:runGates",
+      "type": "function",
+      "name": "runGates",
+      "filePath": "packages/agent/src/evolution-gates.ts",
+      "lineRange": [99, 135],
+      "summary": "Executes all configured quality gates against a candidate prompt and returns a combined verdict with individual check results.",
+      "tags": ["validation", "evolution", "orchestration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-gates.ts:checkSize",
+      "type": "function",
+      "name": "checkSize",
+      "filePath": "packages/agent/src/evolution-gates.ts",
+      "lineRange": [151, 172],
+      "summary": "Verifies that the candidate does not exceed the absolute size limit for the given target kind (system prompt or instruction).",
+      "tags": ["validation", "evolution"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-gates.ts:checkGrowth",
+      "type": "function",
+      "name": "checkGrowth",
+      "filePath": "packages/agent/src/evolution-gates.ts",
+      "lineRange": [174, 214],
+      "summary": "Checks that the evolved candidate does not grow more than a configurable ratio compared to the baseline, preventing runaway prompt inflation.",
+      "tags": ["validation", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-gates.ts:checkRegression",
+      "type": "function",
+      "name": "checkRegression",
+      "filePath": "packages/agent/src/evolution-gates.ts",
+      "lineRange": [279, 302],
+      "summary": "Rejects a candidate if its score regresses beyond an allowed threshold relative to the baseline score.",
+      "tags": ["validation", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "type": "file",
+      "name": "evolution-llm-wiring.ts",
+      "filePath": "packages/agent/src/evolution-llm-wiring.ts",
+      "summary": "Provides LLM adapters and builders for the evolution subsystem: creates Anthropic LLM clients with retry logic, builds GEPA mutation and schema fill functions, and wraps judges to execute candidate prompts against a live LLM for running-judge scoring.",
+      "tags": ["service", "middleware", "evolution", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-llm-wiring.ts:createAnthropicEvolutionLLM",
+      "type": "function",
+      "name": "createAnthropicEvolutionLLM",
+      "filePath": "packages/agent/src/evolution-llm-wiring.ts",
+      "lineRange": [214, 260],
+      "summary": "Dynamically imports the Anthropic SDK and creates a retry-wrapped LLM client configured for evolution workloads, with optional extended-thinking budget.",
+      "tags": ["factory", "api-handler", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-llm-wiring.ts:retryWithBackoff",
+      "type": "function",
+      "name": "retryWithBackoff",
+      "filePath": "packages/agent/src/evolution-llm-wiring.ts",
+      "lineRange": [153, 180],
+      "summary": "Retries an async operation with exponential backoff and jitter, calling an optional onRetry callback and stopping after the configured max attempts.",
+      "tags": ["utility", "middleware", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-llm-wiring.ts:makeRunningJudge",
+      "type": "function",
+      "name": "makeRunningJudge",
+      "filePath": "packages/agent/src/evolution-llm-wiring.ts",
+      "lineRange": [425, 452],
+      "summary": "Wraps a base judge to first execute the candidate prompt against a live LLM and then score the actual output, enabling realistic end-to-end quality measurement during evolution.",
+      "tags": ["factory", "evolution", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/evolution-llm-wiring.ts:buildGEPAMutateFn",
+      "type": "function",
+      "name": "buildGEPAMutateFn",
+      "filePath": "packages/agent/src/evolution-llm-wiring.ts",
+      "lineRange": [322, 341],
+      "summary": "Builds the mutation function for GEPA by constructing a reflective mutation prompt from weakness feedback and calling the LLM to produce an improved candidate prompt.",
+      "tags": ["factory", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/evolution-orchestrator.ts",
+      "type": "file",
+      "name": "evolution-orchestrator.ts",
+      "filePath": "packages/agent/src/evolution-orchestrator.ts",
+      "summary": "Implements the EvolutionOrchestrator class which manages the full evolution lifecycle: collecting traces, running ComposeEvolution, applying quality gates, persisting run records, and exposing accept/reject/deploy operations.",
+      "tags": ["service", "orchestration", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/evolution-orchestrator.ts:EvolutionOrchestrator",
+      "type": "class",
+      "name": "EvolutionOrchestrator",
+      "filePath": "packages/agent/src/evolution-orchestrator.ts",
+      "lineRange": [126, 327],
+      "summary": "Top-level controller for the self-improvement cycle: checks auto-trigger conditions, builds example datasets from traces, runs ComposeEvolution, gates the result, and persists accept/reject decisions with deployment support.",
+      "tags": ["service", "orchestration", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/src/evolve-schema.ts",
+      "type": "file",
+      "name": "evolve-schema.ts",
+      "filePath": "packages/agent/src/evolve-schema.ts",
+      "summary": "Implements the genetic-algorithm-style EvolveSchema optimizer that evolves structured output schemas (fields, types, constraints) across generations using structure/order/refinement mutations, Pareto-front selection, and LLM-based scoring.",
+      "tags": ["service", "evolution", "data-model"],
+      "complexity": "complex",
+      "languageNotes": "Largest file in the evolution subsystem at 852 lines; implements a multi-phase genetic algorithm with Pareto dominance selection."
+    },
+    {
+      "id": "class:packages/agent/src/evolve-schema.ts:EvolveSchema",
+      "type": "class",
+      "name": "EvolveSchema",
+      "filePath": "packages/agent/src/evolve-schema.ts",
+      "lineRange": [588, 698],
+      "summary": "Runs the schema evolution main loop: scores an initial schema, applies structure/order/refinement mutations per generation, selects survivors via Pareto front, and returns the best schema after convergence.",
+      "tags": ["service", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/evolve-schema.ts:scoreSchemaCandidate",
+      "type": "function",
+      "name": "scoreSchemaCandidate",
+      "filePath": "packages/agent/src/evolve-schema.ts",
+      "lineRange": [350, 377],
+      "summary": "Scores a schema candidate by executing it against each example, collecting judge scores, and returning aggregated accuracy and complexity metrics.",
+      "tags": ["evaluation", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/evolve-schema.ts:generateStructureMutations",
+      "type": "function",
+      "name": "generateStructureMutations",
+      "filePath": "packages/agent/src/evolve-schema.ts",
+      "lineRange": [385, 460],
+      "summary": "Generates candidate schema mutations that add reasoning fields, confidence fields, remove underperforming fields, or replace all output fields with minimal sets.",
+      "tags": ["factory", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/evolve-schema.ts:generateRefinementMutations",
+      "type": "function",
+      "name": "generateRefinementMutations",
+      "filePath": "packages/agent/src/evolve-schema.ts",
+      "lineRange": [518, 584],
+      "summary": "Generates LLM-assisted or deterministic field-description refinements based on judge weakness feedback patterns (verbose, incomplete, format issues).",
+      "tags": ["factory", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/evolve-schema.ts:paretoFrontSchema",
+      "type": "function",
+      "name": "paretoFrontSchema",
+      "filePath": "packages/agent/src/evolve-schema.ts",
+      "lineRange": [325, 340],
+      "summary": "Computes the Pareto-optimal front of schema candidates, keeping those not dominated in both accuracy and complexity dimensions.",
+      "tags": ["utility", "evolution"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/agent/src/index.ts",
+      "summary": "Main barrel file for the @waggle/agent package, re-exporting all public symbols from the agent runtime including orchestrator, agent loop, tools, evolution subsystem, persona system, memory cognification, and connector infrastructure.",
+      "tags": ["entry-point", "barrel", "exports"],
+      "complexity": "complex",
+      "languageNotes": "Exports 660+ symbols across 50+ internal modules — the public API surface of the entire agent package."
+    },
+    {
+      "id": "file:packages/agent/src/iterative-optimizer.ts",
+      "type": "file",
+      "name": "iterative-optimizer.ts",
+      "filePath": "packages/agent/src/iterative-optimizer.ts",
+      "summary": "Implements IterativeGEPA — the Genetic Evolutionary Prompt Algorithm — which evolves instruction prompts through generational mutation, Pareto-front survivor selection, and concurrency-controlled scoring against a judge.",
+      "tags": ["service", "evolution", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/iterative-optimizer.ts:IterativeGEPA",
+      "type": "class",
+      "name": "IterativeGEPA",
+      "filePath": "packages/agent/src/iterative-optimizer.ts",
+      "lineRange": [164, 328],
+      "summary": "Core GEPA optimizer class: runs generational mutation cycles with configurable mutation strategies, scores children in parallel or sequentially, selects Pareto survivors, and returns the best candidate prompt.",
+      "tags": ["service", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/iterative-optimizer.ts:scoreCandidate",
+      "type": "function",
+      "name": "scoreCandidate",
+      "filePath": "packages/agent/src/iterative-optimizer.ts",
+      "lineRange": [383, 421],
+      "summary": "Scores a prompt candidate across a sample of examples using a judge, with configurable sequential or concurrent execution, returning aggregated scores.",
+      "tags": ["evaluation", "evolution"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/iterative-optimizer.ts:aggregateScores",
+      "type": "function",
+      "name": "aggregateScores",
+      "filePath": "packages/agent/src/iterative-optimizer.ts",
+      "lineRange": [474, 508],
+      "summary": "Aggregates per-example judge scores into mean overall/dimension scores and collects the worst-case feedback strings for weakness-guided mutation.",
+      "tags": ["utility", "evaluation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/iterative-optimizer.ts:paretoFront",
+      "type": "function",
+      "name": "paretoFront",
+      "filePath": "packages/agent/src/iterative-optimizer.ts",
+      "lineRange": [337, 353],
+      "summary": "Filters a list of candidates to those on the Pareto-optimal front, using accuracy and conciseness as objectives.",
+      "tags": ["utility", "evolution"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/judge.ts",
+      "type": "file",
+      "name": "judge.ts",
+      "filePath": "packages/agent/src/judge.ts",
+      "summary": "Implements the LLMJudge class which scores agent outputs against rubric criteria (correctness, procedure, conciseness) by calling an LLM and parsing structured JSON responses, with length penalty support.",
+      "tags": ["service", "evaluation", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/judge.ts:LLMJudge",
+      "type": "class",
+      "name": "LLMJudge",
+      "filePath": "packages/agent/src/judge.ts",
+      "lineRange": [113, 189],
+      "summary": "LLM-based judge that scores outputs using a weighted rubric; supports batch scoring and optional length penalty computation.",
+      "tags": ["service", "evaluation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/judge.ts:parseJudgeResponse",
+      "type": "function",
+      "name": "parseJudgeResponse",
+      "filePath": "packages/agent/src/judge.ts",
+      "lineRange": [220, 252],
+      "summary": "Parses raw LLM judge output by stripping markdown fences, extracting JSON candidates, and returning the parsed verdict with scores and feedback.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/judge.ts:computeLengthPenalty",
+      "type": "function",
+      "name": "computeLengthPenalty",
+      "filePath": "packages/agent/src/judge.ts",
+      "lineRange": [295, 311],
+      "summary": "Computes a length-based quality penalty that penalizes outputs deviating from a target length outside a tolerance band, with a configurable floor.",
+      "tags": ["utility", "evaluation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/compose-evolution.test.ts",
+      "type": "file",
+      "name": "compose-evolution.test.ts",
+      "filePath": "packages/agent/tests/compose-evolution.test.ts",
+      "summary": "Unit tests for ComposeEvolution, defaultFeedbackFilter, filterJudgeFeedback, stripStructuralLines, and schemaExecutorFromInstructionRunner, using fake judges and runners to verify the two-phase evolution pipeline behavior.",
+      "tags": ["test", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/eval-dataset.test.ts",
+      "type": "file",
+      "name": "eval-dataset.test.ts",
+      "filePath": "packages/agent/tests/eval-dataset.test.ts",
+      "summary": "Unit tests for EvalDatasetBuilder covering secret detection, trace-to-example conversion, deduplication, split ratios, heuristic filtering, and judge-based quality gating.",
+      "tags": ["test", "evaluation"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/evolution-gates.test.ts",
+      "type": "file",
+      "name": "evolution-gates.test.ts",
+      "filePath": "packages/agent/tests/evolution-gates.test.ts",
+      "summary": "Unit tests for all evolution gate functions: checkNonEmpty, checkSize, checkGrowth, checkBalancedFences, checkNoPlaceholders, checkNoObviousTodos, checkRegression, and the composite runGates.",
+      "tags": ["test", "evolution", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/evolution-llm-wiring.test.ts",
+      "type": "file",
+      "name": "evolution-llm-wiring.test.ts",
+      "filePath": "packages/agent/tests/evolution-llm-wiring.test.ts",
+      "summary": "Integration and unit tests for the LLM wiring layer: retry logic, GEPA mutation function, schema fill/execute functions, running judge construction, and JSON fence stripping.",
+      "tags": ["test", "evolution", "api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/evolution-orchestrator.test.ts",
+      "type": "file",
+      "name": "evolution-orchestrator.test.ts",
+      "filePath": "packages/agent/tests/evolution-orchestrator.test.ts",
+      "summary": "Integration tests for EvolutionOrchestrator covering auto-trigger evaluation, full runOnce cycle, gate rejection, accept/reject/deploy flows, and trace-to-example dataset building.",
+      "tags": ["test", "evolution", "orchestration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/evolve-schema.test.ts",
+      "type": "file",
+      "name": "evolve-schema.test.ts",
+      "filePath": "packages/agent/tests/evolve-schema.test.ts",
+      "summary": "Unit and integration tests for the schema evolution subsystem: mutation generators, Pareto selection, candidate scoring, schema manipulation utilities, and the full EvolveSchema run.",
+      "tags": ["test", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/iterative-optimizer.test.ts",
+      "type": "file",
+      "name": "iterative-optimizer.test.ts",
+      "filePath": "packages/agent/tests/iterative-optimizer.test.ts",
+      "summary": "Unit and integration tests for IterativeGEPA covering convergence behavior, concurrent scoring, Pareto selection, strategy cycling, progress events, and abort-signal handling.",
+      "tags": ["test", "evolution"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/judge.test.ts",
+      "type": "file",
+      "name": "judge.test.ts",
+      "filePath": "packages/agent/tests/judge.test.ts",
+      "summary": "Unit tests for LLMJudge, parseJudgeResponse, computeLengthPenalty, and buildJudgePrompt, verifying score parsing, weight validation, and length penalty application.",
+      "tags": ["test", "evaluation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/wave-e-topology.test.ts",
+      "type": "file",
+      "name": "wave-e-topology.test.ts",
+      "filePath": "packages/agent/tests/wave-e-topology.test.ts",
+      "summary": "Topology tests that verify the agent package's public index exports the complete Wave-E evolution subsystem symbols and key agent types.",
+      "tags": ["test", "evolution", "barrel"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "class:packages/agent/src/compose-evolution.ts:ComposeEvolution",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "function:packages/agent/src/compose-evolution.ts:defaultFeedbackFilter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "function:packages/agent/src/compose-evolution.ts:filterJudgeFeedback",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "function:packages/agent/src/compose-evolution.ts:schemaExecutorFromInstructionRunner",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "class:packages/agent/src/compose-evolution.ts:ComposeEvolution",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "function:packages/agent/src/compose-evolution.ts:defaultFeedbackFilter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "function:packages/agent/src/compose-evolution.ts:filterJudgeFeedback",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "function:packages/agent/src/compose-evolution.ts:schemaExecutorFromInstructionRunner",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "file:packages/agent/src/evolve-schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "file:packages/agent/src/iterative-optimizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "class:packages/agent/src/eval-dataset.ts:EvalDatasetBuilder",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "function:packages/agent/src/eval-dataset.ts:detectSecrets",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "function:packages/agent/src/eval-dataset.ts:redactSecrets",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "class:packages/agent/src/eval-dataset.ts:EvalDatasetBuilder",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "function:packages/agent/src/eval-dataset.ts:detectSecrets",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "function:packages/agent/src/eval-dataset.ts:redactSecrets",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:runGates",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:checkSize",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:checkGrowth",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:checkRegression",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:runGates",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:checkSize",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:checkGrowth",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:checkRegression",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "file:packages/agent/src/iterative-optimizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:createAnthropicEvolutionLLM",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:retryWithBackoff",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:makeRunningJudge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:buildGEPAMutateFn",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:createAnthropicEvolutionLLM",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:retryWithBackoff",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:makeRunningJudge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:buildGEPAMutateFn",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "file:packages/agent/src/evolve-schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "file:packages/agent/src/iterative-optimizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "class:packages/agent/src/evolution-orchestrator.ts:EvolutionOrchestrator",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "class:packages/agent/src/evolution-orchestrator.ts:EvolutionOrchestrator",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "file:packages/agent/src/compose-evolution.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "file:packages/agent/src/evolution-gates.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "class:packages/agent/src/evolve-schema.ts:EvolveSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:scoreSchemaCandidate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:generateStructureMutations",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:generateRefinementMutations",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:paretoFrontSchema",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "class:packages/agent/src/evolve-schema.ts:EvolveSchema",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:scoreSchemaCandidate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:generateStructureMutations",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:generateRefinementMutations",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "function:packages/agent/src/evolve-schema.ts:paretoFrontSchema",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "class:packages/agent/src/iterative-optimizer.ts:IterativeGEPA",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/iterative-optimizer.ts:scoreCandidate",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/iterative-optimizer.ts:aggregateScores",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/iterative-optimizer.ts:paretoFront",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "class:packages/agent/src/iterative-optimizer.ts:IterativeGEPA",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/iterative-optimizer.ts:scoreCandidate",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/iterative-optimizer.ts:aggregateScores",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/iterative-optimizer.ts:paretoFront",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "class:packages/agent/src/judge.ts:LLMJudge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "function:packages/agent/src/judge.ts:parseJudgeResponse",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "function:packages/agent/src/judge.ts:computeLengthPenalty",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "class:packages/agent/src/judge.ts:LLMJudge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "function:packages/agent/src/judge.ts:parseJudgeResponse",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "function:packages/agent/src/judge.ts:computeLengthPenalty",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/compose-evolution.test.ts",
+      "target": "file:packages/agent/src/compose-evolution.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/compose-evolution.test.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/compose-evolution.test.ts",
+      "target": "file:packages/agent/src/evolve-schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/compose-evolution.test.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "file:packages/agent/tests/compose-evolution.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/eval-dataset.test.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/eval-dataset.ts",
+      "target": "file:packages/agent/tests/eval-dataset.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-gates.test.ts",
+      "target": "file:packages/agent/src/evolution-gates.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-gates.ts",
+      "target": "file:packages/agent/tests/evolution-gates.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-llm-wiring.test.ts",
+      "target": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-llm-wiring.test.ts",
+      "target": "file:packages/agent/src/evolve-schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-llm-wiring.test.ts",
+      "target": "file:packages/agent/src/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-llm-wiring.test.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-llm-wiring.ts",
+      "target": "file:packages/agent/tests/evolution-llm-wiring.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-orchestrator.test.ts",
+      "target": "file:packages/agent/src/evolution-orchestrator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-orchestrator.test.ts",
+      "target": "file:packages/agent/src/evolve-schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-orchestrator.test.ts",
+      "target": "file:packages/agent/src/iterative-optimizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolution-orchestrator.test.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "file:packages/agent/tests/evolution-orchestrator.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/evolve-schema.test.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolve-schema.test.ts",
+      "target": "file:packages/agent/src/evolve-schema.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/evolve-schema.test.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "file:packages/agent/tests/evolve-schema.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/iterative-optimizer.test.ts",
+      "target": "file:packages/agent/src/eval-dataset.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/iterative-optimizer.test.ts",
+      "target": "file:packages/agent/src/iterative-optimizer.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/iterative-optimizer.test.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "file:packages/agent/tests/iterative-optimizer.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/judge.test.ts",
+      "target": "file:packages/agent/src/judge.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/judge.ts",
+      "target": "file:packages/agent/tests/judge.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/wave-e-topology.test.ts",
+      "target": "file:packages/agent/src/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/index.ts",
+      "target": "file:packages/agent/tests/wave-e-topology.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "class:packages/agent/src/evolve-schema.ts:EvolveSchema",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/compose-evolution.ts",
+      "target": "class:packages/agent/src/iterative-optimizer.ts:IterativeGEPA",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "class:packages/agent/src/compose-evolution.ts:ComposeEvolution",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolution-orchestrator.ts",
+      "target": "function:packages/agent/src/evolution-gates.ts:runGates",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "function:packages/agent/src/evolution-llm-wiring.ts:makeRunningJudge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/evolve-schema.ts",
+      "target": "class:packages/agent/src/judge.ts:LLMJudge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/iterative-optimizer.ts",
+      "target": "class:packages/agent/src/judge.ts:LLMJudge",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

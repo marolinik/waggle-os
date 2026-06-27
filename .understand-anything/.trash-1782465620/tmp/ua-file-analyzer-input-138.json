@@ -1,0 +1,36 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/production-readiness/01A-FEATURE_WAVES.md", "language": "markdown", "sizeLines": 166, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/01B-DEPLOYMENT_PHASES.md", "language": "markdown", "sizeLines": 140, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/02-UX_AUDIT.md", "language": "markdown", "sizeLines": 550, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/03A-AGENT_QUALITY.md", "language": "markdown", "sizeLines": 225, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/03B-SERVER_QUALITY.md", "language": "markdown", "sizeLines": 267, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/03C-UI_QUALITY.md", "language": "markdown", "sizeLines": 248, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/04A-APP_SECURITY.md", "language": "markdown", "sizeLines": 206, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/04B-SECRETS_DEPS.md", "language": "markdown", "sizeLines": 244, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/05-TEST_REPORT.md", "language": "markdown", "sizeLines": 271, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/06-BUILD_REPORT.md", "language": "markdown", "sizeLines": 328, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/07-ISSUE_REGISTER.md", "language": "markdown", "sizeLines": 114, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/08-CONFIDENCE_MATRIX.md", "language": "markdown", "sizeLines": 139, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/09-LAUNCH_RECOMMENDATION.md", "language": "markdown", "sizeLines": 143, "fileCategory": "docs"},
+    {"path": "docs/production-readiness/AUDIT_COMPLETE.md", "language": "markdown", "sizeLines": 104, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/production-readiness/01A-FEATURE_WAVES.md": [],
+    "docs/production-readiness/01B-DEPLOYMENT_PHASES.md": [],
+    "docs/production-readiness/02-UX_AUDIT.md": [],
+    "docs/production-readiness/03A-AGENT_QUALITY.md": [],
+    "docs/production-readiness/03B-SERVER_QUALITY.md": [],
+    "docs/production-readiness/03C-UI_QUALITY.md": [],
+    "docs/production-readiness/04A-APP_SECURITY.md": [],
+    "docs/production-readiness/04B-SECRETS_DEPS.md": [],
+    "docs/production-readiness/05-TEST_REPORT.md": [],
+    "docs/production-readiness/06-BUILD_REPORT.md": [],
+    "docs/production-readiness/07-ISSUE_REGISTER.md": [],
+    "docs/production-readiness/08-CONFIDENCE_MATRIX.md": [],
+    "docs/production-readiness/09-LAUNCH_RECOMMENDATION.md": [],
+    "docs/production-readiness/AUDIT_COMPLETE.md": []
+  },
+  "neighborMap": {}
+}

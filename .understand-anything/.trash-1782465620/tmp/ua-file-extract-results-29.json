@@ -1,0 +1,2898 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 28,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "apps/web/src/components/os/overlays/onboarding/WorkspaceCreateStep.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 109,
+      "nonEmptyLines": 102,
+      "functions": [
+        {
+          "name": "WorkspaceCreateStep",
+          "startLine": 28,
+          "endLine": 107,
+          "params": [
+            "{\r\n  workspaceType,\r\n  workspaceName,\r\n  onSelectType,\r\n  onNameChange,\r\n  onCreate,\r\n  onBack,\r\n  creating,\r\n  createError,\r\n}"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "WorkspaceCreateStep",
+          "callee": "WORKSPACE_TYPES.map",
+          "lineNumber": 53
+        },
+        {
+          "caller": "WorkspaceCreateStep",
+          "callee": "onSelectType",
+          "lineNumber": 60
+        },
+        {
+          "caller": "WorkspaceCreateStep",
+          "callee": "onNameChange",
+          "lineNumber": 79
+        },
+        {
+          "caller": "WorkspaceCreateStep",
+          "callee": "workspaceName.trim",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/overlays/onboarding/constants.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 138,
+      "nonEmptyLines": 129,
+      "functions": [
+        {
+          "name": "getPersonasForTemplate",
+          "startLine": 84,
+          "endLine": 95,
+          "params": [
+            "templateId"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "TEMPLATES",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "TEMPLATE_PERSONA",
+          "line": 28,
+          "isDefault": false
+        },
+        {
+          "name": "CURATED_ONBOARDING_TEMPLATE_IDS",
+          "line": 51,
+          "isDefault": false
+        },
+        {
+          "name": "CURATED_ONBOARDING_TEMPLATES",
+          "line": 56,
+          "isDefault": false
+        },
+        {
+          "name": "ALL_ONBOARDING_PERSONAS",
+          "line": 61,
+          "isDefault": false
+        },
+        {
+          "name": "getPersonasForTemplate",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "TIER_OPTIONS",
+          "line": 102,
+          "isDefault": false
+        },
+        {
+          "name": "VALUE_PROPS",
+          "line": 126,
+          "isDefault": false
+        },
+        {
+          "name": "fadeSlide",
+          "line": 133,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getPersonasForTemplate",
+          "callee": "ALL_ONBOARDING_PERSONAS.filter",
+          "lineNumber": 86
+        },
+        {
+          "caller": "getPersonasForTemplate",
+          "callee": "ALL_ONBOARDING_PERSONAS.filter",
+          "lineNumber": 87
+        },
+        {
+          "caller": "getPersonasForTemplate",
+          "callee": "ALL_ONBOARDING_PERSONAS.filter",
+          "lineNumber": 88
+        },
+        {
+          "caller": "getPersonasForTemplate",
+          "callee": "domain.filter",
+          "lineNumber": 90
+        },
+        {
+          "caller": "getPersonasForTemplate",
+          "callee": "domain.filter",
+          "lineNumber": 93
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 9,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/overlays/onboarding/curated-templates.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 26,
+      "nonEmptyLines": 23,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/overlays/onboarding/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 21,
+      "nonEmptyLines": 20,
+      "exports": [
+        {
+          "name": "WelcomeStep",
+          "line": 1,
+          "isDefault": false
+        },
+        {
+          "name": "WhoAreYouStep",
+          "line": 2,
+          "isDefault": false
+        },
+        {
+          "name": "ModelGateStep",
+          "line": 3,
+          "isDefault": false
+        },
+        {
+          "name": "ImportStep",
+          "line": 4,
+          "isDefault": false
+        },
+        {
+          "name": "TemplateStep",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "FirstTaskStep",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "WorkspaceCreateStep",
+          "line": 7,
+          "isDefault": false
+        },
+        {
+          "name": "ReadyStep",
+          "line": 8,
+          "isDefault": false
+        },
+        {
+          "name": "WelcomeStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "WhoAreYouStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "ModelGateStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "ImportStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "TemplateStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "FirstTaskStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "WorkspaceCreateStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "ReadyStepProps",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "OnboardingProfileFields",
+          "line": 10,
+          "isDefault": false
+        },
+        {
+          "name": "OnboardingWorkspaceType",
+          "line": 10,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 18,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/overlays/onboarding/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 137,
+      "nonEmptyLines": 122,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/warm/AskBar.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 81,
+      "nonEmptyLines": 79,
+      "functions": [
+        {
+          "name": "AskBar",
+          "startLine": 21,
+          "endLine": 81,
+          "params": [
+            "{\r\n  placeholder = 'Start something new — “draft the board update from this week’s work”…',\r\n  onSubmit,\r\n  onPlus,\r\n  cmdkHint = true,\r\n  className,\r\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AskBar",
+          "line": 21,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "AskBar",
+          "callee": "useState",
+          "lineNumber": 28
+        },
+        {
+          "caller": "submit",
+          "callee": "value.trim",
+          "lineNumber": 30
+        },
+        {
+          "caller": "submit",
+          "callee": "onSubmit",
+          "lineNumber": 32
+        },
+        {
+          "caller": "submit",
+          "callee": "setValue",
+          "lineNumber": 33
+        },
+        {
+          "caller": "AskBar",
+          "callee": "cn",
+          "lineNumber": 37
+        },
+        {
+          "caller": "AskBar",
+          "callee": "value.trim",
+          "lineNumber": 47
+        },
+        {
+          "caller": "AskBar",
+          "callee": "onPlus",
+          "lineNumber": 48
+        },
+        {
+          "caller": "AskBar",
+          "callee": "setValue",
+          "lineNumber": 49
+        },
+        {
+          "caller": "AskBar",
+          "callee": "setValue",
+          "lineNumber": 58
+        },
+        {
+          "caller": "AskBar",
+          "callee": "e.preventDefault",
+          "lineNumber": 61
+        },
+        {
+          "caller": "AskBar",
+          "callee": "submit",
+          "lineNumber": 62
+        },
+        {
+          "caller": "AskBar",
+          "callee": "value.trim",
+          "lineNumber": 74
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/command.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 132,
+      "nonEmptyLines": 115,
+      "functions": [
+        {
+          "name": "CommandDialog",
+          "startLine": 26,
+          "endLine": 36,
+          "params": [
+            "{ children, ...props }"
+          ]
+        },
+        {
+          "name": "CommandShortcut",
+          "startLine": 117,
+          "endLine": 119,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Command",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandDialog",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandInput",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandList",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandEmpty",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandGroup",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandItem",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandShortcut",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "CommandSeparator",
+          "line": 122,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "CommandShortcut",
+          "callee": "cn",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 9,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/dialog.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 95,
+      "nonEmptyLines": 83,
+      "functions": [
+        {
+          "name": "DialogHeader",
+          "startLine": 54,
+          "endLine": 56,
+          "params": [
+            "{ className, ...props }"
+          ]
+        },
+        {
+          "name": "DialogFooter",
+          "startLine": 59,
+          "endLine": 61,
+          "params": [
+            "{ className, ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Dialog",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogPortal",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogOverlay",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogClose",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogTrigger",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogContent",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogHeader",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogFooter",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogTitle",
+          "line": 84,
+          "isDefault": false
+        },
+        {
+          "name": "DialogDescription",
+          "line": 84,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "DialogHeader",
+          "callee": "cn",
+          "lineNumber": 55
+        },
+        {
+          "caller": "DialogFooter",
+          "callee": "cn",
+          "lineNumber": 60
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 10,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/ui/sonner.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 27,
+      "nonEmptyLines": 23,
+      "functions": [
+        {
+          "name": "Toaster",
+          "startLine": 6,
+          "endLine": 25,
+          "params": [
+            "{ ...props }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Toaster",
+          "line": 27,
+          "isDefault": false
+        },
+        {
+          "name": "toast",
+          "line": 27,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Toaster",
+          "callee": "useTheme",
+          "lineNumber": 7
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useChatWidgetState.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 301,
+      "nonEmptyLines": 268,
+      "functions": [
+        {
+          "name": "personaLabelFor",
+          "startLine": 70,
+          "endLine": 73,
+          "params": [
+            "personaId"
+          ]
+        },
+        {
+          "name": "composeChatTitle",
+          "startLine": 81,
+          "endLine": 90,
+          "params": [
+            "workspaceName",
+            "templateId",
+            "personaId"
+          ]
+        },
+        {
+          "name": "sanitizeEntry",
+          "startLine": 97,
+          "endLine": 113,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "parseChatState",
+          "startLine": 115,
+          "endLine": 129,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "subscribeChatState",
+          "startLine": 139,
+          "endLine": 142,
+          "params": [
+            "listener"
+          ]
+        },
+        {
+          "name": "loadChatEntries",
+          "startLine": 144,
+          "endLine": 152,
+          "params": []
+        },
+        {
+          "name": "persistChatEntries",
+          "startLine": 154,
+          "endLine": 165,
+          "params": [
+            "chats"
+          ]
+        },
+        {
+          "name": "writeChatEntry",
+          "startLine": 168,
+          "endLine": 171,
+          "params": [
+            "workspaceId",
+            "patch"
+          ]
+        },
+        {
+          "name": "mergeChatEntries",
+          "startLine": 177,
+          "endLine": 179,
+          "params": [
+            "entries"
+          ]
+        },
+        {
+          "name": "rekeyLocalDefaultChatState",
+          "startLine": 190,
+          "endLine": 200,
+          "params": [
+            "firstRealWorkspaceId"
+          ]
+        },
+        {
+          "name": "seedChat",
+          "startLine": 207,
+          "endLine": 209,
+          "params": [
+            "workspaceId",
+            "seed"
+          ]
+        },
+        {
+          "name": "takeChatSeed",
+          "startLine": 212,
+          "endLine": 216,
+          "params": [
+            "workspaceId"
+          ]
+        },
+        {
+          "name": "useChatWidgetState",
+          "startLine": 237,
+          "endLine": 301,
+          "params": [
+            "workspaceId",
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "CHAT_STATE_KEY",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "personaLabelFor",
+          "line": 70,
+          "isDefault": false
+        },
+        {
+          "name": "composeChatTitle",
+          "line": 81,
+          "isDefault": false
+        },
+        {
+          "name": "loadChatEntries",
+          "line": 144,
+          "isDefault": false
+        },
+        {
+          "name": "writeChatEntry",
+          "line": 168,
+          "isDefault": false
+        },
+        {
+          "name": "mergeChatEntries",
+          "line": 177,
+          "isDefault": false
+        },
+        {
+          "name": "rekeyLocalDefaultChatState",
+          "line": 190,
+          "isDefault": false
+        },
+        {
+          "name": "seedChat",
+          "line": 207,
+          "isDefault": false
+        },
+        {
+          "name": "takeChatSeed",
+          "line": 212,
+          "isDefault": false
+        },
+        {
+          "name": "useChatWidgetState",
+          "line": 237,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "composeChatTitle",
+          "callee": "parts.push",
+          "lineNumber": 86
+        },
+        {
+          "caller": "composeChatTitle",
+          "callee": "personaLabelFor",
+          "lineNumber": 87
+        },
+        {
+          "caller": "composeChatTitle",
+          "callee": "parts.push",
+          "lineNumber": 88
+        },
+        {
+          "caller": "composeChatTitle",
+          "callee": "parts.join",
+          "lineNumber": 89
+        },
+        {
+          "caller": "sanitizeEntry",
+          "callee": "AUTONOMY_LEVELS.has",
+          "lineNumber": 103
+        },
+        {
+          "caller": "parseChatState",
+          "callee": "JSON.parse",
+          "lineNumber": 118
+        },
+        {
+          "caller": "parseChatState",
+          "callee": "Object.entries",
+          "lineNumber": 121
+        },
+        {
+          "caller": "parseChatState",
+          "callee": "sanitizeEntry",
+          "lineNumber": 122
+        },
+        {
+          "caller": "subscribeChatState",
+          "callee": "listeners.add",
+          "lineNumber": 140
+        },
+        {
+          "caller": "subscribeChatState",
+          "callee": "listeners.delete",
+          "lineNumber": 141
+        },
+        {
+          "caller": "loadChatEntries",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 146
+        },
+        {
+          "caller": "loadChatEntries",
+          "callee": "parseChatState",
+          "lineNumber": 149
+        },
+        {
+          "caller": "persistChatEntries",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 156
+        },
+        {
+          "caller": "persistChatEntries",
+          "callee": "JSON.stringify",
+          "lineNumber": 156
+        },
+        {
+          "caller": "persistChatEntries",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 162
+        },
+        {
+          "caller": "persistChatEntries",
+          "callee": "listeners.forEach",
+          "lineNumber": 164
+        },
+        {
+          "caller": "persistChatEntries",
+          "callee": "l",
+          "lineNumber": 164
+        },
+        {
+          "caller": "writeChatEntry",
+          "callee": "loadChatEntries",
+          "lineNumber": 169
+        },
+        {
+          "caller": "writeChatEntry",
+          "callee": "persistChatEntries",
+          "lineNumber": 170
+        },
+        {
+          "caller": "mergeChatEntries",
+          "callee": "persistChatEntries",
+          "lineNumber": 178
+        },
+        {
+          "caller": "mergeChatEntries",
+          "callee": "loadChatEntries",
+          "lineNumber": 178
+        },
+        {
+          "caller": "rekeyLocalDefaultChatState",
+          "callee": "loadChatEntries",
+          "lineNumber": 191
+        },
+        {
+          "caller": "rekeyLocalDefaultChatState",
+          "callee": "Object.fromEntries",
+          "lineNumber": 194
+        },
+        {
+          "caller": "rekeyLocalDefaultChatState",
+          "callee": "Object.entries(chats).filter",
+          "lineNumber": 195
+        },
+        {
+          "caller": "rekeyLocalDefaultChatState",
+          "callee": "Object.entries",
+          "lineNumber": 195
+        },
+        {
+          "caller": "rekeyLocalDefaultChatState",
+          "callee": "persistChatEntries",
+          "lineNumber": 197
+        },
+        {
+          "caller": "seedChat",
+          "callee": "pendingSeeds.set",
+          "lineNumber": 208
+        },
+        {
+          "caller": "takeChatSeed",
+          "callee": "pendingSeeds.get",
+          "lineNumber": 213
+        },
+        {
+          "caller": "takeChatSeed",
+          "callee": "pendingSeeds.delete",
+          "lineNumber": 214
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "useSyncExternalStore",
+          "lineNumber": 239
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "useEffect",
+          "lineNumber": 252
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "loadChatEntries",
+          "lineNumber": 254
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "writeChatEntry",
+          "lineNumber": 255
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "useCallback",
+          "lineNumber": 264
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "writeChatEntry",
+          "lineNumber": 265
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "personaLabelFor",
+          "lineNumber": 265
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "useCallback",
+          "lineNumber": 273
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "Date.now",
+          "lineNumber": 279
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "writeChatEntry",
+          "lineNumber": 280
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "useEffect",
+          "lineNumber": 286
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "setInterval",
+          "lineNumber": 287
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "Date.now",
+          "lineNumber": 288
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "loadChatEntries",
+          "lineNumber": 289
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "writeChatEntry",
+          "lineNumber": 294
+        },
+        {
+          "caller": "useChatWidgetState",
+          "callee": "clearInterval",
+          "lineNumber": 297
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 10,
+        "functionCount": 13,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useDeveloperMode.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 71,
+      "nonEmptyLines": 63,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useDeveloperMode.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 54,
+      "nonEmptyLines": 47,
+      "functions": [
+        {
+          "name": "readDeveloperMode",
+          "startLine": 16,
+          "endLine": 22,
+          "params": []
+        },
+        {
+          "name": "writeDeveloperMode",
+          "startLine": 24,
+          "endLine": 33,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "useDeveloperMode",
+          "startLine": 35,
+          "endLine": 54,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "DEVELOPER_MODE_STORAGE_KEY",
+          "line": 12,
+          "isDefault": false
+        },
+        {
+          "name": "readDeveloperMode",
+          "line": 16,
+          "isDefault": false
+        },
+        {
+          "name": "useDeveloperMode",
+          "line": 35,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "readDeveloperMode",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 18
+        },
+        {
+          "caller": "writeDeveloperMode",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 26
+        },
+        {
+          "caller": "writeDeveloperMode",
+          "callee": "String",
+          "lineNumber": 26
+        },
+        {
+          "caller": "writeDeveloperMode",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 32
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "useState",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "readDeveloperMode",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "useEffect",
+          "lineNumber": 38
+        },
+        {
+          "caller": "sync",
+          "callee": "setEnabledState",
+          "lineNumber": 39
+        },
+        {
+          "caller": "sync",
+          "callee": "readDeveloperMode",
+          "lineNumber": 39
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "window.addEventListener",
+          "lineNumber": 40
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "window.addEventListener",
+          "lineNumber": 41
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "window.removeEventListener",
+          "lineNumber": 43
+        },
+        {
+          "caller": "useDeveloperMode",
+          "callee": "window.removeEventListener",
+          "lineNumber": 44
+        },
+        {
+          "caller": "set",
+          "callee": "writeDeveloperMode",
+          "lineNumber": 49
+        },
+        {
+          "caller": "set",
+          "callee": "setEnabledState",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useDockLabels.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 122,
+      "nonEmptyLines": 111,
+      "functions": [
+        {
+          "name": "readSessionCount",
+          "startLine": 24,
+          "endLine": 32,
+          "params": []
+        },
+        {
+          "name": "readFirstLaunch",
+          "startLine": 34,
+          "endLine": 43,
+          "params": []
+        },
+        {
+          "name": "readDockLabelsMode",
+          "startLine": 45,
+          "endLine": 53,
+          "params": []
+        },
+        {
+          "name": "writeDockLabelsMode",
+          "startLine": 55,
+          "endLine": 62,
+          "params": [
+            "mode"
+          ]
+        },
+        {
+          "name": "useBumpSessionCount",
+          "startLine": 74,
+          "endLine": 89,
+          "params": []
+        },
+        {
+          "name": "useDockLabels",
+          "startLine": 91,
+          "endLine": 122,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "SESSION_COUNT_KEY",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "FIRST_LAUNCH_KEY",
+          "line": 20,
+          "isDefault": false
+        },
+        {
+          "name": "DOCK_LABELS_MODE_KEY",
+          "line": 21,
+          "isDefault": false
+        },
+        {
+          "name": "readDockLabelsMode",
+          "line": 45,
+          "isDefault": false
+        },
+        {
+          "name": "useBumpSessionCount",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "useDockLabels",
+          "line": 91,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "readSessionCount",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 26
+        },
+        {
+          "caller": "readSessionCount",
+          "callee": "parseInt",
+          "lineNumber": 27
+        },
+        {
+          "caller": "readSessionCount",
+          "callee": "Number.isFinite",
+          "lineNumber": 28
+        },
+        {
+          "caller": "readFirstLaunch",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 36
+        },
+        {
+          "caller": "readFirstLaunch",
+          "callee": "parseInt",
+          "lineNumber": 38
+        },
+        {
+          "caller": "readFirstLaunch",
+          "callee": "Number.isFinite",
+          "lineNumber": 39
+        },
+        {
+          "caller": "readDockLabelsMode",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 47
+        },
+        {
+          "caller": "writeDockLabelsMode",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 57
+        },
+        {
+          "caller": "writeDockLabelsMode",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 61
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "useRef",
+          "lineNumber": 75
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "useEffect",
+          "lineNumber": 76
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "readSessionCount",
+          "lineNumber": 80
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 81
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "String",
+          "lineNumber": 81
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 82
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 83
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "String",
+          "lineNumber": 83
+        },
+        {
+          "caller": "useBumpSessionCount",
+          "callee": "Date.now",
+          "lineNumber": 83
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "useBumpSessionCount",
+          "lineNumber": 96
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "useState",
+          "lineNumber": 97
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "readDockLabelsMode",
+          "lineNumber": 97
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "useEffect",
+          "lineNumber": 99
+        },
+        {
+          "caller": "sync",
+          "callee": "setModeState",
+          "lineNumber": 100
+        },
+        {
+          "caller": "sync",
+          "callee": "readDockLabelsMode",
+          "lineNumber": 100
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "window.addEventListener",
+          "lineNumber": 101
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "window.addEventListener",
+          "lineNumber": 102
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "window.removeEventListener",
+          "lineNumber": 104
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "window.removeEventListener",
+          "lineNumber": 105
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "shouldShowDockLabels",
+          "lineNumber": 109
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "readSessionCount",
+          "lineNumber": 110
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "readFirstLaunch",
+          "lineNumber": 111
+        },
+        {
+          "caller": "useDockLabels",
+          "callee": "Date.now",
+          "lineNumber": 112
+        },
+        {
+          "caller": "setMode",
+          "callee": "writeDockLabelsMode",
+          "lineNumber": 117
+        },
+        {
+          "caller": "setMode",
+          "callee": "setModeState",
+          "lineNumber": 118
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 6,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useDockNudge.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 81,
+      "nonEmptyLines": 72,
+      "functions": [
+        {
+          "name": "readSessionCount",
+          "startLine": 19,
+          "endLine": 27,
+          "params": []
+        },
+        {
+          "name": "readDismissedMilestones",
+          "startLine": 29,
+          "endLine": 39,
+          "params": []
+        },
+        {
+          "name": "writeDismissedMilestones",
+          "startLine": 41,
+          "endLine": 47,
+          "params": [
+            "milestones"
+          ]
+        },
+        {
+          "name": "useDockNudge",
+          "startLine": 61,
+          "endLine": 81,
+          "params": [
+            "{ onNudge }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DOCK_NUDGE_DISMISSED_KEY",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "readDismissedMilestones",
+          "line": 29,
+          "isDefault": false
+        },
+        {
+          "name": "useDockNudge",
+          "line": 61,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "readSessionCount",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 21
+        },
+        {
+          "caller": "readSessionCount",
+          "callee": "parseInt",
+          "lineNumber": 22
+        },
+        {
+          "caller": "readSessionCount",
+          "callee": "Number.isFinite",
+          "lineNumber": 23
+        },
+        {
+          "caller": "readDismissedMilestones",
+          "callee": "window.localStorage.getItem",
+          "lineNumber": 31
+        },
+        {
+          "caller": "readDismissedMilestones",
+          "callee": "JSON.parse",
+          "lineNumber": 33
+        },
+        {
+          "caller": "readDismissedMilestones",
+          "callee": "Array.isArray",
+          "lineNumber": 34
+        },
+        {
+          "caller": "readDismissedMilestones",
+          "callee": "parsed.filter",
+          "lineNumber": 35
+        },
+        {
+          "caller": "readDismissedMilestones",
+          "callee": "Number.isFinite",
+          "lineNumber": 35
+        },
+        {
+          "caller": "writeDismissedMilestones",
+          "callee": "window.localStorage.setItem",
+          "lineNumber": 43
+        },
+        {
+          "caller": "writeDismissedMilestones",
+          "callee": "JSON.stringify",
+          "lineNumber": 43
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "useRef",
+          "lineNumber": 62
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "useEffect",
+          "lineNumber": 63
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "readSessionCount",
+          "lineNumber": 67
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "readDismissedMilestones",
+          "lineNumber": 68
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "findPendingMilestone",
+          "lineNumber": 69
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "onNudge",
+          "lineNumber": 72
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "copyForMilestone",
+          "lineNumber": 72
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "dismissed.includes",
+          "lineNumber": 77
+        },
+        {
+          "caller": "useDockNudge",
+          "callee": "writeDismissedMilestones",
+          "lineNumber": 78
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 3,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useHasWorkingModel.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 62,
+      "nonEmptyLines": 54,
+      "functions": [
+        {
+          "name": "providers",
+          "startLine": 19,
+          "endLine": 23,
+          "params": [
+            "...withKey"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "providers",
+          "callee": "withKey.map",
+          "lineNumber": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useHasWorkingModel.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 59,
+      "nonEmptyLines": 53,
+      "functions": [
+        {
+          "name": "useHasWorkingModel",
+          "startLine": 28,
+          "endLine": 59,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "useHasWorkingModel",
+          "line": 28,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "useProviders",
+          "lineNumber": 29
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "useState",
+          "lineNumber": 30
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "useState",
+          "lineNumber": 31
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "useCallback",
+          "lineNumber": 33
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "setLocalLoading",
+          "lineNumber": 34
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "adapter.getLocalInferenceStatus",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "setLocalModelCount",
+          "lineNumber": 37
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "setLocalModelCount",
+          "lineNumber": 41
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "setLocalLoading",
+          "lineNumber": 43
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "useEffect",
+          "lineNumber": 47
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "refreshLocal",
+          "lineNumber": 47
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "refreshProviders",
+          "lineNumber": 57
+        },
+        {
+          "caller": "useHasWorkingModel",
+          "callee": "refreshLocal",
+          "lineNumber": 57
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useIsLightTheme.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 32,
+      "nonEmptyLines": 28,
+      "functions": [
+        {
+          "name": "useIsLightTheme",
+          "startLine": 11,
+          "endLine": 32,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "useIsLightTheme",
+          "line": 11,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "read",
+          "callee": "document.documentElement.getAttribute",
+          "lineNumber": 14
+        },
+        {
+          "caller": "useIsLightTheme",
+          "callee": "useState",
+          "lineNumber": 16
+        },
+        {
+          "caller": "useIsLightTheme",
+          "callee": "useEffect",
+          "lineNumber": 18
+        },
+        {
+          "caller": "sync",
+          "callee": "setIsLight",
+          "lineNumber": 20
+        },
+        {
+          "caller": "sync",
+          "callee": "read",
+          "lineNumber": 20
+        },
+        {
+          "caller": "useIsLightTheme",
+          "callee": "observer.observe",
+          "lineNumber": 22
+        },
+        {
+          "caller": "useIsLightTheme",
+          "callee": "sync",
+          "lineNumber": 27
+        },
+        {
+          "caller": "useIsLightTheme",
+          "callee": "observer.disconnect",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useKeyboardShortcuts.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 113,
+      "nonEmptyLines": 98,
+      "functions": [
+        {
+          "name": "isGlobalShortcut",
+          "startLine": 33,
+          "endLine": 36,
+          "params": [
+            "e"
+          ]
+        },
+        {
+          "name": "isInputFocused",
+          "startLine": 38,
+          "endLine": 43,
+          "params": []
+        },
+        {
+          "name": "useKeyboardShortcuts",
+          "startLine": 45,
+          "endLine": 113,
+          "params": [
+            "options"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "useKeyboardShortcuts",
+          "line": 45,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isInputFocused",
+          "callee": "active.tagName.toLowerCase",
+          "lineNumber": 41
+        },
+        {
+          "caller": "useKeyboardShortcuts",
+          "callee": "useRef",
+          "lineNumber": 47
+        },
+        {
+          "caller": "useKeyboardShortcuts",
+          "callee": "useEffect",
+          "lineNumber": 50
+        },
+        {
+          "caller": "handler",
+          "callee": "isInputFocused",
+          "lineNumber": 56
+        },
+        {
+          "caller": "handler",
+          "callee": "isGlobalShortcut",
+          "lineNumber": 56
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 60
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onOpenApp",
+          "lineNumber": 61
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 69
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onNewChatWindow",
+          "lineNumber": 70
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 76
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onOpenApp",
+          "lineNumber": 77
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 83
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onToggleGlobalSearch",
+          "lineNumber": 84
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 90
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onTogglePersonaSwitcher",
+          "lineNumber": 91
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 97
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onToggleWorkspaceSwitcher",
+          "lineNumber": 98
+        },
+        {
+          "caller": "handler",
+          "callee": "e.preventDefault",
+          "lineNumber": 104
+        },
+        {
+          "caller": "handler",
+          "callee": "opts.onToggleKeyboardHelp",
+          "lineNumber": 105
+        },
+        {
+          "caller": "useKeyboardShortcuts",
+          "callee": "window.addEventListener",
+          "lineNumber": 110
+        },
+        {
+          "caller": "useKeyboardShortcuts",
+          "callee": "window.removeEventListener",
+          "lineNumber": 111
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useOfflineStatus.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 100,
+      "nonEmptyLines": 89,
+      "functions": [
+        {
+          "name": "useOfflineStatus",
+          "startLine": 36,
+          "endLine": 100,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "useOfflineStatus",
+          "line": 36,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useOfflineStatus",
+          "callee": "useState",
+          "lineNumber": 37
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "useRef",
+          "lineNumber": 38
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "useEffect",
+          "lineNumber": 40
+        },
+        {
+          "caller": "check",
+          "callee": "adapter.getSystemHealth",
+          "lineNumber": 46
+        },
+        {
+          "caller": "check",
+          "callee": "setOffline",
+          "lineNumber": 48
+        },
+        {
+          "caller": "check",
+          "callee": "console.error",
+          "lineNumber": 52
+        },
+        {
+          "caller": "check",
+          "callee": "setOffline",
+          "lineNumber": 55
+        },
+        {
+          "caller": "schedule",
+          "callee": "Math.min",
+          "lineNumber": 65
+        },
+        {
+          "caller": "schedule",
+          "callee": "Math.pow",
+          "lineNumber": 65
+        },
+        {
+          "caller": "schedule",
+          "callee": "setTimeout",
+          "lineNumber": 66
+        },
+        {
+          "caller": "schedule",
+          "callee": "check",
+          "lineNumber": 67
+        },
+        {
+          "caller": "schedule",
+          "callee": "schedule",
+          "lineNumber": 68
+        },
+        {
+          "caller": "probeNow",
+          "callee": "clearTimeout",
+          "lineNumber": 76
+        },
+        {
+          "caller": "probeNow",
+          "callee": "check().then",
+          "lineNumber": 77
+        },
+        {
+          "caller": "probeNow",
+          "callee": "check",
+          "lineNumber": 77
+        },
+        {
+          "caller": "probeNow",
+          "callee": "schedule",
+          "lineNumber": 77
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "probeNow",
+          "lineNumber": 80
+        },
+        {
+          "caller": "onOnline",
+          "callee": "probeNow",
+          "lineNumber": 82
+        },
+        {
+          "caller": "onVisible",
+          "callee": "probeNow",
+          "lineNumber": 83
+        },
+        {
+          "caller": "onFocus",
+          "callee": "probeNow",
+          "lineNumber": 84
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "window.addEventListener",
+          "lineNumber": 86
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "document.addEventListener",
+          "lineNumber": 87
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "window.addEventListener",
+          "lineNumber": 88
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "clearTimeout",
+          "lineNumber": 92
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "window.removeEventListener",
+          "lineNumber": 93
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "document.removeEventListener",
+          "lineNumber": 94
+        },
+        {
+          "caller": "useOfflineStatus",
+          "callee": "window.removeEventListener",
+          "lineNumber": 95
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useOnboarding.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 255,
+      "nonEmptyLines": 238,
+      "functions": [
+        {
+          "name": "loadState",
+          "startLine": 42,
+          "endLine": 92,
+          "params": []
+        },
+        {
+          "name": "saveState",
+          "startLine": 94,
+          "endLine": 98,
+          "params": [
+            "state"
+          ]
+        },
+        {
+          "name": "useOnboarding",
+          "startLine": 100,
+          "endLine": 255,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "useOnboarding",
+          "line": 100,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadState",
+          "callee": "params.get",
+          "lineNumber": 46
+        },
+        {
+          "caller": "loadState",
+          "callee": "params.get",
+          "lineNumber": 47
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.setItem",
+          "lineNumber": 49
+        },
+        {
+          "caller": "loadState",
+          "callee": "JSON.stringify",
+          "lineNumber": 49
+        },
+        {
+          "caller": "loadState",
+          "callee": "params.get",
+          "lineNumber": 60
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.setItem",
+          "lineNumber": 63
+        },
+        {
+          "caller": "loadState",
+          "callee": "JSON.stringify",
+          "lineNumber": 63
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.removeItem",
+          "lineNumber": 69
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.getItem",
+          "lineNumber": 74
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.removeItem",
+          "lineNumber": 75
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.setItem",
+          "lineNumber": 77
+        },
+        {
+          "caller": "loadState",
+          "callee": "JSON.stringify",
+          "lineNumber": 77
+        },
+        {
+          "caller": "loadState",
+          "callee": "localStorage.getItem",
+          "lineNumber": 80
+        },
+        {
+          "caller": "loadState",
+          "callee": "JSON.parse",
+          "lineNumber": 82
+        },
+        {
+          "caller": "saveState",
+          "callee": "localStorage.setItem",
+          "lineNumber": 95
+        },
+        {
+          "caller": "saveState",
+          "callee": "JSON.stringify",
+          "lineNumber": 95
+        },
+        {
+          "caller": "saveState",
+          "callee": "window.dispatchEvent",
+          "lineNumber": 97
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useState",
+          "lineNumber": 101
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useEffect",
+          "lineNumber": 104
+        },
+        {
+          "caller": "handler",
+          "callee": "setState",
+          "lineNumber": 105
+        },
+        {
+          "caller": "handler",
+          "callee": "loadState",
+          "lineNumber": 105
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "window.addEventListener",
+          "lineNumber": 106
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "window.removeEventListener",
+          "lineNumber": 107
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useEffect",
+          "lineNumber": 116
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "isTauri",
+          "lineNumber": 118
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "tauriIsFirstLaunch()\r\n      .then((firstLaunch) => {\r\n        if (cancelled || firstLaunch) return;\r\n        console.info(\r\n          '[useOnboarding] Tauri filesystem flag indicates returning user — auto-completing wizard',\r\n        );\r\n        const next: OnboardingState = {\r\n          ...defaultState,\r\n          completed: true,\r\n          step: 7,\r\n          tier: state.tier || 'power',\r\n          tooltipsDismissed: true,\r\n          apiKeySet: true,\r\n        };\r\n        saveState(next);\r\n        setState(next);\r\n      })\r\n      .catch",
+          "lineNumber": 120
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "tauriIsFirstLaunch()\r\n      .then",
+          "lineNumber": 120
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "tauriIsFirstLaunch",
+          "lineNumber": 120
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "console.info",
+          "lineNumber": 123
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "saveState",
+          "lineNumber": 134
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "setState",
+          "lineNumber": 135
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useEffect",
+          "lineNumber": 160
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "params.get",
+          "lineNumber": 173
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "(async () => {\r\n      try {\r\n        const status = await adapter.getOnboardingStatus();\r\n        if (cancelled) return;\r\n        if (status?.completed) {\r\n          console.info(\r\n            `[useOnboarding] returning user detected (server onboarding status: ${status.source ?? 'flag'}) — auto-completing wizard`\r\n          );\r\n          const next: OnboardingState = {\r\n            ...defaultState,\r\n            completed: true,\r\n            step: 7,\r\n            tier: state.tier || 'power',\r\n            tooltipsDismissed: true,\r\n            apiKeySet: true,\r\n          };\r\n          saveState(next);\r\n          setState(next);\r\n        }\r\n      } catch {\r\n        /* sidecar unreachable — stay on the wizard so a truly new user can set up */\r\n      }\r\n    })",
+          "lineNumber": 176
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "adapter.getOnboardingStatus",
+          "lineNumber": 178
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "console.info",
+          "lineNumber": 181
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "saveState",
+          "lineNumber": 192
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "setState",
+          "lineNumber": 193
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useCallback",
+          "lineNumber": 204
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "setState",
+          "lineNumber": 205
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "saveState",
+          "lineNumber": 207
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "adapter.markOnboardingComplete().catch",
+          "lineNumber": 212
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "adapter.markOnboardingComplete",
+          "lineNumber": 212
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "console.warn",
+          "lineNumber": 213
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "isTauri",
+          "lineNumber": 218
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "tauriMarkFirstLaunchComplete().catch",
+          "lineNumber": 219
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "tauriMarkFirstLaunchComplete",
+          "lineNumber": 219
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "console.warn",
+          "lineNumber": 220
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useCallback",
+          "lineNumber": 228
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "update",
+          "lineNumber": 229
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useCallback",
+          "lineNumber": 232
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "saveState",
+          "lineNumber": 234
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "setState",
+          "lineNumber": 235
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "useCallback",
+          "lineNumber": 243
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "window.localStorage.removeItem",
+          "lineNumber": 245
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "setState",
+          "lineNumber": 247
+        },
+        {
+          "caller": "useOnboarding",
+          "callee": "saveState",
+          "lineNumber": 249
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useOverlayState.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 48,
+      "functions": [
+        {
+          "name": "useOverlayState",
+          "startLine": 20,
+          "endLine": 52,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "useOverlayState",
+          "line": 20,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 21
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 22
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 23
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 24
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 25
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 26
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 27
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useState",
+          "lineNumber": 28
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "shouldShowLoginBriefing",
+          "lineNumber": 29
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "readSkipBriefingParam",
+          "lineNumber": 30
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "readLoginBriefingDismissed",
+          "lineNumber": 31
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "readMinutesSinceLastDismiss",
+          "lineNumber": 32
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useCallback",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "setShowGlobalSearch",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useCallback",
+          "lineNumber": 37
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "setShowPersonaSwitcher",
+          "lineNumber": 37
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useCallback",
+          "lineNumber": 38
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "setShowWorkspaceSwitcher",
+          "lineNumber": 38
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useCallback",
+          "lineNumber": 39
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "setShowNotifications",
+          "lineNumber": 39
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "useCallback",
+          "lineNumber": 40
+        },
+        {
+          "caller": "useOverlayState",
+          "callee": "setShowKeyboardHelp",
+          "lineNumber": 40
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/clerk.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 69,
+      "nonEmptyLines": 66,
+      "functions": [
+        {
+          "name": "isValidPublishableKey",
+          "startLine": 21,
+          "endLine": 28,
+          "params": [
+            "key"
+          ]
+        },
+        {
+          "name": "clerkPublishableKey",
+          "startLine": 41,
+          "endLine": 44,
+          "params": []
+        },
+        {
+          "name": "clerkAppearance",
+          "startLine": 52,
+          "endLine": 69,
+          "params": [
+            "isDark"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "clerkPublishableKey",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "clerkAppearance",
+          "line": 52,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isValidPublishableKey",
+          "callee": "key.startsWith",
+          "lineNumber": 22
+        },
+        {
+          "caller": "isValidPublishableKey",
+          "callee": "key.startsWith",
+          "lineNumber": 22
+        },
+        {
+          "caller": "isValidPublishableKey",
+          "callee": "atob(key.split('_')[2] ?? '').endsWith",
+          "lineNumber": 24
+        },
+        {
+          "caller": "isValidPublishableKey",
+          "callee": "atob",
+          "lineNumber": 24
+        },
+        {
+          "caller": "isValidPublishableKey",
+          "callee": "key.split",
+          "lineNumber": 24
+        },
+        {
+          "caller": "clerkPublishableKey",
+          "callee": "isValidPublishableKey",
+          "lineNumber": 43
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/command-catalog.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 120,
+      "nonEmptyLines": 105,
+      "functions": [
+        {
+          "name": "buildCommandCatalog",
+          "startLine": 61,
+          "endLine": 120,
+          "params": [
+            "ctx"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "buildCommandCatalog",
+          "line": 61,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "gate",
+          "callee": "items.filter",
+          "lineNumber": 102
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "[...jump, ...doGroup, ...power]\r\n      .filter((i) => i.pinned && (i.minBillingRank === undefined || billingRank >= i.minBillingRank))\r\n      .map",
+          "lineNumber": 107
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "[...jump, ...doGroup, ...power]\r\n      .filter",
+          "lineNumber": 107
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "groups.push",
+          "lineNumber": 111
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "groups.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "gate",
+          "lineNumber": 115
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "groups.push",
+          "lineNumber": 116
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "gate",
+          "lineNumber": 116
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "groups.push",
+          "lineNumber": 117
+        },
+        {
+          "caller": "buildCommandCatalog",
+          "callee": "gate",
+          "lineNumber": 117
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/dock-labels.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 109,
+      "nonEmptyLines": 98,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/dock-labels.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 51,
+      "nonEmptyLines": 47,
+      "functions": [
+        {
+          "name": "shouldShowDockLabels",
+          "startLine": 36,
+          "endLine": 51,
+          "params": [
+            "input"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DOCK_LABELS_SESSION_THRESHOLD",
+          "line": 18,
+          "isDefault": false
+        },
+        {
+          "name": "DOCK_LABELS_AGE_THRESHOLD_MS",
+          "line": 19,
+          "isDefault": false
+        },
+        {
+          "name": "shouldShowDockLabels",
+          "line": 36,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/dock-nudge.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 80,
+      "nonEmptyLines": 69,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/dock-nudge.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 65,
+      "nonEmptyLines": 60,
+      "functions": [
+        {
+          "name": "findPendingMilestone",
+          "startLine": 40,
+          "endLine": 52,
+          "params": [
+            "sessionCount",
+            "dismissed"
+          ]
+        },
+        {
+          "name": "copyForMilestone",
+          "startLine": 58,
+          "endLine": 65,
+          "params": [
+            "milestone"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DOCK_NUDGE_MILESTONES",
+          "line": 15,
+          "isDefault": false
+        },
+        {
+          "name": "DOCK_NUDGE_COPY",
+          "line": 23,
+          "isDefault": false
+        },
+        {
+          "name": "findPendingMilestone",
+          "line": 40,
+          "isDefault": false
+        },
+        {
+          "name": "copyForMilestone",
+          "line": 58,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "findPendingMilestone",
+          "callee": "Number.isFinite",
+          "lineNumber": 44
+        },
+        {
+          "caller": "findPendingMilestone",
+          "callee": "dismissedSet.has",
+          "lineNumber": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/dock-tiers.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 171,
+      "nonEmptyLines": 159,
+      "functions": [
+        {
+          "name": "filterByBillingTier",
+          "startLine": 152,
+          "endLine": 166,
+          "params": [
+            "entries",
+            "billingTier"
+          ]
+        },
+        {
+          "name": "getDockForTier",
+          "startLine": 168,
+          "endLine": 171,
+          "params": [
+            "tier",
+            "billingTier"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DEFAULT_TIER",
+          "line": 58,
+          "isDefault": false
+        },
+        {
+          "name": "TIER_DOCK_CONFIG",
+          "line": 120,
+          "isDefault": false
+        },
+        {
+          "name": "getDockForTier",
+          "line": 168,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "filterByBillingTier",
+          "callee": "filterByBillingTier",
+          "lineNumber": 158
+        },
+        {
+          "caller": "filterByBillingTier",
+          "callee": "out.push",
+          "lineNumber": 160
+        },
+        {
+          "caller": "filterByBillingTier",
+          "callee": "out.push",
+          "lineNumber": 162
+        },
+        {
+          "caller": "getDockForTier",
+          "callee": "filterByBillingTier",
+          "lineNumber": 170
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

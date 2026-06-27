@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/redesign-warm-hive/pr3-recon/chat.md", "language": "markdown", "sizeLines": 301, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr3-recon/home.md", "language": "markdown", "sizeLines": 293, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr3-recon/primitives.md", "language": "markdown", "sizeLines": 200, "fileCategory": "docs"},
+    {"path": "docs/redesign-warm-hive/pr3-recon/workspace.md", "language": "markdown", "sizeLines": 276, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/redesign-warm-hive/pr3-recon/chat.md": [],
+    "docs/redesign-warm-hive/pr3-recon/home.md": [],
+    "docs/redesign-warm-hive/pr3-recon/primitives.md": [],
+    "docs/redesign-warm-hive/pr3-recon/workspace.md": []
+  },
+  "neighborMap": {}
+}

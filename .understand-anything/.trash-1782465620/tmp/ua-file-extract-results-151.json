@@ -1,0 +1,723 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/ux-refactor/deltas/backend-api-delta.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 383,
+      "nonEmptyLines": 311,
+      "sections": [
+        {
+          "heading": "Backend API Delta — Waggle OS UX Refactor (Master List)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "How to read this",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "Phase 0 — Architecture alignment (PRD §8 Phase 0 / §21 Sprint 1)",
+          "level": 2,
+          "line": 52
+        },
+        {
+          "heading": "Phase 1 — Core runtime: Home, Workspace Desktop, Command Center (PRD §8 Phase 1 / §21 Sprint 2–3)",
+          "level": 2,
+          "line": 66
+        },
+        {
+          "heading": "1a. Home Cockpit + Quick Capture (S01) — new `home.ts` + extend `memory.ts`",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "1b. Workspace Desktop (S02) — extend `workspaces.ts`",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "1c. Command Center (Ctrl+K) (S00, S03) — new `command.ts`",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "Phase 2 — Work layer: Memory Center, Artifact Center, Workspace Creation, Onboarding (PRD §8 Phase 2 / §21 Sprint 4–5)",
+          "level": 2,
+          "line": 99
+        },
+        {
+          "heading": "2a. Memory Center (S04, S16) — extend `memory.ts` + ONE optional migration",
+          "level": 3,
+          "line": 101
+        },
+        {
+          "heading": "2b. Artifact Center (S05) — new `artifacts.ts` (largest net-new domain; aggregation only)",
+          "level": 3,
+          "line": 114
+        },
+        {
+          "heading": "2c. Workspace Creation (S17) — extend `workspaces.ts` write path",
+          "level": 3,
+          "line": 130
+        },
+        {
+          "heading": "2d. Onboarding: First Launch, Who-Are-You, Tool Discovery, Memory Import (S12–S15)",
+          "level": 3,
+          "line": 137
+        },
+        {
+          "heading": "Phase 3 — Intelligence layer: Agents, Skills, Automations (PRD §8 Phase 3 / §21 Sprint 6)",
+          "level": 2,
+          "line": 154
+        },
+        {
+          "heading": "3a. Agent Center + Agent Builder (S09, S18) — new sidecar `agents.ts` + agent store",
+          "level": 3,
+          "line": 156
+        },
+        {
+          "heading": "3b. Skills Hub + Skill Builder (S06, S19) — extend `skills.ts`",
+          "level": 3,
+          "line": 175
+        },
+        {
+          "heading": "3c. Automation Center + Automation Builder (S11, S20) — alias cron as automations",
+          "level": 3,
+          "line": 189
+        },
+        {
+          "heading": "Phase 4 — Extend layer: Connectors, MCPs, Marketplace, Install Audit (PRD §8 Phase 4 / §21 Sprint 7)",
+          "level": 2,
+          "line": 208
+        },
+        {
+          "heading": "4a. Connector Hub (S07, S14) — extend `connectors.ts`",
+          "level": 3,
+          "line": 210
+        },
+        {
+          "heading": "4b. MCP Hub (S08, S17) — new `mcps.ts` + persisted MCP-config store + runtime population",
+          "level": 3,
+          "line": 221
+        },
+        {
+          "heading": "4c. Marketplace / Extend + Install Audit (S21, shared S06/S07/S08)",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "Phase 5 — Team intelligence: Team Workspace, RBAC, Sharing, Audit (PRD §8 Phase 5 / §21 Sprint 8)",
+          "level": 2,
+          "line": 256
+        },
+        {
+          "heading": "§M — Schema migrations required",
+          "level": 2,
+          "line": 273
+        },
+        {
+          "heading": "M1 — `memory_frames.metadata` (CONDITIONAL — Phase 2/Phase 5) — the only `.mind` SQLite migration",
+          "level": 3,
+          "line": 282
+        },
+        {
+          "heading": "M2 — `install_audit` risk-level CHECK fix (RECOMMENDED — pre-Phase 4, latent bug)",
+          "level": 3,
+          "line": 299
+        },
+        {
+          "heading": "M3 — `agents` table (OPTIONAL — Phase 3, NOT recommended for v1)",
+          "level": 3,
+          "line": 313
+        },
+        {
+          "heading": "Non-migrations (additive JSON-file / interface changes only — listed for completeness, NOT migrations)",
+          "level": 3,
+          "line": 321
+        },
+        {
+          "heading": "Counts",
+          "level": 2,
+          "line": 334
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 27
+      }
+    },
+    {
+      "path": "docs/ux-refactor/deltas/coverage-check.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 272,
+      "nonEmptyLines": 240,
+      "sections": [
+        {
+          "heading": "Coverage Check — Waggle OS UX Refactor (Adversarial Completeness Audit)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Table 1 — PRD Screens (the 21 numbered screens + AppShell)",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "Table 2 — PRD §16 Endpoints (all 65) — addressed in `backend-api-delta.md`?",
+          "level": 2,
+          "line": 76
+        },
+        {
+          "heading": "Table 3 — PRD §26 Definition of Done (all 11) — addressed by a phase/card?",
+          "level": 2,
+          "line": 176
+        },
+        {
+          "heading": "Concrete gaps to fix (prioritized)",
+          "level": 2,
+          "line": 200
+        },
+        {
+          "heading": "Bottom line",
+          "level": 2,
+          "line": 262
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 6
+      }
+    },
+    {
+      "path": "docs/ux-refactor/deltas/design-system-delta.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 173,
+      "nonEmptyLines": 146,
+      "sections": [
+        {
+          "heading": "Design System Delta — Waggle OS UX Refactor",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "(a) PRD §19.1 Component List — EXISTS vs BUILD-NEW",
+          "level": 2,
+          "line": 18
+        },
+        {
+          "heading": "Supporting primitives confirmed present (reuse, do not rebuild)",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "Summary counts",
+          "level": 3,
+          "line": 49
+        },
+        {
+          "heading": "(b) Color Semantics → Hive DS Token Mapping",
+          "level": 2,
+          "line": 56
+        },
+        {
+          "heading": "(c) Dark-default + Light-variant Note",
+          "level": 2,
+          "line": 102
+        },
+        {
+          "heading": "(d) Accessibility Requirements (PRD §19.3 + Blueprint line 489-490)",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "Net build list (for the impl plan)",
+          "level": 2,
+          "line": 154
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/ux-refactor/deltas/open-questions.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 701,
+      "nonEmptyLines": 605,
+      "sections": [
+        {
+          "heading": "Open Questions — UX Refactor (Founder Ratification)",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "✅ Founder Ratifications — 2026-06-09",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "✅ Founder Ratifications — Phase 2 gate (2026-06-09 S2)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "✅ Founder Ratifications — Phase 3 gate (2026-06-10)",
+          "level": 2,
+          "line": 55
+        },
+        {
+          "heading": "✅ Founder Ratifications — Phase 4 gate (2026-06-10)",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "§A — PRD §23 Open Questions (the canonical 8)",
+          "level": 2,
+          "line": 108
+        },
+        {
+          "heading": "A1. Widget customization in Workspace Desktop — fixed layout or true customization in v1?",
+          "level": 3,
+          "line": 110
+        },
+        {
+          "heading": "A2. Home Cockpit scope — personal-only, or team/global views too?",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "A3. Memory Center graph view — v1 or later?",
+          "level": 3,
+          "line": 141
+        },
+        {
+          "heading": "A4. Which connectors/MCPs are real in v1 vs seeded/mock catalog?",
+          "level": 3,
+          "line": 153
+        },
+        {
+          "heading": "A5. Marketplace — local catalog vs remote registry initially?",
+          "level": 3,
+          "line": 176
+        },
+        {
+          "heading": "A6. Artifact storage — workspace filesystem, virtual store, or external references first?",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "A7. Minimum viable RBAC for team mode?",
+          "level": 3,
+          "line": 213
+        },
+        {
+          "heading": "A8. Memory retention / delete / tombstone behavior?",
+          "level": 3,
+          "line": 233
+        },
+        {
+          "heading": "§B — Cross-cutting decisions (block ≥2 screens; not in PRD §23 but surfaced by gap cards)",
+          "level": 2,
+          "line": 256
+        },
+        {
+          "heading": "B1. Shell topology — keep the bottom-dock OS, or migrate to a left-rail / route-based shell?",
+          "level": 3,
+          "line": 258
+        },
+        {
+          "heading": "B2. Memory confidence — heuristic-at-preview vs LLM-classify, and persisted vs preview-only?",
+          "level": 3,
+          "line": 277
+        },
+        {
+          "heading": "B3. Agent vs Persona boundary, and where the Agent entity is stored.",
+          "level": 3,
+          "line": 300
+        },
+        {
+          "heading": "B4. `/api/*` vocabulary aliasing — singular command, automations, mcps, connectors revoke.",
+          "level": 3,
+          "line": 319
+        },
+        {
+          "heading": "B5. Tier-vocabulary unification (`UserTier` / `BillingTier` / `PlanTier` + RBAC roles).",
+          "level": 3,
+          "line": 337
+        },
+        {
+          "heading": "B6. `MemoryKind` / `ImportItemType` / FE `MemoryFrame.type` reconciliation.",
+          "level": 3,
+          "line": 355
+        },
+        {
+          "heading": "B7. `ExtensionType` union — add `agent`, keep `external_tool`, or both?",
+          "level": 3,
+          "line": 373
+        },
+        {
+          "heading": "B8. Identity store of record for onboarding profile.",
+          "level": 3,
+          "line": 389
+        },
+        {
+          "heading": "§C — Screen-local questions (single-screen scope; ratify with the owning card)",
+          "level": 2,
+          "line": 406
+        },
+        {
+          "heading": "Phase-blocking summary (founder fast-path)",
+          "level": 2,
+          "line": 493
+        },
+        {
+          "heading": "UX Refactor v2.1 — Ratification of Decision Register D1–D15 (2026-06-10)",
+          "level": 1,
+          "line": 511
+        },
+        {
+          "heading": "Structural (D1–D5)",
+          "level": 2,
+          "line": 517
+        },
+        {
+          "heading": "D1 — Shell topology: RATIFIED option (b) — AppShell via in-place conversion. **B1 is explicitly superseded.**",
+          "level": 3,
+          "line": 519
+        },
+        {
+          "heading": "D2 — Memory Center: RATIFIED — rework AND promote to standalone.",
+          "level": 3,
+          "line": 527
+        },
+        {
+          "heading": "D3 — Auth gate: RATIFIED — full structural scope. All four audit conflicts in scope:",
+          "level": 3,
+          "line": 530
+        },
+        {
+          "heading": "D4 — Skill-write governance: RATIFIED — autonomy-aware gating, four bindings:",
+          "level": 3,
+          "line": 537
+        },
+        {
+          "heading": "D5 — Team zone: RATIFIED — keep tier-hidden. No stripping, no new work. Approvals-inbox PRO visibility: post-launch consideration, not launch scope.",
+          "level": 3,
+          "line": 547
+        },
+        {
+          "heading": "Scope clarifications (D6–D10) — defaults ratified, with notes",
+          "level": 2,
+          "line": 549
+        },
+        {
+          "heading": "Launch integrity (D11–D15) — all confirmed",
+          "level": 2,
+          "line": 557
+        },
+        {
+          "heading": "Additional items (no decision letter — just do)",
+          "level": 2,
+          "line": 565
+        },
+        {
+          "heading": "Phase sequence (unblocked)",
+          "level": 2,
+          "line": 572
+        },
+        {
+          "heading": "D3 implementation notes (P1b, 2026-06-11)",
+          "level": 2,
+          "line": 578
+        },
+        {
+          "heading": "P2 implementation notes (verify + J08, 2026-06-11)",
+          "level": 2,
+          "line": 612
+        },
+        {
+          "heading": "P3 implementation notes (D2 two-mind Memory Center, 2026-06-11)",
+          "level": 2,
+          "line": 635
+        },
+        {
+          "heading": "P4 implementation notes (D11 + D12 + clean-install onboarding, 2026-06-11)",
+          "level": 2,
+          "line": 664
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 40
+      }
+    },
+    {
+      "path": "docs/ux-refactor/deltas/rbac-security-delta.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 202,
+      "nonEmptyLines": 150,
+      "sections": [
+        {
+          "heading": "RBAC / Security / Audit Delta — Waggle OS UX Refactor",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. TL;DR for the planner",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. RBAC — current vs. required",
+          "level": 2,
+          "line": 32
+        },
+        {
+          "heading": "1.1 PRD/Blueprint target",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "1.2 What exists — TWO RBAC planes",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "1.3 What must be built",
+          "level": 3,
+          "line": 68
+        },
+        {
+          "heading": "2. Approval / consent gating — current vs. required",
+          "level": 2,
+          "line": 77
+        },
+        {
+          "heading": "2.1 The runtime approval gate (built)",
+          "level": 3,
+          "line": 81
+        },
+        {
+          "heading": "2.2 How it hooks into the loop (built)",
+          "level": 3,
+          "line": 88
+        },
+        {
+          "heading": "2.3 The three PRD consent flows — where each hooks",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "2.4 What must be built (approval)",
+          "level": 3,
+          "line": 107
+        },
+        {
+          "heading": "3. Audit surfaces — current vs. required",
+          "level": 2,
+          "line": 115
+        },
+        {
+          "heading": "3.1 The three stores (all real, all SQLite)",
+          "level": 3,
+          "line": 119
+        },
+        {
+          "heading": "3.2 Deltas vs PRD §18",
+          "level": 3,
+          "line": 127
+        },
+        {
+          "heading": "3.3 Audit read/export surfaces (built)",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "3.4 What must be built (audit UI)",
+          "level": 3,
+          "line": 140
+        },
+        {
+          "heading": "4. Cross-cutting security deltas (PRD §18.1)",
+          "level": 2,
+          "line": 148
+        },
+        {
+          "heading": "5. Recommended build order (security slice of the refactor)",
+          "level": 2,
+          "line": 166
+        },
+        {
+          "heading": "6. Reuse map (don't rebuild)",
+          "level": 2,
+          "line": 178
+        },
+        {
+          "heading": "7. Open questions for the founder/PM",
+          "level": 2,
+          "line": 196
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 20
+      }
+    },
+    {
+      "path": "docs/ux-refactor/deltas/shared-types-delta.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 418,
+      "nonEmptyLines": 348,
+      "sections": [
+        {
+          "heading": "Shared Types Delta — UX Refactor",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Placement policy (where each type lives)",
+          "level": 2,
+          "line": 11
+        },
+        {
+          "heading": "1. §15.2 Enums / literal unions — **ALL NEW** → `packages/shared/src/types.ts`",
+          "level": 2,
+          "line": 39
+        },
+        {
+          "heading": "2. §15.3 `WorkspaceConfigV2` — MODIFY (two layers)",
+          "level": 2,
+          "line": 78
+        },
+        {
+          "heading": "2a. Persisted config — MODIFY `WorkspaceConfig`",
+          "level": 3,
+          "line": 80
+        },
+        {
+          "heading": "2b. FE view-model — MODIFY `Workspace`",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "3. §15.4 Memory with confidence/provenance — MODIFY FE + NEW shared + backend metadata",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "3a. Backend storage — metadata-first (one migration)",
+          "level": 3,
+          "line": 116
+        },
+        {
+          "heading": "3b. NEW shared `Memory` entity → `packages/shared/src/types.ts`",
+          "level": 3,
+          "line": 126
+        },
+        {
+          "heading": "3c. FE view-model — MODIFY `MemoryFrame` (or add `Memory`)",
+          "level": 3,
+          "line": 158
+        },
+        {
+          "heading": "4. §15.6 Artifact — **NEW everywhere** (largest gap)",
+          "level": 2,
+          "line": 172
+        },
+        {
+          "heading": "4a. NEW shared `Artifact` → `packages/shared/src/types.ts`",
+          "level": 3,
+          "line": 178
+        },
+        {
+          "heading": "4b. FE — NEW `Artifact` view-model → `apps/web/src/lib/types.ts`",
+          "level": 3,
+          "line": 207
+        },
+        {
+          "heading": "5. §15.5 Agent — MODIFY shared `AgentDef` + NEW FE `Agent`",
+          "level": 2,
+          "line": 214
+        },
+        {
+          "heading": "5a. Shared — MODIFY `AgentDef`",
+          "level": 3,
+          "line": 216
+        },
+        {
+          "heading": "5b. FE — NEW `Agent` view-model → `apps/web/src/lib/types.ts`",
+          "level": 3,
+          "line": 243
+        },
+        {
+          "heading": "6. §12.6 Skill — MODIFY FE `SkillPack` (or add `Skill`)",
+          "level": 2,
+          "line": 254
+        },
+        {
+          "heading": "7. §12.10 Automation — MODIFY FE `CronJob` → NEW `Automation`",
+          "level": 2,
+          "line": 290
+        },
+        {
+          "heading": "8. §12.7-12.8 Extension / Connector / MCP — MODIFY existing",
+          "level": 2,
+          "line": 325
+        },
+        {
+          "heading": "8a. Connector — MODIFY FE `Connector`, reuse shared `ConnectorDefinition`",
+          "level": 3,
+          "line": 327
+        },
+        {
+          "heading": "8b. MCP — NEW FE `McpInstance`, reuse shared `McpServer` catalog",
+          "level": 3,
+          "line": 339
+        },
+        {
+          "heading": "9. §12.3 Command — NEW everywhere → `packages/shared` + FE",
+          "level": 2,
+          "line": 371
+        },
+        {
+          "heading": "10. Summary table",
+          "level": 2,
+          "line": 401
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 23
+      }
+    }
+  ]
+}

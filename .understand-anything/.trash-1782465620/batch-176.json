@@ -1,0 +1,48 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/marketplace/ARCHITECTURE.md",
+      "type": "document",
+      "name": "ARCHITECTURE.md",
+      "filePath": "packages/marketplace/ARCHITECTURE.md",
+      "summary": "Comprehensive architecture and setup guide for the Waggle Marketplace package, covering the unified package catalog (skills, plugins, MCP servers from 40+ sources), multi-layered security gate design (Gen Trust Hub, Cisco Skill Scanner, MCP Guardian, custom heuristics, content hashing), sync engine, CLI reference, and Waggle Server API integration patterns.",
+      "tags": ["documentation", "infrastructure", "api-schema", "security", "marketplace"],
+      "complexity": "complex",
+      "languageNotes": "31-section document covering the full marketplace architecture including SQLite schema, multi-layer security pipeline, package types (skills/plugins/MCP servers), capability packs, and CI/CD integration guidance."
+    },
+    {
+      "id": "config:packages/marketplace/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/marketplace/package.json",
+      "summary": "Package manifest for @waggle/marketplace v0.1.0, defining the unified package catalog and installer for skills, plugins, and MCP servers with better-sqlite3 as the sole runtime dependency and a CLI binary entry point (waggle-market).",
+      "tags": ["configuration", "build-system", "marketplace", "cli"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/marketplace/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/marketplace/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the marketplace package targeting ES2022 with strict mode, ESNext modules, bundler module resolution, and declaration map generation.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "config:packages/marketplace/tsconfig.json",
+      "target": "config:packages/marketplace/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "document:packages/marketplace/ARCHITECTURE.md",
+      "target": "config:packages/marketplace/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

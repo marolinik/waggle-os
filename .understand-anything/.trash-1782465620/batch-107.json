@@ -1,0 +1,180 @@
+{
+  "nodes": [
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-A-prompt.md",
+      "type": "document",
+      "name": "task-1-cell-A-prompt.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-A-prompt.md",
+      "summary": "Benchmark prompt input for task-1 cell-A, containing 7 synthetic business documents (P&L, sales pipeline, churn analysis, engineering velocity, marketing, board feedback, competitor intelligence) used as context for evaluating multi-hop memory retrieval quality.",
+      "tags": ["documentation", "benchmark", "data-pipeline", "evaluation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-B-trace.md",
+      "type": "document",
+      "name": "task-1-cell-B-trace.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-B-trace.md",
+      "summary": "Execution trace for task-1 cell-B showing a 3-step multi-hop retrieval run: two iterative model calls with retrieval (7 and 6 results), a final synthesis step, and the generated memo output on Q2-Q4 2026 critical risks and action plan.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate",
+      "languageNotes": "Trace format captures model calls, retrieval result counts, and final output inline — useful for diagnosing retrieval quality and answer fidelity in the pilot benchmark."
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-C-prompt.md",
+      "type": "document",
+      "name": "task-1-cell-C-prompt.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-C-prompt.md",
+      "summary": "Benchmark prompt input for task-1 cell-C, identical source documents to cell-A (same 7 synthetic business documents) but targeting a different model or configuration cell for controlled comparison in the pilot benchmark.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-D-trace.md",
+      "type": "document",
+      "name": "task-1-cell-D-trace.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-D-trace.md",
+      "summary": "Execution trace for task-1 cell-D showing a shorter 2-step retrieval run (7 results in step 1) that force-finalizes earlier than cell-B, enabling direct comparison of retrieval depth and output quality across cells.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-A-prompt.md",
+      "type": "document",
+      "name": "task-2-cell-A-prompt.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-A-prompt.md",
+      "summary": "Benchmark prompt input for task-2 cell-A, containing 4 realistic threads of client engagement context (scoping call notes, workshop notes, CFO email thread, Slack messages) used to evaluate temporal and relational memory retrieval across a multi-month consulting engagement.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-B-trace.md",
+      "type": "document",
+      "name": "task-2-cell-B-trace.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-B-trace.md",
+      "summary": "Execution trace for task-2 cell-B showing a 3-step run with 4+4 retrieval results per step before force-finalize, producing a pre-brief for a client emergency check-in call.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-C-prompt.md",
+      "type": "document",
+      "name": "task-2-cell-C-prompt.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-C-prompt.md",
+      "summary": "Benchmark prompt input for task-2 cell-C, identical source threads to cell-A (same 4 client engagement threads) targeting a different configuration cell for controlled comparison.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-D-trace.md",
+      "type": "document",
+      "name": "task-2-cell-D-trace.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-D-trace.md",
+      "summary": "Execution trace for task-2 cell-D showing a 2-step run with 4 retrieval results in step 1, finalizing earlier than cell-B, used to compare retrieval depth and synthesis quality across cells for the consulting engagement task.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-A-prompt.md",
+      "type": "document",
+      "name": "task-3-cell-A-prompt.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-A-prompt.md",
+      "summary": "Benchmark prompt input for task-3 cell-A, containing 3 executive memos (from CFO, CMO, and CTO) presenting conflicting strategic priorities for a CEO to synthesize into a decision, used to evaluate cross-perspective reasoning and conflict resolution in memory retrieval.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-B-trace.md",
+      "type": "document",
+      "name": "task-3-cell-B-trace.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-B-trace.md",
+      "summary": "Execution trace for task-3 cell-B showing a 4-step run with 3 retrieval results per step before force-finalize, generating a CEO decision memo on Q2/Q3 2026 strategy from conflicting executive inputs.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate",
+      "languageNotes": "4-step trace is the deepest in the pilot archive, indicating task-3 requires more retrieval iterations to synthesize conflicting executive perspectives."
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-C-prompt.md",
+      "type": "document",
+      "name": "task-3-cell-C-prompt.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-C-prompt.md",
+      "summary": "Benchmark prompt input for task-3 cell-C, identical executive memos to cell-A (CFO, CMO, CTO) targeting a different configuration cell for controlled comparison of conflict-resolution synthesis quality.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-D-trace.md",
+      "type": "document",
+      "name": "task-3-cell-D-trace.md",
+      "filePath": "benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-D-trace.md",
+      "summary": "Execution trace for task-3 cell-D showing a 4-step run that includes a malformed action and recovery attempt in step 3, providing a robustness test case for the retrieval loop error handling, with finalization in step 4.",
+      "tags": ["documentation", "benchmark", "evaluation", "data-pipeline"],
+      "complexity": "moderate",
+      "languageNotes": "Step 3 contains a malformed action with recovery attempt — one of the few traces in the archive that exercises the error-recovery path of the retrieval loop."
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-B-trace.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-A-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-D-trace.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-C-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-C-prompt.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-1-cell-A-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-B-trace.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-A-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-D-trace.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-C-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-C-prompt.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-2-cell-A-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-B-trace.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-A-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-D-trace.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-C-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-C-prompt.md",
+      "target": "document:benchmarks/results/pilot-2026-04-26/prompts-archive/task-3-cell-A-prompt.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

@@ -1,0 +1,195 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-hooks-core/package.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 58,
+      "nonEmptyLines": 58,
+      "sections": [
+        {
+          "heading": "name",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "version",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "description",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "license",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "type",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "main",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "exports",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "scripts",
+          "level": 1,
+          "line": 14
+        },
+        {
+          "heading": "engines",
+          "level": 1,
+          "line": 21
+        },
+        {
+          "heading": "publishConfig",
+          "level": 1,
+          "line": 24
+        },
+        {
+          "heading": "dependencies",
+          "level": 1,
+          "line": 27
+        },
+        {
+          "heading": "peerDependencies",
+          "level": 1,
+          "line": 30
+        },
+        {
+          "heading": "peerDependenciesMeta",
+          "level": 1,
+          "line": 33
+        },
+        {
+          "heading": "repository",
+          "level": 1,
+          "line": 38
+        },
+        {
+          "heading": "homepage",
+          "level": 1,
+          "line": 43
+        },
+        {
+          "heading": "bugs",
+          "level": 1,
+          "line": 44
+        },
+        {
+          "heading": "author",
+          "level": 1,
+          "line": 47
+        },
+        {
+          "heading": "keywords",
+          "level": 1,
+          "line": 48
+        },
+        {
+          "heading": "types",
+          "level": 1,
+          "line": 10
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 19
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-core/tsconfig.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 14,
+      "nonEmptyLines": 14,
+      "sections": [
+        {
+          "heading": "extends",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "references",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 5
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-core/tsconfig.test.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 12,
+      "nonEmptyLines": 12,
+      "sections": [
+        {
+          "heading": "extends",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "compilerOptions",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "include",
+          "level": 1,
+          "line": 10
+        },
+        {
+          "heading": "exclude",
+          "level": 1,
+          "line": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 4
+      }
+    }
+  ]
+}

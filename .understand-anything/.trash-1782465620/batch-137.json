@@ -1,0 +1,134 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/product-analysis/FOUNDER-REVIEW-V2.md",
+      "type": "document",
+      "name": "FOUNDER-REVIEW-V2.md",
+      "filePath": "docs/product-analysis/FOUNDER-REVIEW-V2.md",
+      "summary": "Revised founder-lens product review that corrects an earlier assessment by incorporating Waggle's full strategic context — KVARK funnel, memory harvest moat, and EvolveSchema cost arbitrage — and provides updated ICE scoring, crown jewel analysis, and a 90-day execution plan.",
+      "tags": ["documentation", "product-management", "strategic-analysis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/product-analysis/FOUNDER-REVIEW.md",
+      "type": "document",
+      "name": "FOUNDER-REVIEW.md",
+      "filePath": "docs/product-analysis/FOUNDER-REVIEW.md",
+      "summary": "Initial founder-lens product review scoring Waggle OS across PMF dimensions (usage, retention, revenue, moat, time-to-value), identifying overengineered features, and prescribing a 90-day plan to reach 50 real users and first revenue.",
+      "tags": ["documentation", "product-management", "strategic-analysis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/product-analysis/WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "type": "document",
+      "name": "WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "filePath": "docs/product-analysis/WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "summary": "Comprehensive product intelligence document covering Waggle OS's technical architecture, five crown-jewel differentiators, UX assessment, competitive positioning matrix, and strategic P0/P1/P2 recommendations for the team.",
+      "tags": ["documentation", "product-management", "competitive-analysis"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/product-analysis/architecture-analysis.md",
+      "type": "document",
+      "name": "architecture-analysis.md",
+      "filePath": "docs/product-analysis/architecture-analysis.md",
+      "summary": "Deep technical architecture analysis covering the five-layer memory substrate (MindDB, FrameStore, HybridSearch, CognifyPipeline, KnowledgeGraph), agent orchestration internals (loop, system-prompt construction, sub-agents, WaggleDance), tool intelligence, and moat assessment with competitor comparisons.",
+      "tags": ["documentation", "architecture", "technical-analysis"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/product-analysis/competitive-analysis.md",
+      "type": "document",
+      "name": "competitive-analysis.md",
+      "filePath": "docs/product-analysis/competitive-analysis.md",
+      "summary": "Exhaustive competitive analysis profiling 15 competitors (Claude Code, ChatGPT, Cursor, Windsurf, Devin, GitHub Copilot, Dust, Notion AI, CrewAI, Relevance AI, AutoGPT, OpenClaw, and others) with feature comparison matrices, Waggle's unique differentiators, competitive gaps, and market positioning recommendations.",
+      "tags": ["documentation", "competitive-analysis", "product-management"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/product-analysis/design-audit.md",
+      "type": "document",
+      "name": "design-audit.md",
+      "filePath": "docs/product-analysis/design-audit.md",
+      "summary": "Scored audit of the Hive DS design system across 10 dimensions (color, typography, spacing, component consistency, responsiveness, dark mode, animation, accessibility, information density, polish), identifying two divergent CSS systems as a critical finding and prioritising remediation actions.",
+      "tags": ["documentation", "design-system", "ui-ux"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/product-analysis/feature-inventory.md",
+      "type": "document",
+      "name": "feature-inventory.md",
+      "filePath": "docs/product-analysis/feature-inventory.md",
+      "summary": "Comprehensive catalogue of every shipped Waggle OS feature across 20 categories — persistent memory system, agent persona system, multi-agent orchestration, tool ecosystem (75+ tools), workspace system, connector/integration system, marketplace, tier/billing, LLM providers, security, proactive features, data management, and more.",
+      "tags": ["documentation", "feature-inventory", "product-management"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/product-analysis/ux-analysis.md",
+      "type": "document",
+      "name": "ux-analysis.md",
+      "filePath": "docs/product-analysis/ux-analysis.md",
+      "summary": "Comprehensive UX analysis of the desktop-OS metaphor shell covering 17 application views (Chat, Dashboard, Memory, Agents, Files, Cockpit, Events, etc.), 10 overlays (OnboardingWizard, GlobalSearch, PersonaSwitcher), the Hive DS design tokens, navigation model, onboarding flow, responsiveness assessment, and an inventory of 12 custom hooks.",
+      "tags": ["documentation", "ui-ux", "design-system"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:docs/product-analysis/FOUNDER-REVIEW-V2.md",
+      "target": "document:docs/product-analysis/FOUNDER-REVIEW.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/FOUNDER-REVIEW-V2.md",
+      "target": "document:docs/product-analysis/WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "target": "document:docs/product-analysis/competitive-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "target": "document:docs/product-analysis/architecture-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/WAGGLE-OS-PRODUCT-INTELLIGENCE.md",
+      "target": "document:docs/product-analysis/ux-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/design-audit.md",
+      "target": "document:docs/product-analysis/ux-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/feature-inventory.md",
+      "target": "document:docs/product-analysis/architecture-analysis.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:docs/product-analysis/competitive-analysis.md",
+      "target": "document:docs/product-analysis/FOUNDER-REVIEW-V2.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

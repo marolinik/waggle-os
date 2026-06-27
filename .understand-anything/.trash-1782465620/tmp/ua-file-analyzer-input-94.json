@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "app/src-tauri/gen/schemas/acl-manifests.json", "language": "json", "sizeLines": 0, "fileCategory": "config"},
+    {"path": "app/src-tauri/gen/schemas/capabilities.json", "language": "json", "sizeLines": 0, "fileCategory": "config"},
+    {"path": "app/src-tauri/gen/schemas/desktop-schema.json", "language": "json", "sizeLines": 2989, "fileCategory": "config"},
+    {"path": "app/src-tauri/gen/schemas/windows-schema.json", "language": "json", "sizeLines": 2989, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "app/src-tauri/gen/schemas/acl-manifests.json": [],
+    "app/src-tauri/gen/schemas/capabilities.json": [],
+    "app/src-tauri/gen/schemas/desktop-schema.json": [],
+    "app/src-tauri/gen/schemas/windows-schema.json": []
+  },
+  "batchImportData": {}
+}

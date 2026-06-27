@@ -1,0 +1,137 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/web/src/components/os/apps/PlatformApp.test.tsx",
+      "type": "file",
+      "name": "PlatformApp.test.tsx",
+      "filePath": "apps/web/src/components/os/apps/PlatformApp.test.tsx",
+      "summary": "Vitest unit tests for PlatformApp covering tab switching, OS title-bar toggle, and static showcase content rendering for all three showcase tabs.",
+      "tags": ["test", "component", "ui", "vitest"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "type": "file",
+      "name": "PlatformApp.tsx",
+      "filePath": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "summary": "Warm-Hive 'Platform & roadmap' showcase screen (screen 18) with three static marketing tabs — Desktop (window mock with macOS/Windows toggle), Boot (animated boot-screen mock), and Roadmap (channel availability cards) — using warm Hive design tokens and no backend dependencies.",
+      "tags": ["component", "ui", "marketing", "showcase"],
+      "complexity": "complex",
+      "languageNotes": "Pure UI with static data arrays (TABS, SPECS, BOOT_STEPS, CHANNELS); uses warm Hive DS CSS vars exclusively per D21 convention. All sub-views are module-private components."
+    },
+    {
+      "id": "file:apps/web/src/routes/PlatformRoute.tsx",
+      "type": "file",
+      "name": "PlatformRoute.tsx",
+      "filePath": "apps/web/src/routes/PlatformRoute.tsx",
+      "summary": "Route wrapper for the `/platform` path that wraps PlatformApp in a SurfaceBoundary error boundary, serving as the PR6a ⌘K-only surface entry point.",
+      "tags": ["entry-point", "routing", "component", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/PlatformApp.tsx:PlatformApp",
+      "type": "function",
+      "name": "PlatformApp",
+      "filePath": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "lineRange": [112, 151],
+      "summary": "Root component that manages tab state and OS toggle state, rendering the segmented tab toggle header and conditionally mounting DesktopView, BootView, or RoadmapView based on the active tab.",
+      "tags": ["component", "ui", "state-management"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/PlatformApp.tsx:DesktopView",
+      "type": "function",
+      "name": "DesktopView",
+      "filePath": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "lineRange": [172, 274],
+      "summary": "Desktop tab panel rendering a macOS/Windows platform toggle and a pixel-accurate window chrome mock with a mini sidebar and content area, plus install spec tiles below.",
+      "tags": ["component", "ui", "showcase"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/PlatformApp.tsx:BootView",
+      "type": "function",
+      "name": "BootView",
+      "filePath": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "lineRange": [276, 314],
+      "summary": "Boot tab panel showing a static marketing mock of the Waggle startup sequence with a hex-logo pulse animation and a boot-step list with done/active/pending states.",
+      "tags": ["component", "ui", "showcase"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/web/src/components/os/apps/PlatformApp.tsx:RoadmapView",
+      "type": "function",
+      "name": "RoadmapView",
+      "filePath": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "lineRange": [316, 361],
+      "summary": "Roadmap tab panel displaying channel availability cards (Desktop, Browser extension, Messaging, Mobile) with status pills and platform tags, using warm Hive tint colors per channel.",
+      "tags": ["component", "ui", "showcase"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/PlatformApp.tsx:PlatformApp",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/PlatformApp.tsx:DesktopView",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/PlatformApp.tsx:BootView",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/PlatformApp.tsx:RoadmapView",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "target": "function:apps/web/src/components/os/apps/PlatformApp.tsx:PlatformApp",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.test.tsx",
+      "target": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "target": "file:apps/web/src/components/os/apps/PlatformApp.test.tsx",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/routes/PlatformRoute.tsx",
+      "target": "file:apps/web/src/components/os/apps/PlatformApp.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/routes/PlatformRoute.tsx",
+      "target": "file:apps/web/src/routes/SurfaceBoundary.tsx",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

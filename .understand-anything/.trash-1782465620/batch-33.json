@@ -1,0 +1,779 @@
+{
+  "nodes": [
+    {
+      "id": "file:benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "type": "file",
+      "name": "a3-namespace-split.test.ts",
+      "filePath": "benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "summary": "Tests the A3 namespace-split feature of the benchmark harness judge runner, verifying that judge verdicts and metrics are correctly partitioned by namespace across multi-namespace benchmark runs.",
+      "tags": ["test", "benchmark", "judge", "namespace"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/agent-loop-exhaustion.test.ts",
+      "type": "file",
+      "name": "agent-loop-exhaustion.test.ts",
+      "filePath": "benchmarks/harness/tests/agent-loop-exhaustion.test.ts",
+      "summary": "Tests agent loop exhaustion scenarios within the benchmark harness, using scripted fake LLM clients and embedders to validate that the harness correctly detects and handles runaway or exhausted agent execution loops.",
+      "tags": ["test", "benchmark", "agent", "loop-guard"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/b2-fold-in.test.ts",
+      "type": "file",
+      "name": "b2-fold-in.test.ts",
+      "filePath": "benchmarks/harness/tests/b2-fold-in.test.ts",
+      "summary": "Tests the B2 fold-in scoring variant of the benchmark judge runner, ensuring that fold-in verdict aggregation and failure-mode tracking behave correctly under the stub LLM client.",
+      "tags": ["test", "benchmark", "judge", "scoring"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "type": "file",
+      "name": "cells-substrate.test.ts",
+      "filePath": "benchmarks/harness/tests/cells-substrate.test.ts",
+      "summary": "Comprehensive integration tests for the harness cells layer combined with the memory substrate, covering agentic cell routing, tool call capture, and embedding pipeline behavior with fake embedders.",
+      "tags": ["test", "benchmark", "substrate", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/cells.test.ts",
+      "type": "file",
+      "name": "cells.test.ts",
+      "filePath": "benchmarks/harness/tests/cells.test.ts",
+      "summary": "Unit tests for the harness cells module, verifying cell name resolution, control name validation, and system prompt constant exports.",
+      "tags": ["test", "benchmark", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/cli-flags.test.ts",
+      "type": "file",
+      "name": "cli-flags.test.ts",
+      "filePath": "benchmarks/harness/tests/cli-flags.test.ts",
+      "summary": "Tests CLI argument parsing for the benchmark runner, verifying that flags like model selection, dataset path, and output options are correctly parsed and validated.",
+      "tags": ["test", "benchmark", "cli", "argument-parsing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/dataset-loader.test.ts",
+      "type": "file",
+      "name": "dataset-loader.test.ts",
+      "filePath": "benchmarks/harness/tests/dataset-loader.test.ts",
+      "summary": "Tests the dataset loading and sampling utilities, validating dataset version checks, preflight sample locking, and instance sampling from the LoCoMo benchmark corpus.",
+      "tags": ["test", "benchmark", "dataset", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/failure-taxonomy/aggregate.test.ts",
+      "type": "file",
+      "name": "aggregate.test.ts",
+      "filePath": "benchmarks/harness/tests/failure-taxonomy/aggregate.test.ts",
+      "summary": "Tests the failure distribution aggregation logic, verifying that computeFailureDistribution correctly tallies failure codes across benchmark result rows.",
+      "tags": ["test", "benchmark", "failure-taxonomy", "aggregation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/failure-taxonomy/codes.test.ts",
+      "type": "file",
+      "name": "codes.test.ts",
+      "filePath": "benchmarks/harness/tests/failure-taxonomy/codes.test.ts",
+      "summary": "Tests the failure code registry, verifying taxonomy version constants, code definitions, and the review threshold for the F_OTHER fallback failure code.",
+      "tags": ["test", "benchmark", "failure-taxonomy", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/failure-taxonomy/rubric.test.ts",
+      "type": "file",
+      "name": "rubric.test.ts",
+      "filePath": "benchmarks/harness/tests/failure-taxonomy/rubric.test.ts",
+      "summary": "Tests the judge rubric block builder, ensuring that failure taxonomy codes are correctly rendered into rubric prompts for LLM judge consumption.",
+      "tags": ["test", "benchmark", "failure-taxonomy", "judge"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/failure-taxonomy/validator.test.ts",
+      "type": "file",
+      "name": "validator.test.ts",
+      "filePath": "benchmarks/harness/tests/failure-taxonomy/validator.test.ts",
+      "summary": "Tests the failure code entry validator, covering valid entries, missing rationale, insufficient token count, and unknown code validation scenarios.",
+      "tags": ["test", "benchmark", "failure-taxonomy", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/health-check.test.ts",
+      "type": "file",
+      "name": "health-check.test.ts",
+      "filePath": "benchmarks/harness/tests/health-check.test.ts",
+      "summary": "Tests the pre-cell health check routine that validates LLM provider connectivity before benchmark runs, using sequential mock fetch responses to simulate success and failure scenarios.",
+      "tags": ["test", "benchmark", "health-check", "llm"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/ingest.test.ts",
+      "type": "file",
+      "name": "ingest.test.ts",
+      "filePath": "benchmarks/harness/tests/ingest.test.ts",
+      "summary": "Tests the LoCoMo corpus ingestion pipeline, verifying turn extraction from raw conversation data and the full ingestion flow into the benchmark substrate with a fake embedder.",
+      "tags": ["test", "benchmark", "ingest", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/jsonl-record-schema.test.ts",
+      "type": "file",
+      "name": "jsonl-record-schema.test.ts",
+      "filePath": "benchmarks/harness/tests/jsonl-record-schema.test.ts",
+      "summary": "Tests the JSONL record schema definitions from the types module, validating that benchmark output records conform to the expected structure including required fields and correct type shapes.",
+      "tags": ["test", "benchmark", "schema", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "type": "file",
+      "name": "judge-wiring.test.ts",
+      "filePath": "benchmarks/harness/tests/judge-wiring.test.ts",
+      "summary": "Tests the complete judge wiring from LLM client through judge runner to output JSONL, verifying that scoring calls are routed correctly, responses parsed, and results written to disk.",
+      "tags": ["test", "benchmark", "judge", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/llm-retry.test.ts",
+      "type": "file",
+      "name": "llm-retry.test.ts",
+      "filePath": "benchmarks/harness/tests/llm-retry.test.ts",
+      "summary": "Tests the LLM client retry logic, covering HTTP error retries, AbortError handling, TypeError vs RangeError discrimination, and exponential backoff behavior.",
+      "tags": ["test", "benchmark", "llm", "retry"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/models-config.test.ts",
+      "type": "file",
+      "name": "models-config.test.ts",
+      "filePath": "benchmarks/harness/tests/models-config.test.ts",
+      "summary": "Tests the benchmark models configuration loading and validation, ensuring that models.json is parsed correctly and all required model fields are present.",
+      "tags": ["test", "benchmark", "configuration", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/preregistration.test.ts",
+      "type": "file",
+      "name": "preregistration.test.ts",
+      "filePath": "benchmarks/harness/tests/preregistration.test.ts",
+      "summary": "Tests the benchmark preregistration manifest system, verifying manifest hashing, date-lock reading, runner version resolution, and sanitized argv emission for reproducible pre-registered benchmark runs.",
+      "tags": ["test", "benchmark", "preregistration", "reproducibility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/reasoning-capture.test.ts",
+      "type": "file",
+      "name": "reasoning-capture.test.ts",
+      "filePath": "benchmarks/harness/tests/reasoning-capture.test.ts",
+      "summary": "Tests reasoning token capture in the LLM client, verifying that extended-thinking reasoning blocks are correctly extracted and stored in benchmark result records alongside regular completion tokens.",
+      "tags": ["test", "benchmark", "llm", "reasoning"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/runner-lock.test.ts",
+      "type": "file",
+      "name": "runner-lock.test.ts",
+      "filePath": "benchmarks/harness/tests/runner-lock.test.ts",
+      "summary": "Tests the runner lock mechanism that prevents concurrent benchmark runs, validating lock acquisition, contention handling, and cleanup on process exit.",
+      "tags": ["test", "benchmark", "concurrency", "locking"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/smoke.test.ts",
+      "type": "file",
+      "name": "smoke.test.ts",
+      "filePath": "benchmarks/harness/tests/smoke.test.ts",
+      "summary": "Smoke tests for the full benchmark runner pipeline, exercising dataset loading, run configuration building, and output JSONL validation against the type schema.",
+      "tags": ["test", "benchmark", "smoke", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/smoke/smoke-run.test.ts",
+      "type": "file",
+      "name": "smoke-run.test.ts",
+      "filePath": "benchmarks/harness/tests/smoke/smoke-run.test.ts",
+      "summary": "End-to-end smoke run tests that load fixture data and validate the complete verdict resolution pipeline including Fleiss kappa computation, Wilson CI, cluster bootstrap CI, and failure distribution logic.",
+      "tags": ["test", "benchmark", "smoke", "statistics"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/stage2-config.test.ts",
+      "type": "file",
+      "name": "stage2-config.test.ts",
+      "filePath": "benchmarks/harness/tests/stage2-config.test.ts",
+      "summary": "Tests the Stage 2 LLM configuration validation, verifying that model specs for the second benchmark stage are correctly parsed, required fields are present, and model parameters meet stage requirements.",
+      "tags": ["test", "benchmark", "configuration", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/streak-tracker.test.ts",
+      "type": "file",
+      "name": "streak-tracker.test.ts",
+      "filePath": "benchmarks/harness/tests/streak-tracker.test.ts",
+      "summary": "Tests the StreakTracker class and transport failure detection utility, verifying streak state transitions under consecutive success/failure sequences and proper classification of fetch transport errors.",
+      "tags": ["test", "benchmark", "streak", "error-handling"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:benchmarks/harness/tests/substrate.test.ts",
+      "type": "file",
+      "name": "substrate.test.ts",
+      "filePath": "benchmarks/harness/tests/substrate.test.ts",
+      "summary": "Unit tests for the benchmark substrate factory, verifying that createSubstrate initializes the memory substrate correctly with a fake embedder for isolated testing.",
+      "tags": ["test", "benchmark", "substrate", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "type": "file",
+      "name": "verbose-fixed-cell-isolation.test.ts",
+      "filePath": "packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "summary": "Tests verbose fixed-cell isolation in the server benchmark suite, using vitest spies to mock CombinedRetrieval, HybridSearch, and WikiCompiler to verify that benchmark cells do not bleed into the production retrieval stack.",
+      "tags": ["test", "benchmark", "isolation", "server"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "target": "file:benchmarks/harness/src/judge-runner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "target": "file:benchmarks/harness/src/judge-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "target": "file:benchmarks/harness/src/metrics.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/agent-loop-exhaustion.test.ts",
+      "target": "file:benchmarks/harness/src/cells.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/agent-loop-exhaustion.test.ts",
+      "target": "file:benchmarks/harness/src/llm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/agent-loop-exhaustion.test.ts",
+      "target": "file:benchmarks/harness/src/substrate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/agent-loop-exhaustion.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/b2-fold-in.test.ts",
+      "target": "file:benchmarks/harness/src/judge-runner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/b2-fold-in.test.ts",
+      "target": "file:benchmarks/harness/src/judge-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "target": "file:benchmarks/harness/src/cells.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "target": "file:benchmarks/harness/src/llm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "target": "file:benchmarks/harness/src/substrate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cells.test.ts",
+      "target": "file:benchmarks/harness/src/cells.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cells.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/cli-flags.test.ts",
+      "target": "file:benchmarks/harness/src/runner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/dataset-loader.test.ts",
+      "target": "file:benchmarks/harness/src/datasets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/dataset-loader.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/failure-taxonomy/aggregate.test.ts",
+      "target": "file:benchmarks/harness/src/failure-taxonomy/aggregate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/failure-taxonomy/codes.test.ts",
+      "target": "file:benchmarks/harness/src/failure-taxonomy/codes.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/failure-taxonomy/rubric.test.ts",
+      "target": "file:benchmarks/harness/src/failure-taxonomy/rubric.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/failure-taxonomy/validator.test.ts",
+      "target": "file:benchmarks/harness/src/failure-taxonomy/validator.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/health-check.test.ts",
+      "target": "file:benchmarks/harness/src/health-check.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/ingest.test.ts",
+      "target": "file:benchmarks/harness/src/ingest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/jsonl-record-schema.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "target": "file:benchmarks/harness/src/judge-client.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "target": "file:benchmarks/harness/src/judge-runner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "target": "file:benchmarks/harness/src/judge-types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "target": "file:benchmarks/harness/src/runner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/llm-retry.test.ts",
+      "target": "file:benchmarks/harness/src/llm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/llm-retry.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/models-config.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/preregistration.test.ts",
+      "target": "file:benchmarks/harness/src/preregistration.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/reasoning-capture.test.ts",
+      "target": "file:benchmarks/harness/src/llm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/reasoning-capture.test.ts",
+      "target": "file:benchmarks/harness/src/metrics.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/reasoning-capture.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/runner-lock.test.ts",
+      "target": "file:benchmarks/harness/src/runner-lock.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/smoke.test.ts",
+      "target": "file:benchmarks/harness/src/datasets.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/smoke.test.ts",
+      "target": "file:benchmarks/harness/src/runner.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/smoke.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/smoke/smoke-run.test.ts",
+      "target": "file:benchmarks/harness/src/failure-taxonomy/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/smoke/smoke-run.test.ts",
+      "target": "file:benchmarks/harness/src/stats/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/stage2-config.test.ts",
+      "target": "file:benchmarks/harness/src/llm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/stage2-config.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/streak-tracker.test.ts",
+      "target": "file:benchmarks/harness/src/streak-tracker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/tests/substrate.test.ts",
+      "target": "file:benchmarks/harness/src/substrate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "target": "file:benchmarks/harness/src/controls.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "target": "file:benchmarks/harness/src/llm.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "target": "file:benchmarks/harness/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "target": "file:packages/agent/src/combined-retrieval.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/harness/src/judge-runner.ts",
+      "target": "file:benchmarks/harness/tests/a3-namespace-split.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/judge-runner.ts",
+      "target": "file:benchmarks/harness/tests/b2-fold-in.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/judge-runner.ts",
+      "target": "file:benchmarks/harness/tests/judge-wiring.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/cells.ts",
+      "target": "file:benchmarks/harness/tests/cells.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/cells.ts",
+      "target": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/llm.ts",
+      "target": "file:benchmarks/harness/tests/llm-retry.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/llm.ts",
+      "target": "file:benchmarks/harness/tests/reasoning-capture.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/substrate.ts",
+      "target": "file:benchmarks/harness/tests/substrate.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/substrate.ts",
+      "target": "file:benchmarks/harness/tests/cells-substrate.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/datasets.ts",
+      "target": "file:benchmarks/harness/tests/dataset-loader.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/datasets.ts",
+      "target": "file:benchmarks/harness/tests/smoke.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/runner.ts",
+      "target": "file:benchmarks/harness/tests/cli-flags.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/runner.ts",
+      "target": "file:benchmarks/harness/tests/smoke.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/failure-taxonomy/aggregate.ts",
+      "target": "file:benchmarks/harness/tests/failure-taxonomy/aggregate.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/failure-taxonomy/codes.ts",
+      "target": "file:benchmarks/harness/tests/failure-taxonomy/codes.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/failure-taxonomy/rubric.ts",
+      "target": "file:benchmarks/harness/tests/failure-taxonomy/rubric.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/failure-taxonomy/validator.ts",
+      "target": "file:benchmarks/harness/tests/failure-taxonomy/validator.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/health-check.ts",
+      "target": "file:benchmarks/harness/tests/health-check.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/ingest.ts",
+      "target": "file:benchmarks/harness/tests/ingest.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/preregistration.ts",
+      "target": "file:benchmarks/harness/tests/preregistration.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/runner-lock.ts",
+      "target": "file:benchmarks/harness/tests/runner-lock.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/streak-tracker.ts",
+      "target": "file:benchmarks/harness/tests/streak-tracker.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/failure-taxonomy/index.ts",
+      "target": "file:benchmarks/harness/tests/smoke/smoke-run.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:benchmarks/harness/src/stats/index.ts",
+      "target": "file:benchmarks/harness/tests/smoke/smoke-run.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "file:packages/server/tests/benchmarks/verbose-fixed-cell-isolation.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

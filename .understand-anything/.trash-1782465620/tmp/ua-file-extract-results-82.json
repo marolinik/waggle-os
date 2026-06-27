@@ -1,0 +1,149 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-core/src/mind/ontology.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 58,
+      "nonEmptyLines": 47,
+      "functions": [
+        {
+          "name": "validateEntity",
+          "startLine": 31,
+          "endLine": 58,
+          "params": [
+            "ontology",
+            "entity"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "Ontology",
+          "startLine": 6,
+          "endLine": 24,
+          "methods": [
+            "define",
+            "getSchema",
+            "hasType",
+            "getTypes"
+          ],
+          "properties": [
+            "schemas"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Ontology",
+          "line": 6,
+          "isDefault": false
+        },
+        {
+          "name": "validateEntity",
+          "line": 31,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "define",
+          "callee": "this.schemas.set",
+          "lineNumber": 10
+        },
+        {
+          "caller": "getSchema",
+          "callee": "this.schemas.get",
+          "lineNumber": 14
+        },
+        {
+          "caller": "hasType",
+          "callee": "this.schemas.has",
+          "lineNumber": 18
+        },
+        {
+          "caller": "getTypes",
+          "callee": "Array.from",
+          "lineNumber": 22
+        },
+        {
+          "caller": "getTypes",
+          "callee": "this.schemas.keys",
+          "lineNumber": 22
+        },
+        {
+          "caller": "validateEntity",
+          "callee": "ontology.getSchema",
+          "lineNumber": 36
+        },
+        {
+          "caller": "validateEntity",
+          "callee": "issues.push",
+          "lineNumber": 45
+        },
+        {
+          "caller": "validateEntity",
+          "callee": "Object.keys",
+          "lineNumber": 51
+        },
+        {
+          "caller": "validateEntity",
+          "callee": "known.has",
+          "lineNumber": 52
+        },
+        {
+          "caller": "validateEntity",
+          "callee": "issues.push",
+          "lineNumber": 53
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/mind/ontology.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 69,
+      "nonEmptyLines": 62,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-core/tests/ontology.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 67,
+      "nonEmptyLines": 60,
+      "callGraph": [
+        {
+          "caller": "makeOntology",
+          "callee": "ont.define",
+          "lineNumber": 7
+        },
+        {
+          "caller": "makeOntology",
+          "callee": "ont.define",
+          "lineNumber": 11
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

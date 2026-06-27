@@ -1,0 +1,185 @@
+{
+  "nodes": [
+    {
+      "id": "document:docs/briefs/2026-04-19-engineering-audit-pre-benchmark.md",
+      "type": "document",
+      "name": "2026-04-19-engineering-audit-pre-benchmark.md",
+      "filePath": "docs/briefs/2026-04-19-engineering-audit-pre-benchmark.md",
+      "summary": "Pre-benchmark engineering audit covering 8 dimensions — architecture coherence, tech debt, hot path code review (agent loop, memory retrieval, prompt assembler, orchestrator, harvest), testing strategy gaps, simplification opportunities, dependency hygiene, observability, and vLLM/Qwen3.6 compatibility — with a three-bucket triage of must-fix, should-fix, and post-launch items.",
+      "tags": ["documentation", "engineering", "audit", "benchmark", "technical-debt"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-19-handoff-claude-code.md",
+      "type": "document",
+      "name": "2026-04-19-handoff-claude-code.md",
+      "filePath": "docs/briefs/2026-04-19-handoff-claude-code.md",
+      "summary": "Session handoff brief for Claude Code dated 2026-04-19, locking strategic decisions and spelling out concrete Track 1 Phase A+B priority work, parallel engineering audit tasks, Track 2 benchmark preparation, judge ensemble specification, and the next communication cycle.",
+      "tags": ["documentation", "handoff", "planning", "benchmark", "sprint"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-19-launch-copy-variants.md",
+      "type": "document",
+      "name": "2026-04-19-launch-copy-variants.md",
+      "filePath": "docs/briefs/2026-04-19-launch-copy-variants.md",
+      "summary": "Three launch copy variants (A: Beats SOTA, B: Matches + Trade-off, C: Below / Category Redefinition) with hero landing page copy, announcement openers, proof points, key differentiators, do/don't lists, tone calibration, and asset deployment sequencing guidance for the Waggle launch.",
+      "tags": ["documentation", "marketing", "launch-copy", "benchmark"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-19-sota-benchmark-audit-readiness.md",
+      "type": "document",
+      "name": "2026-04-19-sota-benchmark-audit-readiness.md",
+      "filePath": "docs/briefs/2026-04-19-sota-benchmark-audit-readiness.md",
+      "summary": "SOTA benchmark audit-readiness brief covering seven dimensions — reproducibility, chain of custody, judge ensemble integrity, dataset integrity, metric definitions, methodological transparency, and release gates — along with pre-flight checklists, required reporting artifacts, and contingency plans if benchmark scores miss targets.",
+      "tags": ["documentation", "benchmark", "audit", "quality-assurance"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-19-sota-benchmark-pre-mortem.md",
+      "type": "document",
+      "name": "2026-04-19-sota-benchmark-pre-mortem.md",
+      "filePath": "docs/briefs/2026-04-19-sota-benchmark-pre-mortem.md",
+      "summary": "Pre-mortem analysis for the SOTA benchmark run classifying risks into Tigers (high-impact, actionable), Paper Tigers (noisy but non-blocking), and Elephants (uncomfortable truths), with launch-blocker vs fast-follow decision rules and response playbooks for each failure scenario.",
+      "tags": ["documentation", "benchmark", "risk-analysis", "planning"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-benchmark-scope-expansion-paired.md",
+      "type": "document",
+      "name": "2026-04-20-benchmark-scope-expansion-paired.md",
+      "filePath": "docs/briefs/2026-04-20-benchmark-scope-expansion-paired.md",
+      "summary": "Proposal for expanding the benchmark scope using paired inference for H-42, including cost estimates, wall-clock sequencing, risks specific to the paired setup, and a decision request from the founder.",
+      "tags": ["documentation", "benchmark", "planning", "cost-analysis"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-cc-preflight-prep-tasks.md",
+      "type": "document",
+      "name": "2026-04-20-cc-preflight-prep-tasks.md",
+      "filePath": "docs/briefs/2026-04-20-cc-preflight-prep-tasks.md",
+      "summary": "Claude Code brief for a preflight preparation mini-sprint with four tasks: Stage 2 sample lock file creation, failure mode calibration set assembly, verbose-fixed cell isolation unit tests, and failure mode judge module scaffolding — with explicit exclusions and exit gates.",
+      "tags": ["documentation", "sprint", "benchmark", "testing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-cc-sprint-7-tasks.md",
+      "type": "document",
+      "name": "2026-04-20-cc-sprint-7-tasks.md",
+      "filePath": "docs/briefs/2026-04-20-cc-sprint-7-tasks.md",
+      "summary": "Claude Code Sprint 7 brief covering seven tasks: regression suite re-run, FileIndexer transaction safety (L-20), atomic cache write (M-08), port discovery and prompt injection defense (M-09), real embedder wiring in wiki compile (M-11), per-turn trace ID implementation (H-AUDIT-1), and a four-cell ablation harness scaffold.",
+      "tags": ["documentation", "sprint", "engineering", "security", "benchmark"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-cc-sprint-9-tasks.md",
+      "type": "document",
+      "name": "2026-04-20-cc-sprint-9-tasks.md",
+      "filePath": "docs/briefs/2026-04-20-cc-sprint-9-tasks.md",
+      "summary": "Claude Code Sprint 9 brief focusing on judge wiring and calibration validation, with tasks covering harvest timestamp preservation, JsonlRecord taxonomy extension, judge wiring in runner.ts, failure-mode distribution rollup in aggregate.ts, and a calibration validation pass-gate run.",
+      "tags": ["documentation", "sprint", "benchmark", "testing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-cc-stage-0-dogfood-tasks.md",
+      "type": "document",
+      "name": "2026-04-20-cc-stage-0-dogfood-tasks.md",
+      "filePath": "docs/briefs/2026-04-20-cc-stage-0-dogfood-tasks.md",
+      "summary": "Claude Code brief for Stage 0 dogfood execution — the preflight gate for the benchmark — covering harvest adapter inventory, harvest pipeline execution, query execution through the full-stack cell, and report assembly, with explicit privacy guardrails.",
+      "tags": ["documentation", "benchmark", "dogfood", "testing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-claude-design-setup-submission.md",
+      "type": "document",
+      "name": "2026-04-20-claude-design-setup-submission.md",
+      "filePath": "docs/briefs/2026-04-20-claude-design-setup-submission.md",
+      "summary": "Submission brief for the claude.ai/design Waggle OS design system setup, specifying the company blurb, visual direction notes, and asset upload checklist for the design generation form, with pre- and post-generation control gates.",
+      "tags": ["documentation", "design", "brand"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-20-launch-copy-dual-axis-revision.md",
+      "type": "document",
+      "name": "2026-04-20-launch-copy-dual-axis-revision.md",
+      "filePath": "docs/briefs/2026-04-20-launch-copy-dual-axis-revision.md",
+      "summary": "Dual-axis revision of launch copy introducing Variant M (Multiplier framing) as the new default, correcting the prior single-axis framing by adding user productivity gains alongside memory benchmark claims, with an updated decision matrix tied to paired benchmark outcomes.",
+      "tags": ["documentation", "marketing", "launch-copy", "benchmark"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-21-cc-sprint-10-tasks.md",
+      "type": "document",
+      "name": "2026-04-21-cc-sprint-10-tasks.md",
+      "filePath": "docs/briefs/2026-04-21-cc-sprint-10-tasks.md",
+      "summary": "Claude Code Sprint 10 brief organizing work across four vectors: operational queue items (Qwen3.6 thinking-mode stability, Sonnet route repair, DashScope provisioning, Claude artifacts harvest adapter), multi-vendor ensemble setup, narrative-agnostic launch prep, and harvest artifact adapter — with cost ceilings and reporting cadence.",
+      "tags": ["documentation", "sprint", "benchmark", "engineering"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-bee-writer-sleeping-regen-brief.md",
+      "type": "document",
+      "name": "2026-04-22-bee-writer-sleeping-regen-brief.md",
+      "filePath": "docs/briefs/2026-04-22-bee-writer-sleeping-regen-brief.md",
+      "summary": "Character and generation run specification brief for two brand bee mascot illustrations — bee-writer-dark and bee-sleeping-dark — including style canon, character briefs, gen run spec, and deployment gates for uploading to claude.ai/design.",
+      "tags": ["documentation", "design", "brand", "assets"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-brand-bee-personas-card-spec.md",
+      "type": "document",
+      "name": "2026-04-22-brand-bee-personas-card-spec.md",
+      "filePath": "docs/briefs/2026-04-22-brand-bee-personas-card-spec.md",
+      "summary": "Scaffold specification for the Brand-Bee Personas Card UI component, defining layout, 13 persona definitions with role titles and JTBD one-liners, accessibility requirements, and a component contract for Claude Code implementation.",
+      "tags": ["documentation", "design", "ui-component", "brand"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-cc-bee-regen-execution.md",
+      "type": "document",
+      "name": "2026-04-22-cc-bee-regen-execution.md",
+      "filePath": "docs/briefs/2026-04-22-cc-bee-regen-execution.md",
+      "summary": "Claude Code execution brief for the bee mascot regeneration task (writer and sleeping variants), specifying the generation run protocol, quality gates, PM-authorized deploy gate, and escalation triggers — ensuring CC autonomy stays within the image generation scope without touching benchmark code.",
+      "tags": ["documentation", "brand", "design", "assets"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-cc-c2-stage1-mikroeval-kickoff.md",
+      "type": "document",
+      "name": "2026-04-22-cc-c2-stage1-mikroeval-kickoff.md",
+      "filePath": "docs/briefs/2026-04-22-cc-c2-stage1-mikroeval-kickoff.md",
+      "summary": "Authorization brief for kickoff of C2 Stage 1 micro-evaluation run against the LoCoMo benchmark, including Docker/LiteLLM health-check prerequisites, invocation commands, exit criteria, abort criteria, and next steps after a passing result.",
+      "tags": ["documentation", "benchmark", "evaluation", "authorization"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-cc-c3-stage2-mini-kickoff.md",
+      "type": "document",
+      "name": "2026-04-22-cc-c3-stage2-mini-kickoff.md",
+      "filePath": "docs/briefs/2026-04-22-cc-c3-stage2-mini-kickoff.md",
+      "summary": "Authorization brief for kickoff of C3 Stage 2 mini (4-cell) benchmark run, covering Docker/LiteLLM health-checks, manifest generation steps, invocation commands, exit and abort criteria, and the Sprint 11 close path after a passing result.",
+      "tags": ["documentation", "benchmark", "evaluation", "authorization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-cc-day2-am-kickoff.md",
+      "type": "document",
+      "name": "2026-04-22-cc-day2-am-kickoff.md",
+      "filePath": "docs/briefs/2026-04-22-cc-day2-am-kickoff.md",
+      "summary": "Day 2 AM kickoff brief for Claude Code-1 instance covering three tasks: reasoning_content capture in the harness, tie-break policy implementation, and Opus 4.6 route audit — with strict execution rules to avoid interfering with the benchmark run.",
+      "tags": ["documentation", "benchmark", "sprint", "engineering"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:docs/briefs/2026-04-22-cc-personas-card-component-parallel.md",
+      "type": "document",
+      "name": "2026-04-22-cc-personas-card-component-parallel.md",
+      "filePath": "docs/briefs/2026-04-22-cc-personas-card-component-parallel.md",
+      "summary": "Claude Code-2 brief for building the Personas Card component in a parallel terminal isolated from CC-1's benchmark work, specifying data source, BrandPersonasCard component implementation, preview route, tests, and strict non-interference boundary.",
+      "tags": ["documentation", "ui-component", "design", "brand"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": []
+}

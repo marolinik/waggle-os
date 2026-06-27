@@ -1,0 +1,1704 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 24,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "apps/www/__tests__/BrandPersonasCard.test.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 153,
+      "nonEmptyLines": 124,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/(legal)/layout.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 29,
+      "nonEmptyLines": 27,
+      "functions": [
+        {
+          "name": "LegalLayout",
+          "startLine": 13,
+          "endLine": 21,
+          "params": [
+            "{ children }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "LegalLayout",
+          "line": 13,
+          "isDefault": true
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/BrandPersonasCard.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 437,
+      "nonEmptyLines": 407,
+      "functions": [
+        {
+          "name": "BrandPersonasCard",
+          "startLine": 56,
+          "endLine": 157,
+          "params": [
+            "{\r\n  eyebrow,\r\n  heading,\r\n  subtitle,\r\n  showFillerTiles = true,\r\n  variant = 'landing',\r\n  onTileHover,\r\n  onPersonaClick,\r\n  cta,\r\n}"
+          ]
+        },
+        {
+          "name": "PersonaTile",
+          "startLine": 167,
+          "endLine": 256,
+          "params": [
+            "{\r\n  persona,\r\n  hasError,\r\n  onAssetError,\r\n  onPersonaClick,\r\n  onTileHover,\r\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "BrandPersonasCard",
+          "line": 56,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "useTranslations",
+          "lineNumber": 66
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "t",
+          "lineNumber": 67
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "t",
+          "lineNumber": 68
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "useState",
+          "lineNumber": 69
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "useCallback",
+          "lineNumber": 73
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "setErroredSlugs",
+          "lineNumber": 74
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "prev.has",
+          "lineNumber": 75
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "next.add",
+          "lineNumber": 77
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "t",
+          "lineNumber": 87
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "LANDING_GRID_SEQUENCE.map",
+          "lineNumber": 116
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "personaByOrder.get",
+          "lineNumber": 129
+        },
+        {
+          "caller": "BrandPersonasCard",
+          "callee": "erroredSlugs.has",
+          "lineNumber": 139
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "useCallback",
+          "lineNumber": 174
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "onPersonaClick",
+          "lineNumber": 175
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "useCallback",
+          "lineNumber": 178
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "event.preventDefault",
+          "lineNumber": 182
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "onPersonaClick",
+          "lineNumber": 183
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "useCallback",
+          "lineNumber": 189
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "onTileHover",
+          "lineNumber": 190
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "useCallback",
+          "lineNumber": 193
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "onTileHover",
+          "lineNumber": 195
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "Boolean",
+          "lineNumber": 198
+        },
+        {
+          "caller": "PersonaTile",
+          "callee": "onAssetError",
+          "lineNumber": 221
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/ComparisonBeat.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 61,
+      "nonEmptyLines": 58,
+      "functions": [
+        {
+          "name": "ComparisonBeat",
+          "startLine": 13,
+          "endLine": 25,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ComparisonBeat",
+          "line": 13,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ComparisonBeat",
+          "callee": "getTranslations",
+          "lineNumber": 14
+        },
+        {
+          "caller": "ComparisonBeat",
+          "callee": "t",
+          "lineNumber": 19
+        },
+        {
+          "caller": "ComparisonBeat",
+          "callee": "t",
+          "lineNumber": 20
+        },
+        {
+          "caller": "ComparisonBeat",
+          "callee": "t",
+          "lineNumber": 21
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/DownloadCTA.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 89,
+      "nonEmptyLines": 79,
+      "functions": [
+        {
+          "name": "DownloadCTA",
+          "startLine": 51,
+          "endLine": 89,
+          "params": [
+            "{\r\n  variant = 'primary',\r\n  section,\r\n  children,\r\n  style,\r\n}"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DownloadCTA",
+          "line": 51,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "DownloadCTA",
+          "callee": "useTranslations",
+          "lineNumber": 57
+        },
+        {
+          "caller": "DownloadCTA",
+          "callee": "useState",
+          "lineNumber": 58
+        },
+        {
+          "caller": "DownloadCTA",
+          "callee": "useEffect",
+          "lineNumber": 60
+        },
+        {
+          "caller": "DownloadCTA",
+          "callee": "setOS",
+          "lineNumber": 62
+        },
+        {
+          "caller": "DownloadCTA",
+          "callee": "detectOSFromUserAgent",
+          "lineNumber": 62
+        },
+        {
+          "caller": "DownloadCTA",
+          "callee": "t",
+          "lineNumber": 67
+        },
+        {
+          "caller": "DownloadCTA",
+          "callee": "t",
+          "lineNumber": 67
+        },
+        {
+          "caller": "handleClick",
+          "callee": "emit",
+          "lineNumber": 71
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/FinalCTA.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 93,
+      "functions": [
+        {
+          "name": "FinalCTA",
+          "startLine": 15,
+          "endLine": 40,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "FinalCTA",
+          "line": 15,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "FinalCTA",
+          "callee": "getTranslations",
+          "lineNumber": 16
+        },
+        {
+          "caller": "FinalCTA",
+          "callee": "t",
+          "lineNumber": 21
+        },
+        {
+          "caller": "FinalCTA",
+          "callee": "t",
+          "lineNumber": 22
+        },
+        {
+          "caller": "FinalCTA",
+          "callee": "t",
+          "lineNumber": 27
+        },
+        {
+          "caller": "FinalCTA",
+          "callee": "t",
+          "lineNumber": 32
+        },
+        {
+          "caller": "FinalCTA",
+          "callee": "t",
+          "lineNumber": 34
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/Footer.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 158,
+      "nonEmptyLines": 146,
+      "functions": [
+        {
+          "name": "Footer",
+          "startLine": 48,
+          "endLine": 88,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "Footer",
+          "line": 48,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Footer",
+          "callee": "getTranslations",
+          "lineNumber": 49
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 55
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 56
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 57
+        },
+        {
+          "caller": "Footer",
+          "callee": "COLUMN_DEFS.map",
+          "lineNumber": 60
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 62
+        },
+        {
+          "caller": "Footer",
+          "callee": "col.links.map",
+          "lineNumber": 64
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 71
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 81
+        },
+        {
+          "caller": "Footer",
+          "callee": "t",
+          "lineNumber": 82
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/Hero.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 206,
+      "nonEmptyLines": 182,
+      "functions": [
+        {
+          "name": "Hero",
+          "startLine": 35,
+          "endLine": 95,
+          "params": [
+            "{ variantId }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "Hero",
+          "line": 35,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Hero",
+          "callee": "getTranslations",
+          "lineNumber": 36
+        },
+        {
+          "caller": "Hero",
+          "callee": "t",
+          "lineNumber": 43
+        },
+        {
+          "caller": "Hero",
+          "callee": "headline.indexOf",
+          "lineNumber": 44
+        },
+        {
+          "caller": "Hero",
+          "callee": "headline.slice",
+          "lineNumber": 45
+        },
+        {
+          "caller": "Hero",
+          "callee": "headline.slice",
+          "lineNumber": 46
+        },
+        {
+          "caller": "Hero",
+          "callee": "t",
+          "lineNumber": 53
+        },
+        {
+          "caller": "Hero",
+          "callee": "t",
+          "lineNumber": 67
+        },
+        {
+          "caller": "Hero",
+          "callee": "t",
+          "lineNumber": 72
+        },
+        {
+          "caller": "Hero",
+          "callee": "MICROCOPY_KEYS.map",
+          "lineNumber": 77
+        },
+        {
+          "caller": "Hero",
+          "callee": "t",
+          "lineNumber": 80
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/HeroVisual.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 354,
+      "nonEmptyLines": 334,
+      "functions": [
+        {
+          "name": "HeroVisual",
+          "startLine": 35,
+          "endLine": 161,
+          "params": [
+            "{ initialVariant = 'A' }"
+          ]
+        },
+        {
+          "name": "ChipLabel",
+          "startLine": 170,
+          "endLine": 205,
+          "params": [
+            "{ x, y, primary, sub }"
+          ]
+        },
+        {
+          "name": "Stat",
+          "startLine": 212,
+          "endLine": 219,
+          "params": [
+            "{ value, label }"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HeroVisual",
+          "line": 35,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "HeroVisual",
+          "callee": "useTranslations",
+          "lineNumber": 36
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "useState",
+          "lineNumber": 37
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 41
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 49
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 50
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 59
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 109
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "CHIP_KEYS.map",
+          "lineNumber": 113
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 118
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 119
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "STAT_KEYS.map",
+          "lineNumber": 126
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 128
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 128
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "t",
+          "lineNumber": 136
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "VARIANT_IDS.map",
+          "lineNumber": 137
+        },
+        {
+          "caller": "HeroVisual",
+          "callee": "setActiveVariant",
+          "lineNumber": 145
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/HowItWorks.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 137,
+      "nonEmptyLines": 130,
+      "functions": [
+        {
+          "name": "HowItWorks",
+          "startLine": 20,
+          "endLine": 59,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "HowItWorks",
+          "line": 20,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "HowItWorks",
+          "callee": "getTranslations",
+          "lineNumber": 21
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "t",
+          "lineNumber": 27
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "t",
+          "lineNumber": 28
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "t",
+          "lineNumber": 29
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "STEP_KEYS.map",
+          "lineNumber": 33
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "t",
+          "lineNumber": 46
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "t",
+          "lineNumber": 49
+        },
+        {
+          "caller": "HowItWorks",
+          "callee": "t",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/Navbar.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 279,
+      "nonEmptyLines": 267,
+      "functions": [
+        {
+          "name": "Navbar",
+          "startLine": 29,
+          "endLine": 154,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "Navbar",
+          "line": 29,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Navbar",
+          "callee": "useTranslations",
+          "lineNumber": 30
+        },
+        {
+          "caller": "Navbar",
+          "callee": "useState",
+          "lineNumber": 31
+        },
+        {
+          "caller": "Navbar",
+          "callee": "useState",
+          "lineNumber": 32
+        },
+        {
+          "caller": "Navbar",
+          "callee": "useEffect",
+          "lineNumber": 34
+        },
+        {
+          "caller": "handler",
+          "callee": "setScrolled",
+          "lineNumber": 35
+        },
+        {
+          "caller": "Navbar",
+          "callee": "window.addEventListener",
+          "lineNumber": 36
+        },
+        {
+          "caller": "Navbar",
+          "callee": "window.removeEventListener",
+          "lineNumber": 37
+        },
+        {
+          "caller": "Navbar",
+          "callee": "NAV_LINKS.map",
+          "lineNumber": 65
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 73
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 79
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 94
+        },
+        {
+          "caller": "Navbar",
+          "callee": "setMobileOpen",
+          "lineNumber": 100
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 103
+        },
+        {
+          "caller": "Navbar",
+          "callee": "NAV_LINKS.map",
+          "lineNumber": 112
+        },
+        {
+          "caller": "Navbar",
+          "callee": "setMobileOpen",
+          "lineNumber": 117
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 120
+        },
+        {
+          "caller": "Navbar",
+          "callee": "setMobileOpen",
+          "lineNumber": 128
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 130
+        },
+        {
+          "caller": "Navbar",
+          "callee": "setMobileOpen",
+          "lineNumber": 135
+        },
+        {
+          "caller": "Navbar",
+          "callee": "setMobileOpen",
+          "lineNumber": 144
+        },
+        {
+          "caller": "Navbar",
+          "callee": "t",
+          "lineNumber": 146
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/Pillars.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 104,
+      "functions": [
+        {
+          "name": "Pillars",
+          "startLine": 22,
+          "endLine": 48,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "Pillars",
+          "line": 22,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Pillars",
+          "callee": "getTranslations",
+          "lineNumber": 23
+        },
+        {
+          "caller": "Pillars",
+          "callee": "t",
+          "lineNumber": 29
+        },
+        {
+          "caller": "Pillars",
+          "callee": "PILLAR_KEYS.map",
+          "lineNumber": 33
+        },
+        {
+          "caller": "Pillars",
+          "callee": "String(i + 1).padStart",
+          "lineNumber": 36
+        },
+        {
+          "caller": "Pillars",
+          "callee": "String",
+          "lineNumber": 36
+        },
+        {
+          "caller": "Pillars",
+          "callee": "t",
+          "lineNumber": 38
+        },
+        {
+          "caller": "Pillars",
+          "callee": "t",
+          "lineNumber": 39
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/Pricing.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 484,
+      "nonEmptyLines": 465,
+      "functions": [
+        {
+          "name": "Pricing",
+          "startLine": 93,
+          "endLine": 260,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "Pricing",
+          "line": 93,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "Pricing",
+          "callee": "useTranslations",
+          "lineNumber": 94
+        },
+        {
+          "caller": "Pricing",
+          "callee": "useState",
+          "lineNumber": 95
+        },
+        {
+          "caller": "Pricing",
+          "callee": "useState",
+          "lineNumber": 96
+        },
+        {
+          "caller": "Pricing",
+          "callee": "useCallback",
+          "lineNumber": 98
+        },
+        {
+          "caller": "Pricing",
+          "callee": "setBilling",
+          "lineNumber": 99
+        },
+        {
+          "caller": "Pricing",
+          "callee": "emit",
+          "lineNumber": 100
+        },
+        {
+          "caller": "Pricing",
+          "callee": "useCallback",
+          "lineNumber": 103
+        },
+        {
+          "caller": "Pricing",
+          "callee": "setLoading",
+          "lineNumber": 105
+        },
+        {
+          "caller": "Pricing",
+          "callee": "emit",
+          "lineNumber": 106
+        },
+        {
+          "caller": "Pricing",
+          "callee": "fetch",
+          "lineNumber": 111
+        },
+        {
+          "caller": "Pricing",
+          "callee": "JSON.stringify",
+          "lineNumber": 114
+        },
+        {
+          "caller": "Pricing",
+          "callee": "res.json",
+          "lineNumber": 117
+        },
+        {
+          "caller": "Pricing",
+          "callee": "window.open",
+          "lineNumber": 118
+        },
+        {
+          "caller": "Pricing",
+          "callee": "res.json().catch",
+          "lineNumber": 120
+        },
+        {
+          "caller": "Pricing",
+          "callee": "res.json",
+          "lineNumber": 120
+        },
+        {
+          "caller": "Pricing",
+          "callee": "alert",
+          "lineNumber": 121
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 121
+        },
+        {
+          "caller": "Pricing",
+          "callee": "alert",
+          "lineNumber": 124
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 124
+        },
+        {
+          "caller": "Pricing",
+          "callee": "setLoading",
+          "lineNumber": 126
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 136
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 137
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 138
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 141
+        },
+        {
+          "caller": "Pricing",
+          "callee": "handleBillingChange",
+          "lineNumber": 144
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 148
+        },
+        {
+          "caller": "Pricing",
+          "callee": "handleBillingChange",
+          "lineNumber": 152
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 156
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 158
+        },
+        {
+          "caller": "Pricing",
+          "callee": "TIER_DEFS.map",
+          "lineNumber": 164
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 176
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 178
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 179
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 180
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 183
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 187
+        },
+        {
+          "caller": "Pricing",
+          "callee": "tier.bulletKeys.map",
+          "lineNumber": 193
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 203
+        },
+        {
+          "caller": "Pricing",
+          "callee": "handleStripeCheckout",
+          "lineNumber": 217
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 222
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 222
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 231
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 236
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 237
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 238
+        },
+        {
+          "caller": "Pricing",
+          "callee": "t",
+          "lineNumber": 239
+        },
+        {
+          "caller": "Pricing",
+          "callee": "COMPARISON_ROWS.map",
+          "lineNumber": 243
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/ProofPointsBand.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 174,
+      "nonEmptyLines": 167,
+      "functions": [
+        {
+          "name": "ProofPointsBand",
+          "startLine": 18,
+          "endLine": 57,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ProofPointsBand",
+          "line": 18,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ProofPointsBand",
+          "callee": "getTranslations",
+          "lineNumber": 19
+        },
+        {
+          "caller": "ProofPointsBand",
+          "callee": "t",
+          "lineNumber": 20
+        },
+        {
+          "caller": "ProofPointsBand",
+          "callee": "t",
+          "lineNumber": 26
+        },
+        {
+          "caller": "ProofPointsBand",
+          "callee": "t",
+          "lineNumber": 27
+        },
+        {
+          "caller": "ProofPointsBand",
+          "callee": "t",
+          "lineNumber": 28
+        },
+        {
+          "caller": "ProofPointsBand",
+          "callee": "proofPoints.map",
+          "lineNumber": 32
+        },
+        {
+          "caller": "ProofPointsBand",
+          "callee": "t",
+          "lineNumber": 44
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/TrustBand.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 142,
+      "nonEmptyLines": 135,
+      "functions": [
+        {
+          "name": "TrustBand",
+          "startLine": 24,
+          "endLine": 57,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "TrustBand",
+          "line": 24,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "TrustBand",
+          "callee": "getTranslations",
+          "lineNumber": 25
+        },
+        {
+          "caller": "TrustBand",
+          "callee": "t",
+          "lineNumber": 30
+        },
+        {
+          "caller": "TrustBand",
+          "callee": "t",
+          "lineNumber": 31
+        },
+        {
+          "caller": "TrustBand",
+          "callee": "t",
+          "lineNumber": 32
+        },
+        {
+          "caller": "TrustBand",
+          "callee": "SIGNAL_KEYS.map",
+          "lineNumber": 35
+        },
+        {
+          "caller": "TrustBand",
+          "callee": "t",
+          "lineNumber": 37
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_components/WowBeat.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 47,
+      "nonEmptyLines": 44,
+      "functions": [
+        {
+          "name": "WowBeat",
+          "startLine": 13,
+          "endLine": 24,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "WowBeat",
+          "line": 13,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "WowBeat",
+          "callee": "getTranslations",
+          "lineNumber": 14
+        },
+        {
+          "caller": "WowBeat",
+          "callee": "t",
+          "lineNumber": 19
+        },
+        {
+          "caller": "WowBeat",
+          "callee": "t",
+          "lineNumber": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_data/hero-variants.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 30,
+      "nonEmptyLines": 27,
+      "exports": [
+        {
+          "name": "heroVariantsMeta",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_data/personas.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 125,
+      "nonEmptyLines": 119,
+      "functions": [
+        {
+          "name": "buildPersona",
+          "startLine": 43,
+          "endLine": 57,
+          "params": [
+            "slug",
+            "title",
+            "role",
+            "order"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "personas",
+          "line": 59,
+          "isDefault": false
+        },
+        {
+          "name": "personaBySlug",
+          "line": 111,
+          "isDefault": false
+        },
+        {
+          "name": "HEX_TEXTURE_PATH",
+          "line": 125,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_data/proof-points.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 45,
+      "nonEmptyLines": 43,
+      "exports": [
+        {
+          "name": "proofPoints",
+          "line": 20,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_lib/event-taxonomy.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 24,
+      "nonEmptyLines": 21,
+      "functions": [
+        {
+          "name": "emit",
+          "startLine": 20,
+          "endLine": 24,
+          "params": [
+            "event"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "events",
+          "line": 13,
+          "isDefault": false
+        },
+        {
+          "name": "emit",
+          "line": 20,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "emit",
+          "callee": "console.info",
+          "lineNumber": 23
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_lib/hero-headline-resolver.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 27,
+      "nonEmptyLines": 24,
+      "functions": [
+        {
+          "name": "resolveHeroVariant",
+          "startLine": 18,
+          "endLine": 27,
+          "params": [
+            "params"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "resolveHeroVariant",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolveHeroVariant",
+          "callee": "params.p?.toLowerCase",
+          "lineNumber": 19
+        },
+        {
+          "caller": "resolveHeroVariant",
+          "callee": "params.utm_source?.toLowerCase",
+          "lineNumber": 20
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/_lib/os-detection.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 15,
+      "nonEmptyLines": 14,
+      "functions": [
+        {
+          "name": "detectOSFromUserAgent",
+          "startLine": 11,
+          "endLine": 15,
+          "params": [
+            "ua"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "detectOSFromUserAgent",
+          "line": 11,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "detectOSFromUserAgent",
+          "callee": "/Mac|iPhone|iPad/i.test",
+          "lineNumber": 12
+        },
+        {
+          "caller": "detectOSFromUserAgent",
+          "callee": "/Windows/i.test",
+          "lineNumber": 13
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/design/personas/page.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 38,
+      "nonEmptyLines": 36,
+      "functions": [
+        {
+          "name": "DesignPersonasPage",
+          "startLine": 24,
+          "endLine": 38,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "metadata",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "DesignPersonasPage",
+          "line": 24,
+          "isDefault": true
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/www/app/page.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 77,
+      "nonEmptyLines": 72,
+      "functions": [
+        {
+          "name": "HomePage",
+          "startLine": 35,
+          "endLine": 72,
+          "params": [
+            "{ searchParams }"
+          ]
+        },
+        {
+          "name": "pickFirst",
+          "startLine": 74,
+          "endLine": 77,
+          "params": [
+            "value"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HomePage",
+          "line": 35,
+          "isDefault": true
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "HomePage",
+          "callee": "resolveHeroVariant",
+          "lineNumber": 37
+        },
+        {
+          "caller": "HomePage",
+          "callee": "pickFirst",
+          "lineNumber": 38
+        },
+        {
+          "caller": "HomePage",
+          "callee": "pickFirst",
+          "lineNumber": 39
+        },
+        {
+          "caller": "HomePage",
+          "callee": "getTranslations",
+          "lineNumber": 42
+        },
+        {
+          "caller": "HomePage",
+          "callee": "t",
+          "lineNumber": 60
+        },
+        {
+          "caller": "HomePage",
+          "callee": "t",
+          "lineNumber": 61
+        },
+        {
+          "caller": "HomePage",
+          "callee": "t",
+          "lineNumber": 62
+        },
+        {
+          "caller": "pickFirst",
+          "callee": "Array.isArray",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 13,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

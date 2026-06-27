@@ -54,6 +54,18 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
   // ── GET /api/marketplace/search ─────────────────────────────────────
   // Search the package catalog with FTS5 + faceted filters.
 
+  // Legacy clients used "plugins" before the marketplace catalog generalized
+  // packages behind /search. Return a machine-readable hint instead of a 404.
+  fastify.get('/api/marketplace/plugins', async (_request, reply) => {
+    return reply
+      .code(301)
+      .header('Location', '/api/marketplace/search')
+      .send({
+        redirect: '/api/marketplace/search',
+        hint: 'Use /api/marketplace/search; /api/marketplace/plugins is a legacy alias.',
+      });
+  });
+
   fastify.get('/api/marketplace/search', async (request, reply) => {
     const db = requireDb(reply);
     if (!db) return;

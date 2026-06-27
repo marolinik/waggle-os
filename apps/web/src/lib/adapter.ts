@@ -38,6 +38,21 @@ const IMPORTANCE_NUM_TO_STRING: Record<number, FrameImportance> = {
 };
 
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
+const LOCAL_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
+
+export function resolveDefaultServerUrl(
+  locationLike: Pick<Location, 'protocol' | 'hostname' | 'port' | 'origin'> | undefined =
+    typeof window !== 'undefined' ? window.location : undefined,
+): string {
+  if (
+    locationLike?.protocol === 'http:' &&
+    locationLike.port &&
+    LOCAL_HTTP_HOSTS.has(locationLike.hostname)
+  ) {
+    return locationLike.origin;
+  }
+  return DEFAULT_SERVER;
+}
 
 /**
  * P1b D3 — client mirror of the server's AUTH_EXEMPT_PATHS
@@ -178,7 +193,7 @@ class LocalAdapter {
   private _epoch = 0;
 
   constructor(serverUrl?: string) {
-    this.baseUrl = serverUrl || localStorage.getItem('waggle:server-url') || DEFAULT_SERVER;
+    this.baseUrl = serverUrl || localStorage.getItem('waggle:server-url') || resolveDefaultServerUrl();
   }
 
   get isConnected() { return this._connected; }
@@ -338,13 +353,14 @@ class LocalAdapter {
 
   /**
    * Probe `/health` against the configured baseUrl, with a single auto-discovery
-   * fallback to DEFAULT_SERVER (FR #10).
+   * fallback to the current local web origin or DEFAULT_SERVER (FR #10).
    *
    * Why this exists: localStorage may carry a stale `waggle:server-url` from a
    * prior Tauri build or wrong port, or be empty after a manual clear. The
-   * constructor already falls back to DEFAULT_SERVER when localStorage is empty,
-   * but a stored-but-stale URL would otherwise stick until the user navigates
-   * to Settings. Auto-rediscovery keeps a fresh user on the rails.
+   * constructor already falls back to the current local web origin (or
+   * DEFAULT_SERVER outside local web mode) when localStorage is empty, but a
+   * stored-but-stale URL would otherwise stick until the user navigates to
+   * Settings. Auto-rediscovery keeps a fresh user on the rails.
    *
    * P1b D3 hardening: single-flighted (useOfflineStatus's exempt /health
    * probes race connect()'s probe), and the fallback runs against a LOCAL
@@ -373,14 +389,15 @@ class LocalAdapter {
       if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
       return await res.json();
     } catch (firstErr) {
-      if (this.baseUrl === DEFAULT_SERVER) throw firstErr;
+      const fallbackServer = resolveDefaultServerUrl();
+      if (this.baseUrl === fallbackServer) throw firstErr;
       try {
-        const res = await fetchWithTimeout(`${DEFAULT_SERVER}/health`);
+        const res = await fetchWithTimeout(`${fallbackServer}/health`);
         if (!res.ok) throw firstErr;
         const data = await res.json();
         if (epoch === this._epoch) {
-          this.baseUrl = DEFAULT_SERVER;
-          try { localStorage.setItem('waggle:server-url', DEFAULT_SERVER); } catch { /* private mode etc. */ }
+          this.baseUrl = fallbackServer;
+          try { localStorage.setItem('waggle:server-url', fallbackServer); } catch { /* private mode etc. */ }
         }
         return data;
       } catch {

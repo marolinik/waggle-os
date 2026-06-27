@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": ".dockerignore", "language": "unknown", "sizeLines": 18, "fileCategory": "infra"},
+    {"path": "docker-compose.production.yml", "language": "yaml", "sizeLines": 117, "fileCategory": "infra"},
+    {"path": "docker-compose.yml", "language": "yaml", "sizeLines": 93, "fileCategory": "infra"},
+    {"path": "Dockerfile", "language": "dockerfile", "sizeLines": 98, "fileCategory": "infra"}
+  ],
+  "batchImportData": {
+    ".dockerignore": [],
+    "docker-compose.production.yml": [],
+    "docker-compose.yml": [],
+    "Dockerfile": []
+  },
+  "batchIndex": 89
+}

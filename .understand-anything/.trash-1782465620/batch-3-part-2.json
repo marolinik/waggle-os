@@ -1,0 +1,584 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/server/src/local/routes/weaver.ts",
+      "type": "file",
+      "name": "weaver.ts",
+      "filePath": "packages/server/src/local/routes/weaver.ts",
+      "summary": "Proxy routes for the Weaver AI writing assistant service, forwarding requests to the Weaver package's internal endpoints for document generation and refinement.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/weaver.ts:weaverRoutes",
+      "type": "function",
+      "name": "weaverRoutes",
+      "filePath": "packages/server/src/local/routes/weaver.ts",
+      "lineRange": [13, 130],
+      "summary": "Registers Weaver document generation and refinement endpoints, proxying requests to the Weaver service with authentication forwarding.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/wiki.ts",
+      "type": "file",
+      "name": "wiki.ts",
+      "filePath": "packages/server/src/local/routes/wiki.ts",
+      "summary": "Wiki compilation and retrieval routes enabling personal knowledge wiki generation from memory frames, with page browsing and search endpoints.",
+      "tags": ["api-handler", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/wiki.ts:wikiRoutes",
+      "type": "function",
+      "name": "wikiRoutes",
+      "filePath": "packages/server/src/local/routes/wiki.ts",
+      "lineRange": [14, 201],
+      "summary": "Registers wiki compile, list pages, get page, and search endpoints backed by the wiki-compiler package and memory frame store.",
+      "tags": ["api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/workflows.ts",
+      "type": "file",
+      "name": "workflows.ts",
+      "filePath": "packages/server/src/local/routes/workflows.ts",
+      "summary": "Custom workflow definition routes enabling users to save and retrieve multi-step agent workflow templates.",
+      "tags": ["api-handler", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/workspace-context.ts",
+      "type": "file",
+      "name": "workspace-context.ts",
+      "filePath": "packages/server/src/local/routes/workspace-context.ts",
+      "summary": "Builds and formats workspace context blocks injected into agent system prompts, assembling memory frames, pending tasks, session state, and time-aware greetings into structured context.",
+      "tags": ["api-handler", "service", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/workspace-context.ts:buildWorkspaceNowBlock",
+      "type": "function",
+      "name": "buildWorkspaceNowBlock",
+      "filePath": "packages/server/src/local/routes/workspace-context.ts",
+      "lineRange": [223, 436],
+      "summary": "Assembles the full workspace context block by aggregating memory frames, active sessions, tasks, schedules, and knowledge graph entries into a structured context object.",
+      "tags": ["utility", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/workspace-context.ts:formatWorkspaceNowPrompt",
+      "type": "function",
+      "name": "formatWorkspaceNowPrompt",
+      "filePath": "packages/server/src/local/routes/workspace-context.ts",
+      "lineRange": [440, 490],
+      "summary": "Renders the workspace context block into a formatted text prompt string suitable for injection into the agent system prompt.",
+      "tags": ["utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/workspace-context.ts:buildTimeAwareGreeting",
+      "type": "function",
+      "name": "buildTimeAwareGreeting",
+      "filePath": "packages/server/src/local/routes/workspace-context.ts",
+      "lineRange": [146, 179],
+      "summary": "Generates a time-of-day-aware greeting string incorporating the user's name and current local time for injection into the agent context.",
+      "tags": ["utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/workspace-templates.ts",
+      "type": "file",
+      "name": "workspace-templates.ts",
+      "filePath": "packages/server/src/local/routes/workspace-templates.ts",
+      "summary": "Workspace template management routes providing built-in templates and user-defined custom templates for pre-populating new workspaces with settings and context.",
+      "tags": ["api-handler", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/workspace-templates.ts:workspaceTemplateRoutes",
+      "type": "function",
+      "name": "workspaceTemplateRoutes",
+      "filePath": "packages/server/src/local/routes/workspace-templates.ts",
+      "lineRange": [286, 471],
+      "summary": "Registers template list, get, create-custom, update-custom, and delete-custom endpoints combining built-in and user-defined workspace templates.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/routes/workspaces.ts",
+      "type": "file",
+      "name": "workspaces.ts",
+      "filePath": "packages/server/src/local/routes/workspaces.ts",
+      "summary": "Core workspace lifecycle management routes providing CRUD, rename, archive, restore, export, state management, activity tracking, and memory association operations for the workspace entity.",
+      "tags": ["api-handler", "service", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/workspaces.ts:workspaceRoutes",
+      "type": "function",
+      "name": "workspaceRoutes",
+      "filePath": "packages/server/src/local/routes/workspaces.ts",
+      "lineRange": [150, 1136],
+      "summary": "Registers all workspace management endpoints including list, create, get, update, rename, archive, restore, export, delete, state read/write, activity log, and memory context endpoints.",
+      "tags": ["api-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/routes/workspaces.ts:composeWorkspaceSummary",
+      "type": "function",
+      "name": "composeWorkspaceSummary",
+      "filePath": "packages/server/src/local/routes/workspaces.ts",
+      "lineRange": [31, 75],
+      "summary": "Builds a structured workspace summary DTO combining workspace config, recent session metadata, memory stats, and active agent state.",
+      "tags": ["utility", "data-model"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/security-middleware.ts",
+      "type": "file",
+      "name": "security-middleware.ts",
+      "filePath": "packages/server/src/local/security-middleware.ts",
+      "summary": "Implements per-endpoint rate limiting and session timeout tracking for the Fastify sidecar, with configurable limits and automatic cleanup, exported as a Fastify plugin.",
+      "tags": ["middleware", "security", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/server/src/local/security-middleware.ts:RateLimiter",
+      "type": "class",
+      "name": "RateLimiter",
+      "filePath": "packages/server/src/local/security-middleware.ts",
+      "lineRange": [66, 163],
+      "summary": "Sliding-window rate limiter that tracks request counts per IP/token per endpoint with configurable per-route limits and automatic stale-entry cleanup.",
+      "tags": ["security", "middleware", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/server/src/local/security-middleware.ts:SessionTimeoutTracker",
+      "type": "class",
+      "name": "SessionTimeoutTracker",
+      "filePath": "packages/server/src/local/security-middleware.ts",
+      "lineRange": [173, 233],
+      "summary": "Tracks last-activity timestamps for active sessions and enforces configurable inactivity timeout, cleaning up stale session records automatically.",
+      "tags": ["security", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/service.ts",
+      "type": "file",
+      "name": "service.ts",
+      "filePath": "packages/server/src/local/service.ts",
+      "summary": "Main service bootstrap module that resolves data directories, checks first-run state, validates port availability, and orchestrates startup of the Fastify server with all route registrations and lifecycle management.",
+      "tags": ["entry-point", "service", "middleware"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/server/src/local/service.ts:startService",
+      "type": "function",
+      "name": "startService",
+      "filePath": "packages/server/src/local/service.ts",
+      "lineRange": [121, 295],
+      "summary": "Bootstraps the entire Fastify sidecar service: initializes middleware, registers all route plugins, starts the server, and sets up signal handlers for graceful shutdown.",
+      "tags": ["entry-point", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/services/evolution-service.ts",
+      "type": "file",
+      "name": "evolution-service.ts",
+      "filePath": "packages/server/src/local/services/evolution-service.ts",
+      "summary": "Background evolution service that periodically evaluates agent performance candidates and triggers prompt optimization cycles to continuously improve skill and persona quality.",
+      "tags": ["service", "singleton"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/server/src/local/services/evolution-service.ts:EvolutionService",
+      "type": "class",
+      "name": "EvolutionService",
+      "filePath": "packages/server/src/local/services/evolution-service.ts",
+      "lineRange": [112, 349],
+      "summary": "Orchestrates periodic evolution ticks that enumerate skill/persona candidates, select next targets, run baseline evaluation, and trigger the iterative optimizer.",
+      "tags": ["service", "singleton"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/server/src/local/services/optimizer-service.ts",
+      "type": "file",
+      "name": "optimizer-service.ts",
+      "filePath": "packages/server/src/local/services/optimizer-service.ts",
+      "summary": "Provides a singleton optimizer service factory that wraps the agent's iterative optimizer with a chat-route-aware callback for triggering prompt optimization from the API layer.",
+      "tags": ["service", "singleton", "factory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/setup-connectors.ts",
+      "type": "file",
+      "name": "setup-connectors.ts",
+      "filePath": "packages/server/src/local/setup-connectors.ts",
+      "summary": "Registers all external service connector plugins (e.g., GitHub, Notion, Slack) into the Fastify server during startup.",
+      "tags": ["service", "middleware"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/setup-crons.ts",
+      "type": "file",
+      "name": "setup-crons.ts",
+      "filePath": "packages/server/src/local/setup-crons.ts",
+      "summary": "Seeds default scheduled cron jobs (e.g., memory distillation, harvest sync) into the cron store on first run.",
+      "tags": ["service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/server/src/local/signal-bus.ts",
+      "type": "file",
+      "name": "signal-bus.ts",
+      "filePath": "packages/server/src/local/signal-bus.ts",
+      "summary": "Ring-buffer signal bus for in-process WaggleDance event broadcasting, supporting subscriber fan-out and bounded memory usage via configurable buffer capacity.",
+      "tags": ["service", "event-handler", "singleton"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/server/src/local/signal-bus.ts:SignalBus",
+      "type": "class",
+      "name": "SignalBus",
+      "filePath": "packages/server/src/local/signal-bus.ts",
+      "lineRange": [43, 131],
+      "summary": "Ring-buffer event bus with subscriber callbacks, a fixed-capacity circular buffer of recorded signals, and point-in-time query support for replaying recent history.",
+      "tags": ["service", "event-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/server/src/local/start.ts",
+      "type": "file",
+      "name": "start.ts",
+      "filePath": "packages/server/src/local/start.ts",
+      "summary": "Binary entry point that imports and invokes the service startup function, serving as the Node.js process bootstrap for the Fastify sidecar.",
+      "tags": ["entry-point"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/server/src/local/routes/weaver.ts",
+      "target": "function:packages/server/src/local/routes/weaver.ts:weaverRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/weaver.ts",
+      "target": "function:packages/server/src/local/routes/weaver.ts:weaverRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/wiki.ts",
+      "target": "function:packages/server/src/local/routes/wiki.ts:wikiRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/wiki.ts",
+      "target": "function:packages/server/src/local/routes/wiki.ts:wikiRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "function:packages/server/src/local/routes/workspace-context.ts:buildWorkspaceNowBlock",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "function:packages/server/src/local/routes/workspace-context.ts:formatWorkspaceNowPrompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "function:packages/server/src/local/routes/workspace-context.ts:buildTimeAwareGreeting",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "function:packages/server/src/local/routes/workspace-context.ts:buildWorkspaceNowBlock",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "function:packages/server/src/local/routes/workspace-context.ts:formatWorkspaceNowPrompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "function:packages/server/src/local/routes/workspace-context.ts:buildTimeAwareGreeting",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "file:packages/server/src/local/routes/sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-context.ts",
+      "target": "file:packages/server/src/local/workspace-state.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-templates.ts",
+      "target": "function:packages/server/src/local/routes/workspace-templates.ts:workspaceTemplateRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspace-templates.ts",
+      "target": "function:packages/server/src/local/routes/workspace-templates.ts:workspaceTemplateRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "function:packages/server/src/local/routes/workspaces.ts:workspaceRoutes",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "function:packages/server/src/local/routes/workspaces.ts:composeWorkspaceSummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "function:packages/server/src/local/routes/workspaces.ts:workspaceRoutes",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/routes/events.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/routes/ingest.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/routes/sessions.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/routes/validate.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/routes/workspace-context.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/routes/workspaces.ts",
+      "target": "file:packages/server/src/local/workspace-state.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/security-middleware.ts",
+      "target": "class:packages/server/src/local/security-middleware.ts:RateLimiter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/security-middleware.ts",
+      "target": "class:packages/server/src/local/security-middleware.ts:SessionTimeoutTracker",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/security-middleware.ts",
+      "target": "class:packages/server/src/local/security-middleware.ts:RateLimiter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/security-middleware.ts",
+      "target": "class:packages/server/src/local/security-middleware.ts:SessionTimeoutTracker",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/security-middleware.ts",
+      "target": "file:packages/server/src/local/net-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "function:packages/server/src/local/service.ts:startService",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "function:packages/server/src/local/service.ts:startService",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "file:packages/server/src/local/data-erase-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "file:packages/server/src/local/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "file:packages/server/src/local/lifecycle.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "file:packages/server/src/local/net-config.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/service.ts",
+      "target": "file:packages/server/src/middleware/assert-tier.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/services/evolution-service.ts",
+      "target": "class:packages/server/src/local/services/evolution-service.ts:EvolutionService",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/services/evolution-service.ts",
+      "target": "class:packages/server/src/local/services/evolution-service.ts:EvolutionService",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/signal-bus.ts",
+      "target": "class:packages/server/src/local/signal-bus.ts:SignalBus",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/server/src/local/signal-bus.ts",
+      "target": "class:packages/server/src/local/signal-bus.ts:SignalBus",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/start.ts",
+      "target": "file:packages/server/src/local/logger.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/start.ts",
+      "target": "file:packages/server/src/local/service.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/server/src/local/start.ts",
+      "target": "function:packages/server/src/local/service.ts:startService",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/server/src/local/routes/waggle-dance.ts",
+      "target": "class:packages/server/src/local/signal-bus.ts:SignalBus",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

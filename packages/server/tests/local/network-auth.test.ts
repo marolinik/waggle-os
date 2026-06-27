@@ -73,9 +73,17 @@ describe('isLoopbackBind (AV-5)', () => {
 describe('corsOriginAllowed', () => {
   it('allows no-origin (same-origin / non-browser)', () => expect(corsOriginAllowed(undefined)).toBe(true));
   it('allows exact allowed origin', () => expect(corsOriginAllowed('http://localhost:1420')).toBe(true));
+  it('allows loopback origins on arbitrary local dev/e2e ports', () => {
+    expect(corsOriginAllowed('http://127.0.0.1:8081')).toBe(true);
+    expect(corsOriginAllowed('http://127.0.0.1:8082')).toBe(true);
+    expect(corsOriginAllowed('http://127.0.0.1:3344')).toBe(true);
+    expect(corsOriginAllowed('http://localhost:3344')).toBe(true);
+  });
   it('rejects prefix-bypass origin', () => {
     expect(corsOriginAllowed('http://localhost:1420.evil.com')).toBe(false);
+    expect(corsOriginAllowed('http://127.0.0.1.evil.com:3344')).toBe(false);
     expect(corsOriginAllowed('https://evil.example.com')).toBe(false);
+    expect(corsOriginAllowed('https://localhost:3344')).toBe(false);
   });
 });
 

@@ -140,6 +140,30 @@ export {
   type AgentRunProgressCallback,
 } from './retrieval-agent-loop.js';
 
+function toolCallWithValidConversationArgs(
+  toolCall: { id: string; type: 'function'; function: { name: string; arguments: string } },
+): { id: string; type: 'function'; function: { name: string; arguments: string } } {
+  try {
+    JSON.parse(toolCall.function.arguments || '{}');
+    return toolCall;
+  } catch {
+    return {
+      ...toolCall,
+      function: {
+        ...toolCall.function,
+        arguments: '{}',
+      },
+    };
+  }
+}
+
+function containsRawToolCallMarkup(content: string): boolean {
+  return /\[\/?TOOL_CALL\]/i.test(content)
+    || /<\s*tool_call\b/i.test(content)
+    || /\{\s*tool\s*=>/i.test(content)
+    || /```(?:json|tool)?\s*\{[^`]*"tool"/is.test(content);
+}
+
 export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentResponse> {
   const {
     litellmUrl,
@@ -245,6 +269,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let totalOutputTokens = 0;
   let allStreamedContent = ''; // Accumulate ALL streamed content across all turns
   const guard = new LoopGuard();
+  let rawToolMarkupCorrectionUsed = false;
   // 429 / 5xx / network retry counters — see `./retry-policy.ts` for the protocol.
   let retryState = initialRetryState();
   // Per-request LLM timeout, merged with the client-disconnect signal below, so a
@@ -402,6 +427,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       // Use this turn's content, or fall back to all accumulated streamed content
       const content = (assistantMessage.content ?? '') || allStreamedContent;
       allStreamedContent = ''; // Release accumulated tokens once consumed
+      if (content.trim().length === 0) {
+        const err = new Error('LLM returned an empty assistant response with no tool calls');
+        (err as Error & { status?: number }).status = 502;
+        throw err;
+      }
+      if (containsRawToolCallMarkup(content) && !rawToolMarkupCorrectionUsed) {
+        rawToolMarkupCorrectionUsed = true;
+        messages.push({
+          role: 'user',
+          content: 'Your previous response exposed raw tool-call markup instead of answering. Do not output tool-call tags, JSON tool blocks, or pretend tool calls. Answer the previous user request directly in plain language with the tools currently available.',
+        });
+        continue;
+      }
 
       // Completion-time gates: D3 (verification) + D1 (skill distillation).
       // See ./loop-gates.ts. If a gate fires, it pushes the corrective
@@ -446,7 +484,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     messages.push({
       role: 'assistant',
       content: assistantMessage.content ?? '',
-      tool_calls: assistantMessage.tool_calls,
+      tool_calls: assistantMessage.tool_calls.map(toolCallWithValidConversationArgs),
     });
 
     // Execute each tool call through the explicit middleware chain in

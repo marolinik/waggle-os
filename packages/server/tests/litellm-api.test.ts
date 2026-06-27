@@ -13,6 +13,7 @@ vi.mock('../src/local/lifecycle.js', () => ({
 
 import { buildLocalServer } from '../src/local/index.js';
 import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../src/local/lifecycle.js';
+import { resolveUsableModel } from '../src/local/model-availability.js';
 import { injectWithAuth } from './test-utils.js';
 
 const mockGetStatus = getLiteLLMStatus as ReturnType<typeof vi.fn>;
@@ -199,5 +200,91 @@ describe('LiteLLM Management API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.models).toEqual([]);
+  });
+
+  it('GET /api/litellm/models falls back to local Ollama chat models', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/models')) {
+        return { ok: false, status: 503 } as Response;
+      }
+      if (url.endsWith('/api/tags')) {
+        return {
+          ok: true,
+          json: async () => ({
+            models: [
+              { name: 'nomic-embed-text:latest', size: 262_000_000 },
+              { name: 'llama3.2:latest', size: 2_000_000_000 },
+            ],
+          }),
+        } as Response;
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/litellm/models',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.models).toEqual(['ollama/llama3.2:latest']);
+  });
+
+  it('GET /api/agent/model resolves a cloud default to a local chat model when no provider key exists', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return {
+          ok: true,
+          json: async () => ({
+            models: [
+              { name: 'nomic-embed-text:latest', size: 262_000_000 },
+              { name: 'llama3.2:latest', size: 2_000_000_000 },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 503 } as Response;
+    });
+    await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/agent/model',
+      payload: { model: 'claude-sonnet-4-6' },
+    });
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: '/api/agent/model',
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.model).toBe('ollama/llama3.2:latest');
+  });
+
+  it('model resolver keeps the startup-selected Ollama model over a stale cloud default', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return {
+          ok: true,
+          json: async () => ({
+            models: [
+              { name: 'nomic-embed-text:latest' },
+              { name: 'minimax-m2.7:cloud', remote_host: 'https://ollama.com:443' },
+              { name: 'gemma4:31b' },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 503 } as Response;
+    });
+    await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/agent/model',
+      payload: { model: 'ollama/minimax-m2.7:cloud' },
+    });
+
+    await expect(resolveUsableModel(server, 'claude-sonnet-4-6')).resolves.toBe('ollama/minimax-m2.7:cloud');
   });
 });

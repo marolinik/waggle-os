@@ -1,0 +1,446 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "type": "file",
+      "name": "notion.ts",
+      "filePath": "packages/wiki-compiler/src/adapters/notion.ts",
+      "summary": "Notion API adapter for the wiki-compiler that converts wiki pages (markdown) to Notion blocks and syncs them to a Notion workspace, with incremental diff to skip unchanged pages.",
+      "tags": ["service", "api-handler", "serialization", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/adapters/notion.ts:writeToNotionWorkspace",
+      "type": "function",
+      "name": "writeToNotionWorkspace",
+      "filePath": "packages/wiki-compiler/src/adapters/notion.ts",
+      "lineRange": [285, 334],
+      "summary": "Orchestrates syncing a set of compiled wiki pages to a Notion workspace, archiving stale pages and creating updated ones, tracking state via CompilationState.",
+      "tags": ["api-handler", "service", "serialization"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/adapters/notion.ts:markdownToBlocks",
+      "type": "function",
+      "name": "markdownToBlocks",
+      "filePath": "packages/wiki-compiler/src/adapters/notion.ts",
+      "lineRange": [140, 205],
+      "summary": "Parses a markdown body string into Notion block objects, handling headings, bullet lists, numbered lists, dividers, code fences, and paragraph text with rich text annotations.",
+      "tags": ["serialization", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/adapters/notion.ts:toRichText",
+      "type": "function",
+      "name": "toRichText",
+      "filePath": "packages/wiki-compiler/src/adapters/notion.ts",
+      "lineRange": [92, 114],
+      "summary": "Converts a plain markdown text span (including inline links and emphasis) into Notion rich_text block array format.",
+      "tags": ["serialization", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/wiki-compiler/src/adapters/obsidian.ts",
+      "type": "file",
+      "name": "obsidian.ts",
+      "filePath": "packages/wiki-compiler/src/adapters/obsidian.ts",
+      "summary": "Obsidian vault adapter for the wiki-compiler that writes compiled wiki pages as markdown files into a local directory and generates an index file with wikilink transformation.",
+      "tags": ["service", "utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/adapters/obsidian.ts:writeToObsidianVault",
+      "type": "function",
+      "name": "writeToObsidianVault",
+      "filePath": "packages/wiki-compiler/src/adapters/obsidian.ts",
+      "lineRange": [95, 128],
+      "summary": "Writes all compiled wiki pages to a local Obsidian vault directory, transforming wikilinks for cross-page navigation and generating a categorized index file.",
+      "tags": ["service", "utility", "serialization"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/wiki-compiler/src/compiler.ts",
+      "type": "file",
+      "name": "compiler.ts",
+      "filePath": "packages/wiki-compiler/src/compiler.ts",
+      "summary": "Core WikiCompiler class that orchestrates incremental compilation of memory frames and knowledge graph entities into structured wiki pages (entity, concept, synthesis, index, and health pages).",
+      "tags": ["service", "factory", "entry-point"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "type": "class",
+      "name": "WikiCompiler",
+      "filePath": "packages/wiki-compiler/src/compiler.ts",
+      "lineRange": [60, 596],
+      "summary": "Main wiki compilation engine that reads from a knowledge graph and frame store, detects entities and concepts, and produces markdown pages with frontmatter, exporting to files or other adapters.",
+      "tags": ["service", "factory"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/wiki-compiler/src/prompts.ts",
+      "type": "file",
+      "name": "prompts.ts",
+      "filePath": "packages/wiki-compiler/src/prompts.ts",
+      "summary": "LLM prompt templates for the wiki-compiler synthesis step, providing structured prompts for entity pages, concept pages, and cross-source synthesis pages.",
+      "tags": ["utility", "type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/prompts.ts:entityPagePrompt",
+      "type": "function",
+      "name": "entityPagePrompt",
+      "filePath": "packages/wiki-compiler/src/prompts.ts",
+      "lineRange": [5, 37],
+      "summary": "Builds the LLM system+user prompt pair for synthesizing a wiki page about a named entity, including its memory frames and knowledge graph relations.",
+      "tags": ["utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/prompts.ts:conceptPagePrompt",
+      "type": "function",
+      "name": "conceptPagePrompt",
+      "filePath": "packages/wiki-compiler/src/prompts.ts",
+      "lineRange": [39, 69],
+      "summary": "Builds the LLM prompt pair for synthesizing a wiki page about a recurring concept, drawing from related memory frames and linked entities.",
+      "tags": ["utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/prompts.ts:synthesisPagePrompt",
+      "type": "function",
+      "name": "synthesisPagePrompt",
+      "filePath": "packages/wiki-compiler/src/prompts.ts",
+      "lineRange": [71, 94],
+      "summary": "Builds the LLM prompt pair for synthesizing a cross-source insight page that surfaces patterns across multiple memory frame origins.",
+      "tags": ["utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/wiki-compiler/src/state.ts",
+      "type": "file",
+      "name": "state.ts",
+      "filePath": "packages/wiki-compiler/src/state.ts",
+      "summary": "Persistence layer for the wiki-compiler that stores compiled page metadata, content hashes, watermarks, and Notion page IDs in an SQLite database via better-sqlite3.",
+      "tags": ["data-model", "service", "validation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/wiki-compiler/src/state.ts:CompilationState",
+      "type": "class",
+      "name": "CompilationState",
+      "filePath": "packages/wiki-compiler/src/state.ts",
+      "lineRange": [36, 193],
+      "summary": "SQLite-backed state store for the wiki-compiler that tracks compiled wiki pages, Notion page IDs, content hashes, and a frame-id watermark for incremental recompilation.",
+      "tags": ["data-model", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/wiki-compiler/src/synthesizer.ts",
+      "type": "file",
+      "name": "synthesizer.ts",
+      "filePath": "packages/wiki-compiler/src/synthesizer.ts",
+      "summary": "LLM synthesizer abstraction for the wiki-compiler that selects and wraps an Anthropic, Ollama, or echo (deterministic fallback) backend for page content generation.",
+      "tags": ["service", "factory", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/wiki-compiler/src/synthesizer.ts:resolveSynthesizer",
+      "type": "function",
+      "name": "resolveSynthesizer",
+      "filePath": "packages/wiki-compiler/src/synthesizer.ts",
+      "lineRange": [106, 156],
+      "summary": "Detects the available LLM backend from config (Anthropic key, Ollama availability, or echo fallback) and returns the appropriate synthesizer function for wiki page generation.",
+      "tags": ["factory", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/wiki-compiler/src/types.ts",
+      "type": "file",
+      "name": "types.ts",
+      "filePath": "packages/wiki-compiler/src/types.ts",
+      "summary": "Shared TypeScript type definitions for the wiki-compiler package, including WikiPage, CompilerConfig, SynthesizerFn, and adapter option interfaces.",
+      "tags": ["type-definition"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/wiki-compiler/tests/notion.test.ts",
+      "type": "file",
+      "name": "notion.test.ts",
+      "filePath": "packages/wiki-compiler/tests/notion.test.ts",
+      "summary": "Unit tests for the Notion adapter's markdown-to-blocks conversion logic, covering headings, paragraphs, bullet lists, rich text emphasis, and inline links.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/wiki-compiler/tests/obsidian.test.ts",
+      "type": "file",
+      "name": "obsidian.test.ts",
+      "filePath": "packages/wiki-compiler/tests/obsidian.test.ts",
+      "summary": "Integration tests for the Obsidian vault adapter, verifying file creation, wikilink transformation, index generation, and type-categorized page output across various WikiPage types.",
+      "tags": ["test"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "file:packages/wiki-compiler/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/obsidian.ts",
+      "target": "file:packages/wiki-compiler/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/compiler.ts",
+      "target": "file:packages/wiki-compiler/src/prompts.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/compiler.ts",
+      "target": "file:packages/wiki-compiler/src/state.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/compiler.ts",
+      "target": "file:packages/wiki-compiler/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/state.ts",
+      "target": "file:packages/wiki-compiler/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/synthesizer.ts",
+      "target": "file:packages/wiki-compiler/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/tests/notion.test.ts",
+      "target": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/tests/obsidian.test.ts",
+      "target": "file:packages/wiki-compiler/src/adapters/obsidian.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/tests/obsidian.test.ts",
+      "target": "file:packages/wiki-compiler/src/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/notion.ts:writeToNotionWorkspace",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/notion.ts:markdownToBlocks",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/notion.ts:toRichText",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/notion.ts:writeToNotionWorkspace",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/notion.ts:markdownToBlocks",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/notion.ts:toRichText",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/obsidian.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/obsidian.ts:writeToObsidianVault",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/obsidian.ts",
+      "target": "function:packages/wiki-compiler/src/adapters/obsidian.ts:writeToObsidianVault",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/compiler.ts",
+      "target": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/compiler.ts",
+      "target": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/prompts.ts",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:entityPagePrompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/prompts.ts",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:conceptPagePrompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/prompts.ts",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:synthesisPagePrompt",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/prompts.ts",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:entityPagePrompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/prompts.ts",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:conceptPagePrompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/prompts.ts",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:synthesisPagePrompt",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/state.ts",
+      "target": "class:packages/wiki-compiler/src/state.ts:CompilationState",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/state.ts",
+      "target": "class:packages/wiki-compiler/src/state.ts:CompilationState",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/synthesizer.ts",
+      "target": "function:packages/wiki-compiler/src/synthesizer.ts:resolveSynthesizer",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/synthesizer.ts",
+      "target": "function:packages/wiki-compiler/src/synthesizer.ts:resolveSynthesizer",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "file:packages/wiki-compiler/src/state.ts",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/notion.ts",
+      "target": "file:packages/wiki-compiler/tests/notion.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/wiki-compiler/src/adapters/obsidian.ts",
+      "target": "file:packages/wiki-compiler/tests/obsidian.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:entityPagePrompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:conceptPagePrompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "target": "function:packages/wiki-compiler/src/prompts.ts:synthesisPagePrompt",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "class:packages/wiki-compiler/src/compiler.ts:WikiCompiler",
+      "target": "class:packages/wiki-compiler/src/state.ts:CompilationState",
+      "type": "depends_on",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

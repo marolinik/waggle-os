@@ -1,0 +1,668 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 7,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "apps/web/src/components/os/apps/RoomApp.test.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 121,
+      "nonEmptyLines": 110,
+      "functions": [
+        {
+          "name": "agent",
+          "startLine": 29,
+          "endLine": 40,
+          "params": [
+            "over"
+          ]
+        },
+        {
+          "name": "setRoster",
+          "startLine": 42,
+          "endLine": 52,
+          "params": [
+            "live",
+            "recent"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "agent",
+          "callee": "Date.now",
+          "lineNumber": 37
+        },
+        {
+          "caller": "setRoster",
+          "callee": "map.set",
+          "lineNumber": 44
+        },
+        {
+          "caller": "setRoster",
+          "callee": "Date.now",
+          "lineNumber": 44
+        },
+        {
+          "caller": "setRoster",
+          "callee": "vi.fn",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/components/os/apps/RoomApp.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 323,
+      "nonEmptyLines": 298,
+      "functions": [
+        {
+          "name": "roleStyle",
+          "startLine": 50,
+          "endLine": 52,
+          "params": [
+            "role"
+          ]
+        },
+        {
+          "name": "formatElapsed",
+          "startLine": 54,
+          "endLine": 63,
+          "params": [
+            "startedAt",
+            "completedAt"
+          ]
+        },
+        {
+          "name": "AgentTile",
+          "startLine": 65,
+          "endLine": 134,
+          "params": [
+            "{ agent, workspaceName }"
+          ]
+        },
+        {
+          "name": "RoomApp",
+          "startLine": 144,
+          "endLine": 321,
+          "params": [
+            "{ workspaceId, workspaceNames = {} }"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "roleStyle",
+          "callee": "role.toLowerCase",
+          "lineNumber": 51
+        },
+        {
+          "caller": "formatElapsed",
+          "callee": "Date.now",
+          "lineNumber": 56
+        },
+        {
+          "caller": "formatElapsed",
+          "callee": "Math.round",
+          "lineNumber": 57
+        },
+        {
+          "caller": "formatElapsed",
+          "callee": "Math.round",
+          "lineNumber": 59
+        },
+        {
+          "caller": "formatElapsed",
+          "callee": "Math.round",
+          "lineNumber": 61
+        },
+        {
+          "caller": "AgentTile",
+          "callee": "formatElapsed",
+          "lineNumber": 67
+        },
+        {
+          "caller": "AgentTile",
+          "callee": "roleStyle",
+          "lineNumber": 85
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "useRoomState",
+          "lineNumber": 145
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "useState",
+          "lineNumber": 146
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "useMemo",
+          "lineNumber": 149
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "workspaceMap.has",
+          "lineNumber": 153
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "workspaceMap.get",
+          "lineNumber": 153
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "workspaceMap.entries",
+          "lineNumber": 154
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "live.push",
+          "lineNumber": 156
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "recent.push",
+          "lineNumber": 157
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "useMemo",
+          "lineNumber": 169
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "seen.has",
+          "lineNumber": 173
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "seen.add",
+          "lineNumber": 174
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "rows.push",
+          "lineNumber": 175
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "seen.has",
+          "lineNumber": 178
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "seen.add",
+          "lineNumber": 179
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "rows.push",
+          "lineNumber": 180
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "liveAgents.map",
+          "lineNumber": 252
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "setShowRecent",
+          "lineNumber": 266
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "recentAgents.map",
+          "lineNumber": 274
+        },
+        {
+          "caller": "RoomApp",
+          "callee": "participants.map",
+          "lineNumber": 302
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/hooks/useRoomState.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 80,
+      "functions": [
+        {
+          "name": "useRoomState",
+          "startLine": 23,
+          "endLine": 90,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "useRoomState",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "useRoomState",
+          "callee": "useState",
+          "lineNumber": 24
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useState",
+          "lineNumber": 28
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useState",
+          "lineNumber": 29
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useState",
+          "lineNumber": 30
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useCallback",
+          "lineNumber": 32
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setReconnectNonce",
+          "lineNumber": 32
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useEffect",
+          "lineNumber": 34
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setConnecting",
+          "lineNumber": 36
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setError",
+          "lineNumber": 37
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "adapter.subscribeSubagentStatus",
+          "lineNumber": 39
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setWorkspaceMap",
+          "lineNumber": 40
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "next.get",
+          "lineNumber": 42
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "applyStatusEvent",
+          "lineNumber": 44
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "next.set",
+          "lineNumber": 45
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setConnecting",
+          "lineNumber": 51
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setError",
+          "lineNumber": 53
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setConnecting",
+          "lineNumber": 54
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "console.error",
+          "lineNumber": 55
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "unsub",
+          "lineNumber": 58
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useEffect",
+          "lineNumber": 62
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setInterval",
+          "lineNumber": 63
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "setWorkspaceMap",
+          "lineNumber": 64
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "pruneRecent",
+          "lineNumber": 68
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "next.set",
+          "lineNumber": 70
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "clearInterval",
+          "lineNumber": 77
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useMemo",
+          "lineNumber": 80
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "workspaceMap.keys",
+          "lineNumber": 80
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "useMemo",
+          "lineNumber": 81
+        },
+        {
+          "caller": "useRoomState",
+          "callee": "workspaceMap.values",
+          "lineNumber": 83
+        },
+        {
+          "caller": "getWorkspace",
+          "callee": "workspaceMap.get",
+          "lineNumber": 87
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/room-state-reducer.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 179,
+      "nonEmptyLines": 160,
+      "functions": [
+        {
+          "name": "mkAgent",
+          "startLine": 19,
+          "endLine": 28,
+          "params": [
+            "partial"
+          ]
+        },
+        {
+          "name": "mkEvent",
+          "startLine": 30,
+          "endLine": 37,
+          "params": [
+            "workspaceId",
+            "agents"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mkEvent",
+          "callee": "new Date(NOW).toISOString",
+          "lineNumber": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/lib/room-state-reducer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 140,
+      "nonEmptyLines": 127,
+      "functions": [
+        {
+          "name": "applyStatusEvent",
+          "startLine": 52,
+          "endLine": 85,
+          "params": [
+            "current",
+            "event",
+            "now",
+            "recentWindowMs"
+          ]
+        },
+        {
+          "name": "dedupeAgents",
+          "startLine": 91,
+          "endLine": 100,
+          "params": [
+            "agents"
+          ]
+        },
+        {
+          "name": "pruneRecent",
+          "startLine": 103,
+          "endLine": 113,
+          "params": [
+            "agents",
+            "now",
+            "windowMs"
+          ]
+        },
+        {
+          "name": "flattenWorkspaceMap",
+          "startLine": 119,
+          "endLine": 140,
+          "params": [
+            "workspaceMap",
+            "filterWorkspaceId"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "DEFAULT_RECENT_WINDOW_MS",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "applyStatusEvent",
+          "line": 52,
+          "isDefault": false
+        },
+        {
+          "name": "dedupeAgents",
+          "line": 91,
+          "isDefault": false
+        },
+        {
+          "name": "pruneRecent",
+          "line": 103,
+          "isDefault": false
+        },
+        {
+          "name": "flattenWorkspaceMap",
+          "line": 119,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "applyStatusEvent",
+          "callee": "Date.now",
+          "lineNumber": 55
+        },
+        {
+          "caller": "applyStatusEvent",
+          "callee": "event.agents.filter",
+          "lineNumber": 59
+        },
+        {
+          "caller": "applyStatusEvent",
+          "callee": "newlyDone.push",
+          "lineNumber": 65
+        },
+        {
+          "caller": "applyStatusEvent",
+          "callee": "event.agents.find",
+          "lineNumber": 71
+        },
+        {
+          "caller": "applyStatusEvent",
+          "callee": "newlyDone.push",
+          "lineNumber": 73
+        },
+        {
+          "caller": "applyStatusEvent",
+          "callee": "dedupeAgents",
+          "lineNumber": 77
+        },
+        {
+          "caller": "applyStatusEvent",
+          "callee": "pruneRecent",
+          "lineNumber": 78
+        },
+        {
+          "caller": "dedupeAgents",
+          "callee": "seen.has",
+          "lineNumber": 95
+        },
+        {
+          "caller": "dedupeAgents",
+          "callee": "seen.add",
+          "lineNumber": 96
+        },
+        {
+          "caller": "dedupeAgents",
+          "callee": "out.push",
+          "lineNumber": 97
+        },
+        {
+          "caller": "pruneRecent",
+          "callee": "Date.now",
+          "lineNumber": 105
+        },
+        {
+          "caller": "pruneRecent",
+          "callee": "agents.filter",
+          "lineNumber": 109
+        },
+        {
+          "caller": "flattenWorkspaceMap",
+          "callee": "workspaceMap.has",
+          "lineNumber": 130
+        },
+        {
+          "caller": "flattenWorkspaceMap",
+          "callee": "workspaceMap.get",
+          "lineNumber": 131
+        },
+        {
+          "caller": "flattenWorkspaceMap",
+          "callee": "workspaceMap.entries",
+          "lineNumber": 133
+        },
+        {
+          "caller": "flattenWorkspaceMap",
+          "callee": "live.push",
+          "lineNumber": 136
+        },
+        {
+          "caller": "flattenWorkspaceMap",
+          "callee": "recent.push",
+          "lineNumber": 137
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 5,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/routes/RoomRoute.tsx",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 18,
+      "nonEmptyLines": 16,
+      "functions": [
+        {
+          "name": "RoomRoute",
+          "startLine": 6,
+          "endLine": 16,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "RoomRoute",
+          "callee": "useShell",
+          "lineNumber": 7
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "apps/web/src/test/p7-b2-room-state.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 46,
+      "nonEmptyLines": 40,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

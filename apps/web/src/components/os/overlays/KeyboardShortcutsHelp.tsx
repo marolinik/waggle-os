@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Keyboard, X } from 'lucide-react';
 
@@ -8,30 +9,43 @@ interface KeyboardShortcutsHelpProps {
 
 const shortcuts = [
   { category: 'Navigation', items: [
-    { keys: ['⌘', '⇧', '0'], action: 'Dashboard' },
-    { keys: ['⌘', '⇧', '1'], action: 'Chat' },
-    { keys: ['⌘', '⇧', '2'], action: 'Capabilities' },
-    { keys: ['⌘', '⇧', '3'], action: 'Menu' },
-    { keys: ['⌘', '⇧', '4'], action: 'Mission Control' },
-    { keys: ['⌘', '⇧', '5'], action: 'Memory' },
-    { keys: ['⌘', '⇧', '6'], action: 'Events' },
-    { keys: ['⌘', '⇧', '7'], action: 'Settings' },
+    { keys: ['Ctrl', 'Shift', '0'], action: 'Home' },
+    { keys: ['Ctrl', 'Shift', '1'], action: 'Chat' },
+    { keys: ['Ctrl', 'Shift', '2'], action: 'Agents' },
+    { keys: ['Ctrl', 'Shift', '3'], action: 'Files' },
+    { keys: ['Ctrl', 'Shift', '4'], action: 'Mission Control' },
+    { keys: ['Ctrl', 'Shift', '5'], action: 'Memory' },
+    { keys: ['Ctrl', 'Shift', '6'], action: 'Events' },
+    { keys: ['Ctrl', 'Shift', '7'], action: 'Settings' },
+    { keys: ['Ctrl', 'Shift', '8'], action: 'Skills' },
+    { keys: ['Ctrl', 'Shift', '9'], action: 'Agent Swarm' },
   ]},
   { category: 'Quick Actions', items: [
-    { keys: ['⌘', 'K'], action: 'Global Search' },
-    { keys: ['⌘', '⇧', 'P'], action: 'Persona Switcher' },
+    { keys: ['Ctrl', 'K'], action: 'Global Search' },
+    { keys: ['Ctrl', 'Shift', 'N'], action: 'Open Chat' },
+    { keys: ['Ctrl', 'Shift', 'R'], action: 'Room' },
+    { keys: ['Ctrl', 'Shift', 'P'], action: 'Persona Switcher' },
     { keys: ['Ctrl', 'Tab'], action: 'Workspace Switcher' },
-    { keys: ['⌘', '?'], action: 'Keyboard Shortcuts' },
+    { keys: ['Ctrl', '/'], action: 'Keyboard Shortcuts' },
   ]},
   { category: 'Chat', items: [
     { keys: ['Enter'], action: 'Send message' },
-    { keys: ['⇧', 'Enter'], action: 'New line' },
+    { keys: ['Shift', 'Enter'], action: 'New line' },
     { keys: ['/'], action: 'Slash commands' },
     { keys: ['Esc'], action: 'Close overlay' },
   ]},
 ];
 
 const KeyboardShortcutsHelp = ({ open, onClose }: KeyboardShortcutsHelpProps) => {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   return (
@@ -48,15 +62,18 @@ const KeyboardShortcutsHelp = ({ open, onClose }: KeyboardShortcutsHelpProps) =>
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="keyboard-shortcuts-title"
           className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl p-6"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
               <Keyboard className="w-5 h-5 text-primary" />
-              <h2 className="text-lg font-display font-semibold text-foreground">Keyboard Shortcuts</h2>
+              <h2 id="keyboard-shortcuts-title" className="text-lg font-display font-semibold text-foreground">Keyboard Shortcuts</h2>
             </div>
-            <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+            <button onClick={onClose} aria-label="Close keyboard shortcuts" className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
               <X className="w-4 h-4" />
             </button>
           </div>

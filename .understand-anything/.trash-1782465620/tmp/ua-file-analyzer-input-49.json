@@ -1,0 +1,38 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/marketplace/src/categories.ts", "language": "typescript", "sizeLines": 100, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/cisco-scanner.ts", "language": "typescript", "sizeLines": 367, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/cli.ts", "language": "typescript", "sizeLines": 398, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/db.ts", "language": "typescript", "sizeLines": 541, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/installer.ts", "language": "typescript", "sizeLines": 775, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/mcp-registry.ts", "language": "typescript", "sizeLines": 795, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/security.ts", "language": "typescript", "sizeLines": 1226, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/sources-seed.ts", "language": "typescript", "sizeLines": 223, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/sync.ts", "language": "typescript", "sizeLines": 1373, "fileCategory": "code"},
+    {"path": "packages/marketplace/src/types.ts", "language": "typescript", "sizeLines": 263, "fileCategory": "code"},
+    {"path": "packages/marketplace/tests/categories.test.ts", "language": "typescript", "sizeLines": 390, "fileCategory": "code"},
+    {"path": "packages/marketplace/tests/cisco-scanner.test.ts", "language": "typescript", "sizeLines": 553, "fileCategory": "code"},
+    {"path": "packages/marketplace/tests/mcp-registry.test.ts", "language": "typescript", "sizeLines": 456, "fileCategory": "code"},
+    {"path": "packages/marketplace/tests/sync-adapters.test.ts", "language": "typescript", "sizeLines": 1683, "fileCategory": "code"},
+    {"path": "packages/marketplace/tests/sync-verification.test.ts", "language": "typescript", "sizeLines": 676, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/marketplace/src/categories.ts": ["packages/marketplace/src/db.ts"],
+    "packages/marketplace/src/cisco-scanner.ts": [],
+    "packages/marketplace/src/cli.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/installer.ts","packages/marketplace/src/security.ts","packages/marketplace/src/sync.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/src/db.ts": ["packages/marketplace/src/mcp-registry.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/src/installer.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/security.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/src/mcp-registry.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/src/security.ts": ["packages/marketplace/src/cisco-scanner.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/src/sources-seed.ts": ["packages/marketplace/src/db.ts"],
+    "packages/marketplace/src/sync.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/src/types.ts": [],
+    "packages/marketplace/tests/categories.test.ts": ["packages/marketplace/src/categories.ts","packages/marketplace/src/db.ts"],
+    "packages/marketplace/tests/cisco-scanner.test.ts": ["packages/marketplace/src/cisco-scanner.ts","packages/marketplace/src/security.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/tests/mcp-registry.test.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/mcp-registry.ts"],
+    "packages/marketplace/tests/sync-adapters.test.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/sources-seed.ts","packages/marketplace/src/sync.ts","packages/marketplace/src/types.ts"],
+    "packages/marketplace/tests/sync-verification.test.ts": ["packages/marketplace/src/db.ts","packages/marketplace/src/sync.ts","packages/marketplace/src/types.ts"]
+  },
+  "neighborMap": {}
+}

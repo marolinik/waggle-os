@@ -21,11 +21,18 @@ import { test, expect, type Page } from '@playwright/test';
  * mounts immediately with the power-tier dock (which includes the
  * spawn-agent shortcut).
  */
-async function gotoDesktop(page: Page, url = '/?skipOnboarding=true&tier=power&skipBriefing=true') {
+async function gotoDesktop(page: Page, url = '/home?skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true') {
   await page.addInitScript(() => {
     localStorage.setItem('waggle-booted', 'true');
   });
-  await page.goto(url);
+  await page.goto(url, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('[role="navigation"], main', { timeout: 10_000 });
+}
+
+async function clickSpawnAgent(page: Page) {
+  const spawnButton = page.getByTestId('nav-spawn-agent');
+  await expect(spawnButton).toBeVisible({ timeout: 10_000 });
+  await spawnButton.click();
 }
 
 // ── H-01 · BootScreen skip on return visits ────────────────────────────
@@ -37,7 +44,7 @@ test.describe('H-01 QW-3 · BootScreen skip', () => {
     await page.addInitScript(() => {
       localStorage.removeItem('waggle-booted');
     });
-    await page.goto('/?skipOnboarding=true&tier=power&skipBriefing=true');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('boot-screen')).toBeVisible({ timeout: 5_000 });
   });
 
@@ -53,9 +60,7 @@ test.describe('H-01 QW-3 · BootScreen skip', () => {
 test.describe('H-03 P36 · Dock spawn-agent wiring', () => {
   test('clicking the dock rocket icon opens SpawnAgentDialog', async ({ page }) => {
     await gotoDesktop(page);
-    const dockIcon = page.getByRole('button', { name: /spawn agent/i });
-    await expect(dockIcon).toBeVisible({ timeout: 10_000 });
-    await dockIcon.click();
+    await clickSpawnAgent(page);
     await expect(page.getByTestId('spawn-agent-dialog')).toBeVisible();
   });
 });
@@ -67,6 +72,9 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
     // Mock both endpoints BEFORE navigation so the dialog's useEffect hits them.
     await page.route('**/api/litellm/models', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+    await page.route('**/api/agent/model', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ model: '' }) }),
     );
     await page.route('**/api/providers', (route) =>
       route.fulfill({
@@ -81,7 +89,7 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
       }),
     );
     await gotoDesktop(page);
-    await page.getByRole('button', { name: /spawn agent/i }).click();
+    await clickSpawnAgent(page);
     await expect(page.getByTestId('spawn-no-keys-cta')).toBeVisible();
     await expect(page.getByTestId('spawn-no-keys-cta')).toContainText(/Settings → Vault|Ollama/i);
   });
@@ -89,6 +97,9 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
   test('keys configured but no models → retry CTA', async ({ page }) => {
     await page.route('**/api/litellm/models', (route) =>
       route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }),
+    );
+    await page.route('**/api/agent/model', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ model: '' }) }),
     );
     await page.route('**/api/providers', (route) =>
       route.fulfill({
@@ -102,7 +113,7 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
       }),
     );
     await gotoDesktop(page);
-    await page.getByRole('button', { name: /spawn agent/i }).click();
+    await clickSpawnAgent(page);
     await expect(page.getByTestId('spawn-no-models-cta')).toBeVisible();
     await expect(page.getByTestId('spawn-no-models-cta')).toContainText(/Retry/i);
   });
@@ -125,9 +136,8 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
       }),
     );
     await gotoDesktop(page);
-    await page.getByRole('button', { name: /spawn agent/i }).click();
+    await clickSpawnAgent(page);
     await expect(page.getByTestId('spawn-models-list')).toBeVisible();
     await expect(page.getByTestId('spawn-models-list')).toContainText('claude-sonnet-4-6');
   });
 });
-

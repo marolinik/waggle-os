@@ -1,0 +1,1559 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 11,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/bin/claude-code-hooks-cli.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 159,
+      "nonEmptyLines": 146,
+      "functions": [
+        {
+          "name": "parseArgs",
+          "startLine": 19,
+          "endLine": 44,
+          "params": [
+            "argv"
+          ]
+        },
+        {
+          "name": "printHelp",
+          "startLine": 46,
+          "endLine": 67,
+          "params": []
+        },
+        {
+          "name": "printInstallSummary",
+          "startLine": 69,
+          "endLine": 83,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "printUninstallSummary",
+          "startLine": 85,
+          "endLine": 97,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "printVerifySummary",
+          "startLine": 99,
+          "endLine": 110,
+          "params": [
+            "result"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 112,
+          "endLine": 157,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "parseArgs",
+          "callee": "valid.includes",
+          "lineNumber": 24
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.startsWith",
+          "lineNumber": 29
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.indexOf",
+          "lineNumber": 30
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 32
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 32
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "next.startsWith",
+          "lineNumber": 35
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 36
+        },
+        {
+          "caller": "parseArgs",
+          "callee": "arg.slice",
+          "lineNumber": 39
+        },
+        {
+          "caller": "printHelp",
+          "callee": "process.stdout.write",
+          "lineNumber": 47
+        },
+        {
+          "caller": "printHelp",
+          "callee": "[\r\n    'Usage: claude-code-hooks <command> [options]',\r\n    '',\r\n    'Commands:',\r\n    '  install     Patch ~/.claude/settings.json (additive, with backup).',\r\n    '  uninstall   Restore the byte-identical pre-install settings.json.',\r\n    '  verify      Smoke-check the install + hive-mind-cli reachability.',\r\n    '',\r\n    'Options:',\r\n    '  --help, -h           Show this help.',\r\n    '  --hooks-dir <PATH>   Override compiled hooks directory (testing).',\r\n    '  --hook-timeout <S>   Override per-hook timeout in seconds (default 5).',\r\n    '  --cli-path <PATH>    Absolute path to the hive-mind-cli binary or its',\r\n    '                       compiled JS entry. Required on Windows (npm bin',\r\n    '                       is a .cmd shim) and recommended for production',\r\n    '                       installs. Threaded into every hook command.',\r\n    '',\r\n    'Repo: https://github.com/marolinik/hive-mind-clients',\r\n    '',\r\n  ].join",
+          "lineNumber": 47
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "result.installedHooks.join",
+          "lineNumber": 75
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 82
+        },
+        {
+          "caller": "printInstallSummary",
+          "callee": "lines.join",
+          "lineNumber": 82
+        },
+        {
+          "caller": "printUninstallSummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 96
+        },
+        {
+          "caller": "printUninstallSummary",
+          "callee": "lines.join",
+          "lineNumber": 96
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 104
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 106
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 107
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.push",
+          "lineNumber": 108
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "process.stdout.write",
+          "lineNumber": 109
+        },
+        {
+          "caller": "printVerifySummary",
+          "callee": "lines.join",
+          "lineNumber": 109
+        },
+        {
+          "caller": "main",
+          "callee": "parseArgs",
+          "lineNumber": 113
+        },
+        {
+          "caller": "main",
+          "callee": "process.argv.slice",
+          "lineNumber": 113
+        },
+        {
+          "caller": "main",
+          "callee": "printHelp",
+          "lineNumber": 115
+        },
+        {
+          "caller": "main",
+          "callee": "Number.parseInt",
+          "lineNumber": 122
+        },
+        {
+          "caller": "main",
+          "callee": "install",
+          "lineNumber": 138
+        },
+        {
+          "caller": "main",
+          "callee": "printInstallSummary",
+          "lineNumber": 139
+        },
+        {
+          "caller": "main",
+          "callee": "uninstall",
+          "lineNumber": 143
+        },
+        {
+          "caller": "main",
+          "callee": "printUninstallSummary",
+          "lineNumber": 144
+        },
+        {
+          "caller": "main",
+          "callee": "verify",
+          "lineNumber": 148
+        },
+        {
+          "caller": "main",
+          "callee": "printVerifySummary",
+          "lineNumber": 149
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 150
+        },
+        {
+          "caller": "main",
+          "callee": "process.stderr.write",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "String",
+          "lineNumber": 154
+        },
+        {
+          "caller": "main",
+          "callee": "process.exit",
+          "lineNumber": 155
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 6,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/install.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 154,
+      "nonEmptyLines": 139,
+      "functions": [
+        {
+          "name": "ensureDir",
+          "startLine": 67,
+          "endLine": 69,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "install",
+          "startLine": 71,
+          "endLine": 140,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "normalizeCliPath",
+          "startLine": 142,
+          "endLine": 154,
+          "params": [
+            "input"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "install",
+          "line": 71,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ensureDir",
+          "callee": "existsSync",
+          "lineNumber": 68
+        },
+        {
+          "caller": "ensureDir",
+          "callee": "mkdir",
+          "lineNumber": 68
+        },
+        {
+          "caller": "install",
+          "callee": "createLogger",
+          "lineNumber": 72
+        },
+        {
+          "caller": "install",
+          "callee": "resolvePaths",
+          "lineNumber": 77
+        },
+        {
+          "caller": "install",
+          "callee": "log.info",
+          "lineNumber": 83
+        },
+        {
+          "caller": "install",
+          "callee": "existsSync",
+          "lineNumber": 85
+        },
+        {
+          "caller": "install",
+          "callee": "readFile",
+          "lineNumber": 92
+        },
+        {
+          "caller": "install",
+          "callee": "JSON.parse",
+          "lineNumber": 95
+        },
+        {
+          "caller": "install",
+          "callee": "String",
+          "lineNumber": 99
+        },
+        {
+          "caller": "install",
+          "callee": "ensureDir",
+          "lineNumber": 103
+        },
+        {
+          "caller": "install",
+          "callee": "dirname",
+          "lineNumber": 103
+        },
+        {
+          "caller": "install",
+          "callee": "backupPathFor",
+          "lineNumber": 104
+        },
+        {
+          "caller": "install",
+          "callee": "now().toISOString",
+          "lineNumber": 104
+        },
+        {
+          "caller": "install",
+          "callee": "now",
+          "lineNumber": 104
+        },
+        {
+          "caller": "install",
+          "callee": "writeFile",
+          "lineNumber": 105
+        },
+        {
+          "caller": "install",
+          "callee": "log.info",
+          "lineNumber": 106
+        },
+        {
+          "caller": "install",
+          "callee": "normalizeCliPath",
+          "lineNumber": 108
+        },
+        {
+          "caller": "install",
+          "callee": "defaultHookEntries",
+          "lineNumber": 109
+        },
+        {
+          "caller": "install",
+          "callee": "mergeHiveHooks",
+          "lineNumber": 115
+        },
+        {
+          "caller": "install",
+          "callee": "JSON.stringify",
+          "lineNumber": 116
+        },
+        {
+          "caller": "install",
+          "callee": "writeFile",
+          "lineNumber": 117
+        },
+        {
+          "caller": "install",
+          "callee": "now().toISOString",
+          "lineNumber": 121
+        },
+        {
+          "caller": "install",
+          "callee": "now",
+          "lineNumber": 121
+        },
+        {
+          "caller": "install",
+          "callee": "entries.map",
+          "lineNumber": 124
+        },
+        {
+          "caller": "install",
+          "callee": "writeFile",
+          "lineNumber": 127
+        },
+        {
+          "caller": "install",
+          "callee": "JSON.stringify",
+          "lineNumber": 127
+        },
+        {
+          "caller": "install",
+          "callee": "log.info",
+          "lineNumber": 129
+        },
+        {
+          "caller": "install",
+          "callee": "entries.map",
+          "lineNumber": 135
+        },
+        {
+          "caller": "normalizeCliPath",
+          "callee": "input.trim",
+          "lineNumber": 144
+        },
+        {
+          "caller": "normalizeCliPath",
+          "callee": "trimmed.includes",
+          "lineNumber": 148
+        },
+        {
+          "caller": "normalizeCliPath",
+          "callee": "trimmed.slice",
+          "lineNumber": 150
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/paths.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 90,
+      "nonEmptyLines": 78,
+      "functions": [
+        {
+          "name": "allHookBasenames",
+          "startLine": 41,
+          "endLine": 43,
+          "params": []
+        },
+        {
+          "name": "defaultHooksDirFromUrl",
+          "startLine": 45,
+          "endLine": 51,
+          "params": [
+            "moduleUrl"
+          ]
+        },
+        {
+          "name": "resolvePaths",
+          "startLine": 53,
+          "endLine": 72,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "hookCommandFor",
+          "startLine": 74,
+          "endLine": 84,
+          "params": [
+            "hooksDir",
+            "basename",
+            "cliPath"
+          ]
+        },
+        {
+          "name": "backupPathFor",
+          "startLine": 86,
+          "endLine": 90,
+          "params": [
+            "settingsPath",
+            "isoTimestamp"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "allHookBasenames",
+          "line": 41,
+          "isDefault": false
+        },
+        {
+          "name": "resolvePaths",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "hookCommandFor",
+          "line": 74,
+          "isDefault": false
+        },
+        {
+          "name": "backupPathFor",
+          "line": 86,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "defaultHooksDirFromUrl",
+          "callee": "dirname",
+          "lineNumber": 49
+        },
+        {
+          "caller": "defaultHooksDirFromUrl",
+          "callee": "fileURLToPath",
+          "lineNumber": 49
+        },
+        {
+          "caller": "defaultHooksDirFromUrl",
+          "callee": "resolve",
+          "lineNumber": 50
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "homedir",
+          "lineNumber": 54
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "join",
+          "lineNumber": 55
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "join",
+          "lineNumber": 56
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "join",
+          "lineNumber": 57
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "resolve",
+          "lineNumber": 61
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "defaultHooksDirFromUrl",
+          "lineNumber": 63
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "resolve",
+          "lineNumber": 68
+        },
+        {
+          "caller": "resolvePaths",
+          "callee": "process.cwd",
+          "lineNumber": 68
+        },
+        {
+          "caller": "hookCommandFor",
+          "callee": "join",
+          "lineNumber": 79
+        },
+        {
+          "caller": "backupPathFor",
+          "callee": "isoTimestamp.replace",
+          "lineNumber": 88
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/settings-merger.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 130,
+      "nonEmptyLines": 115,
+      "functions": [
+        {
+          "name": "buildGroup",
+          "startLine": 48,
+          "endLine": 58,
+          "params": [
+            "spec"
+          ]
+        },
+        {
+          "name": "isHiveGroup",
+          "startLine": 60,
+          "endLine": 62,
+          "params": [
+            "group"
+          ]
+        },
+        {
+          "name": "mergeHiveHooks",
+          "startLine": 72,
+          "endLine": 101,
+          "params": [
+            "settings",
+            "entries"
+          ]
+        },
+        {
+          "name": "hasHiveHooks",
+          "startLine": 107,
+          "endLine": 113,
+          "params": [
+            "settings"
+          ]
+        },
+        {
+          "name": "defaultHookEntries",
+          "startLine": 119,
+          "endLine": 130,
+          "params": [
+            "hooksDir",
+            "timeoutSeconds",
+            "cmdBuilder",
+            "cliPath"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "HIVE_MIND_MARKER",
+          "line": 17,
+          "isDefault": false
+        },
+        {
+          "name": "HOOK_EVENT_BY_BASENAME",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "mergeHiveHooks",
+          "line": 72,
+          "isDefault": false
+        },
+        {
+          "name": "hasHiveHooks",
+          "line": 107,
+          "isDefault": false
+        },
+        {
+          "name": "defaultHookEntries",
+          "line": 119,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "mergeHiveHooks",
+          "callee": "buildGroup",
+          "lineNumber": 83
+        },
+        {
+          "caller": "mergeHiveHooks",
+          "callee": "isHiveGroup",
+          "lineNumber": 88
+        },
+        {
+          "caller": "mergeHiveHooks",
+          "callee": "existingArr.push",
+          "lineNumber": 94
+        },
+        {
+          "caller": "hasHiveHooks",
+          "callee": "Object.values",
+          "lineNumber": 109
+        },
+        {
+          "caller": "hasHiveHooks",
+          "callee": "Array.isArray",
+          "lineNumber": 110
+        },
+        {
+          "caller": "hasHiveHooks",
+          "callee": "groups.some",
+          "lineNumber": 110
+        },
+        {
+          "caller": "defaultHookEntries",
+          "callee": "allHookBasenames().map",
+          "lineNumber": 125
+        },
+        {
+          "caller": "defaultHookEntries",
+          "callee": "allHookBasenames",
+          "lineNumber": 125
+        },
+        {
+          "caller": "defaultHookEntries",
+          "callee": "cmdBuilder",
+          "lineNumber": 127
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 5,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/uninstall.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 98,
+      "nonEmptyLines": 85,
+      "functions": [
+        {
+          "name": "isPointer",
+          "startLine": 37,
+          "endLine": 41,
+          "params": [
+            "value"
+          ]
+        },
+        {
+          "name": "uninstall",
+          "startLine": 43,
+          "endLine": 98,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "uninstall",
+          "line": 43,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "uninstall",
+          "callee": "createLogger",
+          "lineNumber": 44
+        },
+        {
+          "caller": "uninstall",
+          "callee": "resolvePaths",
+          "lineNumber": 45
+        },
+        {
+          "caller": "uninstall",
+          "callee": "existsSync",
+          "lineNumber": 51
+        },
+        {
+          "caller": "uninstall",
+          "callee": "readFile",
+          "lineNumber": 58
+        },
+        {
+          "caller": "uninstall",
+          "callee": "JSON.parse",
+          "lineNumber": 59
+        },
+        {
+          "caller": "uninstall",
+          "callee": "isPointer",
+          "lineNumber": 60
+        },
+        {
+          "caller": "uninstall",
+          "callee": "existsSync",
+          "lineNumber": 65
+        },
+        {
+          "caller": "uninstall",
+          "callee": "readFile",
+          "lineNumber": 71
+        },
+        {
+          "caller": "uninstall",
+          "callee": "writeFile",
+          "lineNumber": 72
+        },
+        {
+          "caller": "uninstall",
+          "callee": "readFile",
+          "lineNumber": 75
+        },
+        {
+          "caller": "uninstall",
+          "callee": "log.info",
+          "lineNumber": 83
+        },
+        {
+          "caller": "uninstall",
+          "callee": "unlink",
+          "lineNumber": 87
+        },
+        {
+          "caller": "uninstall",
+          "callee": "unlink",
+          "lineNumber": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/src/verify.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 175,
+      "nonEmptyLines": 160,
+      "functions": [
+        {
+          "name": "fileReadable",
+          "startLine": 43,
+          "endLine": 45,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "findHiveGroup",
+          "startLine": 47,
+          "endLine": 50,
+          "params": [
+            "groups",
+            "command"
+          ]
+        },
+        {
+          "name": "isJsPath",
+          "startLine": 52,
+          "endLine": 54,
+          "params": [
+            "p"
+          ]
+        },
+        {
+          "name": "probeCliVersion",
+          "startLine": 56,
+          "endLine": 93,
+          "params": [
+            "cliPath",
+            "spawnImpl",
+            "timeoutMs"
+          ]
+        },
+        {
+          "name": "verify",
+          "startLine": 95,
+          "endLine": 175,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "verify",
+          "line": 95,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fileReadable",
+          "callee": "access",
+          "lineNumber": 44
+        },
+        {
+          "caller": "findHiveGroup",
+          "callee": "Array.isArray",
+          "lineNumber": 48
+        },
+        {
+          "caller": "findHiveGroup",
+          "callee": "groups.find",
+          "lineNumber": 49
+        },
+        {
+          "caller": "isJsPath",
+          "callee": "p.endsWith",
+          "lineNumber": 53
+        },
+        {
+          "caller": "isJsPath",
+          "callee": "p.endsWith",
+          "lineNumber": 53
+        },
+        {
+          "caller": "isJsPath",
+          "callee": "p.endsWith",
+          "lineNumber": 53
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "isJsPath",
+          "lineNumber": 65
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "isJsPath",
+          "lineNumber": 66
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "spawnImpl",
+          "lineNumber": 67
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "setTimeout",
+          "lineNumber": 70
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.kill",
+          "lineNumber": 73
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "resolve",
+          "lineNumber": 74
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.stdout?.on",
+          "lineNumber": 76
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "stdout.push",
+          "lineNumber": 76
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.stderr?.on",
+          "lineNumber": 77
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "stderr.push",
+          "lineNumber": 77
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.on",
+          "lineNumber": 78
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "clearTimeout",
+          "lineNumber": 81
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "resolve",
+          "lineNumber": 82
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "String",
+          "lineNumber": 82
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "child.on",
+          "lineNumber": 84
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "clearTimeout",
+          "lineNumber": 87
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stdout).toString('utf-8').slice",
+          "lineNumber": 88
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stdout).toString",
+          "lineNumber": 88
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat",
+          "lineNumber": 88
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stderr).toString('utf-8').slice",
+          "lineNumber": 89
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat(stderr).toString",
+          "lineNumber": 89
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "Buffer.concat",
+          "lineNumber": 89
+        },
+        {
+          "caller": "probeCliVersion",
+          "callee": "resolve",
+          "lineNumber": 90
+        },
+        {
+          "caller": "verify",
+          "callee": "createLogger",
+          "lineNumber": 96
+        },
+        {
+          "caller": "verify",
+          "callee": "resolvePaths",
+          "lineNumber": 97
+        },
+        {
+          "caller": "verify",
+          "callee": "existsSync",
+          "lineNumber": 104
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 105
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 108
+        },
+        {
+          "caller": "verify",
+          "callee": "JSON.parse",
+          "lineNumber": 112
+        },
+        {
+          "caller": "verify",
+          "callee": "readFile",
+          "lineNumber": 112
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 113
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "verify",
+          "callee": "String",
+          "lineNumber": 118
+        },
+        {
+          "caller": "verify",
+          "callee": "allHookBasenames",
+          "lineNumber": 124
+        },
+        {
+          "caller": "verify",
+          "callee": "Array.isArray",
+          "lineNumber": 128
+        },
+        {
+          "caller": "verify",
+          "callee": "groups.find",
+          "lineNumber": 129
+        },
+        {
+          "caller": "verify",
+          "callee": "g.hooks[0]?.command.includes",
+          "lineNumber": 129
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 132
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 135
+        },
+        {
+          "caller": "verify",
+          "callee": "found.hooks[0]?.command.match",
+          "lineNumber": 138
+        },
+        {
+          "caller": "verify",
+          "callee": "fileReadable",
+          "lineNumber": 140
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 141
+        },
+        {
+          "caller": "verify",
+          "callee": "existsSync",
+          "lineNumber": 154
+        },
+        {
+          "caller": "verify",
+          "callee": "JSON.parse",
+          "lineNumber": 156
+        },
+        {
+          "caller": "verify",
+          "callee": "readFile",
+          "lineNumber": 156
+        },
+        {
+          "caller": "verify",
+          "callee": "probeCliVersion",
+          "lineNumber": 165
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.push",
+          "lineNumber": 166
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.every",
+          "lineNumber": 172
+        },
+        {
+          "caller": "verify",
+          "callee": "log.info",
+          "lineNumber": 173
+        },
+        {
+          "caller": "verify",
+          "callee": "checks.filter",
+          "lineNumber": 173
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 1,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/install.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 150,
+      "nonEmptyLines": 133,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 16,
+          "endLine": 25,
+          "params": [
+            "initial"
+          ]
+        },
+        {
+          "name": "cleanup",
+          "startLine": 27,
+          "endLine": 29,
+          "params": [
+            "env"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 17
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 17
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 17
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 20
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "JSON.stringify",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "resolve",
+          "lineNumber": 22
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 23
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 24
+        },
+        {
+          "caller": "cleanup",
+          "callee": "rm",
+          "lineNumber": 28
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/paths.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 73,
+      "nonEmptyLines": 64,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/settings-merger.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 113,
+      "nonEmptyLines": 100,
+      "functions": [
+        {
+          "name": "makeEntry",
+          "startLine": 15,
+          "endLine": 21,
+          "params": [
+            "basename"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeEntry",
+          "callee": "hookCommandFor",
+          "lineNumber": 18
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/uninstall.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 100,
+      "nonEmptyLines": 88,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 18,
+          "endLine": 27,
+          "params": [
+            "initial"
+          ]
+        },
+        {
+          "name": "sha256",
+          "startLine": 29,
+          "endLine": 31,
+          "params": [
+            "s"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 20
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 22
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 23
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "JSON.stringify",
+          "lineNumber": 23
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "resolve",
+          "lineNumber": 24
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 25
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 26
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update(s, 'utf-8').digest",
+          "lineNumber": 30
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 30
+        },
+        {
+          "caller": "sha256",
+          "callee": "createHash",
+          "lineNumber": 30
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-hooks-claude-code/tests/verify.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 145,
+      "nonEmptyLines": 133,
+      "functions": [
+        {
+          "name": "bootstrap",
+          "startLine": 17,
+          "endLine": 31,
+          "params": [
+            "initial",
+            "withHookFiles"
+          ]
+        },
+        {
+          "name": "mockSpawnImpl",
+          "startLine": 33,
+          "endLine": 46,
+          "params": [
+            "opts"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "bootstrap",
+          "callee": "mkdtemp",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "tmpdir",
+          "lineNumber": 18
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 19
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 20
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 21
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 22
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "JSON.stringify",
+          "lineNumber": 22
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 23
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "mkdir",
+          "lineNumber": 24
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "writeFile",
+          "lineNumber": 27
+        },
+        {
+          "caller": "bootstrap",
+          "callee": "join",
+          "lineNumber": 27
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "import",
+          "lineNumber": 33
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Readable.from",
+          "lineNumber": 36
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Buffer.from",
+          "lineNumber": 36
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Readable.from",
+          "lineNumber": 37
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Buffer.from",
+          "lineNumber": 37
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "Object.assign",
+          "lineNumber": 38
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "vi.fn",
+          "lineNumber": 41
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "setImmediate",
+          "lineNumber": 43
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "emitter.emit",
+          "lineNumber": 43
+        },
+        {
+          "caller": "mockSpawnImpl",
+          "callee": "import",
+          "lineNumber": 45
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    }
+  ]
+}

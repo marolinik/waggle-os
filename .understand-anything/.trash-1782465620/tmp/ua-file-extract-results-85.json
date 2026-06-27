@@ -1,0 +1,251 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/shared/src/connector-recommendations.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 173,
+      "nonEmptyLines": 164,
+      "functions": [
+        {
+          "name": "recommendConnectors",
+          "startLine": 146,
+          "endLine": 150,
+          "params": [
+            "personaId"
+          ]
+        },
+        {
+          "name": "flattenRecommendation",
+          "startLine": 158,
+          "endLine": 160,
+          "params": [
+            "rec"
+          ]
+        },
+        {
+          "name": "allReferencedConnectorIds",
+          "startLine": 164,
+          "endLine": 173,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "CONNECTOR_RECOMMENDATIONS",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "recommendConnectors",
+          "line": 146,
+          "isDefault": false
+        },
+        {
+          "name": "flattenRecommendation",
+          "line": 158,
+          "isDefault": false
+        },
+        {
+          "name": "allReferencedConnectorIds",
+          "line": 164,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "allReferencedConnectorIds",
+          "callee": "seen.add",
+          "lineNumber": 166
+        },
+        {
+          "caller": "allReferencedConnectorIds",
+          "callee": "seen.add",
+          "lineNumber": 167
+        },
+        {
+          "caller": "allReferencedConnectorIds",
+          "callee": "Object.values",
+          "lineNumber": 168
+        },
+        {
+          "caller": "allReferencedConnectorIds",
+          "callee": "seen.add",
+          "lineNumber": 169
+        },
+        {
+          "caller": "allReferencedConnectorIds",
+          "callee": "seen.add",
+          "lineNumber": 170
+        },
+        {
+          "caller": "allReferencedConnectorIds",
+          "callee": "[...seen].sort",
+          "lineNumber": 172
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/shared/src/mcp-catalog.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 319,
+      "nonEmptyLines": 299,
+      "functions": [
+        {
+          "name": "normalizeMcpId",
+          "startLine": 268,
+          "endLine": 282,
+          "params": [
+            "raw"
+          ]
+        },
+        {
+          "name": "assertCatalogUnique",
+          "startLine": 293,
+          "endLine": 317,
+          "params": [
+            "catalog"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "MCP_CATEGORIES",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "CATEGORY_EMOJI",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "MCP_CATALOG",
+          "line": 53,
+          "isDefault": false
+        },
+        {
+          "name": "normalizeMcpId",
+          "line": 268,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace(/\\bserver[- ]?mcp\\b/g, '')\r\n    .replace(/\\bmcp\\b/g, '')\r\n    .replace(/^server[- ]/, '')        // leading \"server-\" (post-scope)\r\n    .replace(/[- ]server$/, '')        // trailing \"-server\"\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace(/^-+|-+$/g, '')\r\n    .trim",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace(/\\bserver[- ]?mcp\\b/g, '')\r\n    .replace(/\\bmcp\\b/g, '')\r\n    .replace(/^server[- ]/, '')        // leading \"server-\" (post-scope)\r\n    .replace(/[- ]server$/, '')        // trailing \"-server\"\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace(/\\bserver[- ]?mcp\\b/g, '')\r\n    .replace(/\\bmcp\\b/g, '')\r\n    .replace(/^server[- ]/, '')        // leading \"server-\" (post-scope)\r\n    .replace(/[- ]server$/, '')        // trailing \"-server\"\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace(/\\bserver[- ]?mcp\\b/g, '')\r\n    .replace(/\\bmcp\\b/g, '')\r\n    .replace(/^server[- ]/, '')        // leading \"server-\" (post-scope)\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace(/\\bserver[- ]?mcp\\b/g, '')\r\n    .replace(/\\bmcp\\b/g, '')\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace(/\\bserver[- ]?mcp\\b/g, '')\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace(/\\bmcp[- ]?server\\b/g, '')\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace(/\\s+/g, ' ')\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace(/[.()[\\]/,]/g, ' ')       // punctuation → space\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace(/^@[^/]+\\//, '')          // strip npm scope\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase()\r\n    .replace",
+          "lineNumber": 269
+        },
+        {
+          "caller": "normalizeMcpId",
+          "callee": "raw\r\n    .toLowerCase",
+          "lineNumber": 269
+        },
+        {
+          "caller": "assertCatalogUnique",
+          "callee": "normalizeMcpId",
+          "lineNumber": 297
+        },
+        {
+          "caller": "assertCatalogUnique",
+          "callee": "seenIds.get",
+          "lineNumber": 298
+        },
+        {
+          "caller": "assertCatalogUnique",
+          "callee": "seenIds.set",
+          "lineNumber": 307
+        },
+        {
+          "caller": "assertCatalogUnique",
+          "callee": "seenUrls.get",
+          "lineNumber": 308
+        },
+        {
+          "caller": "assertCatalogUnique",
+          "callee": "seenUrls.set",
+          "lineNumber": 315
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 4,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/shared/tests/connector-recommendations.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 113,
+      "nonEmptyLines": 100,
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/backend-map/DIAGRAMS/01-system-architecture.md", "language": "markdown", "sizeLines": 147, "fileCategory": "docs"},
+    {"path": "docs/backend-map/DIAGRAMS/02-master-er.md", "language": "markdown", "sizeLines": 466, "fileCategory": "docs"},
+    {"path": "docs/backend-map/DIAGRAMS/03-chat-turn-sequence.md", "language": "markdown", "sizeLines": 80, "fileCategory": "docs"},
+    {"path": "docs/backend-map/DIAGRAMS/04-feature-api-map.md", "language": "markdown", "sizeLines": 218, "fileCategory": "docs"},
+    {"path": "docs/backend-map/DIAGRAMS/05-tier-gating.md", "language": "markdown", "sizeLines": 159, "fileCategory": "docs"},
+    {"path": "docs/backend-map/DIAGRAMS/06-api-domains.md", "language": "markdown", "sizeLines": 110, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/backend-map/DIAGRAMS/01-system-architecture.md": [],
+    "docs/backend-map/DIAGRAMS/02-master-er.md": [],
+    "docs/backend-map/DIAGRAMS/03-chat-turn-sequence.md": [],
+    "docs/backend-map/DIAGRAMS/04-feature-api-map.md": [],
+    "docs/backend-map/DIAGRAMS/05-tier-gating.md": [],
+    "docs/backend-map/DIAGRAMS/06-api-domains.md": []
+  },
+  "batchImportData": {}
+}

@@ -1,0 +1,345 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "type": "file",
+      "name": "_shared.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "summary": "Shared utilities for the hive-mind Claude Code hook system, providing the core runHook orchestrator, stdin reading, JSON parsing, and field extraction helpers used by every individual hook handler.",
+      "tags": ["utility", "hook", "event-handler", "middleware"],
+      "complexity": "complex",
+      "languageNotes": "Exports a runHook higher-order function that accepts a handler object with parse/run methods, wiring stdin → JSON parse → handler → stdout response in a consistent pattern across all hook types."
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts:runHook",
+      "type": "function",
+      "name": "runHook",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "lineRange": [99, 129],
+      "summary": "Core hook orchestrator that wires stdin reading, JSON parsing, handler dispatch, and stdout response writing for all Claude Code hook types.",
+      "tags": ["utility", "event-handler", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts:readStdinAsString",
+      "type": "function",
+      "name": "readStdinAsString",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "lineRange": [64, 88],
+      "summary": "Reads process stdin to a string with a configurable timeout, handling data/end/error events and resolving on completion or timeout.",
+      "tags": ["utility", "io"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/src/hooks/pre-compact.ts",
+      "type": "file",
+      "name": "pre-compact.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/pre-compact.ts",
+      "summary": "Implements the PreCompact Claude Code hook handler that triggers hive-mind frame cleanup before context compaction occurs.",
+      "tags": ["hook", "event-handler", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "type": "file",
+      "name": "session-start.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "summary": "Implements the SessionStart Claude Code hook handler that recalls relevant memory from the hive-mind substrate and injects it into the session context at startup.",
+      "tags": ["hook", "event-handler", "memory", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts:formatHitsForContext",
+      "type": "function",
+      "name": "formatHitsForContext",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "lineRange": [42, 57],
+      "summary": "Formats memory recall hits into a human-readable context string to be injected into the Claude Code session prompt.",
+      "tags": ["utility", "serialization", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/src/hooks/stop.ts",
+      "type": "file",
+      "name": "stop.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/stop.ts",
+      "summary": "Implements the Stop Claude Code hook handler that saves memory frames from the completed session turn, classifies importance, and optionally emits a WaggleDance discovery signal.",
+      "tags": ["hook", "event-handler", "memory", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/src/hooks/user-prompt-submit.ts",
+      "type": "file",
+      "name": "user-prompt-submit.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/src/hooks/user-prompt-submit.ts",
+      "summary": "Implements the UserPromptSubmit Claude Code hook handler that captures user prompt input as a hive-mind memory frame for persistent context tracking.",
+      "tags": ["hook", "event-handler", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "type": "file",
+      "name": "_test-helpers.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "summary": "Test utility module providing makeMockBridge factory for creating vitest mock bridge objects and makeHookCaptures for capturing stdout/exit output from hook handlers under test.",
+      "tags": ["test", "utility", "factory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts:makeMockBridge",
+      "type": "function",
+      "name": "makeMockBridge",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "lineRange": [20, 38],
+      "summary": "Factory that creates a vitest mock bridge object with all hive-mind CLI bridge methods stubbed, supporting partial overrides for specific test scenarios.",
+      "tags": ["test", "factory", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts:makeHookCaptures",
+      "type": "function",
+      "name": "makeHookCaptures",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "lineRange": [45, 57],
+      "summary": "Creates capture arrays for hook stdout writes and exit calls, used to assert hook output and exit codes in tests.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/tests/hooks/pre-compact.test.ts",
+      "type": "file",
+      "name": "pre-compact.test.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/pre-compact.test.ts",
+      "summary": "Unit tests for the PreCompact hook handler verifying frame cleanup is triggered with correct session/workspace parameters.",
+      "tags": ["test", "hook", "memory"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/tests/hooks/session-start.test.ts",
+      "type": "file",
+      "name": "session-start.test.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/session-start.test.ts",
+      "summary": "Unit tests for the SessionStart hook handler verifying memory recall and context injection behavior across different session scenarios.",
+      "tags": ["test", "hook", "memory"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/tests/hooks/shared.test.ts",
+      "type": "file",
+      "name": "shared.test.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/shared.test.ts",
+      "summary": "Unit tests for the shared hook utilities covering parseHookArgs, safeJsonParse, pickStringField, and pickStringFromObject helper functions.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/tests/hooks/stop.test.ts",
+      "type": "file",
+      "name": "stop.test.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/stop.test.ts",
+      "summary": "Comprehensive unit tests for the Stop hook handler covering memory frame saving, importance classification, WaggleDance signal emission, and edge cases like missing fields or disabled emit.",
+      "tags": ["test", "hook", "memory"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/hive-mind-hooks-claude-code/tests/hooks/user-prompt-submit.test.ts",
+      "type": "file",
+      "name": "user-prompt-submit.test.ts",
+      "filePath": "packages/hive-mind-hooks-claude-code/tests/hooks/user-prompt-submit.test.ts",
+      "summary": "Unit tests for the UserPromptSubmit hook handler verifying that user prompts are correctly captured and persisted as hive-mind memory frames.",
+      "tags": ["test", "hook", "memory"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts:runHook",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts:readStdinAsString",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts:runHook",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts:readStdinAsString",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts:formatHitsForContext",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts:makeMockBridge",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts:makeHookCaptures",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts:makeMockBridge",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "target": "function:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts:makeHookCaptures",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/pre-compact.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/stop.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/user-prompt-submit.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/pre-compact.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/pre-compact.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/pre-compact.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/session-start.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/session-start.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/shared.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/stop.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/stop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/stop.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/user-prompt-submit.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/src/hooks/user-prompt-submit.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/tests/hooks/user-prompt-submit.test.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/_test-helpers.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/pre-compact.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/pre-compact.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/session-start.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/session-start.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/_shared.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/shared.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/stop.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/stop.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/hive-mind-hooks-claude-code/src/hooks/user-prompt-submit.ts",
+      "target": "file:packages/hive-mind-hooks-claude-code/tests/hooks/user-prompt-submit.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

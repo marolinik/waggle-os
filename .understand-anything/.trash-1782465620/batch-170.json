@@ -1,0 +1,64 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/hive-mind-hooks-cursor/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/hive-mind-hooks-cursor/README.md",
+      "summary": "Documentation for the @waggle/hive-mind-hooks-cursor package, describing how to install, verify, and uninstall the Cursor silent-capture shim that wires sessionStart, beforeSubmitPrompt, stop, and preCompact lifecycle hooks into hive-mind frames. Includes a capture fidelity table disclosing two degraded events (beforeSubmitPrompt is save-only, preCompact is observational).",
+      "tags": ["documentation", "cursor", "hooks", "memory", "infrastructure"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-cursor/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/hive-mind-hooks-cursor/package.json",
+      "summary": "NPM package manifest for @waggle/hive-mind-hooks-cursor v0.1.0, declaring the Cursor silent-capture shim as a public ESM package with four named hook exports, a CLI binary entry point, and dependencies on @waggle/hive-mind-hooks-core and @waggle/hive-mind-shim-core.",
+      "tags": ["configuration", "build-system", "hooks", "package-manifest"],
+      "complexity": "moderate",
+      "languageNotes": "Declares four named exports for individual hook files (session-start, user-prompt-submit, stop, pre-compact) alongside the default barrel, plus a bin entry for the cursor-hooks CLI installer."
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-cursor/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/hive-mind-hooks-cursor/tsconfig.json",
+      "summary": "TypeScript build configuration for the hive-mind-hooks-cursor package, extending the monorepo base config with composite project references to hive-mind-hooks-core and hive-mind-shim-core to enable incremental builds.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/hive-mind-hooks-cursor/tsconfig.test.json",
+      "type": "config",
+      "name": "tsconfig.test.json",
+      "filePath": "packages/hive-mind-hooks-cursor/tsconfig.test.json",
+      "summary": "TypeScript test-only compiler configuration for hive-mind-hooks-cursor, extending the base config with noEmit mode and including both src and tests directories without generating output artifacts.",
+      "tags": ["configuration", "typescript", "test"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/hive-mind-hooks-cursor/README.md",
+      "target": "config:packages/hive-mind-hooks-cursor/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/hive-mind-hooks-cursor/tsconfig.json",
+      "target": "config:packages/hive-mind-hooks-cursor/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:packages/hive-mind-hooks-cursor/tsconfig.test.json",
+      "target": "config:packages/hive-mind-hooks-cursor/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

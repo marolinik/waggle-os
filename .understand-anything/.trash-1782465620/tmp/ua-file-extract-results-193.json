@@ -1,0 +1,962 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 25,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/probes/vertex-batch-eligibility/probe-input.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 5,
+      "nonEmptyLines": 5,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/probes/vertex-batch-eligibility/probe-script.py",
+      "language": "python",
+      "fileCategory": "code",
+      "totalLines": 378,
+      "nonEmptyLines": 333,
+      "functions": [
+        {
+          "name": "ts",
+          "startLine": 116,
+          "endLine": 117,
+          "params": []
+        },
+        {
+          "name": "logline",
+          "startLine": 128,
+          "endLine": 135,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "build_input_jsonl",
+          "startLine": 138,
+          "endLine": 166,
+          "params": []
+        },
+        {
+          "name": "upload_to_gcs",
+          "startLine": 169,
+          "endLine": 178,
+          "params": [
+            "local_path",
+            "gcs_uri"
+          ]
+        },
+        {
+          "name": "download_first_output_jsonl",
+          "startLine": 181,
+          "endLine": 196,
+          "params": [
+            "gcs_prefix",
+            "local_path"
+          ]
+        },
+        {
+          "name": "submit_via_preview_api",
+          "startLine": 199,
+          "endLine": 222,
+          "params": [
+            "model_variant"
+          ]
+        },
+        {
+          "name": "submit_via_legacy_api",
+          "startLine": 225,
+          "endLine": 247,
+          "params": []
+        },
+        {
+          "name": "poll_until_terminal",
+          "startLine": 250,
+          "endLine": 267,
+          "params": [
+            "job",
+            "max_seconds",
+            "cadence_s"
+          ]
+        },
+        {
+          "name": "resume_job",
+          "startLine": 270,
+          "endLine": 286,
+          "params": [
+            "resource_name"
+          ]
+        },
+        {
+          "name": "main",
+          "startLine": 289,
+          "endLine": 368,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "ts",
+          "line": 116,
+          "isDefault": false
+        },
+        {
+          "name": "logline",
+          "line": 128,
+          "isDefault": false
+        },
+        {
+          "name": "build_input_jsonl",
+          "line": 138,
+          "isDefault": false
+        },
+        {
+          "name": "upload_to_gcs",
+          "line": 169,
+          "isDefault": false
+        },
+        {
+          "name": "download_first_output_jsonl",
+          "line": 181,
+          "isDefault": false
+        },
+        {
+          "name": "submit_via_preview_api",
+          "line": 199,
+          "isDefault": false
+        },
+        {
+          "name": "submit_via_legacy_api",
+          "line": 225,
+          "isDefault": false
+        },
+        {
+          "name": "poll_until_terminal",
+          "line": 250,
+          "isDefault": false
+        },
+        {
+          "name": "resume_job",
+          "line": 270,
+          "isDefault": false
+        },
+        {
+          "name": "main",
+          "line": 289,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "ts",
+          "callee": "datetime.now(timezone.utc).isoformat",
+          "lineNumber": 117
+        },
+        {
+          "caller": "ts",
+          "callee": "datetime.now",
+          "lineNumber": 117
+        },
+        {
+          "caller": "logline",
+          "callee": "ts",
+          "lineNumber": 129
+        },
+        {
+          "caller": "logline",
+          "callee": "print",
+          "lineNumber": 131
+        },
+        {
+          "caller": "logline",
+          "callee": "print",
+          "lineNumber": 133
+        },
+        {
+          "caller": "logline",
+          "callee": "line.encode(\"ascii\", errors=\"replace\").decode",
+          "lineNumber": 133
+        },
+        {
+          "caller": "logline",
+          "callee": "line.encode",
+          "lineNumber": 133
+        },
+        {
+          "caller": "logline",
+          "callee": "LOG_PATH.open",
+          "lineNumber": 134
+        },
+        {
+          "caller": "logline",
+          "callee": "f.write",
+          "lineNumber": 135
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "PROBE_DIR.mkdir",
+          "lineNumber": 139
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "FIXTURE_PATH.open",
+          "lineNumber": 141
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "INPUT_PATH.open",
+          "lineNumber": 141
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "line.strip",
+          "lineNumber": 145
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "json.loads",
+          "lineNumber": 148
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "JUDGE_PROMPT_TEMPLATE.format",
+          "lineNumber": 149
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "rec.get",
+          "lineNumber": 151
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "rec.get",
+          "lineNumber": 152
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "g.write",
+          "lineNumber": 164
+        },
+        {
+          "caller": "build_input_jsonl",
+          "callee": "json.dumps",
+          "lineNumber": 164
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "gcs_uri.startswith",
+          "lineNumber": 171
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "len",
+          "lineNumber": 172
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "rest.partition",
+          "lineNumber": 173
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "storage.Client",
+          "lineNumber": 174
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "client.bucket",
+          "lineNumber": 175
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "bucket.blob",
+          "lineNumber": 176
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "blob.upload_from_filename",
+          "lineNumber": 177
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "str",
+          "lineNumber": 177
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "logline",
+          "lineNumber": 178
+        },
+        {
+          "caller": "upload_to_gcs",
+          "callee": "local_path.stat",
+          "lineNumber": 178
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "gcs_prefix.startswith",
+          "lineNumber": 183
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "len",
+          "lineNumber": 184
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "rest.partition",
+          "lineNumber": 185
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "storage.Client",
+          "lineNumber": 186
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "client.bucket",
+          "lineNumber": 187
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "local_path.open",
+          "lineNumber": 189
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "client.list_blobs",
+          "lineNumber": 190
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "blob.name.endswith",
+          "lineNumber": 191
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "blob.download_as_text",
+          "lineNumber": 192
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "out.write",
+          "lineNumber": 193
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "sum",
+          "lineNumber": 194
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "data.splitlines",
+          "lineNumber": 194
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "line.strip",
+          "lineNumber": 194
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "logline",
+          "lineNumber": 195
+        },
+        {
+          "caller": "download_first_output_jsonl",
+          "callee": "len",
+          "lineNumber": 195
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "logline",
+          "lineNumber": 208
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "vertexai.init",
+          "lineNumber": 211
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "BatchPredictionJob.submit",
+          "lineNumber": 212
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "logline",
+          "lineNumber": 218
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "logline",
+          "lineNumber": 221
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "type",
+          "lineNumber": 221
+        },
+        {
+          "caller": "submit_via_preview_api",
+          "callee": "str",
+          "lineNumber": 221
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "logline",
+          "lineNumber": 230
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "aiplatform.init",
+          "lineNumber": 233
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "aiplatform.BatchPredictionJob.create",
+          "lineNumber": 234
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "logline",
+          "lineNumber": 243
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "logline",
+          "lineNumber": 246
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "type",
+          "lineNumber": 246
+        },
+        {
+          "caller": "submit_via_legacy_api",
+          "callee": "str",
+          "lineNumber": 246
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "time.time",
+          "lineNumber": 251
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "time.time",
+          "lineNumber": 253
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "job._sync_gca_resource",
+          "lineNumber": 256
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "logline",
+          "lineNumber": 258
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "type",
+          "lineNumber": 258
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "str",
+          "lineNumber": 258
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "str",
+          "lineNumber": 259
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "hasattr",
+          "lineNumber": 259
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "logline",
+          "lineNumber": 261
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "int",
+          "lineNumber": 261
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "time.time",
+          "lineNumber": 261
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "time.sleep",
+          "lineNumber": 265
+        },
+        {
+          "caller": "poll_until_terminal",
+          "callee": "logline",
+          "lineNumber": 266
+        },
+        {
+          "caller": "resume_job",
+          "callee": "logline",
+          "lineNumber": 272
+        },
+        {
+          "caller": "resume_job",
+          "callee": "vertexai.init",
+          "lineNumber": 276
+        },
+        {
+          "caller": "resume_job",
+          "callee": "PreviewBPJ",
+          "lineNumber": 277
+        },
+        {
+          "caller": "resume_job",
+          "callee": "logline",
+          "lineNumber": 279
+        },
+        {
+          "caller": "resume_job",
+          "callee": "type",
+          "lineNumber": 279
+        },
+        {
+          "caller": "resume_job",
+          "callee": "aiplatform.init",
+          "lineNumber": 282
+        },
+        {
+          "caller": "resume_job",
+          "callee": "aiplatform.BatchPredictionJob",
+          "lineNumber": 283
+        },
+        {
+          "caller": "resume_job",
+          "callee": "logline",
+          "lineNumber": 285
+        },
+        {
+          "caller": "resume_job",
+          "callee": "type",
+          "lineNumber": 285
+        },
+        {
+          "caller": "main",
+          "callee": "argparse.ArgumentParser",
+          "lineNumber": 290
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 291
+        },
+        {
+          "caller": "main",
+          "callee": "ap.add_argument",
+          "lineNumber": 292
+        },
+        {
+          "caller": "main",
+          "callee": "ap.parse_args",
+          "lineNumber": 293
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 295
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 301
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 303
+        },
+        {
+          "caller": "main",
+          "callee": "resume_job",
+          "lineNumber": 306
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 308
+        },
+        {
+          "caller": "main",
+          "callee": "build_input_jsonl",
+          "lineNumber": 312
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 313
+        },
+        {
+          "caller": "main",
+          "callee": "upload_to_gcs",
+          "lineNumber": 317
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 319
+        },
+        {
+          "caller": "main",
+          "callee": "type",
+          "lineNumber": 319
+        },
+        {
+          "caller": "main",
+          "callee": "str",
+          "lineNumber": 319
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 320
+        },
+        {
+          "caller": "main",
+          "callee": "submit_via_preview_api",
+          "lineNumber": 334
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 338
+        },
+        {
+          "caller": "main",
+          "callee": "submit_via_legacy_api",
+          "lineNumber": 339
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 341
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 342
+        },
+        {
+          "caller": "main",
+          "callee": "poll_until_terminal",
+          "lineNumber": 346
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 347
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 350
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 351
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 356
+        },
+        {
+          "caller": "main",
+          "callee": "download_first_output_jsonl",
+          "lineNumber": 357
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 358
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 359
+        },
+        {
+          "caller": "main",
+          "callee": "getattr",
+          "lineNumber": 362
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 363
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 364
+        },
+        {
+          "caller": "main",
+          "callee": "logline",
+          "lineNumber": 367
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 10,
+        "functionCount": 10,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "benchmarks/results/.gitkeep",
+      "language": "unknown",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/agentic-locomo-2026-04-25T16-13-29-924Z.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 400,
+      "nonEmptyLines": 400,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/checkpoint-c/checkpoint-c-eval.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 15,
+      "nonEmptyLines": 15,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/corpus/h3-northlane-cfo-50-instances.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 50,
+      "nonEmptyLines": 50,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/gen-1/gen-1-eval-void-registry-bug-superseded.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 11,
+      "nonEmptyLines": 11,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/gen-1/gen-1-eval.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 120,
+      "nonEmptyLines": 120,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/null-baseline/null-baseline-eval-artifactual-bug-superseded.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 40,
+      "nonEmptyLines": 40,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/null-baseline/null-baseline-eval.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 40,
+      "nonEmptyLines": 40,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/invalidated/pilot-task-1-C.invalidated-2026-04-26T01-33-08-392Z.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/invalidated/pilot-task-1-D.invalidated-2026-04-26T01-35-05-441Z.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-summary.json",
+      "language": "json",
+      "fileCategory": "config",
+      "totalLines": 54,
+      "nonEmptyLines": 54,
+      "sections": [
+        {
+          "heading": "pilot_id",
+          "level": 1,
+          "line": 2
+        },
+        {
+          "heading": "manifest_anchor",
+          "level": 1,
+          "line": 3
+        },
+        {
+          "heading": "execution_window_utc",
+          "level": 1,
+          "line": 4
+        },
+        {
+          "heading": "total_cost_usd",
+          "level": 1,
+          "line": 5
+        },
+        {
+          "heading": "total_judge_calls",
+          "level": 1,
+          "line": 6
+        },
+        {
+          "heading": "total_candidate_calls",
+          "level": 1,
+          "line": 7
+        },
+        {
+          "heading": "n_cells",
+          "level": 1,
+          "line": 8
+        },
+        {
+          "heading": "results_per_task",
+          "level": 1,
+          "line": 9
+        },
+        {
+          "heading": "aggregate",
+          "level": 1,
+          "line": 47
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 9
+      }
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-1-A.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-1-B.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-1-C.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-1-D.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-2-A.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-2-B.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-2-C.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-2-D.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-3-A.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-3-B.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-3-C.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    },
+    {
+      "path": "benchmarks/results/pilot-2026-04-26/pilot-task-3-D.jsonl",
+      "language": "jsonl",
+      "fileCategory": "code",
+      "totalLines": 1,
+      "nonEmptyLines": 1,
+      "metrics": {}
+    }
+  ]
+}

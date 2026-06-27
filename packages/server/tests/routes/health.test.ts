@@ -34,7 +34,7 @@ describe('Health Endpoint', () => {
 
     // LLM section
     expect(body.llm).toBeDefined();
-    expect(body.llm.provider).toMatch(/^(litellm|anthropic-proxy)$/);
+    expect(body.llm.provider).toMatch(/^(litellm|anthropic-proxy|ollama)$/);
     expect(body.llm.health).toMatch(/^(healthy|degraded|unavailable)$/);
     expect(body.llm.detail).toBeTruthy();
     expect(body.llm.checkedAt).toBeTruthy();
@@ -69,6 +69,30 @@ describe('Health Endpoint', () => {
     expect(body.status).toBe('ok');
     expect(body.llm.provider).toBe('litellm');
     expect(body.llm.health).toBe('healthy');
+    expect(body.llm.reachable).toBe(true);
+  });
+
+  it('reports a healthy resolved provider as reachable even when the offline probe is stale', async () => {
+    const offlineProbe = server.offlineManager as unknown as { _offline: boolean };
+    const previousOffline = offlineProbe._offline;
+    offlineProbe._offline = true;
+    server.agentState.llmProvider = {
+      provider: 'ollama',
+      health: 'healthy',
+      detail: 'Local Ollama model',
+      checkedAt: new Date().toISOString(),
+    };
+
+    try {
+      const res = await server.inject({ method: 'GET', url: '/health' });
+      const body = JSON.parse(res.payload);
+
+      expect(body.status).toBe('ok');
+      expect(body.llm.health).toBe('healthy');
+      expect(body.llm.reachable).toBe(true);
+    } finally {
+      offlineProbe._offline = previousOffline;
+    }
   });
 
   it('reports degraded when LLM provider is configured but not verified', async () => {

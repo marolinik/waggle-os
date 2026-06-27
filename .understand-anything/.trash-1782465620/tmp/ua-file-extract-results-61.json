@@ -1,0 +1,1394 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 8,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/compiler.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 212,
+      "nonEmptyLines": 185,
+      "functions": [
+        {
+          "name": "stubSynthesize",
+          "startLine": 23,
+          "endLine": 26,
+          "params": [
+            "prompt"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "stubSynthesize",
+          "callee": "prompt.match",
+          "lineNumber": 24
+        },
+        {
+          "caller": "stubSynthesize",
+          "callee": "prompt.match",
+          "lineNumber": 24
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/compiler.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 555,
+      "nonEmptyLines": 486,
+      "functions": [
+        {
+          "name": "slugify",
+          "startLine": 29,
+          "endLine": 35,
+          "params": [
+            "name"
+          ]
+        },
+        {
+          "name": "buildFrontmatter",
+          "startLine": 37,
+          "endLine": 58,
+          "params": [
+            "type",
+            "name",
+            "frameIds",
+            "relatedEntities",
+            "confidence",
+            "entityType"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "WikiCompiler",
+          "startLine": 60,
+          "endLine": 555,
+          "methods": [
+            "constructor",
+            "compileEntityPage",
+            "compileConceptPage",
+            "compileSynthesisPage",
+            "compileIndex",
+            "compileHealth",
+            "compile",
+            "detectConcepts",
+            "exportToMarkdown",
+            "exportToDirectory"
+          ],
+          "properties": [
+            "kg",
+            "frames",
+            "search",
+            "state",
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "WikiCompiler",
+          "line": 60,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase()\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace(/^-|-$/g, '')\r\n    .slice",
+          "lineNumber": 30
+        },
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase()\r\n    .replace(/[^a-z0-9]+/g, '-')\r\n    .replace",
+          "lineNumber": 30
+        },
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase()\r\n    .replace",
+          "lineNumber": 30
+        },
+        {
+          "caller": "slugify",
+          "callee": "name\r\n    .toLowerCase",
+          "lineNumber": 30
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "name.replace",
+          "lineNumber": 49
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "confidence.toFixed",
+          "lineNumber": 50
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "new Date().toISOString",
+          "lineNumber": 52
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "frameIds.join",
+          "lineNumber": 53
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "relatedEntities.map(e => `\"${e}\"`).join",
+          "lineNumber": 54
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "relatedEntities.map",
+          "lineNumber": 54
+        },
+        {
+          "caller": "buildFrontmatter",
+          "callee": "lines.join",
+          "lineNumber": 57
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.search.search",
+          "lineNumber": 91
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "searchResults.map",
+          "lineNumber": 95
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 106
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getRelationsTo",
+          "lineNumber": 107
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getEntity",
+          "lineNumber": 112
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relations.push",
+          "lineNumber": 114
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relatedEntities.push",
+          "lineNumber": 115
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.kg.getEntity",
+          "lineNumber": 119
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relations.push",
+          "lineNumber": 121
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relatedEntities.includes",
+          "lineNumber": 122
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "relatedEntities.push",
+          "lineNumber": 123
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "entityPagePrompt",
+          "lineNumber": 129
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "this.config.synthesize",
+          "lineNumber": 130
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "frameData.map",
+          "lineNumber": 132
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "slugify",
+          "lineNumber": 134
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "buildFrontmatter",
+          "lineNumber": 136
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 147
+        },
+        {
+          "caller": "compileEntityPage",
+          "callee": "contentHash",
+          "lineNumber": 152
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "this.search.search",
+          "lineNumber": 159
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "searchResults.map",
+          "lineNumber": 163
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "this.kg.searchEntities",
+          "lineNumber": 174
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "entityResults.map",
+          "lineNumber": 175
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "conceptPagePrompt",
+          "lineNumber": 177
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "this.config.synthesize",
+          "lineNumber": 178
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "frameData.map",
+          "lineNumber": 180
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "slugify",
+          "lineNumber": 182
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "buildFrontmatter",
+          "lineNumber": 184
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 194
+        },
+        {
+          "caller": "compileConceptPage",
+          "callee": "contentHash",
+          "lineNumber": 199
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "this.search.search",
+          "lineNumber": 206
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "bySource.get",
+          "lineNumber": 214
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "bySource.set",
+          "lineNumber": 217
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "group.push",
+          "lineNumber": 219
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "searchResults.slice(0, this.config.maxFramesPerCall).map",
+          "lineNumber": 227
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "searchResults.slice",
+          "lineNumber": 227
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "synthesisPagePrompt",
+          "lineNumber": 234
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "this.config.synthesize",
+          "lineNumber": 235
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "crossSourceFrames.map",
+          "lineNumber": 237
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "slugify",
+          "lineNumber": 239
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "Array.from",
+          "lineNumber": 240
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "bySource.keys",
+          "lineNumber": 240
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "buildFrontmatter",
+          "lineNumber": 242
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "new Date().toISOString",
+          "lineNumber": 252
+        },
+        {
+          "caller": "compileSynthesisPage",
+          "callee": "contentHash",
+          "lineNumber": 257
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "this.state.getAllPages",
+          "lineNumber": 264
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "allPages.filter",
+          "lineNumber": 266
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "allPages.filter",
+          "lineNumber": 267
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "allPages.filter",
+          "lineNumber": 268
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "new Date().toISOString().slice",
+          "lineNumber": 273
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "new Date().toISOString",
+          "lineNumber": 273
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 278
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 280
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "p.compiledAt.slice",
+          "lineNumber": 280
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 282
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 286
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 288
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "p.compiledAt.slice",
+          "lineNumber": 288
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 290
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 294
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 296
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "p.compiledAt.slice",
+          "lineNumber": 296
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.push",
+          "lineNumber": 298
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "lines.join",
+          "lineNumber": 301
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "new Date().toISOString",
+          "lineNumber": 310
+        },
+        {
+          "caller": "compileIndex",
+          "callee": "contentHash",
+          "lineNumber": 315
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.state.getAllPages",
+          "lineNumber": 323
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getEntityCount",
+          "lineNumber": 324
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.frames.getStats",
+          "lineNumber": 325
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getEntities",
+          "lineNumber": 328
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "allPages.map",
+          "lineNumber": 329
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "p.name.toLowerCase",
+          "lineNumber": 329
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "pageNames.has",
+          "lineNumber": 332
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "entity.name.toLowerCase",
+          "lineNumber": 332
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 334
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 336
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 350
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsFrom",
+          "lineNumber": 362
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "this.kg.getRelationsTo",
+          "lineNumber": 363
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.push",
+          "lineNumber": 365
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "issues.filter",
+          "lineNumber": 379
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.min",
+          "lineNumber": 380
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "Math.max",
+          "lineNumber": 381
+        },
+        {
+          "caller": "compileHealth",
+          "callee": "new Date().toISOString",
+          "lineNumber": 389
+        },
+        {
+          "caller": "compile",
+          "callee": "Date.now",
+          "lineNumber": 396
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getWatermark",
+          "lineNumber": 398
+        },
+        {
+          "caller": "compile",
+          "callee": "this.kg.getEntities",
+          "lineNumber": 408
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getPage",
+          "lineNumber": 412
+        },
+        {
+          "caller": "compile",
+          "callee": "slugify",
+          "lineNumber": 412
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getFramesSince",
+          "lineNumber": 415
+        },
+        {
+          "caller": "compile",
+          "callee": "newFrames.some",
+          "lineNumber": 416
+        },
+        {
+          "caller": "compile",
+          "callee": "f.content.toLowerCase().includes",
+          "lineNumber": 417
+        },
+        {
+          "caller": "compile",
+          "callee": "f.content.toLowerCase",
+          "lineNumber": 417
+        },
+        {
+          "caller": "compile",
+          "callee": "entity.name.toLowerCase",
+          "lineNumber": 417
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileEntityPage",
+          "lineNumber": 426
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 428
+        },
+        {
+          "caller": "compile",
+          "callee": "entityPageNames.push",
+          "lineNumber": 436
+        },
+        {
+          "caller": "compile",
+          "callee": "this.detectConcepts",
+          "lineNumber": 441
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileConceptPage",
+          "lineNumber": 443
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 445
+        },
+        {
+          "caller": "compile",
+          "callee": "conceptPageNames.push",
+          "lineNumber": 453
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileSynthesisPage",
+          "lineNumber": 459
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 461
+        },
+        {
+          "caller": "compile",
+          "callee": "synthesisPageNames.push",
+          "lineNumber": 469
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileIndex",
+          "lineNumber": 474
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.upsertPage",
+          "lineNumber": 475
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.getMaxFrameId",
+          "lineNumber": 478
+        },
+        {
+          "caller": "compile",
+          "callee": "this.state.updateWatermark",
+          "lineNumber": 480
+        },
+        {
+          "caller": "compile",
+          "callee": "this.compileHealth",
+          "lineNumber": 483
+        },
+        {
+          "caller": "compile",
+          "callee": "new Date().toISOString",
+          "lineNumber": 493
+        },
+        {
+          "caller": "compile",
+          "callee": "Date.now",
+          "lineNumber": 494
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "typeCounts.set",
+          "lineNumber": 504
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "typeCounts.get",
+          "lineNumber": 504
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.push",
+          "lineNumber": 512
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "entities.filter",
+          "lineNumber": 517
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.includes",
+          "lineNumber": 519
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.push",
+          "lineNumber": 520
+        },
+        {
+          "caller": "detectConcepts",
+          "callee": "concepts.slice",
+          "lineNumber": 524
+        },
+        {
+          "caller": "exportToMarkdown",
+          "callee": "this.state.getAllPages",
+          "lineNumber": 532
+        },
+        {
+          "caller": "exportToMarkdown",
+          "callee": "result.set",
+          "lineNumber": 535
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "import",
+          "lineNumber": 545
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "mkdirSync",
+          "lineNumber": 546
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "this.exportToMarkdown",
+          "lineNumber": 547
+        },
+        {
+          "caller": "exportToDirectory",
+          "callee": "writeFileSync",
+          "lineNumber": 550
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/prompts.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 75,
+      "functions": [
+        {
+          "name": "entityPagePrompt",
+          "startLine": 5,
+          "endLine": 37,
+          "params": [
+            "entityName",
+            "entityType",
+            "frames",
+            "relations"
+          ]
+        },
+        {
+          "name": "conceptPagePrompt",
+          "startLine": 39,
+          "endLine": 69,
+          "params": [
+            "conceptName",
+            "frames",
+            "relatedEntities"
+          ]
+        },
+        {
+          "name": "synthesisPagePrompt",
+          "startLine": 71,
+          "endLine": 94,
+          "params": [
+            "topic",
+            "crossSourceFrames"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "entityPagePrompt",
+          "line": 5,
+          "isDefault": false
+        },
+        {
+          "name": "conceptPagePrompt",
+          "line": 39,
+          "isDefault": false
+        },
+        {
+          "name": "synthesisPagePrompt",
+          "line": 71,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "entityPagePrompt",
+          "callee": "frames\r\n    .map(f => `[Frame #${f.id}, ${f.created_at}]: ${f.content}`)\r\n    .join",
+          "lineNumber": 11
+        },
+        {
+          "caller": "entityPagePrompt",
+          "callee": "frames\r\n    .map",
+          "lineNumber": 11
+        },
+        {
+          "caller": "entityPagePrompt",
+          "callee": "relations.map(r => `- ${r.target} (${r.relationType}, confidence: ${r.confidence})`).join",
+          "lineNumber": 16
+        },
+        {
+          "caller": "entityPagePrompt",
+          "callee": "relations.map",
+          "lineNumber": 16
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "frames\r\n    .map(f => `[Frame #${f.id}, ${f.created_at}]: ${f.content}`)\r\n    .join",
+          "lineNumber": 44
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "frames\r\n    .map",
+          "lineNumber": 44
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "relatedEntities.map(e => `- [[${e}]]`).join",
+          "lineNumber": 49
+        },
+        {
+          "caller": "conceptPagePrompt",
+          "callee": "relatedEntities.map",
+          "lineNumber": 49
+        },
+        {
+          "caller": "synthesisPagePrompt",
+          "callee": "crossSourceFrames\r\n    .map(f => `[Frame #${f.id}, source: ${f.source}, ${f.created_at}]: ${f.content}`)\r\n    .join",
+          "lineNumber": 75
+        },
+        {
+          "caller": "synthesisPagePrompt",
+          "callee": "crossSourceFrames\r\n    .map",
+          "lineNumber": 75
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 3,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/state.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 132,
+      "nonEmptyLines": 111,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/state.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 160,
+      "nonEmptyLines": 137,
+      "functions": [
+        {
+          "name": "contentHash",
+          "startLine": 32,
+          "endLine": 34,
+          "params": [
+            "content"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "CompilationState",
+          "startLine": 36,
+          "endLine": 160,
+          "methods": [
+            "constructor",
+            "ensureSchema",
+            "getWatermark",
+            "updateWatermark",
+            "getPage",
+            "getAllPages",
+            "getPagesByType",
+            "upsertPage",
+            "deletePage",
+            "getMaxFrameId",
+            "getFramesSince"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "contentHash",
+          "line": 32,
+          "isDefault": false
+        },
+        {
+          "name": "CompilationState",
+          "line": 36,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "contentHash",
+          "callee": "createHash('sha256').update(content).digest('hex').slice",
+          "lineNumber": 33
+        },
+        {
+          "caller": "contentHash",
+          "callee": "createHash('sha256').update(content).digest",
+          "lineNumber": 33
+        },
+        {
+          "caller": "contentHash",
+          "callee": "createHash('sha256').update",
+          "lineNumber": 33
+        },
+        {
+          "caller": "contentHash",
+          "callee": "createHash",
+          "lineNumber": 33
+        },
+        {
+          "caller": "constructor",
+          "callee": "this.ensureSchema",
+          "lineNumber": 41
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 45
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(PAGES_TABLE).run",
+          "lineNumber": 46
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 46
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(WATERMARK_TABLE).run",
+          "lineNumber": 47
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 47
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(\"SELECT markdown FROM wiki_pages LIMIT 0\").get",
+          "lineNumber": 50
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 50
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare(\"ALTER TABLE wiki_pages ADD COLUMN markdown TEXT NOT NULL DEFAULT ''\").run",
+          "lineNumber": 52
+        },
+        {
+          "caller": "ensureSchema",
+          "callee": "raw.prepare",
+          "lineNumber": 52
+        },
+        {
+          "caller": "getWatermark",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 59
+        },
+        {
+          "caller": "getWatermark",
+          "callee": "raw.prepare('SELECT * FROM wiki_watermark WHERE id = 1').get",
+          "lineNumber": 60
+        },
+        {
+          "caller": "getWatermark",
+          "callee": "raw.prepare",
+          "lineNumber": 60
+        },
+        {
+          "caller": "updateWatermark",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 78
+        },
+        {
+          "caller": "updateWatermark",
+          "callee": "raw.prepare(`\r\n      INSERT INTO wiki_watermark (id, last_frame_id, last_compiled_at, pages_compiled)\r\n      VALUES (1, ?, datetime('now'), ?)\r\n      ON CONFLICT(id) DO UPDATE SET\r\n        last_frame_id = excluded.last_frame_id,\r\n        last_compiled_at = excluded.last_compiled_at,\r\n        pages_compiled = excluded.pages_compiled\r\n    `).run",
+          "lineNumber": 79
+        },
+        {
+          "caller": "updateWatermark",
+          "callee": "raw.prepare",
+          "lineNumber": 79
+        },
+        {
+          "caller": "getPage",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE slug = ?',\r\n    ).get",
+          "lineNumber": 92
+        },
+        {
+          "caller": "getPage",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 92
+        },
+        {
+          "caller": "getPage",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 92
+        },
+        {
+          "caller": "getAllPages",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages ORDER BY name',\r\n    ).all",
+          "lineNumber": 98
+        },
+        {
+          "caller": "getAllPages",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 98
+        },
+        {
+          "caller": "getAllPages",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 98
+        },
+        {
+          "caller": "getPagesByType",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT slug, page_type as pageType, name, content_hash as contentHash, markdown, frame_ids as frameIds, compiled_at as compiledAt, source_count as sourceCount FROM wiki_pages WHERE page_type = ? ORDER BY name',\r\n    ).all",
+          "lineNumber": 104
+        },
+        {
+          "caller": "getPagesByType",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 104
+        },
+        {
+          "caller": "getPagesByType",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 104
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 118
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "this.getPage",
+          "lineNumber": 119
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "raw.prepare(`\r\n      INSERT INTO wiki_pages (slug, page_type, name, content_hash, markdown, frame_ids, compiled_at, source_count)\r\n      VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)\r\n      ON CONFLICT(slug) DO UPDATE SET\r\n        content_hash = excluded.content_hash,\r\n        markdown = excluded.markdown,\r\n        frame_ids = excluded.frame_ids,\r\n        compiled_at = excluded.compiled_at,\r\n        source_count = excluded.source_count\r\n    `).run",
+          "lineNumber": 125
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "raw.prepare",
+          "lineNumber": 125
+        },
+        {
+          "caller": "upsertPage",
+          "callee": "JSON.stringify",
+          "lineNumber": 134
+        },
+        {
+          "caller": "deletePage",
+          "callee": "this.db.getDatabase().prepare(\r\n      'DELETE FROM wiki_pages WHERE slug = ?',\r\n    ).run",
+          "lineNumber": 140
+        },
+        {
+          "caller": "deletePage",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 140
+        },
+        {
+          "caller": "deletePage",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 140
+        },
+        {
+          "caller": "getMaxFrameId",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT COALESCE(MAX(id), 0) as max_id FROM memory_frames',\r\n    ).get",
+          "lineNumber": 148
+        },
+        {
+          "caller": "getMaxFrameId",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 148
+        },
+        {
+          "caller": "getMaxFrameId",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 148
+        },
+        {
+          "caller": "getFramesSince",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT id, content, importance, source, created_at FROM memory_frames WHERE id > ? ORDER BY id ASC LIMIT ?',\r\n    ).all",
+          "lineNumber": 156
+        },
+        {
+          "caller": "getFramesSince",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 156
+        },
+        {
+          "caller": "getFramesSince",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 156
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 2,
+        "functionCount": 1,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/synthesizer.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 102,
+      "nonEmptyLines": 89,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/synthesizer.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 157,
+      "nonEmptyLines": 134,
+      "functions": [
+        {
+          "name": "createAnthropicSynthesizer",
+          "startLine": 29,
+          "endLine": 44,
+          "params": [
+            "apiKey",
+            "model",
+            "maxTokens"
+          ]
+        },
+        {
+          "name": "createOllamaSynthesizer",
+          "startLine": 48,
+          "endLine": 71,
+          "params": [
+            "baseUrl",
+            "model",
+            "maxTokens"
+          ]
+        },
+        {
+          "name": "createEchoSynthesizer",
+          "startLine": 75,
+          "endLine": 94,
+          "params": []
+        },
+        {
+          "name": "resolveSynthesizer",
+          "startLine": 108,
+          "endLine": 157,
+          "params": [
+            "config"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "resolveSynthesizer",
+          "line": 108,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "createAnthropicSynthesizer",
+          "callee": "import",
+          "lineNumber": 32
+        },
+        {
+          "caller": "createAnthropicSynthesizer",
+          "callee": "client.messages.create",
+          "lineNumber": 35
+        },
+        {
+          "caller": "createAnthropicSynthesizer",
+          "callee": "response.content.find",
+          "lineNumber": 41
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "baseUrl.replace",
+          "lineNumber": 50
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "fetch",
+          "lineNumber": 52
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "JSON.stringify",
+          "lineNumber": 55
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "AbortSignal.timeout",
+          "lineNumber": 61
+        },
+        {
+          "caller": "createOllamaSynthesizer",
+          "callee": "response.json",
+          "lineNumber": 68
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 77
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 79
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 79
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "prompt.match",
+          "lineNumber": 83
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "frameLines.slice(0, 8).map(line => {\r\n      const m = line.match(/\\[Frame (#\\d+).*?\\]: (.+)/);\r\n      return m ? `- ${m[2].slice(0, 200)} *(${m[1]})*` : null;\r\n    }).filter",
+          "lineNumber": 84
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "frameLines.slice(0, 8).map",
+          "lineNumber": 84
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "frameLines.slice",
+          "lineNumber": 84
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "line.match",
+          "lineNumber": 85
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "m[2].slice",
+          "lineNumber": 86
+        },
+        {
+          "caller": "createEchoSynthesizer",
+          "callee": "facts.join",
+          "lineNumber": 90
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "import",
+          "lineNumber": 118
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "createAnthropicSynthesizer",
+          "lineNumber": 120
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "fetch",
+          "lineNumber": 136
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "ollamaUrl.replace",
+          "lineNumber": 136
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "AbortSignal.timeout",
+          "lineNumber": 137
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "createOllamaSynthesizer",
+          "lineNumber": 141
+        },
+        {
+          "caller": "resolveSynthesizer",
+          "callee": "createEchoSynthesizer",
+          "lineNumber": 153
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/hive-mind-wiki-compiler/src/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 115,
+      "nonEmptyLines": 99,
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

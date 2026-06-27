@@ -1,0 +1,130 @@
+{
+  "nodes": [
+    {
+      "id": "document:benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md",
+      "type": "document",
+      "name": "checkpoint-b-report.md",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md",
+      "summary": "Checkpoint B halt-and-PM report for GEPA Faza 1 Gen 1, documenting partial run results across 4 of 15 candidates (30 evals) with per-candidate tier breakdowns, retrieval engagement deltas, cost projections, and three PM decision paths (continue, stop, or scope-reduce).",
+      "tags": ["documentation", "benchmark", "analysis", "evaluation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:benchmarks/results/gepa-faza1/gen-1/final-gen-1-close-report.md",
+      "type": "document",
+      "name": "final-gen-1-close-report.md",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/final-gen-1-close-report.md",
+      "summary": "Final Gen 1 close report for GEPA Faza 1 covering all 15 candidates × 8 evals (120 total), declaring §F.2 PASS at 3/5 shapes with Phase 4.5 POSITIVE verdict on qwen-thinking and MIXED verdict on qwen-non-thinking, and recommending PM proceed to Checkpoint C held-out validation.",
+      "tags": ["documentation", "benchmark", "evaluation", "analysis"],
+      "complexity": "complex"
+    },
+    {
+      "id": "document:benchmarks/results/gepa-faza1/gen-1/full-gen-1-halt-report.md",
+      "type": "document",
+      "name": "full-gen-1-halt-report.md",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/full-gen-1-halt-report.md",
+      "summary": "Mid-run halt-and-PM report for full Gen 1 covering 7 of 15 candidates (53 evals), presenting the Phase 4.5 mechanistic verdict on qwen-thinking (POSITIVE), a halt threshold calibration concern, and four PM paths including Amendment 10 options for resuming or closing Faza 1.",
+      "tags": ["documentation", "benchmark", "evaluation", "analysis"],
+      "complexity": "complex"
+    },
+    {
+      "id": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary-void-registry-bug-superseded.json",
+      "type": "config",
+      "name": "gen-1-summary-void-registry-bug-superseded.json",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/gen-1-summary-void-registry-bug-superseded.json",
+      "summary": "Superseded GEPA Gen 1 summary JSON produced during the run affected by the void-registry injection bug; contains partial per-candidate tier breakdowns, retrieval engagement deltas, cell-semantic anchor invariance counts, and pre-registered Δ-floor verdicts — retained for audit trail but replaced by gen-1-summary.json.",
+      "tags": ["configuration", "benchmark", "data", "evaluation"],
+      "complexity": "moderate",
+      "languageNotes": "Marked superseded due to a critical REGISTRY-injection bug that caused 16 of 27 attempted evals to fail with void results; the corrected summary is gen-1-summary.json."
+    },
+    {
+      "id": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json",
+      "type": "config",
+      "name": "gen-1-summary.json",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json",
+      "summary": "Authoritative GEPA Faza 1 Gen 1 summary JSON containing per-candidate tier breakdowns for all 15 candidates, retrieval engagement deltas per Qwen shape, cell-semantic anchor invariance counts, pre-registered Δ-floor verdicts, and mid-run halt binding thresholds.",
+      "tags": ["configuration", "benchmark", "data", "evaluation"],
+      "complexity": "complex",
+      "languageNotes": "Contains structured benchmark results keyed by candidate ID and model shape (claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple); substantially larger than the superseded version at 333 lines vs 86."
+    },
+    {
+      "id": "document:benchmarks/results/gepa-faza1/gen-1/investigate-report.md",
+      "type": "document",
+      "name": "investigate-report.md",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/investigate-report.md",
+      "summary": "Root-cause investigation report for the critical REGISTRY-injection bug that caused 16 Gen 1 evals to produce void results and triggered a mid-run CC-2 halt, with ranked hypotheses, diagnostic probes, recommended fixes, and three PM paths for resuming or pausing Faza 1.",
+      "tags": ["documentation", "benchmark", "debugging", "analysis"],
+      "complexity": "complex"
+    },
+    {
+      "id": "config:benchmarks/results/gepa-faza1/gen-1/mutation-oracle-manifest.json",
+      "type": "config",
+      "name": "mutation-oracle-manifest.json",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/mutation-oracle-manifest.json",
+      "summary": "Mutation oracle manifest for GEPA Faza 1 Gen 1 recording all attempted prompt mutations with their validity status, per-entry metadata, and cumulative cost; serves as the audit trail for the mutation generation phase of the evolution benchmark.",
+      "tags": ["configuration", "benchmark", "data", "evaluation"],
+      "complexity": "moderate",
+      "languageNotes": "Tracks totalMutationsAttempted, totalValid, totalInvalid, cumulativeCostUsd and an entries array — the primary artifact linking each mutation candidate to its oracle validation outcome."
+    },
+    {
+      "id": "document:benchmarks/results/gepa-faza1/gen-1/post-amendment-10-halt-report.md",
+      "type": "document",
+      "name": "post-amendment-10-halt-report.md",
+      "filePath": "benchmarks/results/gepa-faza1/gen-1/post-amendment-10-halt-report.md",
+      "summary": "Post-Amendment-10 halt-and-PM report covering 8 Gen 1 candidates (57 evals), diagnosing why the halt fired again despite Amendment 10 §10.1 calibration, and presenting four PM escalation options ranging from an Amendment 11 interface refactor to accepting Faza 1 closure with mixed verdicts.",
+      "tags": ["documentation", "benchmark", "evaluation", "analysis"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/investigate-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary-void-registry-bug-superseded.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/full-gen-1-halt-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/post-amendment-10-halt-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/final-gen-1-close-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/gen-1-summary.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/final-gen-1-close-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/mutation-oracle-manifest.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:benchmarks/results/gepa-faza1/gen-1/checkpoint-b-report.md",
+      "target": "config:benchmarks/results/gepa-faza1/gen-1/mutation-oracle-manifest.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

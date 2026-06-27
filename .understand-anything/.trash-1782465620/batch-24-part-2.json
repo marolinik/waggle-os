@@ -1,0 +1,497 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/tests/combined-retrieval.test.ts",
+      "type": "file",
+      "name": "combined-retrieval.test.ts",
+      "filePath": "packages/agent/tests/combined-retrieval.test.ts",
+      "summary": "Unit tests for CombinedRetrieval covering local memory vs KVARK routing decisions, result mapping, conflict detection, and hybrid search scenarios with mocked search and KVARK clients.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/compose-workflow-tool.test.ts",
+      "type": "file",
+      "name": "compose-workflow-tool.test.ts",
+      "filePath": "packages/agent/tests/compose-workflow-tool.test.ts",
+      "summary": "Unit tests for the compose_workflow agent tool, verifying it correctly detects task shape, selects execution mode, and returns a valid workflow plan.",
+      "tags": ["test", "workflow"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/confirmation.test.ts",
+      "type": "file",
+      "name": "confirmation.test.ts",
+      "filePath": "packages/agent/tests/confirmation.test.ts",
+      "summary": "Unit tests for the confirmation gate, verifying that high-risk tool calls require user approval while low-risk calls auto-pass based on approval class and autonomy level.",
+      "tags": ["test", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/conflict-detection.test.ts",
+      "type": "file",
+      "name": "conflict-detection.test.ts",
+      "filePath": "packages/agent/tests/conflict-detection.test.ts",
+      "summary": "Unit tests for memory/KVARK conflict detection logic, verifying that contradictory results across sources are identified and surfaced with appropriate confidence scoring.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/connector-routing.test.ts",
+      "type": "file",
+      "name": "connector-routing.test.ts",
+      "filePath": "packages/agent/tests/connector-routing.test.ts",
+      "summary": "Unit tests for CapabilityRouter connector routing rules, verifying that service connectors are selected based on capability type and tier constraints.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/connector-sdk.test.ts",
+      "type": "file",
+      "name": "connector-sdk.test.ts",
+      "filePath": "packages/agent/tests/connector-sdk.test.ts",
+      "summary": "Unit tests for the connector SDK including credential retrieval from vault, health check lifecycle, action execution dispatch, and ConnectorRegistry registration/lookup.",
+      "tags": ["test", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/connector-search.test.ts",
+      "type": "file",
+      "name": "connector-search.test.ts",
+      "filePath": "packages/agent/tests/connector-search.test.ts",
+      "summary": "Unit tests for the connector search tool, verifying query routing to registered connectors and JSON result parsing.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/cost-tracker.test.ts",
+      "type": "file",
+      "name": "cost-tracker.test.ts",
+      "filePath": "packages/agent/tests/cost-tracker.test.ts",
+      "summary": "Unit tests for CostTracker verifying token cost accumulation, budget threshold enforcement, and BudgetExceededError triggering.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/cron-tools.test.ts",
+      "type": "file",
+      "name": "cron-tools.test.ts",
+      "filePath": "packages/agent/tests/cron-tools.test.ts",
+      "summary": "Unit tests for cron scheduling tools covering job creation, listing, deletion, and immediate execution trigger behavior.",
+      "tags": ["test", "utility"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/d6-recovery-confab.test.ts",
+      "type": "file",
+      "name": "d6-recovery-confab.test.ts",
+      "filePath": "packages/agent/tests/d6-recovery-confab.test.ts",
+      "summary": "Unit tests for the D6 recovery confabulation scenario, verifying that the agent loop correctly handles and recovers from confabulation detection with loop recovery options.",
+      "tags": ["test", "agent-runtime"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/document-tools.test.ts",
+      "type": "file",
+      "name": "document-tools.test.ts",
+      "filePath": "packages/agent/tests/document-tools.test.ts",
+      "summary": "Unit tests for document reading, writing, and search tools, verifying file I/O operations and content extraction behaviors.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "type": "file",
+      "name": "scenario-framework.ts",
+      "filePath": "packages/agent/tests/e2e/scenario-framework.ts",
+      "summary": "E2E test utility providing executeScenario and verifyScenario helpers that drive tool sequences against a tool map and assert on called tools and output patterns.",
+      "tags": ["test", "utility", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/tests/e2e/scenario-framework.ts:executeScenario",
+      "type": "function",
+      "name": "executeScenario",
+      "filePath": "packages/agent/tests/e2e/scenario-framework.ts",
+      "lineRange": [31, 63],
+      "summary": "Executes a sequence of tool steps against a provided tool map, recording outputs and called tool names, handling missing tools gracefully.",
+      "tags": ["test", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/tests/e2e/scenario-framework.ts:verifyScenario",
+      "type": "function",
+      "name": "verifyScenario",
+      "filePath": "packages/agent/tests/e2e/scenario-framework.ts",
+      "lineRange": [66, 97],
+      "summary": "Asserts that a scenario result contains all expected tool calls and that output text matches all expected regex patterns, collecting failures for test reporting.",
+      "tags": ["test", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "type": "file",
+      "name": "solo-scenarios.test.ts",
+      "filePath": "packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "summary": "E2E integration tests for solo agent scenarios validating end-to-end agent behavior with real persona configs, connector registries, capability routing, and confirmation gates via the scenario framework.",
+      "tags": ["test", "agent-runtime", "e2e"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/enhanced-grep.test.ts",
+      "type": "file",
+      "name": "enhanced-grep.test.ts",
+      "filePath": "packages/agent/tests/enhanced-grep.test.ts",
+      "summary": "Unit tests for the enhanced grep system tool, verifying pattern matching, recursive directory search, context line inclusion, and binary file exclusion.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/enhanced-read-file.test.ts",
+      "type": "file",
+      "name": "enhanced-read-file.test.ts",
+      "filePath": "packages/agent/tests/enhanced-read-file.test.ts",
+      "summary": "Unit tests for the enhanced read-file system tool, verifying line-range reads, encoding handling, large file truncation, and binary detection.",
+      "tags": ["test", "utility"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/tests/combined-retrieval.test.ts",
+      "target": "file:packages/agent/src/combined-retrieval.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/combined-retrieval.test.ts",
+      "target": "file:packages/agent/src/kvark-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/compose-workflow-tool.test.ts",
+      "target": "file:packages/agent/src/agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/compose-workflow-tool.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/compose-workflow-tool.test.ts",
+      "target": "file:packages/agent/src/workflow-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/confirmation.test.ts",
+      "target": "file:packages/agent/src/confirmation.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/conflict-detection.test.ts",
+      "target": "file:packages/agent/src/combined-retrieval.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/conflict-detection.test.ts",
+      "target": "file:packages/agent/src/kvark-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/conflict-detection.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connector-routing.test.ts",
+      "target": "file:packages/agent/src/capability-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connector-sdk.test.ts",
+      "target": "file:packages/agent/src/connector-registry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connector-sdk.test.ts",
+      "target": "file:packages/agent/src/connector-sdk.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/connector-search.test.ts",
+      "target": "file:packages/agent/src/connector-search.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/cost-tracker.test.ts",
+      "target": "file:packages/agent/src/cost-tracker.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/cron-tools.test.ts",
+      "target": "file:packages/agent/src/cron-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/cron-tools.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/d6-recovery-confab.test.ts",
+      "target": "file:packages/agent/src/agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/d6-recovery-confab.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/document-tools.test.ts",
+      "target": "file:packages/agent/src/document-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/src/agent-message-bus.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/src/capability-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/src/confirmation.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/src/connector-registry.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/src/personas.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/solo-scenarios.test.ts",
+      "target": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/enhanced-grep.test.ts",
+      "target": "file:packages/agent/src/system-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/enhanced-grep.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/enhanced-read-file.test.ts",
+      "target": "file:packages/agent/src/system-tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/enhanced-read-file.test.ts",
+      "target": "file:packages/agent/src/tools.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:executeScenario",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:verifyScenario",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:executeScenario",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/e2e/scenario-framework.ts",
+      "target": "function:packages/agent/tests/e2e/scenario-framework.ts:verifyScenario",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "file:packages/agent/tests/combined-retrieval.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/workflow-tools.ts",
+      "target": "file:packages/agent/tests/compose-workflow-tool.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/confirmation.ts",
+      "target": "file:packages/agent/tests/confirmation.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/combined-retrieval.ts",
+      "target": "file:packages/agent/tests/conflict-detection.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/capability-router.ts",
+      "target": "file:packages/agent/tests/connector-routing.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connector-sdk.ts",
+      "target": "file:packages/agent/tests/connector-sdk.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/connector-search.ts",
+      "target": "file:packages/agent/tests/connector-search.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/cost-tracker.ts",
+      "target": "file:packages/agent/tests/cost-tracker.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/cron-tools.ts",
+      "target": "file:packages/agent/tests/cron-tools.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/agent-loop.ts",
+      "target": "file:packages/agent/tests/d6-recovery-confab.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/document-tools.ts",
+      "target": "file:packages/agent/tests/document-tools.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/system-tools.ts",
+      "target": "file:packages/agent/tests/enhanced-grep.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/src/system-tools.ts",
+      "target": "file:packages/agent/tests/enhanced-read-file.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

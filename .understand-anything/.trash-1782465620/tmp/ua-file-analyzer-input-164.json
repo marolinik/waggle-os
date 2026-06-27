@@ -1,0 +1,16 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/hive-mind-core/CONTRIBUTING.md", "language": "markdown", "sizeLines": 87, "fileCategory": "docs"},
+    {"path": "packages/hive-mind-core/README.md", "language": "markdown", "sizeLines": 45, "fileCategory": "docs"},
+    {"path": "packages/hive-mind-core/package.json", "language": "json", "sizeLines": 29, "fileCategory": "config"},
+    {"path": "packages/hive-mind-core/tsconfig.json", "language": "json", "sizeLines": 21, "fileCategory": "config"}
+  ],
+  "batchImportData": {
+    "packages/hive-mind-core/CONTRIBUTING.md": [],
+    "packages/hive-mind-core/README.md": [],
+    "packages/hive-mind-core/package.json": [],
+    "packages/hive-mind-core/tsconfig.json": []
+  },
+  "neighborMap": {}
+}

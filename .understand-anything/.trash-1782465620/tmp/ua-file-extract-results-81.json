@@ -1,0 +1,307 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/core/src/install-audit.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 221,
+      "nonEmptyLines": 200,
+      "classes": [
+        {
+          "name": "InstallAuditStore",
+          "startLine": 94,
+          "endLine": 221,
+          "methods": [
+            "constructor",
+            "ensureTable",
+            "rebuildForWidenedActionCheck",
+            "record",
+            "getByCapability",
+            "getByAction",
+            "getRecent",
+            "getRecentByType",
+            "getAll",
+            "clear"
+          ],
+          "properties": [
+            "db"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "AuditAction",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "AuditCapabilityType",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "AuditInitiator",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "AuditRiskLevel",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "AuditApprovalClass",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "AuditTrustSource",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "INSTALL_AUDIT_TABLE_SQL",
+          "line": 73,
+          "isDefault": false
+        },
+        {
+          "name": "InstallAuditStore",
+          "line": 94,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "this.ensureTable",
+          "lineNumber": 99
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 103
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare(\r\n      \"SELECT sql FROM sqlite_master WHERE type='table' AND name='install_audit'\",\r\n    ).get",
+          "lineNumber": 104
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.prepare",
+          "lineNumber": 104
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "raw.exec",
+          "lineNumber": 108
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "existing.sql.includes",
+          "lineNumber": 117
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "existing.sql.includes",
+          "lineNumber": 118
+        },
+        {
+          "caller": "ensureTable",
+          "callee": "this.rebuildForWidenedActionCheck",
+          "lineNumber": 120
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.transaction",
+          "lineNumber": 130
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.exec",
+          "lineNumber": 131
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.exec",
+          "lineNumber": 136
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.exec",
+          "lineNumber": 137
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.exec",
+          "lineNumber": 138
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.exec",
+          "lineNumber": 139
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "raw.exec",
+          "lineNumber": 148
+        },
+        {
+          "caller": "rebuildForWidenedActionCheck",
+          "callee": "migrate",
+          "lineNumber": 150
+        },
+        {
+          "caller": "record",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 155
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare(`\r\n      INSERT INTO install_audit (\r\n        capability_name, capability_type, source, version,\r\n        risk_level, trust_source, approval_class, action, initiator, detail\r\n      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\r\n    `).run",
+          "lineNumber": 157
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare",
+          "lineNumber": 157
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare(\r\n      'SELECT * FROM install_audit ORDER BY id DESC LIMIT 1',\r\n    ).get",
+          "lineNumber": 176
+        },
+        {
+          "caller": "record",
+          "callee": "raw.prepare",
+          "lineNumber": 176
+        },
+        {
+          "caller": "getByCapability",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM install_audit WHERE capability_name = ? ORDER BY id DESC',\r\n    ).all",
+          "lineNumber": 183
+        },
+        {
+          "caller": "getByCapability",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 183
+        },
+        {
+          "caller": "getByCapability",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 183
+        },
+        {
+          "caller": "getByAction",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM install_audit WHERE action = ? ORDER BY id DESC',\r\n    ).all",
+          "lineNumber": 190
+        },
+        {
+          "caller": "getByAction",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 190
+        },
+        {
+          "caller": "getByAction",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 190
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM install_audit ORDER BY id DESC LIMIT ?',\r\n    ).all",
+          "lineNumber": 197
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 197
+        },
+        {
+          "caller": "getRecent",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 197
+        },
+        {
+          "caller": "getRecentByType",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM install_audit WHERE capability_type = ? ORDER BY id DESC LIMIT ?',\r\n    ).all",
+          "lineNumber": 205
+        },
+        {
+          "caller": "getRecentByType",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 205
+        },
+        {
+          "caller": "getRecentByType",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 205
+        },
+        {
+          "caller": "getAll",
+          "callee": "this.db.getDatabase().prepare(\r\n      'SELECT * FROM install_audit ORDER BY id ASC',\r\n    ).all",
+          "lineNumber": 212
+        },
+        {
+          "caller": "getAll",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 212
+        },
+        {
+          "caller": "getAll",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 212
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare('DELETE FROM install_audit').run",
+          "lineNumber": 219
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase().prepare",
+          "lineNumber": 219
+        },
+        {
+          "caller": "clear",
+          "callee": "this.db.getDatabase",
+          "lineNumber": 219
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 8,
+        "functionCount": 0,
+        "classCount": 1
+      }
+    },
+    {
+      "path": "packages/core/tests/install-audit-check-parity.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 44,
+      "nonEmptyLines": 39,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/core/tests/install-audit.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 479,
+      "nonEmptyLines": 427,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    }
+  ]
+}

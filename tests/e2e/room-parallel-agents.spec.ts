@@ -15,7 +15,7 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:3333';
+const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
 // Canonical test payload — two agents in one status event, different roles.
 const AGENT_ALPHA_ID = 'agent-alpha-p6';
@@ -133,22 +133,21 @@ async function dismissOverlay(page: Page) {
   }
 }
 
+function routeWithSkip(route: string) {
+  const sep = route.includes('?') ? '&' : '?';
+  return `${BASE}${route}${sep}skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`;
+}
+
 async function openRoom(page: Page) {
-  // Matches the working pattern from tests/e2e/phase-ab-verification.spec.ts.
-  // Dock icons carry aria-label matching the app's display name.
-  const roomBtn = page.locator('button[aria-label="Room"]');
-  await roomBtn.waitFor({ state: 'visible', timeout: 5000 });
-  await roomBtn.click();
-  await expect(page.locator('[data-testid="room-root"]')).toBeVisible({ timeout: 5000 });
+  await page.goto(routeWithSkip('/room'), { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-testid="room-root"]')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Room — parallel agent visualization (P6)', () => {
   test('renders two simultaneous agents with distinct tiles', async ({ page }) => {
     await installSseMock(page);
-    await page.goto(`${BASE}/?skipOnboarding=true&tier=power`);
-    await page.waitForLoadState('networkidle');
-    await dismissOverlay(page);
     await openRoom(page);
+    await dismissOverlay(page);
 
     // Both tiles present, keyed by agent id.
     const alpha = page.locator(`[data-testid="room-agent-tile"][data-agent-id="${AGENT_ALPHA_ID}"]`);
@@ -166,10 +165,8 @@ test.describe('Room — parallel agent visualization (P6)', () => {
 
   test('role badges do not cross-contaminate between simultaneous agents', async ({ page }) => {
     await installSseMock(page);
-    await page.goto(`${BASE}/?skipOnboarding=true&tier=power`);
-    await page.waitForLoadState('networkidle');
-    await dismissOverlay(page);
     await openRoom(page);
+    await dismissOverlay(page);
 
     const alpha = page.locator(`[data-testid="room-agent-tile"][data-agent-id="${AGENT_ALPHA_ID}"]`);
     const beta = page.locator(`[data-testid="room-agent-tile"][data-agent-id="${AGENT_BETA_ID}"]`);

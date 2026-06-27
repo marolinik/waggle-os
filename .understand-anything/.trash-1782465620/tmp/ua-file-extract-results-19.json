@@ -1,0 +1,2676 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 33,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 147,
+      "nonEmptyLines": 141,
+      "exports": [
+        {
+          "name": "claudeGen1V1Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        '<role>',\r\n        persona,\r\n        '</role>',\r\n        '',\r\n        '<reasoning_protocol>',\r\n        'Before composing your answer, internally work through these steps:',\r\n        '  1. Decompose the question into its distinct sub-claims or sub-questions.',\r\n        '  2. For each sub-claim, locate the SPECIFIC passages in the materials that support it.',\r\n        '  3. Note which sub-claims are well-supported vs. partially-supported vs. unsupported.',\r\n        '  4. Identify any DISTINCT risks/factors that should be separated rather than blended.',\r\n        '  5. Flag any temptation to assert specifics not present in the materials — and resist it.',\r\n        '</reasoning_protocol>',\r\n        '',\r\n        '<grounding_rules>',\r\n        'Every specific claim (number, name, date, mechanism) MUST trace to the materials.',\r\n        'If the materials are silent on a point, say so explicitly rather than inventing detail.',\r\n        'When multiple risks or factors are present, enumerate them separately before synthesising.',\r\n        '</grounding_rules>',\r\n        '',\r\n        'Answer the question precisely and substantively, grounded strictly in the materials provided.',\r\n      ].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      '<role>',\r\n      persona,\r\n      '</role>',\r\n      '',\r\n      '<task>',\r\n      'You have access to a private corpus of materials about this scenario via a retrieval tool.',\r\n      'You CANNOT see the materials directly. You MUST request retrievals to get information.',\r\n      'Insufficient retrieval is the dominant failure mode on this benchmark — err toward MORE targeted retrievals, not fewer.',\r\n      '</task>',\r\n      '',\r\n      '<protocol>',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      '',\r\n      `You have a maximum of ${maxSteps} turns. Plan accordingly.`,\r\n      `Each retrieval returns up to ${maxRetrievalsPerStep} most relevant document chunks.`,\r\n      'A good retrieval query is 5-15 words and targets specific information.',\r\n      '</protocol>',\r\n      '',\r\n      '<reasoning_protocol>',\r\n      'On every turn, before emitting your action JSON, internally walk through:',\r\n      '  1. Sub-question inventory: what distinct sub-questions does the question decompose into?',\r\n      '  2. Coverage check: which sub-questions have I retrieved evidence for, and which remain unaddressed?',\r\n      '  3. Gap identification: what specific facts, mechanisms, entities, or risks are still missing?',\r\n      '  4. Next-action choice: if ANY sub-question lacks grounding, choose retrieve with a targeted query;',\r\n      '     only choose finalize when every sub-question has supporting evidence in hand.',\r\n      '  5. Anti-conflation: when multiple risks/factors appear, plan to keep them SEPARATE in the final answer.',\r\n      '</reasoning_protocol>',\r\n      '',\r\n      '<grounding_rules>',\r\n      'Do not assert specifics (numbers, names, dates, causal mechanisms) absent from retrieved chunks.',\r\n      'If retrievals are silent on a sub-question, either retrieve again with a refined query or note the gap explicitly.',\r\n      '</grounding_rules>',\r\n      '',\r\n      '<question>',\r\n      question,\r\n      '</question>',\r\n    ].join",
+          "lineNumber": 59
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      '<context>',\r\n      input.persona,\r\n      '</context>',\r\n      '',\r\n      '<materials>',\r\n      input.materials,\r\n      '</materials>',\r\n      '',\r\n      '<question>',\r\n      input.question,\r\n      '</question>',\r\n      '',\r\n      '<answer_plan>',\r\n      'Step 1 — Decompose: list the distinct sub-questions implicit in the question above.',\r\n      'Step 2 — Locate: for each sub-question, identify the supporting passages in <materials>.',\r\n      'Step 3 — Separate: if multiple risks/factors/entities are involved, treat them as DISTINCT items.',\r\n      'Step 4 — Audit: verify every specific claim you intend to make is grounded in <materials>; drop or hedge any that are not.',\r\n      'Step 5 — Compose: produce a precise, substantive answer that covers every sub-question.',\r\n      '</answer_plan>',\r\n      '',\r\n      'Answer the question above based strictly on the materials. Be specific, substantive, and grounded — no invented details.',\r\n    ].join",
+          "lineNumber": 100
+        },
+        {
+          "caller": "multiStepKickoffUserPrompt",
+          "callee": "[\r\n      'Begin.',\r\n      'First, internally enumerate the sub-questions you will need to answer and the gaps you must fill via retrieval.',\r\n      'Then output your first action JSON.',\r\n    ].join",
+          "lineNumber": 126
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `<retrieval_results query=\"${input.query}\" count=\"${input.resultCount}\">`,\r\n      input.results,\r\n      '</retrieval_results>',\r\n      '',\r\n      '<turn_review>',\r\n      'Before deciding, check: which sub-questions are now covered by retrieved evidence, and which remain open?',\r\n      'If any sub-question is still unsupported, prefer another targeted retrieve over finalize.',\r\n      '</turn_review>',\r\n      '',\r\n      'Next action JSON?',\r\n    ].join",
+          "lineNumber": 134
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v2.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 146,
+      "nonEmptyLines": 140,
+      "exports": [
+        {
+          "name": "claudeGen1V2Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n  '<role>',\r\n  persona,\r\n  '</role>',\r\n  '',\r\n  '<reasoning_protocol>',\r\n  'Before composing your answer, briefly work through these steps internally:',\r\n  '  1. Identify what the question is actually asking (decompose into sub-questions if compound).',\r\n  '  2. Inventory the materials: which passages bear on each sub-question?',\r\n  '  3. Separate distinct items (risks, factors, entities) — do NOT blend them together.',\r\n  '  4. Confirm every specific claim you make is anchored in the materials; if not anchored, drop it or mark as inference.',\r\n  '</reasoning_protocol>',\r\n  '',\r\n  '<answer_constraints>',\r\n  '  - Be specific and substantive, but ground every specific in the materials.',\r\n  '  - Do not introduce facts, numbers, names, or details that are not present in the materials.',\r\n  '  - If the materials are silent or ambiguous on a point, say so explicitly rather than filling the gap.',\r\n  '  - Cover the full scope of what the materials say on the question; do not stop at the first plausible answer.',\r\n  '</answer_constraints>',\r\n  '',\r\n  'Answer the question precisely and substantively, grounded strictly in the materials provided.',\r\n].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n  '<role>',\r\n  persona,\r\n  '</role>',\r\n  '',\r\n  '<task>',\r\n  'You have access to a private corpus of materials about this scenario via a retrieval tool.',\r\n  'You CANNOT see the materials directly. You MUST request retrievals to gather evidence before finalizing.',\r\n  'Answers given without first retrieving sufficient evidence will be unsupported and will fail.',\r\n  '</task>',\r\n  '',\r\n  '<protocol>',\r\n  MULTI_STEP_ACTION_CONTRACT,\r\n  '',\r\n  `You have a maximum of ${maxSteps} turns. Plan accordingly.`,\r\n  `Each retrieval returns up to ${maxRetrievalsPerStep} most relevant document chunks.`,\r\n  'A good retrieval query is 5-15 words and targets specific information.',\r\n  '</protocol>',\r\n  '',\r\n  '<retrieval_engagement>',\r\n  '  Strong performance on this benchmark correlates with active corpus engagement.',\r\n  '  Expectation: issue multiple retrievals (typically 2-4 across distinct sub-topics) before finalizing,',\r\n  '  unless one retrieval demonstrably covers the full question. A single retrieval is rarely sufficient',\r\n  '  for compound questions. Vary your queries to probe different facets rather than rephrasing the same query.',\r\n  '</retrieval_engagement>',\r\n  '',\r\n  '<reasoning_scaffold>',\r\n  '  Before each action, think through (internally):',\r\n  '    a. What sub-questions does the prompt contain? (decompose)',\r\n  '    b. Which sub-questions do I already have evidence for, and which are still open?',\r\n  '    c. If open sub-questions remain, my next action should be `retrieve` with a query targeting the gap.',\r\n  '    d. Only choose `finalize` when every sub-question has supporting evidence from retrievals.',\r\n  '  When you finalize: separate distinct items rather than conflating them, ground every specific in retrieved text,',\r\n  '  and do not invent details beyond what retrievals returned.',\r\n  '</reasoning_scaffold>',\r\n  '',\r\n  '<question>',\r\n  question,\r\n  '</question>',\r\n].join",
+          "lineNumber": 59
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n  '<context>',\r\n  input.persona,\r\n  '</context>',\r\n  '',\r\n  '<materials>',\r\n  input.materials,\r\n  '</materials>',\r\n  '',\r\n  '<question>',\r\n  input.question,\r\n  '</question>',\r\n  '',\r\n  '<instructions>',\r\n  'Work through this in stages:',\r\n  '  Stage 1 — Decompose the question into its component sub-questions.',\r\n  '  Stage 2 — For each sub-question, locate the relevant evidence in <materials> and note what it says.',\r\n  '  Stage 3 — Distinguish separate items; do not blend distinct risks, factors, or entities together.',\r\n  '  Stage 4 — Compose the answer: specific, substantive, and anchored to <materials>.',\r\n  'Hard constraints: do NOT add specifics absent from the materials. If the materials do not address a point,',\r\n  'state that explicitly rather than speculating. Cover the full scope the materials support.',\r\n  '</instructions>',\r\n].join",
+          "lineNumber": 102
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n  `<retrieval_results query=\"${input.query}\" count=\"${input.resultCount}\">`,\r\n  input.results,\r\n  '</retrieval_results>',\r\n  '',\r\n  '<assess>',\r\n  '  Briefly consider (internally): which sub-questions did this retrieval answer, and which remain open?',\r\n  '  If gaps remain, your next action should be another `retrieve` with a query targeting an unaddressed facet.',\r\n  '  Only `finalize` when every sub-question has supporting evidence.',\r\n  '</assess>',\r\n  '',\r\n  'Next action JSON?',\r\n].join",
+          "lineNumber": 132
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v1.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 94,
+      "nonEmptyLines": 88,
+      "exports": [
+        {
+          "name": "genericSimpleGen1V1Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n  persona,\r\n  '',\r\n  'Before answering, take a moment to plan your response:',\r\n  '  1. Identify what the question is actually asking.',\r\n  '  2. Scan the materials for every passage that bears on it.',\r\n  '  3. Separate distinct points or risks rather than blending them.',\r\n  '  4. Stay strictly within what the materials support — do not invent specifics.',\r\n  '',\r\n  'Then write a specific, substantive answer grounded only in the materials provided.',\r\n].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n  persona,\r\n  '',\r\n  'You have access to a private corpus via a retrieval tool. You are expected to USE it actively — most tasks require multiple retrievals to cover the source material adequately. Shallow single-shot answers tend to miss important content.',\r\n  '',\r\n  'Reasoning scaffold for each turn:',\r\n  '  1. Restate what you still need to learn before you can answer well.',\r\n  '  2. Decide whether another retrieval (with a fresh, targeted query) would surface material you have not yet seen.',\r\n  '  3. Only choose finalize when further retrieval is unlikely to add coverage.',\r\n  '  4. When finalizing, separate distinct points rather than conflating them, and ground every specific claim in retrieved text.',\r\n  '',\r\n  MULTI_STEP_ACTION_CONTRACT,\r\n  '',\r\n  `You have up to ${maxSteps} turns. Each retrieval returns up to ${maxRetrievalsPerStep} chunks. Prefer issuing several varied retrievals over finalizing early.`,\r\n  '',\r\n  `Question: ${question}`,\r\n].join",
+          "lineNumber": 48
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n  input.persona,\r\n  '',\r\n  'Materials:',\r\n  '',\r\n  input.materials,\r\n  '',\r\n  `Question: ${input.question}`,\r\n  '',\r\n  'Plan briefly: which parts of the materials are relevant, and what distinct points need to be made? Then answer specifically, keeping each point separate and staying strictly within what the materials support.',\r\n].join",
+          "lineNumber": 68
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n  `Retrieval results for \"${input.query}\" (${input.resultCount} hits):`,\r\n  '',\r\n  input.results,\r\n  '',\r\n  'Consider: do these results cover the question fully, or are there angles still unexamined? Output your next action JSON.',\r\n].join",
+          "lineNumber": 86
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v2.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 46,
+      "exports": [
+        {
+          "name": "genericSimpleGen1V2Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, '', 'Task: answer the question grounded strictly in the provided materials.', '', 'Before answering, internally work through these steps:', '1. Identify every distinct sub-question or claim the prompt requires.', '2. Scan the materials and note which passages support each sub-question; flag any that are unsupported.', '3. Separate distinct risks, entities, or factors — do not blend them into a single synthesis.', '4. Drop any specific (number, name, date, mechanism) that is not directly attested in the materials.', '', 'Then write the answer. Be specific and substantive, but every specific must trace to the materials. If a sub-question is not covered by the materials, say so explicitly rather than guessing.'].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, '', 'You have access to a private corpus via a retrieval tool. You are expected to actively retrieve — a single retrieval is rarely sufficient for multi-faceted questions. Plan to issue multiple, varied queries that cover distinct sub-topics, entities, and risks.', '', 'Reasoning loop for each turn:', '1. Decompose the question into its sub-parts (entities, risks, mechanisms, time periods).', '2. Inventory what you already have from prior retrievals; identify the largest remaining gap.', '3. Issue a retrieval whose query targets that gap with specific terminology — avoid repeating prior queries.', '4. Only finalize when every sub-part has direct corpus support, or when remaining turns force a stop.', '', 'When you finalize: keep distinct risks/entities separate, do not invent specifics beyond retrieved chunks, and explicitly note any sub-part that retrieval did not cover.', '', MULTI_STEP_ACTION_CONTRACT, '', `Budget: up to ${maxSteps} turns; each retrieval returns up to ${maxRetrievalsPerStep} chunks. Use the budget — under-retrieval is a known failure mode.`, '', `Question: ${question}`].join",
+          "lineNumber": 38
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[input.persona, '', 'Materials:', '', input.materials, '', `Question: ${input.question}`, '', 'Procedure:', '- List the sub-questions implied by the question.', '- For each, cite the supporting passage from the materials (or mark as uncovered).', '- Keep distinct factors/risks/entities separated; do not conflate.', '- Omit any specific not grounded in the materials.', '', 'Now produce the final answer following that procedure.'].join",
+          "lineNumber": 42
+        },
+        {
+          "caller": "multiStepKickoffUserPrompt",
+          "callee": "['Begin.', '', 'First, briefly decompose the question into its sub-parts (entities, risks, mechanisms). Then output your first action JSON — typically a retrieval targeting the highest-priority sub-part with specific query terms.'].join",
+          "lineNumber": 46
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[`Retrieval results for \"${input.query}\" (${input.resultCount} hits):`, '', input.results, '', 'Update your working notes:', '- Which sub-parts of the question are now supported by retrieved evidence?', '- Which sub-parts remain uncovered or thinly covered?', '- Is there a distinct angle (different entity, risk, time period, mechanism) not yet queried?', '', 'If gaps remain and turns are available, retrieve again with a query that targets a new gap (do not repeat prior queries). Otherwise, finalize. Output your next action JSON.'].join",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v1.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 73,
+      "nonEmptyLines": 67,
+      "exports": [
+        {
+          "name": "gptGen1V1Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        persona,\r\n        'Before answering: (1) scan the materials, (2) list the distinct points relevant to the question, (3) separate them rather than blending. Cite only what the materials state. If unsupported, say so.',\r\n      ].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      persona,\r\n      'You answer by issuing retrieval queries against a private corpus you cannot see directly. Plan before each action: what gap remains, what query closes it, when you have enough to finalize.',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      `Budget: up to ${maxSteps} turns; up to ${maxRetrievalsPerStep} chunks per retrieval. Prefer multiple targeted retrievals over one broad query — coverage matters more than speed.`,\r\n      'Ground every claim in retrieved text. Do not invent specifics. Keep distinct risks/points separate in your final answer.',\r\n      `Question: ${question}`,\r\n    ].join",
+          "lineNumber": 41
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      input.persona,\r\n      `Materials:\\n${input.materials}`,\r\n      `Question: ${input.question}`,\r\n      'Steps: (1) enumerate the distinct points the materials make about this question, (2) keep them separate, (3) answer concretely citing only material-supported specifics. Flag anything the materials do not cover rather than filling gaps.',\r\n    ].join",
+          "lineNumber": 52
+        },
+        {
+          "caller": "multiStepKickoffUserPrompt",
+          "callee": "[\r\n      'Plan briefly: what is the first information gap, and what query targets it? Then output your first JSON action.',\r\n    ].join",
+          "lineNumber": 61
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `Retrieval (\"${input.query}\", ${input.resultCount} hits):`,\r\n      input.results,\r\n      'Assess: what did this confirm, what gap remains, is another retrieval warranted before finalize? Next JSON action:',\r\n    ].join",
+          "lineNumber": 67
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v2.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 46,
+      "exports": [
+        {
+          "name": "gptGen1V2Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, 'Procedure: (1) enumerate every distinct claim, risk, or entity present in the materials before drafting; (2) group related items, separating distinct risks rather than blending them; (3) answer using only what the materials state — no outside specifics, numbers, or named entities the materials do not contain; (4) if materials are silent on a sub-question, say so explicitly.'].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, 'You answer by issuing retrieval queries against a private corpus you cannot read directly. Default to retrieving: each finalize without prior retrieval risks unsupported specifics.', MULTI_STEP_ACTION_CONTRACT, 'Per-turn reasoning protocol (think internally, emit only the JSON action):', '  • What sub-question or facet is still uncovered?', '  • Which distinct angle has retrieval not yet probed (entities, mechanisms, counter-evidence, edge cases)?', '  • Compose a query targeting that gap; avoid repeating prior phrasings.', '  • Finalize only when every facet of the question has at least one retrieval grounding it and remaining gaps are explicitly acknowledged.', `Budget: up to ${maxSteps} turns, ${maxRetrievalsPerStep} chunks per retrieval. Prefer multiple targeted retrievals over one broad one.`, `Question: ${question}`].join",
+          "lineNumber": 38
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[input.persona, `Materials:\\n${input.materials}`, `Question: ${input.question}`, 'Before answering, internally list the distinct facets the question asks about and the specific passages in the materials that address each. Then answer concretely, separating distinct risks/claims rather than conflating them, and grounding every specific (numbers, names, mechanisms) in the materials. If the materials do not address a facet, state that explicitly instead of inferring.'].join",
+          "lineNumber": 42
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[`Retrieval (\"${input.query}\", ${input.resultCount} hits):`, input.results, 'Assess: which facets are now covered, which remain open, and whether any specific you might cite is actually grounded in retrieved text. Then emit the next JSON action — retrieve again if gaps remain, finalize only when coverage is sufficient:'].join",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v1.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 46,
+      "exports": [
+        {
+          "name": "qwenNonThinkingGen1V1Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, '', 'Answer the question precisely. Ground every specific (numbers, names, dates, claims) in the materials provided. If a detail is not in the materials, omit it rather than guess. Be brief and concrete. Output only the answer — no preamble.'].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, '', 'TASK: Answer the question using a retrieval tool. You cannot see materials directly — every specific in your final answer MUST come from retrieved chunks.', '', 'PROTOCOL (output exactly one JSON object per turn, no prose):', MULTI_STEP_ACTION_CONTRACT, '', 'RETRIEVAL DISCIPLINE (critical — single-shot retrieval is insufficient):', '- Issue at least 2 distinct retrieval queries before finalizing. One query rarely covers a real question.', '- After each retrieval, ask yourself: (a) what sub-aspect of the question is still uncovered? (b) what entity, mechanism, or counter-angle did the first query miss? (c) is any specific I would write unsupported by retrieved text? If any answer is yes, issue another retrieval.', '- Refine each follow-up query — do not repeat prior wording. Vary entities, synonyms, or angles (e.g. risks vs mitigations, mechanism vs evidence, primary vs secondary sources).', '- Separate distinct risks/factors/items rather than blending them. If the question implies multiple facets, retrieve for each facet.', '- Only emit {\"action\":\"finalize\",...} when no evidence gap remains AND you have results from >= 2 distinct queries.', '', `RULES:`, `- Maximum ${maxSteps} turns — budget them for iterative retrieval, not a single shot.`, `- Each retrieval returns up to ${maxRetrievalsPerStep} chunks.`, '- Output JSON only — no markdown fences, no explanation.', '', 'QUESTION:', question].join",
+          "lineNumber": 38
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[input.persona, '', 'MATERIALS:', input.materials, '', 'QUESTION:', input.question, '', 'Answer based strictly on the materials. Cover every facet the question implies; separate distinct items rather than blending them. Do not introduce specifics absent from the materials. Be specific where the materials are specific. No preamble.'].join",
+          "lineNumber": 42
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[`RETRIEVAL RESULTS (query: \"${input.query}\", ${input.resultCount} hits):`, input.results, '', 'Before your next action, check: (1) what aspect of the question is still uncovered by these results? (2) would any specific in a final answer be unsupported? (3) have you issued >= 2 distinct queries yet? If any gap exists, issue another retrieve with a refined, non-redundant query. Otherwise finalize.', '', 'Next JSON action:'].join",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v2.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 99,
+      "nonEmptyLines": 93,
+      "exports": [
+        {
+          "name": "qwenNonThinkingGen1V2Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        persona,\r\n        '',\r\n        'Answer the question precisely using ONLY the provided materials. Be concrete and specific; do not introduce facts, names, numbers, or claims not present in the materials.',\r\n        'Before finalizing, scan the materials once more for any distinct point you may have skipped — separate distinct risks/items rather than blending them.',\r\n        'Output only the answer — no preamble, no meta-commentary.',\r\n      ].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      persona,\r\n      '',\r\n      'TASK: Answer the question using a retrieval tool. You cannot see materials directly — every fact in your final answer must trace to retrieved chunks.',\r\n      '',\r\n      'PROTOCOL (output exactly one JSON object per turn, no prose):',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      '',\r\n      'RETRIEVAL DISCIPLINE (critical — do not skip):',\r\n      '- Do NOT finalize after a single retrieval. Issue at least 2 distinct retrieval queries (different angle, different keywords, or follow-up on a specific entity surfaced in the first batch) before considering finalize.',\r\n      '- After each retrieval, ask yourself: (a) which sub-parts of the question are still unevidenced? (b) which entities/terms newly surfaced deserve a follow-up query? (c) did I conflate two distinct items that should be separated? If any answer is non-empty, issue another retrieve action.',\r\n      '- Refine queries iteratively: do not repeat the same query verbatim; rephrase using terms discovered in prior results.',\r\n      '- Only finalize when no evidence gap remains AND your answer cites only material grounded in retrieved chunks.',\r\n      '',\r\n      `RULES:`,\r\n      `- Maximum ${maxSteps} turns; aim to use at least 2 retrieval turns before finalize.`,\r\n      `- Each retrieval returns up to ${maxRetrievalsPerStep} chunks.`,\r\n      `- Output JSON only — no markdown fences, no explanation.`,\r\n      '',\r\n      'QUESTION:',\r\n      question,\r\n    ].join",
+          "lineNumber": 44
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      input.persona,\r\n      '',\r\n      'MATERIALS:',\r\n      input.materials,\r\n      '',\r\n      'QUESTION:',\r\n      input.question,\r\n      '',\r\n      'Answer based strictly on the materials above. Cover each distinct point the question asks about; keep separable items separate (do not merge them). Do not add specifics that are not in the materials. No preamble.',\r\n    ].join",
+          "lineNumber": 69
+        },
+        {
+          "caller": "multiStepKickoffUserPrompt",
+          "callee": "[\r\n      'Begin. Plan to issue at least 2 distinct retrieval queries before finalize — your first query should be broad enough to map the territory, with follow-up queries targeting specific entities or sub-questions surfaced in the first results.',\r\n      'Output your first action JSON now (retrieve).',\r\n    ].join",
+          "lineNumber": 83
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `RETRIEVAL RESULTS (query: \"${input.query}\", ${input.resultCount} hits):`,\r\n      input.results,\r\n      '',\r\n      'Gap-check before next action: (1) which sub-parts of the question remain unevidenced? (2) which entities/terms in these results deserve a targeted follow-up query? (3) are any items at risk of being conflated? If any gap exists, issue another retrieve with a refined query (do not repeat the prior query verbatim). Only finalize if no gap remains and you have evidence from at least 2 distinct queries.',\r\n      '',\r\n      'Next JSON action:',\r\n    ].join",
+          "lineNumber": 90
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 101,
+      "nonEmptyLines": 95,
+      "exports": [
+        {
+          "name": "qwenThinkingGen1V1Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        persona,\r\n        '',\r\n        'Answer the question precisely and substantively, grounded strictly in the materials provided.',\r\n        '',\r\n        'Before finalizing, check: (a) is every specific claim traceable to the materials? (b) which parts of the question remain only partially covered? (c) are distinct items kept separate rather than blended? Revise if any check fails.',\r\n      ].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      persona,\r\n      '',\r\n      '## Task',\r\n      'You have access to a private corpus via a retrieval tool. You cannot see materials directly — request retrievals to get information.',\r\n      '',\r\n      '## Protocol',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      '',\r\n      `Max ${maxSteps} turns. Each retrieval returns up to ${maxRetrievalsPerStep} chunks.`,\r\n      '',\r\n      '## Retrieval discipline',\r\n      '- A single retrieval is rarely sufficient. Continue retrieving until you have evidence from at least 2 distinct queries before finalizing.',\r\n      '- After each retrieval, refine your next query based on what the prior results revealed or omitted — vary terms, angles, or entities rather than repeating.',\r\n      '- Before emitting a finalize action, ask explicitly: what gap in evidence remains? Which sub-parts of the question are still under-supported? If any gap exists, issue another retrieval instead of finalizing.',\r\n      '- Ground every specific (names, numbers, dates, claims) in retrieved chunks. If a specific is not in the evidence, omit it rather than infer it.',\r\n      '- Keep distinct items, risks, or entities separated in your synthesis; do not blend them.',\r\n      '',\r\n      '## Question',\r\n      question,\r\n    ].join",
+          "lineNumber": 44
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      input.persona,\r\n      '',\r\n      '## Materials',\r\n      '',\r\n      input.materials,\r\n      '',\r\n      '## Question',\r\n      '',\r\n      input.question,\r\n      '',\r\n      'Answer the question above based strictly on the materials. Be specific and substantive. Keep distinct items separated; do not introduce specifics absent from the materials.',\r\n    ].join",
+          "lineNumber": 68
+        },
+        {
+          "caller": "multiStepKickoffUserPrompt",
+          "callee": "[\r\n      'Begin. Plan to issue at least 2 distinct retrieval queries before finalizing — a single retrieval will almost certainly leave gaps.',\r\n      'Output your first action JSON now.',\r\n    ].join",
+          "lineNumber": 84
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `## Retrieval results for \"${input.query}\" (${input.resultCount} hits)`,\r\n      '',\r\n      input.results,\r\n      '',\r\n      'Before deciding: what aspect of the question is still uncovered or weakly supported by the evidence so far? If any gap remains, issue another retrieval with a refined query (different terms or angle). Only finalize when no material gap is left.',\r\n      '',\r\n      'Next action JSON?',\r\n    ].join",
+          "lineNumber": 91
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v2.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 52,
+      "nonEmptyLines": 46,
+      "exports": [
+        {
+          "name": "qwenThinkingGen1V2Shape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, '', 'Answer the question precisely and substantively, grounded strictly in the materials provided. Separate distinct risks/claims rather than blending them, and do not introduce specifics that the materials do not support.'].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[persona, '', '## Task', 'You have access to a private corpus via a retrieval tool. You cannot see materials directly — request retrievals to get information. Treat each retrieval as one slice of evidence: a single query rarely covers the question.', '', '## Protocol', MULTI_STEP_ACTION_CONTRACT, '', `Max ${maxSteps} turns. Each retrieval returns up to ${maxRetrievalsPerStep} chunks.`, '', '## Retrieval discipline', '- Plan to issue at least 2 distinct retrieval queries before finalizing; aim for 2–3 when the question has multiple facets (entities, risks, timeframes, comparisons).', '- After each retrieval, explicitly note (in your reasoning): which sub-parts of the question are now evidenced, and which remain uncovered or thinly supported.', '- Refine the next query based on the gap — vary phrasing, entities, or angle rather than repeating the prior query.', '- Before emitting a finalize action, ask yourself: \"What gap in evidence remains? Is any specific I am about to assert ungrounded? Are distinct risks being conflated?\" If any gap exists and turns remain, issue another retrieve action instead of finalizing.', '- Only finalize when coverage is adequate across the question and every specific in your answer traces to retrieved chunks.', '', '## Question', question].join",
+          "lineNumber": 38
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[input.persona, '', '## Materials', '', input.materials, '', '## Question', '', input.question, '', 'Answer the question above based strictly on the materials. Be specific and substantive, but do not assert specifics the materials do not support. Keep distinct risks or claims separated rather than blended.'].join",
+          "lineNumber": 42
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[`## Retrieval results for \"${input.query}\" (${input.resultCount} hits)`, '', input.results, '', 'Briefly assess: which parts of the question are now covered, and which gaps remain? If a gap exists and turns remain, issue another retrieve with a refined or differently-angled query rather than finalizing. Next action JSON?'].join",
+          "lineNumber": 50
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/gpt.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 68,
+      "nonEmptyLines": 62,
+      "exports": [
+        {
+          "name": "gptShape",
+          "line": 21,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        persona,\r\n        'Answer based on the materials. Be concrete.',\r\n      ].join",
+          "lineNumber": 34
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      persona,\r\n      'You answer questions by issuing retrieval queries against a private corpus you cannot see directly.',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      `Max ${maxSteps} turns; ${maxRetrievalsPerStep} chunks per retrieval.`,\r\n      `Question: ${question}`,\r\n    ].join",
+          "lineNumber": 39
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      input.persona,\r\n      `Materials:\\n${input.materials}`,\r\n      `Question: ${input.question}`,\r\n      'Answer concretely based on the materials.',\r\n    ].join",
+          "lineNumber": 49
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `Retrieval (\"${input.query}\", ${input.resultCount} hits):`,\r\n      input.results,\r\n      'Next JSON action:',\r\n    ].join",
+          "lineNumber": 62
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 54,
+      "nonEmptyLines": 50,
+      "exports": [
+        {
+          "name": "PromptShape",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "PromptShapeMetadata",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "SystemPromptInput",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "SoloUserPromptInput",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "MultiStepKickoffInput",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "RetrievalInjectionInput",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "MULTI_STEP_ACTION_CONTRACT",
+          "line": 24,
+          "isDefault": false
+        },
+        {
+          "name": "claudeShape",
+          "line": 34,
+          "isDefault": false
+        },
+        {
+          "name": "qwenThinkingShape",
+          "line": 35,
+          "isDefault": false
+        },
+        {
+          "name": "qwenNonThinkingShape",
+          "line": 36,
+          "isDefault": false
+        },
+        {
+          "name": "gptShape",
+          "line": 37,
+          "isDefault": false
+        },
+        {
+          "name": "genericSimpleShape",
+          "line": 38,
+          "isDefault": false
+        },
+        {
+          "name": "claudeGen1V1Shape",
+          "line": 43,
+          "isDefault": false
+        },
+        {
+          "name": "qwenThinkingGen1V1Shape",
+          "line": 44,
+          "isDefault": false
+        },
+        {
+          "name": "selectShape",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "listShapes",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "getShapeMetadata",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "REGISTRY",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "registerShape",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "_resetConfigCache",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "SelectShapeOptions",
+          "line": 46,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 21,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/qwen-non-thinking.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 85,
+      "nonEmptyLines": 79,
+      "exports": [
+        {
+          "name": "qwenNonThinkingShape",
+          "line": 22,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        persona,\r\n        '',\r\n        'Answer the question precisely. Be brief and concrete. Output only the answer — no preamble.',\r\n      ].join",
+          "lineNumber": 35
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      persona,\r\n      '',\r\n      'TASK: Answer the question using a retrieval tool. You cannot see materials directly.',\r\n      '',\r\n      'PROTOCOL (output exactly one JSON object per turn, no prose):',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      '',\r\n      `RULES:`,\r\n      `- Maximum ${maxSteps} turns.`,\r\n      `- Each retrieval returns up to ${maxRetrievalsPerStep} chunks.`,\r\n      `- Output JSON only — no markdown fences, no explanation.`,\r\n      '',\r\n      'QUESTION:',\r\n      question,\r\n    ].join",
+          "lineNumber": 41
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      input.persona,\r\n      '',\r\n      'MATERIALS:',\r\n      input.materials,\r\n      '',\r\n      'QUESTION:',\r\n      input.question,\r\n      '',\r\n      'Answer based on the materials. Be specific. No preamble.',\r\n    ].join",
+          "lineNumber": 60
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `RETRIEVAL RESULTS (query: \"${input.query}\", ${input.resultCount} hits):`,\r\n      input.results,\r\n      '',\r\n      'Next JSON action:',\r\n    ].join",
+          "lineNumber": 78
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/qwen-thinking.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 87,
+      "nonEmptyLines": 81,
+      "exports": [
+        {
+          "name": "qwenThinkingShape",
+          "line": 23,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n        persona,\r\n        '',\r\n        'Answer the question precisely and substantively, grounded in the materials provided.',\r\n      ].join",
+          "lineNumber": 36
+        },
+        {
+          "caller": "systemPrompt",
+          "callee": "[\r\n      persona,\r\n      '',\r\n      '## Task',\r\n      'You have access to a private corpus via a retrieval tool. You cannot see materials directly — request retrievals to get information.',\r\n      '',\r\n      '## Protocol',\r\n      MULTI_STEP_ACTION_CONTRACT,\r\n      '',\r\n      `Max ${maxSteps} turns. Each retrieval returns up to ${maxRetrievalsPerStep} chunks.`,\r\n      '',\r\n      '## Question',\r\n      question,\r\n    ].join",
+          "lineNumber": 42
+        },
+        {
+          "caller": "soloUserPrompt",
+          "callee": "[\r\n      input.persona,\r\n      '',\r\n      '## Materials',\r\n      '',\r\n      input.materials,\r\n      '',\r\n      '## Question',\r\n      '',\r\n      input.question,\r\n      '',\r\n      'Answer the question above based on the materials. Be specific and substantive.',\r\n    ].join",
+          "lineNumber": 59
+        },
+        {
+          "caller": "retrievalInjectionUserPrompt",
+          "callee": "[\r\n      `## Retrieval results for \"${input.query}\" (${input.resultCount} hits)`,\r\n      '',\r\n      input.results,\r\n      '',\r\n      'Next action JSON?',\r\n    ].join",
+          "lineNumber": 79
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/selector.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 177,
+      "nonEmptyLines": 159,
+      "functions": [
+        {
+          "name": "registerShape",
+          "startLine": 65,
+          "endLine": 76,
+          "params": [
+            "name",
+            "shape"
+          ]
+        },
+        {
+          "name": "loadConfig",
+          "startLine": 81,
+          "endLine": 98,
+          "params": [
+            "configPath"
+          ]
+        },
+        {
+          "name": "_resetConfigCache",
+          "startLine": 101,
+          "endLine": 103,
+          "params": []
+        },
+        {
+          "name": "selectShape",
+          "startLine": 122,
+          "endLine": 152,
+          "params": [
+            "modelAlias",
+            "options"
+          ]
+        },
+        {
+          "name": "resolve",
+          "startLine": 154,
+          "endLine": 163,
+          "params": [
+            "shapeName",
+            "alias"
+          ]
+        },
+        {
+          "name": "listShapes",
+          "startLine": 166,
+          "endLine": 168,
+          "params": []
+        },
+        {
+          "name": "getShapeMetadata",
+          "startLine": 171,
+          "endLine": 177,
+          "params": [
+            "name"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "REGISTRY",
+          "line": 30,
+          "isDefault": false
+        },
+        {
+          "name": "registerShape",
+          "line": 65,
+          "isDefault": false
+        },
+        {
+          "name": "_resetConfigCache",
+          "line": 101,
+          "isDefault": false
+        },
+        {
+          "name": "selectShape",
+          "line": 122,
+          "isDefault": false
+        },
+        {
+          "name": "listShapes",
+          "line": 166,
+          "isDefault": false
+        },
+        {
+          "name": "getShapeMetadata",
+          "line": 171,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "loadConfig",
+          "callee": "fs.readFileSync",
+          "lineNumber": 84
+        },
+        {
+          "caller": "loadConfig",
+          "callee": "JSON.parse",
+          "lineNumber": 85
+        },
+        {
+          "caller": "loadConfig",
+          "callee": "Array.isArray",
+          "lineNumber": 93
+        },
+        {
+          "caller": "selectShape",
+          "callee": "loadConfig",
+          "lineNumber": 123
+        },
+        {
+          "caller": "selectShape",
+          "callee": "Object.keys(REGISTRY).join",
+          "lineNumber": 130
+        },
+        {
+          "caller": "selectShape",
+          "callee": "Object.keys",
+          "lineNumber": 130
+        },
+        {
+          "caller": "selectShape",
+          "callee": "resolve",
+          "lineNumber": 139
+        },
+        {
+          "caller": "selectShape",
+          "callee": "[...config.prefix_patterns].sort",
+          "lineNumber": 143
+        },
+        {
+          "caller": "selectShape",
+          "callee": "modelAlias.startsWith",
+          "lineNumber": 145
+        },
+        {
+          "caller": "selectShape",
+          "callee": "resolve",
+          "lineNumber": 146
+        },
+        {
+          "caller": "selectShape",
+          "callee": "resolve",
+          "lineNumber": 151
+        },
+        {
+          "caller": "resolve",
+          "callee": "Object.keys(REGISTRY).join",
+          "lineNumber": 159
+        },
+        {
+          "caller": "resolve",
+          "callee": "Object.keys",
+          "lineNumber": 159
+        },
+        {
+          "caller": "listShapes",
+          "callee": "Object.keys",
+          "lineNumber": 167
+        }
+      ],
+      "metrics": {
+        "importCount": 6,
+        "exportCount": 6,
+        "functionCount": 7,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/prompt-shapes/types.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 101,
+      "nonEmptyLines": 85,
+      "exports": [
+        {
+          "name": "MULTI_STEP_ACTION_CONTRACT",
+          "line": 99,
+          "isDefault": false
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 1,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/retrieval-agent-loop.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 973,
+      "nonEmptyLines": 895,
+      "functions": [
+        {
+          "name": "resolveNormalizationConfig",
+          "startLine": 253,
+          "endLine": 265,
+          "params": [
+            "preset"
+          ]
+        },
+        {
+          "name": "pickShape",
+          "startLine": 279,
+          "endLine": 285,
+          "params": [
+            "modelAlias",
+            "override",
+            "requestId"
+          ]
+        },
+        {
+          "name": "normalizeFinal",
+          "startLine": 287,
+          "endLine": 290,
+          "params": [
+            "text",
+            "preset"
+          ]
+        },
+        {
+          "name": "recordPredictionIfCapturing",
+          "startLine": 292,
+          "endLine": 325,
+          "params": [
+            "capture",
+            "fields"
+          ]
+        },
+        {
+          "name": "flatten",
+          "startLine": 327,
+          "endLine": 329,
+          "params": [
+            "messages"
+          ]
+        },
+        {
+          "name": "buildAccumulatedAudit",
+          "startLine": 363,
+          "endLine": 372,
+          "params": [
+            "prior",
+            "turn",
+            "action"
+          ]
+        },
+        {
+          "name": "applyContextCompression",
+          "startLine": 374,
+          "endLine": 390,
+          "params": [
+            "state",
+            "contextManager",
+            "emit"
+          ]
+        },
+        {
+          "name": "parseAgentAction",
+          "startLine": 392,
+          "endLine": 407,
+          "params": [
+            "text"
+          ]
+        },
+        {
+          "name": "runSoloAgent",
+          "startLine": 417,
+          "endLine": 486,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "runRetrievalAgentLoop",
+          "startLine": 516,
+          "endLine": 874,
+          "params": [
+            "config"
+          ]
+        },
+        {
+          "name": "defaultLoopSleep",
+          "startLine": 902,
+          "endLine": 907,
+          "params": [
+            "ms"
+          ]
+        },
+        {
+          "name": "computeLoopBackoff",
+          "startLine": 909,
+          "endLine": 914,
+          "params": [
+            "attempt",
+            "opts"
+          ]
+        },
+        {
+          "name": "loopErrorMessage",
+          "startLine": 916,
+          "endLine": 920,
+          "params": [
+            "err"
+          ]
+        },
+        {
+          "name": "runRetrievalAgentLoopWithRecovery",
+          "startLine": 937,
+          "endLine": 973,
+          "params": [
+            "config",
+            "recoveryOpts"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "runSoloAgent",
+          "line": 417,
+          "isDefault": false
+        },
+        {
+          "name": "runRetrievalAgentLoop",
+          "line": 516,
+          "isDefault": false
+        },
+        {
+          "name": "runRetrievalAgentLoopWithRecovery",
+          "line": 937,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "pickShape",
+          "callee": "routeRequestToVariant",
+          "lineNumber": 284
+        },
+        {
+          "caller": "normalizeFinal",
+          "callee": "resolveNormalizationConfig",
+          "lineNumber": 288
+        },
+        {
+          "caller": "normalizeFinal",
+          "callee": "normalize",
+          "lineNumber": 289
+        },
+        {
+          "caller": "recordPredictionIfCapturing",
+          "callee": "capture.recordPrediction",
+          "lineNumber": 310
+        },
+        {
+          "caller": "recordPredictionIfCapturing",
+          "callee": "new Date().toISOString",
+          "lineNumber": 312
+        },
+        {
+          "caller": "flatten",
+          "callee": "messages.map(m => `<${m.role}>\\n${m.content}\\n</${m.role}>`).join",
+          "lineNumber": 328
+        },
+        {
+          "caller": "flatten",
+          "callee": "messages.map",
+          "lineNumber": 328
+        },
+        {
+          "caller": "buildAccumulatedAudit",
+          "callee": "(action.query ?? '').slice",
+          "lineNumber": 366
+        },
+        {
+          "caller": "buildAccumulatedAudit",
+          "callee": "(action.response ?? '').slice",
+          "lineNumber": 369
+        },
+        {
+          "caller": "applyContextCompression",
+          "callee": "contextManager.needsCompression",
+          "lineNumber": 379
+        },
+        {
+          "caller": "applyContextCompression",
+          "callee": "contextManager.estimateTokens",
+          "lineNumber": 380
+        },
+        {
+          "caller": "applyContextCompression",
+          "callee": "contextManager.compress",
+          "lineNumber": 381
+        },
+        {
+          "caller": "applyContextCompression",
+          "callee": "contextManager.estimateTokens",
+          "lineNumber": 382
+        },
+        {
+          "caller": "applyContextCompression",
+          "callee": "emit",
+          "lineNumber": 383
+        },
+        {
+          "caller": "applyContextCompression",
+          "callee": "contextManager.evictRetrievalCache",
+          "lineNumber": 389
+        },
+        {
+          "caller": "parseAgentAction",
+          "callee": "text.match",
+          "lineNumber": 393
+        },
+        {
+          "caller": "parseAgentAction",
+          "callee": "JSON.parse",
+          "lineNumber": 396
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "crypto.randomUUID",
+          "lineNumber": 421
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "pickShape",
+          "lineNumber": 422
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "shape.systemPrompt",
+          "lineNumber": 424
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "shape.soloUserPrompt",
+          "lineNumber": 429
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "config.llmCall",
+          "lineNumber": 440
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "errors.push",
+          "lineNumber": 448
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "errors.push",
+          "lineNumber": 452
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "llmRes.costUsd.toFixed",
+          "lineNumber": 452
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "normalizeFinal",
+          "lineNumber": 455
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "recordPredictionIfCapturing",
+          "lineNumber": 457
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "crypto.randomUUID",
+          "lineNumber": 458
+        },
+        {
+          "caller": "runSoloAgent",
+          "callee": "flatten",
+          "lineNumber": 461
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "crypto.randomUUID",
+          "lineNumber": 519
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "pickShape",
+          "lineNumber": 520
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "Boolean",
+          "lineNumber": 528
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "shape.systemPrompt",
+          "lineNumber": 530
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "shape.multiStepKickoffUserPrompt",
+          "lineNumber": 537
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "checkpointStore.loadLatest",
+          "lineNumber": 560
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 565
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "normalizeFinal",
+          "lineNumber": 567
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 596
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "maybeCompressMessages",
+          "lineNumber": 607
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 612
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 622
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "config.llmCall",
+          "lineNumber": 623
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "recordPredictionIfCapturing",
+          "lineNumber": 634
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "crypto.randomUUID",
+          "lineNumber": 635
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "flatten",
+          "lineNumber": 638
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "errors.push",
+          "lineNumber": 650
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "errors.push",
+          "lineNumber": 654
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "llmRes.costUsd.toFixed",
+          "lineNumber": 654
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "errors.push",
+          "lineNumber": 658
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "totalCost.toFixed",
+          "lineNumber": 658
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "messages.push",
+          "lineNumber": 662
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "parseAgentAction",
+          "lineNumber": 663
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "config.search",
+          "lineNumber": 669
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 674
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "shape.retrievalInjectionUserPrompt",
+          "lineNumber": 681
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "messages.push",
+          "lineNumber": 686
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 689
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "messages.push",
+          "lineNumber": 692
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "action.response?.slice",
+          "lineNumber": 701
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "buildAccumulatedAudit",
+          "lineNumber": 703
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "new Date().toISOString",
+          "lineNumber": 731
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "applyContextCompression",
+          "lineNumber": 742
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "checkpointStore.save",
+          "lineNumber": 746
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "new Date().toISOString",
+          "lineNumber": 754
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "applyContextCompression",
+          "lineNumber": 762
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 767
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "config.llmCall",
+          "lineNumber": 791
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "errors.push",
+          "lineNumber": 802
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "recordPredictionIfCapturing",
+          "lineNumber": 804
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "crypto.randomUUID",
+          "lineNumber": 805
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "flatten",
+          "lineNumber": 808
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "emit",
+          "lineNumber": 819
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "new Date().toISOString",
+          "lineNumber": 843
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "checkpointStore.save",
+          "lineNumber": 853
+        },
+        {
+          "caller": "runRetrievalAgentLoop",
+          "callee": "normalizeFinal",
+          "lineNumber": 858
+        },
+        {
+          "caller": "defaultLoopSleep",
+          "callee": "setTimeout",
+          "lineNumber": 905
+        },
+        {
+          "caller": "computeLoopBackoff",
+          "callee": "Math.min",
+          "lineNumber": 910
+        },
+        {
+          "caller": "computeLoopBackoff",
+          "callee": "opts.rng",
+          "lineNumber": 912
+        },
+        {
+          "caller": "computeLoopBackoff",
+          "callee": "Math.max",
+          "lineNumber": 913
+        },
+        {
+          "caller": "loopErrorMessage",
+          "callee": "String",
+          "lineNumber": 919
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "Number.isInteger",
+          "lineNumber": 942
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "String",
+          "lineNumber": 943
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "computeLoopBackoff",
+          "lineNumber": 962
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "onRetry",
+          "lineNumber": 963
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "loopErrorMessage",
+          "lineNumber": 963
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "sleep",
+          "lineNumber": 964
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "runRetrievalAgentLoop",
+          "lineNumber": 967
+        },
+        {
+          "caller": "runRetrievalAgentLoopWithRecovery",
+          "callee": "loopErrorMessage",
+          "lineNumber": 972
+        }
+      ],
+      "metrics": {
+        "importCount": 7,
+        "exportCount": 3,
+        "functionCount": 14,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/src/run-meta.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 453,
+      "nonEmptyLines": 410,
+      "functions": [
+        {
+          "name": "verifyDeterministicReplay",
+          "startLine": 425,
+          "endLine": 453,
+          "params": [
+            "meta",
+            "replayFn"
+          ]
+        }
+      ],
+      "classes": [
+        {
+          "name": "RunMetaCapture",
+          "startLine": 177,
+          "endLine": 339,
+          "methods": [
+            "constructor",
+            "assertOpen",
+            "setConfigSnapshot",
+            "setDatasetSha256",
+            "addModelVersion",
+            "addProviderRoute",
+            "setPromptShapePerModel",
+            "addAuditSha",
+            "recordPrediction",
+            "recordJudgeCall",
+            "finish",
+            "freeze",
+            "serialize"
+          ],
+          "properties": [
+            "finished",
+            "run_id",
+            "started_at_iso",
+            "finished_at_iso",
+            "config_snapshot",
+            "dataset_sha256",
+            "model_versions",
+            "provider_routing",
+            "prompt_shape_per_model",
+            "seed",
+            "git_sha",
+            "audit_shas",
+            "predictions",
+            "judge_call_traces"
+          ]
+        },
+        {
+          "name": "RunMetaReader",
+          "startLine": 349,
+          "endLine": 393,
+          "methods": [
+            "constructor",
+            "load",
+            "loadRawResponse"
+          ],
+          "properties": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "RUN_META_SCHEMA_VERSION",
+          "line": 46,
+          "isDefault": false
+        },
+        {
+          "name": "RunMetaCapture",
+          "line": 177,
+          "isDefault": false
+        },
+        {
+          "name": "RunMetaReader",
+          "line": 349,
+          "isDefault": false
+        },
+        {
+          "name": "verifyDeterministicReplay",
+          "line": 425,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "constructor",
+          "callee": "crypto.randomUUID",
+          "lineNumber": 194
+        },
+        {
+          "caller": "constructor",
+          "callee": "new Date().toISOString",
+          "lineNumber": 195
+        },
+        {
+          "caller": "setConfigSnapshot",
+          "callee": "this.assertOpen",
+          "lineNumber": 207
+        },
+        {
+          "caller": "setConfigSnapshot",
+          "callee": "JSON.parse",
+          "lineNumber": 209
+        },
+        {
+          "caller": "setConfigSnapshot",
+          "callee": "JSON.stringify",
+          "lineNumber": 209
+        },
+        {
+          "caller": "setDatasetSha256",
+          "callee": "this.assertOpen",
+          "lineNumber": 214
+        },
+        {
+          "caller": "addModelVersion",
+          "callee": "this.assertOpen",
+          "lineNumber": 220
+        },
+        {
+          "caller": "addModelVersion",
+          "callee": "this.model_versions.push",
+          "lineNumber": 221
+        },
+        {
+          "caller": "addProviderRoute",
+          "callee": "this.assertOpen",
+          "lineNumber": 226
+        },
+        {
+          "caller": "addProviderRoute",
+          "callee": "this.provider_routing.push",
+          "lineNumber": 227
+        },
+        {
+          "caller": "setPromptShapePerModel",
+          "callee": "this.assertOpen",
+          "lineNumber": 232
+        },
+        {
+          "caller": "addAuditSha",
+          "callee": "this.assertOpen",
+          "lineNumber": 242
+        },
+        {
+          "caller": "addAuditSha",
+          "callee": "this.audit_shas.push",
+          "lineNumber": 243
+        },
+        {
+          "caller": "recordPrediction",
+          "callee": "this.assertOpen",
+          "lineNumber": 248
+        },
+        {
+          "caller": "recordPrediction",
+          "callee": "this.predictions.push",
+          "lineNumber": 250
+        },
+        {
+          "caller": "recordJudgeCall",
+          "callee": "this.assertOpen",
+          "lineNumber": 255
+        },
+        {
+          "caller": "recordJudgeCall",
+          "callee": "this.judge_call_traces.push",
+          "lineNumber": 257
+        },
+        {
+          "caller": "finish",
+          "callee": "this.assertOpen",
+          "lineNumber": 262
+        },
+        {
+          "caller": "finish",
+          "callee": "new Date().toISOString",
+          "lineNumber": 263
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 280
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 282
+        },
+        {
+          "caller": "freeze",
+          "callee": "this.model_versions.map",
+          "lineNumber": 282
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 282
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 283
+        },
+        {
+          "caller": "freeze",
+          "callee": "this.provider_routing.map",
+          "lineNumber": 283
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 283
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 284
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 287
+        },
+        {
+          "caller": "freeze",
+          "callee": "this.audit_shas.map",
+          "lineNumber": 287
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 287
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 288
+        },
+        {
+          "caller": "freeze",
+          "callee": "this.predictions.map",
+          "lineNumber": 288
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 289
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 289
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 291
+        },
+        {
+          "caller": "freeze",
+          "callee": "this.judge_call_traces.map",
+          "lineNumber": 291
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 291
+        },
+        {
+          "caller": "freeze",
+          "callee": "Object.freeze",
+          "lineNumber": 293
+        },
+        {
+          "caller": "serialize",
+          "callee": "fsp.mkdir",
+          "lineNumber": 310
+        },
+        {
+          "caller": "serialize",
+          "callee": "this.freeze",
+          "lineNumber": 311
+        },
+        {
+          "caller": "serialize",
+          "callee": "meta.predictions.map",
+          "lineNumber": 314
+        },
+        {
+          "caller": "serialize",
+          "callee": "JSON.stringify",
+          "lineNumber": 318
+        },
+        {
+          "caller": "serialize",
+          "callee": "path.join",
+          "lineNumber": 323
+        },
+        {
+          "caller": "serialize",
+          "callee": "fsp.writeFile",
+          "lineNumber": 324
+        },
+        {
+          "caller": "serialize",
+          "callee": "meta.predictions\r\n      .map(p => JSON.stringify({ prediction_id: p.prediction_id, raw_response: p.raw_response }))\r\n      .join",
+          "lineNumber": 327
+        },
+        {
+          "caller": "serialize",
+          "callee": "meta.predictions\r\n      .map",
+          "lineNumber": 327
+        },
+        {
+          "caller": "serialize",
+          "callee": "JSON.stringify",
+          "lineNumber": 328
+        },
+        {
+          "caller": "serialize",
+          "callee": "Buffer.from",
+          "lineNumber": 330
+        },
+        {
+          "caller": "serialize",
+          "callee": "gzip",
+          "lineNumber": 331
+        },
+        {
+          "caller": "serialize",
+          "callee": "path.join",
+          "lineNumber": 334
+        },
+        {
+          "caller": "serialize",
+          "callee": "fsp.writeFile",
+          "lineNumber": 335
+        },
+        {
+          "caller": "load",
+          "callee": "path.join",
+          "lineNumber": 357
+        },
+        {
+          "caller": "load",
+          "callee": "path.join",
+          "lineNumber": 358
+        },
+        {
+          "caller": "load",
+          "callee": "fsp.readFile",
+          "lineNumber": 360
+        },
+        {
+          "caller": "load",
+          "callee": "JSON.parse",
+          "lineNumber": 361
+        },
+        {
+          "caller": "load",
+          "callee": "fs.existsSync",
+          "lineNumber": 367
+        },
+        {
+          "caller": "load",
+          "callee": "fsp.readFile",
+          "lineNumber": 368
+        },
+        {
+          "caller": "load",
+          "callee": "(await gunzip(gzippedBytes)).toString",
+          "lineNumber": 369
+        },
+        {
+          "caller": "load",
+          "callee": "gunzip",
+          "lineNumber": 369
+        },
+        {
+          "caller": "load",
+          "callee": "rawJsonl.split",
+          "lineNumber": 370
+        },
+        {
+          "caller": "load",
+          "callee": "line.trim",
+          "lineNumber": 371
+        },
+        {
+          "caller": "load",
+          "callee": "JSON.parse",
+          "lineNumber": 372
+        },
+        {
+          "caller": "load",
+          "callee": "rawByPredictionId.set",
+          "lineNumber": 376
+        },
+        {
+          "caller": "load",
+          "callee": "lightMeta.predictions.map",
+          "lineNumber": 378
+        },
+        {
+          "caller": "load",
+          "callee": "rawByPredictionId.get",
+          "lineNumber": 380
+        },
+        {
+          "caller": "load",
+          "callee": "lightMeta.predictions.map",
+          "lineNumber": 383
+        },
+        {
+          "caller": "loadRawResponse",
+          "callee": "this.rawByPredictionId.get",
+          "lineNumber": 391
+        },
+        {
+          "caller": "verifyDeterministicReplay",
+          "callee": "replayFn",
+          "lineNumber": 432
+        },
+        {
+          "caller": "verifyDeterministicReplay",
+          "callee": "mismatches.push",
+          "lineNumber": 438
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 4,
+        "functionCount": 1,
+        "classCount": 2
+      }
+    },
+    {
+      "path": "packages/agent/tests/behavioral-spec-overrides.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 104,
+      "nonEmptyLines": 94,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/context-compressor.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 434,
+      "nonEmptyLines": 369,
+      "functions": [
+        {
+          "name": "msg",
+          "startLine": 16,
+          "endLine": 18,
+          "params": [
+            "role",
+            "content"
+          ]
+        },
+        {
+          "name": "makeHistory",
+          "startLine": 20,
+          "endLine": 27,
+          "params": [
+            "count",
+            "contentSize"
+          ]
+        },
+        {
+          "name": "mockFetch",
+          "startLine": 29,
+          "endLine": 36,
+          "params": [
+            "responseContent",
+            "ok"
+          ]
+        },
+        {
+          "name": "testConfig",
+          "startLine": 38,
+          "endLine": 45,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeHistory",
+          "callee": "msg",
+          "lineNumber": 21
+        },
+        {
+          "caller": "makeHistory",
+          "callee": "messages.push",
+          "lineNumber": 24
+        },
+        {
+          "caller": "makeHistory",
+          "callee": "msg",
+          "lineNumber": 24
+        },
+        {
+          "caller": "makeHistory",
+          "callee": "'x'.repeat",
+          "lineNumber": 24
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn().mockResolvedValue",
+          "lineNumber": 30
+        },
+        {
+          "caller": "mockFetch",
+          "callee": "vi.fn",
+          "lineNumber": 30
+        },
+        {
+          "caller": "testConfig",
+          "callee": "createDefaultCompressionConfig",
+          "lineNumber": 39
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/feature-flags.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 54,
+      "nonEmptyLines": 49,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-checkpoint.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 521,
+      "nonEmptyLines": 453,
+      "functions": [
+        {
+          "name": "buildState",
+          "startLine": 51,
+          "endLine": 66,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-context-manager.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 683,
+      "nonEmptyLines": 616,
+      "functions": [
+        {
+          "name": "buildState",
+          "startLine": 38,
+          "endLine": 53,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeFakeLlmCall",
+          "startLine": 55,
+          "endLine": 72,
+          "params": [
+            "opts"
+          ]
+        },
+        {
+          "name": "makeMgr",
+          "startLine": 74,
+          "endLine": 87,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fn",
+          "callee": "calls.push",
+          "lineNumber": 61
+        },
+        {
+          "caller": "makeMgr",
+          "callee": "events.push",
+          "lineNumber": 83
+        },
+        {
+          "caller": "decs",
+          "callee": "Array.from",
+          "lineNumber": 504
+        }
+      ],
+      "metrics": {
+        "importCount": 3,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-failure-classify.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 641,
+      "nonEmptyLines": 564,
+      "functions": [
+        {
+          "name": "inp",
+          "startLine": 29,
+          "endLine": 31,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeJudge",
+          "startLine": 33,
+          "endLine": 41,
+          "params": [
+            "verdict"
+          ]
+        },
+        {
+          "name": "makeMalformedJudge",
+          "startLine": 43,
+          "endLine": 51,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeJudge",
+          "callee": "JSON.stringify",
+          "lineNumber": 35
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-loop-integration.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 850,
+      "nonEmptyLines": 770,
+      "functions": [
+        {
+          "name": "makeStore",
+          "startLine": 53,
+          "endLine": 55,
+          "params": [
+            "taskId"
+          ]
+        },
+        {
+          "name": "makeScriptedLlm",
+          "startLine": 69,
+          "endLine": 95,
+          "params": [
+            "replies"
+          ]
+        },
+        {
+          "name": "fakeSearch",
+          "startLine": 97,
+          "endLine": 100,
+          "params": [
+            "{ query }"
+          ]
+        },
+        {
+          "name": "baseConfig",
+          "startLine": 102,
+          "endLine": 112,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "baseConfig",
+          "callee": "makeScriptedLlm",
+          "lineNumber": 107
+        },
+        {
+          "caller": "llm",
+          "callee": "expect(messages.length).toBeGreaterThanOrEqual",
+          "lineNumber": 653
+        },
+        {
+          "caller": "llm",
+          "callee": "expect",
+          "lineNumber": 653
+        },
+        {
+          "caller": "buildLlm",
+          "callee": "makeScriptedLlm",
+          "lineNumber": 692
+        },
+        {
+          "caller": "buildLlm",
+          "callee": "makeScriptedLlm",
+          "lineNumber": 716
+        },
+        {
+          "caller": "heavySearch",
+          "callee": "'word '.repeat",
+          "lineNumber": 765
+        }
+      ],
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 4,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-messages-compressor.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 507,
+      "nonEmptyLines": 466,
+      "functions": [
+        {
+          "name": "makeMessages",
+          "startLine": 60,
+          "endLine": 70,
+          "params": [
+            "count",
+            "fillerChars"
+          ]
+        },
+        {
+          "name": "makeFakeLlm",
+          "startLine": 72,
+          "endLine": 80,
+          "params": [
+            "content",
+            "costUsd"
+          ]
+        },
+        {
+          "name": "fakeSearch",
+          "startLine": 292,
+          "endLine": 295,
+          "params": [
+            "{ query }"
+          ]
+        },
+        {
+          "name": "makeScriptedLlm",
+          "startLine": 302,
+          "endLine": 318,
+          "params": [
+            "replies"
+          ]
+        },
+        {
+          "name": "baseConfig",
+          "startLine": 320,
+          "endLine": 330,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeMessages",
+          "callee": "out.push",
+          "lineNumber": 66
+        },
+        {
+          "caller": "makeMessages",
+          "callee": "out.push",
+          "lineNumber": 67
+        },
+        {
+          "caller": "makeMessages",
+          "callee": "'X'.repeat",
+          "lineNumber": 67
+        },
+        {
+          "caller": "fakeSearch",
+          "callee": "'Y'.repeat",
+          "lineNumber": 293
+        },
+        {
+          "caller": "baseConfig",
+          "callee": "makeScriptedLlm",
+          "lineNumber": 325
+        },
+        {
+          "caller": "buildLlm",
+          "callee": "makeScriptedLlm",
+          "lineNumber": 482
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-recovery.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 820,
+      "nonEmptyLines": 726,
+      "functions": [
+        {
+          "name": "makeStore",
+          "startLine": 50,
+          "endLine": 52,
+          "params": [
+            "taskId"
+          ]
+        },
+        {
+          "name": "makeRunner",
+          "startLine": 61,
+          "endLine": 77,
+          "params": [
+            "overrides"
+          ]
+        },
+        {
+          "name": "makeStepFn",
+          "startLine": 79,
+          "endLine": 92,
+          "params": [
+            "impl"
+          ]
+        },
+        {
+          "name": "okResult",
+          "startLine": 94,
+          "endLine": 97,
+          "params": [
+            "output",
+            "extras"
+          ]
+        },
+        {
+          "name": "errMessage",
+          "startLine": 817,
+          "endLine": 820,
+          "params": [
+            "err"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makeRunner",
+          "callee": "makeStore",
+          "lineNumber": 64
+        },
+        {
+          "caller": "makeRunner",
+          "callee": "events.push",
+          "lineNumber": 68
+        },
+        {
+          "caller": "makeRunner",
+          "callee": "sleeps.push",
+          "lineNumber": 70
+        },
+        {
+          "caller": "makeRunner",
+          "callee": "Promise.resolve",
+          "lineNumber": 71
+        },
+        {
+          "caller": "fn",
+          "callee": "inputs.push",
+          "lineNumber": 84
+        },
+        {
+          "caller": "fn",
+          "callee": "impl",
+          "lineNumber": 85
+        },
+        {
+          "caller": "mkErr",
+          "callee": "new Date().toISOString",
+          "lineNumber": 321
+        },
+        {
+          "caller": "step",
+          "callee": "seen.push",
+          "lineNumber": 493
+        },
+        {
+          "caller": "deterministicStep",
+          "callee": "okResult",
+          "lineNumber": 624
+        },
+        {
+          "caller": "buildFlakyStep",
+          "callee": "counts.get",
+          "lineNumber": 657
+        },
+        {
+          "caller": "buildFlakyStep",
+          "callee": "counts.set",
+          "lineNumber": 658
+        },
+        {
+          "caller": "buildFlakyStep",
+          "callee": "okResult",
+          "lineNumber": 661
+        },
+        {
+          "caller": "seed",
+          "callee": "Math.imul",
+          "lineNumber": 686
+        },
+        {
+          "caller": "seed",
+          "callee": "Math.imul",
+          "lineNumber": 687
+        },
+        {
+          "caller": "runOnce",
+          "callee": "makeRunner",
+          "lineNumber": 692
+        },
+        {
+          "caller": "runOnce",
+          "callee": "seed",
+          "lineNumber": 697
+        },
+        {
+          "caller": "runOnce",
+          "callee": "runner.run",
+          "lineNumber": 699
+        },
+        {
+          "caller": "errMessage",
+          "callee": "String",
+          "lineNumber": 819
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 5,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/long-task-report.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 506,
+      "nonEmptyLines": 451,
+      "functions": [
+        {
+          "name": "rec",
+          "startLine": 49,
+          "endLine": 57,
+          "params": [
+            "overrides"
+          ]
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/output-normalize.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 350,
+      "nonEmptyLines": 301,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/phase-5-canary-router.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 318,
+      "nonEmptyLines": 286,
+      "metrics": {
+        "importCount": 4,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/prompt-shapes.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 238,
+      "nonEmptyLines": 206,
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/retrieval-agent-loop.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 511,
+      "nonEmptyLines": 477,
+      "functions": [
+        {
+          "name": "makeLlmCall",
+          "startLine": 30,
+          "endLine": 53,
+          "params": [
+            "responses"
+          ]
+        },
+        {
+          "name": "mockSearch",
+          "startLine": 55,
+          "endLine": 57,
+          "params": [
+            "results",
+            "count"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "fn",
+          "callee": "calls.push",
+          "lineNumber": 40
+        },
+        {
+          "caller": "fn",
+          "callee": "input.messages.map",
+          "lineNumber": 40
+        },
+        {
+          "caller": "fn",
+          "callee": "Math.min",
+          "lineNumber": 41
+        },
+        {
+          "caller": "runOnce",
+          "callee": "makeLlmCall",
+          "lineNumber": 453
+        },
+        {
+          "caller": "runOnce",
+          "callee": "runRetrievalAgentLoop",
+          "lineNumber": 454
+        },
+        {
+          "caller": "runOnce",
+          "callee": "mockSearch",
+          "lineNumber": 459
+        }
+      ],
+      "metrics": {
+        "importCount": 2,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/agent/tests/run-meta.test.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 448,
+      "nonEmptyLines": 389,
+      "functions": [
+        {
+          "name": "makePrediction",
+          "startLine": 35,
+          "endLine": 50,
+          "params": [
+            "idx",
+            "opts"
+          ]
+        },
+        {
+          "name": "makeJudgeTrace",
+          "startLine": 52,
+          "endLine": 65,
+          "params": [
+            "idx",
+            "predId"
+          ]
+        },
+        {
+          "name": "tmpDir",
+          "startLine": 67,
+          "endLine": 69,
+          "params": [
+            "label"
+          ]
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "makePrediction",
+          "callee": "new Date().toISOString",
+          "lineNumber": 38
+        },
+        {
+          "caller": "makeJudgeTrace",
+          "callee": "new Date().toISOString",
+          "lineNumber": 61
+        },
+        {
+          "caller": "tmpDir",
+          "callee": "fs.mkdtempSync",
+          "lineNumber": 68
+        },
+        {
+          "caller": "tmpDir",
+          "callee": "path.join",
+          "lineNumber": 68
+        },
+        {
+          "caller": "tmpDir",
+          "callee": "os.tmpdir",
+          "lineNumber": 68
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 0,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    }
+  ]
+}

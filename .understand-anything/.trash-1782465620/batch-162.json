@@ -1,0 +1,33 @@
+{
+  "nodes": [
+    {
+      "id": "config:packages/cli/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/cli/package.json",
+      "summary": "Package manifest for @waggle/cli, the interactive AI agent CLI with persistent memory. Declares the waggle bin entry point, ESM exports, and runtime dependencies on @waggle/core, @waggle/agent, @waggle/weaver, and the Anthropic SDK.",
+      "tags": ["configuration", "entry-point", "cli", "build-system", "dependency-management"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:packages/cli/test-hello.txt",
+      "type": "document",
+      "name": "test-hello.txt",
+      "filePath": "packages/cli/test-hello.txt",
+      "summary": "Minimal smoke-test artifact containing the single string 'Waggle works', used to verify basic CLI output or test harness functionality.",
+      "tags": ["documentation", "testing"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:packages/cli/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/cli/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the @waggle/cli package, targeting ES2022 with composite project references to @waggle/core, @waggle/agent, and @waggle/weaver for incremental monorepo builds.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "Uses composite mode with project references to enable incremental tsc --build across the monorepo dependency chain (core → agent → weaver → cli)."
+    }
+  ],
+  "edges": []
+}

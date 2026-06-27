@@ -1,0 +1,117 @@
+{
+  "nodes": [
+    {
+      "id": "config:apps/web/.env.example",
+      "type": "config",
+      "name": ".env.example",
+      "filePath": "apps/web/.env.example",
+      "summary": "Environment variable template for the apps/web Vite frontend, documenting VITE_POSTHOG_KEY for PostHog analytics and the optional VITE_CLERK_PUBLISHABLE_KEY for Clerk auth — both baked into the Tauri binary at compile time.",
+      "tags": ["configuration", "environment", "security", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "Both keys are VITE_ prefixed so Vite exposes them to the client bundle; the Clerk key is intentionally left blank/commented so a verbatim copy degrades gracefully to the accountless state rather than crashing."
+    },
+    {
+      "id": "config:apps/web/components.json",
+      "type": "config",
+      "name": "components.json",
+      "filePath": "apps/web/components.json",
+      "summary": "shadcn/ui CLI configuration for the apps/web frontend, specifying the default style, Tailwind CSS integration with cssVariables, and import path aliases for components, utils, ui, lib, and hooks.",
+      "tags": ["configuration", "ui-framework", "shadcn", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "The rsc:false setting disables React Server Components, consistent with the Vite SPA (non-Next.js) setup; tsx:true means shadcn generates .tsx files."
+    },
+    {
+      "id": "file:apps/web/index.html",
+      "type": "file",
+      "name": "index.html",
+      "filePath": "apps/web/index.html",
+      "summary": "Vite SPA entry HTML for Waggle OS, mounting the React app at #root with Open Graph metadata and loading /src/main.tsx as the module entry point.",
+      "tags": ["entry-point", "markup", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "config:apps/web/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "apps/web/package.json",
+      "summary": "Package manifest for the @waggle/web frontend workspace, declaring dev scripts (vite, vitest, playwright), a comprehensive Radix UI + React 19 + Clerk + TanStack Query dependency set, and Tailwind 3 + Vite 5 build toolchain.",
+      "tags": ["configuration", "build-system", "dependencies", "frontend-patterns"],
+      "complexity": "moderate",
+      "languageNotes": "Uses React 19 with the SWC Vite plugin for fast compilation; notable dependencies include @clerk/clerk-react for auth, @tauri-apps/api for desktop shell integration, framer-motion for animation, posthog-js for analytics, and the full Radix UI component suite underlying shadcn/ui."
+    },
+    {
+      "id": "config:apps/web/tsconfig.app.json",
+      "type": "config",
+      "name": "tsconfig.app.json",
+      "filePath": "apps/web/tsconfig.app.json",
+      "summary": "TypeScript compiler configuration for the apps/web browser source (src/), targeting ES2020 with bundler module resolution, noEmit type-checking mode, and an @/* path alias for the src/ directory.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "strict:false and noImplicitAny:false indicate a permissive type-checking stance for rapid iteration; vitest/globals is added to types to make test helpers available without imports."
+    },
+    {
+      "id": "config:apps/web/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "apps/web/tsconfig.json",
+      "summary": "Root TypeScript project references config for apps/web, composing tsconfig.app.json (browser source) and tsconfig.node.json (Vite config) into a single build project with shared @/* path alias.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "Uses TypeScript project references (composite build) to separate browser and Node environments; strictNullChecks:false is applied at the root level as a blanket override."
+    },
+    {
+      "id": "config:apps/web/tsconfig.node.json",
+      "type": "config",
+      "name": "tsconfig.node.json",
+      "filePath": "apps/web/tsconfig.node.json",
+      "summary": "TypeScript configuration for the Vite config file (vite.config.ts) in apps/web, targeting ES2022 with strict mode enabled and bundler module resolution.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "This config is intentionally stricter (strict:true) than tsconfig.app.json because vite.config.ts runs in a Node.js context where type safety is more tractable; includes only vite.config.ts."
+    }
+  ],
+  "edges": [
+    {
+      "source": "config:apps/web/tsconfig.json",
+      "target": "config:apps/web/tsconfig.app.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:apps/web/tsconfig.json",
+      "target": "config:apps/web/tsconfig.node.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:apps/web/tsconfig.app.json",
+      "target": "file:apps/web/index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:apps/web/package.json",
+      "target": "file:apps/web/index.html",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "config:apps/web/components.json",
+      "target": "file:apps/web/index.html",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:apps/web/.env.example",
+      "target": "config:apps/web/package.json",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

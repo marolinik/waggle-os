@@ -1,0 +1,20 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/ga/GA-STATUS-2026-05-30.md", "language": "markdown", "sizeLines": 80, "fileCategory": "docs"},
+    {"path": "docs/ga/OPERATING-MANUAL.md", "language": "markdown", "sizeLines": 207, "fileCategory": "docs"},
+    {"path": "docs/ga/PHASE2-FAILURE-INJECTION-2026-05-30.md", "language": "markdown", "sizeLines": 161, "fileCategory": "docs"},
+    {"path": "docs/ga/PRODUCTION-PLAN.md", "language": "markdown", "sizeLines": 141, "fileCategory": "docs"},
+    {"path": "docs/ga/RECONCILIATION-2026-05-30.md", "language": "markdown", "sizeLines": 65, "fileCategory": "docs"},
+    {"path": "docs/ga/TRUST-REPORT.md", "language": "markdown", "sizeLines": 100, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/ga/GA-STATUS-2026-05-30.md": [],
+    "docs/ga/OPERATING-MANUAL.md": [],
+    "docs/ga/PHASE2-FAILURE-INJECTION-2026-05-30.md": [],
+    "docs/ga/PRODUCTION-PLAN.md": [],
+    "docs/ga/RECONCILIATION-2026-05-30.md": [],
+    "docs/ga/TRUST-REPORT.md": []
+  },
+  "neighborMap": {}
+}

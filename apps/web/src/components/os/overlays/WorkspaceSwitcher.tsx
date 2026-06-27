@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Brain, ChevronRight, Plus, Archive } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
@@ -94,6 +94,15 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
 
 const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect, onCreateNew, error, onRetry }: WorkspaceSwitcherProps) => {
   const [showArchived, setShowArchived] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
   if (!open) return null;
 
   const visibleWorkspaces = workspaces.filter(
@@ -125,10 +134,13 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="workspace-switcher-title"
           className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl p-5"
           onClick={e => e.stopPropagation()}
         >
-          <h2 className="text-sm font-display font-semibold text-foreground mb-1">Switch Workspace</h2>
+          <h2 id="workspace-switcher-title" className="text-sm font-display font-semibold text-foreground mb-1">Switch Workspace</h2>
           <p className="text-[11px] text-muted-foreground mb-3">
             One workspace per project or area — each remembers its own work.
           </p>

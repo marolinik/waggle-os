@@ -1,0 +1,235 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 3,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-addendum.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 159,
+      "nonEmptyLines": 116,
+      "sections": [
+        {
+          "heading": "Pre-A Halt-and-PM Addendum — Option B Retry + Texture Audit Verdict",
+          "level": 1,
+          "line": 20
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 22
+        },
+        {
+          "heading": "§1 — Retry execution summary",
+          "level": 2,
+          "line": 26
+        },
+        {
+          "heading": "§2 — Resume-bug recovery (mid-retry)",
+          "level": 2,
+          "line": 37
+        },
+        {
+          "heading": "§3 — Texture audit per Amendment 4 caveat",
+          "level": 2,
+          "line": 45
+        },
+        {
+          "heading": "3.1 — Methodology",
+          "level": 3,
+          "line": 47
+        },
+        {
+          "heading": "3.2 — Quantitative deltas (retry mean vs original-sample mean)",
+          "level": 3,
+          "line": 55
+        },
+        {
+          "heading": "3.3 — Qualitative side-by-side review",
+          "level": 3,
+          "line": 75
+        },
+        {
+          "heading": "3.4 — Drift assessment",
+          "level": 3,
+          "line": 99
+        },
+        {
+          "heading": "§4 — Per-Amendment-4-caveat verdict",
+          "level": 2,
+          "line": 114
+        },
+        {
+          "heading": "§5 — Updated audit chain",
+          "level": 2,
+          "line": 122
+        },
+        {
+          "heading": "§6 — Cost reconciliation (final corpus phase)",
+          "level": 2,
+          "line": 134
+        },
+        {
+          "heading": "§7 — PM ratification ask",
+          "level": 2,
+          "line": 146
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 13
+      }
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/corpus/h3-spot-audit-pre-a-report.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 159,
+      "nonEmptyLines": 125,
+      "sections": [
+        {
+          "heading": "Pre-A Halt-and-PM Report — H3 Corpus Quality Audit",
+          "level": 1,
+          "line": 26
+        },
+        {
+          "heading": "TL;DR",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "§1 — Generation summary",
+          "level": 2,
+          "line": 34
+        },
+        {
+          "heading": "§2 — Failed cells (3)",
+          "level": 2,
+          "line": 48
+        },
+        {
+          "heading": "§3 — Per-family / per-persona coverage",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "Per task family",
+          "level": 3,
+          "line": 66
+        },
+        {
+          "heading": "Per persona",
+          "level": 3,
+          "line": 76
+        },
+        {
+          "heading": "Per company stage",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "§4 — Spot-audit results",
+          "level": 2,
+          "line": 93
+        },
+        {
+          "heading": "§5 — Cost reconciliation (Amendment 3 binding)",
+          "level": 2,
+          "line": 109
+        },
+        {
+          "heading": "§6 — Audit chain",
+          "level": 2,
+          "line": 120
+        },
+        {
+          "heading": "§7 — PM ratification ask",
+          "level": 2,
+          "line": 132
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 12
+      }
+    },
+    {
+      "path": "benchmarks/results/gepa-faza1/corpus/texture-audit-side-by-side.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 297,
+      "nonEmptyLines": 198,
+      "sections": [
+        {
+          "heading": "Texture-audit Side-by-Side Comparison",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "RETRY (JSON-mode)",
+          "level": 2,
+          "line": 6
+        },
+        {
+          "heading": "h3-F4-p2_cfo-stage_a_series_b_growth_burning-001",
+          "level": 3,
+          "line": 8
+        },
+        {
+          "heading": "h3-F4-p2_cfo-stage_b_post_profitable_consolidation-001",
+          "level": 3,
+          "line": 46
+        },
+        {
+          "heading": "h3-F5-p1_founder_ceo-stage_a_series_b_growth_burning-001",
+          "level": 3,
+          "line": 78
+        },
+        {
+          "heading": "ORIGINAL-SAMPLE (seed=99)",
+          "level": 2,
+          "line": 120
+        },
+        {
+          "heading": "h3-F2-p2_cfo-stage_a_series_b_growth_burning-001",
+          "level": 3,
+          "line": 122
+        },
+        {
+          "heading": "h3-F5-p1_founder_ceo-stage_b_post_profitable_consolidation-001",
+          "level": 3,
+          "line": 159
+        },
+        {
+          "heading": "h3-F3-p4_vp_finance-stage_a_series_b_growth_burning-001",
+          "level": 3,
+          "line": 193
+        },
+        {
+          "heading": "h3-F4-p3_coo-stage_b_post_profitable_consolidation-001",
+          "level": 3,
+          "line": 229
+        },
+        {
+          "heading": "h3-F1-p3_coo-stage_a_series_b_growth_burning-001",
+          "level": 3,
+          "line": 262
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 11
+      }
+    }
+  ]
+}

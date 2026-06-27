@@ -1,0 +1,101 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/tests/eval/adversarial.ts",
+      "type": "file",
+      "name": "adversarial.ts",
+      "filePath": "packages/agent/tests/eval/adversarial.ts",
+      "summary": "Declares the ADVERSARIAL_SCENARIOS array containing eval scenarios designed to probe the agent's resistance to prompt injection, jailbreaks, and unsafe tool usage.",
+      "tags": ["test", "data-model", "validation", "security"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/eval.test.ts",
+      "type": "file",
+      "name": "eval.test.ts",
+      "filePath": "packages/agent/tests/eval/eval.test.ts",
+      "summary": "Test entry point that runs both standard and adversarial evaluation scenarios through the evaluateScenario framework, asserting agent response quality and safety.",
+      "tags": ["test", "entry-point", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/framework.ts",
+      "type": "file",
+      "name": "framework.ts",
+      "filePath": "packages/agent/tests/eval/framework.ts",
+      "summary": "Core evaluation framework exporting evaluateScenario, which checks agent responses against forbidden/required terms, token-length bounds, and tool-usage constraints, returning a structured pass/fail result.",
+      "tags": ["test", "utility", "validation", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/tests/eval/framework.ts:evaluateScenario",
+      "type": "function",
+      "name": "evaluateScenario",
+      "filePath": "packages/agent/tests/eval/framework.ts",
+      "lineRange": [25, 72],
+      "summary": "Evaluates a single agent-response object against an EvalScenario definition, checking for forbidden terms, required terms, token counts, and tool allowlists/denylists, returning an array of failure messages.",
+      "tags": ["validation", "test", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/eval/scenarios.ts",
+      "type": "file",
+      "name": "scenarios.ts",
+      "filePath": "packages/agent/tests/eval/scenarios.ts",
+      "summary": "Declares the SCENARIOS array of standard (non-adversarial) evaluation scenarios covering expected agent behaviours such as tool selection, response length, and content quality.",
+      "tags": ["test", "data-model", "validation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/tests/eval/framework.ts",
+      "target": "function:packages/agent/tests/eval/framework.ts:evaluateScenario",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/tests/eval/framework.ts",
+      "target": "function:packages/agent/tests/eval/framework.ts:evaluateScenario",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/eval/adversarial.ts",
+      "target": "file:packages/agent/tests/eval/framework.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/eval.test.ts",
+      "target": "file:packages/agent/tests/eval/adversarial.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/eval.test.ts",
+      "target": "file:packages/agent/tests/eval/framework.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/eval.test.ts",
+      "target": "file:packages/agent/tests/eval/scenarios.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/eval/scenarios.ts",
+      "target": "file:packages/agent/tests/eval/framework.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    }
+  ]
+}

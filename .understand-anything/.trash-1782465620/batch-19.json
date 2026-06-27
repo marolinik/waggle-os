@@ -1,0 +1,1028 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts",
+      "type": "file",
+      "name": "claude-gen1-v1.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts",
+      "summary": "First-generation GEPA-evolved prompt shape for Claude models (v1), implementing structured XML-tagged reasoning protocols with explicit sub-question decomposition and grounding rules for the retrieval agent loop.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v2.ts",
+      "type": "file",
+      "name": "claude-gen1-v2.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v2.ts",
+      "summary": "Second iteration of the GEPA-evolved Claude prompt shape (v2), refining retrieval engagement prompts with explicit multi-retrieval guidance and reasoning scaffold for improved coverage on multi-faceted questions.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v1.ts",
+      "type": "file",
+      "name": "generic-simple-gen1-v1.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v1.ts",
+      "summary": "GEPA-evolved generic simple prompt shape (gen1/v1) targeting model-agnostic retrieval agents with a concise planning scaffold emphasizing multi-retrieval coverage and grounding discipline.",
+      "tags": ["prompt-engineering", "gepa", "model-agnostic", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v2.ts",
+      "type": "file",
+      "name": "generic-simple-gen1-v2.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v2.ts",
+      "summary": "Compact GEPA-evolved generic simple prompt shape (gen1/v2) with terse instruction style, per-turn reasoning loop, and iterative retrieval gap-filling procedure for budget-constrained runs.",
+      "tags": ["prompt-engineering", "gepa", "model-agnostic", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v1.ts",
+      "type": "file",
+      "name": "gpt-gen1-v1.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v1.ts",
+      "summary": "GEPA-evolved GPT prompt shape (gen1/v1) with compact inline instruction style, emphasizing gap-driven retrieval planning and multi-coverage before finalization.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "gpt"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v2.ts",
+      "type": "file",
+      "name": "gpt-gen1-v2.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v2.ts",
+      "summary": "Second GEPA-evolved GPT prompt shape (gen1/v2), extending v1 with per-turn facet reasoning protocol and explicit counter-evidence probing to reduce hallucinated specifics.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "gpt"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v1.ts",
+      "type": "file",
+      "name": "qwen-non-thinking-gen1-v1.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v1.ts",
+      "summary": "GEPA-evolved prompt shape for Qwen non-thinking mode (gen1/v1), using JSON-only output protocol and enforcing at-least-two-retrieval discipline before finalization.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "qwen"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v2.ts",
+      "type": "file",
+      "name": "qwen-non-thinking-gen1-v2.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v2.ts",
+      "summary": "Refined GEPA-evolved Qwen non-thinking shape (gen1/v2), adding a kickoff prompt that primes broad-then-targeted retrieval and an iterative gap-check prompt after each retrieval result.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "qwen"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts",
+      "type": "file",
+      "name": "qwen-thinking-gen1-v1.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts",
+      "summary": "GEPA-evolved prompt shape for Qwen thinking-mode models (gen1/v1), leveraging extended reasoning with markdown-structured headers and explicit retrieval discipline requiring at least two distinct queries.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "qwen"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v2.ts",
+      "type": "file",
+      "name": "qwen-thinking-gen1-v2.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v2.ts",
+      "summary": "Compact GEPA-evolved Qwen thinking shape (gen1/v2) with tightened finalization gate: requires 2-3 distinct retrievals, explicit sub-part gap tracking, and conflict-of-distinct-risks check before finalizing.",
+      "tags": ["prompt-engineering", "gepa", "model-specific", "qwen"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/gpt.ts",
+      "type": "file",
+      "name": "gpt.ts",
+      "filePath": "packages/agent/src/prompt-shapes/gpt.ts",
+      "summary": "Baseline GPT prompt shape implementing the PromptShape interface with minimal, concrete instructions for solo and multi-step retrieval agent modes.",
+      "tags": ["prompt-engineering", "model-specific", "gpt", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/index.ts",
+      "type": "file",
+      "name": "index.ts",
+      "filePath": "packages/agent/src/prompt-shapes/index.ts",
+      "summary": "Public barrel for the prompt-shapes module, re-exporting all shape implementations (claude, qwen-thinking, qwen-non-thinking, gpt, generic-simple, gepa-evolved variants), types, and the selector API.",
+      "tags": ["barrel", "entry-point", "prompt-engineering", "exports"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/qwen-non-thinking.ts",
+      "type": "file",
+      "name": "qwen-non-thinking.ts",
+      "filePath": "packages/agent/src/prompt-shapes/qwen-non-thinking.ts",
+      "summary": "Baseline prompt shape for Qwen non-thinking models with JSON-only output constraint, straightforward retrieval protocol, and minimal instruction overhead for budget-sensitive runs.",
+      "tags": ["prompt-engineering", "model-specific", "qwen", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/qwen-thinking.ts",
+      "type": "file",
+      "name": "qwen-thinking.ts",
+      "filePath": "packages/agent/src/prompt-shapes/qwen-thinking.ts",
+      "summary": "Baseline prompt shape for Qwen extended-thinking models, using markdown-structured headers to scaffold retrieval protocol and system/user/kickoff/injection message templates.",
+      "tags": ["prompt-engineering", "model-specific", "qwen", "service"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "type": "file",
+      "name": "selector.ts",
+      "filePath": "packages/agent/src/prompt-shapes/selector.ts",
+      "summary": "Dynamic prompt shape selector with a runtime registry supporting exact-match and prefix-pattern routing; reads optional JSON config to override shape assignments per model alias without code changes.",
+      "tags": ["factory", "configuration", "prompt-engineering", "registry"],
+      "complexity": "moderate",
+      "languageNotes": "Uses a module-level REGISTRY map and optional JSON config file loaded at runtime with a cache-reset escape hatch (_resetConfigCache) for testing."
+    },
+    {
+      "id": "function:packages/agent/src/prompt-shapes/selector.ts:selectShape",
+      "type": "function",
+      "name": "selectShape",
+      "filePath": "packages/agent/src/prompt-shapes/selector.ts",
+      "lineRange": [122, 152],
+      "summary": "Resolves a PromptShape for a given model alias by consulting exact-match and prefix-pattern overrides from a JSON config, falling back to the REGISTRY default.",
+      "tags": ["factory", "routing", "prompt-engineering"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/prompt-shapes/selector.ts:registerShape",
+      "type": "function",
+      "name": "registerShape",
+      "filePath": "packages/agent/src/prompt-shapes/selector.ts",
+      "lineRange": [65, 76],
+      "summary": "Registers a named PromptShape into the module-level REGISTRY, throwing if the name is already taken to prevent silent overrides.",
+      "tags": ["registry", "factory", "prompt-engineering"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "file",
+      "name": "types.ts",
+      "filePath": "packages/agent/src/prompt-shapes/types.ts",
+      "summary": "Core TypeScript type definitions for the prompt-shapes module — PromptShape interface, input types for solo/multi-step/retrieval-injection messages, and the MULTI_STEP_ACTION_CONTRACT constant string.",
+      "tags": ["type-definition", "prompt-engineering", "api-schema"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "file",
+      "name": "retrieval-agent-loop.ts",
+      "filePath": "packages/agent/src/retrieval-agent-loop.ts",
+      "summary": "Core retrieval agent execution engine implementing solo-run, multi-step retrieval loop, and recovery-wrapped variants; orchestrates LLM calls, prompt shape selection, context compression, checkpointing, and prediction capture.",
+      "tags": ["agent-runtime", "service", "entry-point", "event-handler"],
+      "complexity": "complex",
+      "languageNotes": "Largest file in the agent package (973 lines); three exported entry points cover progressive complexity: solo → multi-step loop → loop with exponential-backoff recovery."
+    },
+    {
+      "id": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoop",
+      "type": "function",
+      "name": "runRetrievalAgentLoop",
+      "filePath": "packages/agent/src/retrieval-agent-loop.ts",
+      "lineRange": [516, 874],
+      "summary": "Main multi-turn retrieval agent loop: drives LLM inference, parses retrieve/finalize actions, injects search results, manages context compression and checkpointing across up to maxSteps turns.",
+      "tags": ["agent-runtime", "service", "event-handler"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:packages/agent/src/retrieval-agent-loop.ts:runSoloAgent",
+      "type": "function",
+      "name": "runSoloAgent",
+      "filePath": "packages/agent/src/retrieval-agent-loop.ts",
+      "lineRange": [417, 486],
+      "summary": "Single-turn agent variant that assembles a solo user prompt from pre-retrieved materials and calls the LLM once without a retrieval loop, useful for direct-context evaluation.",
+      "tags": ["agent-runtime", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoopWithRecovery",
+      "type": "function",
+      "name": "runRetrievalAgentLoopWithRecovery",
+      "filePath": "packages/agent/src/retrieval-agent-loop.ts",
+      "lineRange": [937, 973],
+      "summary": "Wraps runRetrievalAgentLoop with configurable retry count and exponential backoff, enabling resilient batch evaluation runs that survive transient LLM provider errors.",
+      "tags": ["agent-runtime", "service", "resilience"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/retrieval-agent-loop.ts:applyContextCompression",
+      "type": "function",
+      "name": "applyContextCompression",
+      "filePath": "packages/agent/src/retrieval-agent-loop.ts",
+      "lineRange": [374, 390],
+      "summary": "Checks whether message history exceeds the context budget and invokes the ContextManager to compress, emitting a compression event for observability.",
+      "tags": ["context-management", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:packages/agent/src/retrieval-agent-loop.ts:recordPredictionIfCapturing",
+      "type": "function",
+      "name": "recordPredictionIfCapturing",
+      "filePath": "packages/agent/src/retrieval-agent-loop.ts",
+      "lineRange": [292, 325],
+      "summary": "Conditionally records a prediction into the RunMetaCapture object when capture mode is active, including cost, tokens, and turn-level audit trail.",
+      "tags": ["telemetry", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/src/run-meta.ts",
+      "type": "file",
+      "name": "run-meta.ts",
+      "filePath": "packages/agent/src/run-meta.ts",
+      "summary": "Provides RunMetaCapture for collecting per-run evaluation metadata (predictions, judge calls, model versions, cost) and RunMetaReader for loading serialized run artifacts including gzip-compressed raw responses.",
+      "tags": ["telemetry", "data-model", "serialization", "service"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/run-meta.ts:RunMetaCapture",
+      "type": "class",
+      "name": "RunMetaCapture",
+      "filePath": "packages/agent/src/run-meta.ts",
+      "lineRange": [177, 339],
+      "summary": "Mutable accumulator for a single evaluation run's metadata — records predictions, judge call traces, model versions, and provider routes, then serializes to a JSONL + gzip artifact pair on disk.",
+      "tags": ["data-model", "telemetry", "serialization"],
+      "complexity": "complex"
+    },
+    {
+      "id": "class:packages/agent/src/run-meta.ts:RunMetaReader",
+      "type": "class",
+      "name": "RunMetaReader",
+      "filePath": "packages/agent/src/run-meta.ts",
+      "lineRange": [349, 393],
+      "summary": "Reads serialized run metadata artifacts from disk, lazy-loading gzip-compressed raw LLM responses on demand via loadRawResponse.",
+      "tags": ["data-model", "serialization", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/run-meta.ts:verifyDeterministicReplay",
+      "type": "function",
+      "name": "verifyDeterministicReplay",
+      "filePath": "packages/agent/src/run-meta.ts",
+      "lineRange": [425, 453],
+      "summary": "Replays a completed run through a provided function and asserts that every prediction output matches the stored value, surfacing any non-determinism in the evaluation pipeline.",
+      "tags": ["testing", "validation", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/behavioral-spec-overrides.test.ts",
+      "type": "file",
+      "name": "behavioral-spec-overrides.test.ts",
+      "filePath": "packages/agent/tests/behavioral-spec-overrides.test.ts",
+      "summary": "Vitest tests for the behavioral spec override mechanism, verifying that buildActiveBehavioralSpec correctly merges rule overrides and that COMPACTION_PROMPT is well-formed.",
+      "tags": ["test", "behavioral-spec", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/context-compressor.test.ts",
+      "type": "file",
+      "name": "context-compressor.test.ts",
+      "filePath": "packages/agent/tests/context-compressor.test.ts",
+      "summary": "Comprehensive Vitest tests for the context compression subsystem, covering token estimation, pruning, protected-region splitting, middle summarization, and full compression pipeline with mocked LLM calls.",
+      "tags": ["test", "context-management", "compression"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/feature-flags.test.ts",
+      "type": "file",
+      "name": "feature-flags.test.ts",
+      "filePath": "packages/agent/tests/feature-flags.test.ts",
+      "summary": "Small Vitest suite testing FEATURE_FLAGS parsing and the isEnabled/parsePhase5CanaryPct helpers for environment-driven feature flag resolution.",
+      "tags": ["test", "feature-flags", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-checkpoint.test.ts",
+      "type": "file",
+      "name": "long-task-checkpoint.test.ts",
+      "filePath": "packages/agent/tests/long-task-checkpoint.test.ts",
+      "summary": "Vitest tests for the long-task CheckpointStore and state-transition logic, covering schema versioning, save/load round-trips, makeInitialState, and nextStateFrom transitions.",
+      "tags": ["test", "checkpointing", "long-task"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-context-manager.test.ts",
+      "type": "file",
+      "name": "long-task-context-manager.test.ts",
+      "filePath": "packages/agent/tests/long-task-context-manager.test.ts",
+      "summary": "Vitest tests for ContextManager integration with the retrieval agent loop, verifying token estimation, compression thresholds, cache eviction, and turn-level event emission.",
+      "tags": ["test", "context-management", "long-task"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-failure-classify.test.ts",
+      "type": "file",
+      "name": "long-task-failure-classify.test.ts",
+      "filePath": "packages/agent/tests/long-task-failure-classify.test.ts",
+      "summary": "Vitest tests for the failure classification subsystem, validating classifyFailure/classifyFailureBatch categorize agent errors (timeout, budget, parse, tool) and failureDistribution aggregates correctly.",
+      "tags": ["test", "failure-handling", "long-task"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-loop-integration.test.ts",
+      "type": "file",
+      "name": "long-task-loop-integration.test.ts",
+      "filePath": "packages/agent/tests/long-task-loop-integration.test.ts",
+      "summary": "End-to-end integration Vitest tests for the retrieval agent loop with scripted LLM responses, verifying checkpoint persistence, message compression triggers, and multi-turn flow control.",
+      "tags": ["test", "integration", "long-task", "agent-runtime"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-messages-compressor.test.ts",
+      "type": "file",
+      "name": "long-task-messages-compressor.test.ts",
+      "filePath": "packages/agent/tests/long-task-messages-compressor.test.ts",
+      "summary": "Vitest tests for the message compression subsystem, testing shouldCompressMessages thresholds and maybeCompressMessages behavior under scripted LLM summarization calls within the loop context.",
+      "tags": ["test", "compression", "long-task"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-recovery.test.ts",
+      "type": "file",
+      "name": "long-task-recovery.test.ts",
+      "filePath": "packages/agent/tests/long-task-recovery.test.ts",
+      "summary": "Vitest tests for the RecoveryRunner, simulating flaky step functions to verify retry logic, backoff timing, checkpoint-based resume, and deterministic-replay guarantees.",
+      "tags": ["test", "resilience", "long-task", "checkpointing"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/long-task-report.test.ts",
+      "type": "file",
+      "name": "long-task-report.test.ts",
+      "filePath": "packages/agent/tests/long-task-report.test.ts",
+      "summary": "Vitest tests for long-task report generation, validating generateReport, writeReportToDisk, and fromPilotRecord over synthetic pilot records with controlled outcome distributions.",
+      "tags": ["test", "reporting", "long-task"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/output-normalize.test.ts",
+      "type": "file",
+      "name": "output-normalize.test.ts",
+      "filePath": "packages/agent/tests/output-normalize.test.ts",
+      "summary": "Vitest tests for the output normalization pipeline, exercising normalize/normalizeWithPreset across multiple PRESETS to verify whitespace, JSON extraction, and answer-extraction behavior.",
+      "tags": ["test", "normalization", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/phase-5-canary-router.test.ts",
+      "type": "file",
+      "name": "phase-5-canary-router.test.ts",
+      "filePath": "packages/agent/tests/phase-5-canary-router.test.ts",
+      "summary": "Vitest tests for the Phase 5 canary routing system, validating hashRequestIdToBucket distribution, routeRequestToVariant assignment, and BASE_TO_CANARY_VARIANT_MAP consistency with registered shapes.",
+      "tags": ["test", "canary", "routing", "prompt-engineering"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/prompt-shapes.test.ts",
+      "type": "file",
+      "name": "prompt-shapes.test.ts",
+      "filePath": "packages/agent/tests/prompt-shapes.test.ts",
+      "summary": "Vitest tests for the prompt shapes module, verifying selectShape resolution, REGISTRY completeness, and that each registered shape produces valid system/user/injection prompts for representative inputs.",
+      "tags": ["test", "prompt-engineering", "registry"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/retrieval-agent-loop.test.ts",
+      "type": "file",
+      "name": "retrieval-agent-loop.test.ts",
+      "filePath": "packages/agent/tests/retrieval-agent-loop.test.ts",
+      "summary": "Vitest tests for the retrieval agent loop and run meta integration, using scripted LLM replies and mock search to verify multi-turn action parsing, prediction recording, and result structure.",
+      "tags": ["test", "agent-runtime", "integration"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:packages/agent/tests/run-meta.test.ts",
+      "type": "file",
+      "name": "run-meta.test.ts",
+      "filePath": "packages/agent/tests/run-meta.test.ts",
+      "summary": "Vitest tests for RunMetaCapture and RunMetaReader, verifying serialization round-trips, gzip compression of raw responses, prediction indexing, and deterministic-replay validation.",
+      "tags": ["test", "telemetry", "serialization"],
+      "complexity": "complex"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v2.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v1.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/generic-simple-gen1-v2.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v1.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/gpt-gen1-v2.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v1.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-non-thinking-gen1-v2.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v2.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/gpt.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/qwen-non-thinking.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/qwen-thinking.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "file:packages/agent/src/prompt-shapes/claude.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "file:packages/agent/src/prompt-shapes/generic-simple.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "file:packages/agent/src/prompt-shapes/gpt.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "file:packages/agent/src/prompt-shapes/qwen-non-thinking.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "file:packages/agent/src/prompt-shapes/qwen-thinking.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "file:packages/agent/src/prompt-shapes/types.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/canary/phase-5-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/long-task/checkpoint.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/long-task/context-manager.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/long-task/messages-compressor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/output-normalize.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/prompt-shapes/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/run-meta.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "file:packages/agent/src/output-normalize.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/behavioral-spec-overrides.test.ts",
+      "target": "file:packages/agent/src/behavioral-spec.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/context-compressor.test.ts",
+      "target": "file:packages/agent/src/context-compressor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/feature-flags.test.ts",
+      "target": "file:packages/agent/src/feature-flags.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-checkpoint.test.ts",
+      "target": "file:packages/agent/src/long-task/checkpoint.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-context-manager.test.ts",
+      "target": "file:packages/agent/src/long-task/checkpoint.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-context-manager.test.ts",
+      "target": "file:packages/agent/src/long-task/context-manager.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-context-manager.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-failure-classify.test.ts",
+      "target": "file:packages/agent/src/long-task/failure-classify.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-failure-classify.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-loop-integration.test.ts",
+      "target": "file:packages/agent/src/long-task/checkpoint.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-loop-integration.test.ts",
+      "target": "file:packages/agent/src/long-task/context-manager.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-loop-integration.test.ts",
+      "target": "file:packages/agent/src/long-task/messages-compressor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-loop-integration.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-messages-compressor.test.ts",
+      "target": "file:packages/agent/src/long-task/messages-compressor.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-messages-compressor.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-recovery.test.ts",
+      "target": "file:packages/agent/src/long-task/checkpoint.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-recovery.test.ts",
+      "target": "file:packages/agent/src/long-task/recovery.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-report.test.ts",
+      "target": "file:packages/agent/src/long-task/report.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/output-normalize.test.ts",
+      "target": "file:packages/agent/src/output-normalize.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/phase-5-canary-router.test.ts",
+      "target": "file:packages/agent/src/canary/phase-5-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/phase-5-canary-router.test.ts",
+      "target": "file:packages/agent/src/prompt-shapes/gepa-evolved/claude-gen1-v1.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/phase-5-canary-router.test.ts",
+      "target": "file:packages/agent/src/prompt-shapes/gepa-evolved/qwen-thinking-gen1-v1.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/phase-5-canary-router.test.ts",
+      "target": "file:packages/agent/src/prompt-shapes/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/prompt-shapes.test.ts",
+      "target": "file:packages/agent/src/prompt-shapes/index.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/retrieval-agent-loop.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/retrieval-agent-loop.test.ts",
+      "target": "file:packages/agent/src/run-meta.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/run-meta.test.ts",
+      "target": "file:packages/agent/src/run-meta.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "function:packages/agent/src/prompt-shapes/selector.ts:selectShape",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "function:packages/agent/src/prompt-shapes/selector.ts:registerShape",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "function:packages/agent/src/prompt-shapes/selector.ts:selectShape",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "target": "function:packages/agent/src/prompt-shapes/selector.ts:registerShape",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoop",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runSoloAgent",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoopWithRecovery",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:applyContextCompression",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:recordPredictionIfCapturing",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoop",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runSoloAgent",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoopWithRecovery",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "class:packages/agent/src/run-meta.ts:RunMetaCapture",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "class:packages/agent/src/run-meta.ts:RunMetaReader",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "function:packages/agent/src/run-meta.ts:verifyDeterministicReplay",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "class:packages/agent/src/run-meta.ts:RunMetaCapture",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "class:packages/agent/src/run-meta.ts:RunMetaReader",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/run-meta.ts",
+      "target": "function:packages/agent/src/run-meta.ts:verifyDeterministicReplay",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "function:packages/agent/src/retrieval-agent-loop.ts:runRetrievalAgentLoopWithRecovery",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "target": "file:packages/agent/src/prompt-shapes/selector.ts",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/tests/behavioral-spec-overrides.test.ts",
+      "target": "file:packages/agent/src/behavioral-spec.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/context-compressor.test.ts",
+      "target": "file:packages/agent/src/context-compressor.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/feature-flags.test.ts",
+      "target": "file:packages/agent/src/feature-flags.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-checkpoint.test.ts",
+      "target": "file:packages/agent/src/long-task/checkpoint.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-context-manager.test.ts",
+      "target": "file:packages/agent/src/long-task/context-manager.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-failure-classify.test.ts",
+      "target": "file:packages/agent/src/long-task/failure-classify.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-loop-integration.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-messages-compressor.test.ts",
+      "target": "file:packages/agent/src/long-task/messages-compressor.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-recovery.test.ts",
+      "target": "file:packages/agent/src/long-task/recovery.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/long-task-report.test.ts",
+      "target": "file:packages/agent/src/long-task/report.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/output-normalize.test.ts",
+      "target": "file:packages/agent/src/output-normalize.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/phase-5-canary-router.test.ts",
+      "target": "file:packages/agent/src/canary/phase-5-router.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/prompt-shapes.test.ts",
+      "target": "file:packages/agent/src/prompt-shapes/index.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/retrieval-agent-loop.test.ts",
+      "target": "file:packages/agent/src/retrieval-agent-loop.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:packages/agent/tests/run-meta.test.ts",
+      "target": "file:packages/agent/src/run-meta.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

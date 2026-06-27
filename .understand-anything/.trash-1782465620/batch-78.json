@@ -1,0 +1,134 @@
+{
+  "nodes": [
+    {
+      "id": "file:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "type": "file",
+      "name": "compute-final-kappa.ts",
+      "filePath": "benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "summary": "Benchmark script that loads JSONL judge evaluation records from three LLM judges (Opus, GPT, Minimax) and computes pairwise Cohen's kappa inter-rater agreement statistics, producing a final kappa report with drift audit results written to disk.",
+      "tags": ["benchmark", "script", "entry-point", "data-pipeline"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts:main",
+      "type": "function",
+      "name": "main",
+      "filePath": "benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "lineRange": [94, 192],
+      "summary": "Entry-point function that orchestrates loading of judge JSONL files, computes pairwise kappa statistics across all judge pairs, runs the drift audit, and writes a structured JSON report to disk.",
+      "tags": ["entry-point", "benchmark", "data-pipeline"],
+      "complexity": "complex"
+    },
+    {
+      "id": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "type": "file",
+      "name": "kappa-audit.ts",
+      "filePath": "benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "summary": "Core library for GEPA benchmark inter-rater reliability, exporting Cohen's kappa computation, a trio-audit function, and policy constants (canonical kappa, drift thresholds, V6 pass/borderline floors) used to validate judge agreement.",
+      "tags": ["utility", "benchmark", "validation", "serialization"],
+      "complexity": "moderate",
+      "languageNotes": "Exports both runtime functions and numeric policy constants that serve as locked thresholds for the benchmark drift-gate."
+    },
+    {
+      "id": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:auditKappa",
+      "type": "function",
+      "name": "auditKappa",
+      "filePath": "benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "lineRange": [71, 107],
+      "summary": "Audits pairwise kappa values against canonical constants, computing a conservative trio minimum and returning a structured result with verdict, drift measurements, and V6 policy floor pass/fail status.",
+      "tags": ["validation", "benchmark", "utility"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:computeCohensKappa",
+      "type": "function",
+      "name": "computeCohensKappa",
+      "filePath": "benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "lineRange": [118, 141],
+      "summary": "Computes Cohen's kappa from a binary confusion matrix (2x2), calculating observed agreement and expected agreement to yield the inter-rater reliability coefficient.",
+      "tags": ["utility", "benchmark", "validation"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:benchmarks/gepa/tests/faza-1/kappa-audit.test.ts",
+      "type": "file",
+      "name": "kappa-audit.test.ts",
+      "filePath": "benchmarks/gepa/tests/faza-1/kappa-audit.test.ts",
+      "summary": "Test suite for the kappa-audit module, covering Cohen's kappa computation correctness and the auditKappa drift-gate logic against known policy thresholds and canonical constants.",
+      "tags": ["test", "benchmark", "validation"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "target": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/gepa/tests/faza-1/kappa-audit.test.ts",
+      "target": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "target": "function:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts:main",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "target": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:auditKappa",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "target": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:computeCohensKappa",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "target": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:auditKappa",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "target": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:computeCohensKappa",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "target": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:auditKappa",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:benchmarks/gepa/scripts/faza-1/compute-final-kappa.ts",
+      "target": "function:benchmarks/gepa/src/faza-1/kappa-audit.ts:computeCohensKappa",
+      "type": "calls",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:benchmarks/gepa/src/faza-1/kappa-audit.ts",
+      "target": "file:benchmarks/gepa/tests/faza-1/kappa-audit.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

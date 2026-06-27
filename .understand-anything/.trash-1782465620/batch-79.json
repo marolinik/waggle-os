@@ -1,0 +1,126 @@
+{
+  "nodes": [
+    {
+      "id": "file:packages/agent/src/model-router.ts",
+      "type": "file",
+      "name": "model-router.ts",
+      "filePath": "packages/agent/src/model-router.ts",
+      "summary": "Defines the ModelRouter class and createLiteLLMRouter factory for resolving LLM model aliases to endpoint configurations, supporting multiple providers via a LiteLLM-compatible routing layer.",
+      "tags": ["service", "factory", "middleware", "llm-routing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "class:packages/agent/src/model-router.ts:ModelRouter",
+      "type": "class",
+      "name": "ModelRouter",
+      "filePath": "packages/agent/src/model-router.ts",
+      "lineRange": [26, 77],
+      "summary": "Manages a map of model aliases to resolved endpoint configurations, exposing methods to resolve a model name, list available models, and retrieve the default model.",
+      "tags": ["service", "factory", "llm-routing"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/model-router.ts:createLiteLLMRouter",
+      "type": "function",
+      "name": "createLiteLLMRouter",
+      "filePath": "packages/agent/src/model-router.ts",
+      "lineRange": [84, 103],
+      "summary": "Factory function that instantiates a ModelRouter from a LiteLLM configuration object, bridging the LiteLLM config format to the agent's routing layer.",
+      "tags": ["factory", "llm-routing", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:packages/agent/src/providers/openai-compat.ts",
+      "type": "file",
+      "name": "openai-compat.ts",
+      "filePath": "packages/agent/src/providers/openai-compat.ts",
+      "summary": "Provides the openaiChat function that executes chat completions against any OpenAI-compatible HTTP endpoint, using a resolved model configuration from ModelRouter.",
+      "tags": ["api-handler", "middleware", "llm-routing", "service"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:packages/agent/src/providers/openai-compat.ts:openaiChat",
+      "type": "function",
+      "name": "openaiChat",
+      "filePath": "packages/agent/src/providers/openai-compat.ts",
+      "lineRange": [29, 81],
+      "summary": "Sends a chat completion request to an OpenAI-compatible REST endpoint, assembling messages with an optional system prompt and returning the response text.",
+      "tags": ["api-handler", "llm-routing", "middleware"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:packages/agent/tests/model-router.test.ts",
+      "type": "file",
+      "name": "model-router.test.ts",
+      "filePath": "packages/agent/tests/model-router.test.ts",
+      "summary": "Unit tests for ModelRouter and createLiteLLMRouter, verifying model alias resolution, listing, and default model selection behavior.",
+      "tags": ["test", "llm-routing", "unit-test"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:packages/agent/src/model-router.ts",
+      "target": "class:packages/agent/src/model-router.ts:ModelRouter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/model-router.ts",
+      "target": "class:packages/agent/src/model-router.ts:ModelRouter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/model-router.ts",
+      "target": "function:packages/agent/src/model-router.ts:createLiteLLMRouter",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/model-router.ts",
+      "target": "function:packages/agent/src/model-router.ts:createLiteLLMRouter",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/providers/openai-compat.ts",
+      "target": "function:packages/agent/src/providers/openai-compat.ts:openaiChat",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:packages/agent/src/providers/openai-compat.ts",
+      "target": "function:packages/agent/src/providers/openai-compat.ts:openaiChat",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:packages/agent/src/providers/openai-compat.ts",
+      "target": "file:packages/agent/src/model-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/tests/model-router.test.ts",
+      "target": "file:packages/agent/src/model-router.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:packages/agent/src/model-router.ts",
+      "target": "file:packages/agent/tests/model-router.test.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

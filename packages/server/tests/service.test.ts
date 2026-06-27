@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -20,6 +20,9 @@ describe('Agent Service', () => {
   const tmpDirs: string[] = [];
 
   afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+
     // Close all servers
     for (const cleanup of cleanups) {
       await cleanup();
@@ -96,6 +99,44 @@ describe('Agent Service', () => {
     expect(body.llm).toBeDefined();
     expect(body.llm.provider).toBeDefined();
     expect(body.database).toBeDefined();
+  });
+
+  it('reports healthy when a fresh local install can use Ollama without a cloud key', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const litellmPort = randomPort();
+
+    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/health/liveliness')) {
+        return { ok: false, status: 503 } as Response;
+      }
+      if (url.endsWith('/api/tags')) {
+        return {
+          ok: true,
+          json: async () => ({
+            models: [
+              { name: 'nomic-embed-text:latest' },
+              { name: 'llama3.2:latest' },
+            ],
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    const { server } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+
+    const res = await server.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.status).toBe('ok');
+    expect(body.llm.provider).toBe('ollama');
+    expect(body.llm.health).toBe('healthy');
+    expect(body.defaultModel).toBe('ollama/llama3.2:latest');
   });
 
   it('server gracefully shuts down on close', async () => {

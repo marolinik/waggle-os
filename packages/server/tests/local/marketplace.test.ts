@@ -12,10 +12,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import Fastify from 'fastify';
 import path from 'node:path';
 import fs from 'node:fs';
 import { MarketplaceDB } from '@waggle/marketplace';
 import type { MarketplacePackage } from '@waggle/marketplace';
+import { marketplaceRoutes } from '../../src/local/routes/marketplace.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -109,6 +111,22 @@ describe('GET /api/marketplace/search', () => {
 });
 
 // ── Packs Routes ─────────────────────────────────────────────────────
+
+describe('GET /api/marketplace/plugins', () => {
+  it('returns a legacy redirect hint to marketplace search', async () => {
+    const server = Fastify({ logger: false });
+    server.decorate('marketplace', null as never);
+    await server.register(marketplaceRoutes);
+
+    const res = await server.inject({ method: 'GET', url: '/api/marketplace/plugins' });
+
+    expect(res.statusCode).toBe(301);
+    expect(res.headers.location).toBe('/api/marketplace/search');
+    expect(res.json()).toMatchObject({ redirect: '/api/marketplace/search' });
+
+    await server.close();
+  });
+});
 
 describe('GET /api/marketplace/packs', () => {
   let db: MarketplaceDB;

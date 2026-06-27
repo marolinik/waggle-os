@@ -1,0 +1,155 @@
+{
+  "nodes": [
+    {
+      "id": "document:judging/FINAL-REPORT.md",
+      "type": "document",
+      "name": "FINAL-REPORT.md",
+      "filePath": "judging/FINAL-REPORT.md",
+      "summary": "Final aggregated report for the UX habit-loop judging mission (2026-06-12), summarizing scorecard results across 5 judge personas over multiple rounds, listing all shipped fixes, documenting why unanimous 5/5 scores are structurally unreachable in-session, and cataloguing remaining UX residuals.",
+      "tags": ["documentation", "ux-review", "quality-assurance", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/judge-1-novice.md",
+      "type": "document",
+      "name": "judge-1-novice.md",
+      "filePath": "judging/judge-1-novice.md",
+      "summary": "UX evaluation verdict from the perspective of a complete novice user, scoring Waggle OS across 5 criteria (first-session clarity, 'it knows me' feeling, visible agent growth, desire to return, absence of friction) with per-criterion reasoning and concrete complaints.",
+      "tags": ["documentation", "ux-review", "quality-assurance", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/judge-2-casual-professional.md",
+      "type": "document",
+      "name": "judge-2-casual-professional.md",
+      "filePath": "judging/judge-2-casual-professional.md",
+      "summary": "UX evaluation verdict from the perspective of a casual non-technical professional, scoring Waggle OS across 5 habit-loop criteria with detailed per-criterion reasoning and actionable complaints about onboarding friction and memory visibility.",
+      "tags": ["documentation", "ux-review", "quality-assurance", "development"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:judging/judge-3-power-user.md",
+      "type": "document",
+      "name": "judge-3-power-user.md",
+      "filePath": "judging/judge-3-power-user.md",
+      "summary": "Detailed UX evaluation verdict from a non-developer power user, providing the most thorough per-criterion analysis (171 lines) including power-user spot checks and extensive concrete complaints about agent growth visibility and onboarding friction.",
+      "tags": ["documentation", "ux-review", "quality-assurance", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/judge-4-junior-developer.md",
+      "type": "document",
+      "name": "judge-4-junior-developer.md",
+      "filePath": "judging/judge-4-junior-developer.md",
+      "summary": "UX evaluation verdict from a junior developer persona, scoring Waggle OS on 5 habit-loop criteria with notable positive marks for first-session clarity, 'knows me' feeling, and desire to return, while flagging friction in absence-of-friction and agent growth visibility.",
+      "tags": ["documentation", "ux-review", "quality-assurance", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/judge-5-senior-skeptic.md",
+      "type": "document",
+      "name": "judge-5-senior-skeptic.md",
+      "filePath": "judging/judge-5-senior-skeptic.md",
+      "summary": "UX evaluation from a senior engineer / professional skeptic persona, applying the most critical standards across 5 habit-loop criteria with numbered, actionable complaints focused on observable agent growth and friction elimination.",
+      "tags": ["documentation", "ux-review", "quality-assurance", "development"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "document:judging/round1-fixes.md",
+      "type": "document",
+      "name": "round1-fixes.md",
+      "filePath": "judging/round1-fixes.md",
+      "summary": "Consolidated mapping of Round 1 judge complaints to concrete code fixes applied between judging rounds, serving as the actionable bridge between UX feedback and implementation.",
+      "tags": ["documentation", "ux-review", "development", "quality-assurance"],
+      "complexity": "simple"
+    },
+    {
+      "id": "document:judging/verifier-report.md",
+      "type": "document",
+      "name": "verifier-report.md",
+      "filePath": "judging/verifier-report.md",
+      "summary": "Independent verifier PASS report for commit b508583, confirming that claimed UX fixes match actual diff changes, regression sweeps are clean, tests assert the new behavior, and typecheck passes — providing the quality gate for the habit-loop judging arc.",
+      "tags": ["documentation", "quality-assurance", "ux-review", "development"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:judging/FINAL-REPORT.md",
+      "target": "document:judging/judge-1-novice.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/FINAL-REPORT.md",
+      "target": "document:judging/judge-2-casual-professional.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/FINAL-REPORT.md",
+      "target": "document:judging/judge-3-power-user.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/FINAL-REPORT.md",
+      "target": "document:judging/judge-4-junior-developer.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/FINAL-REPORT.md",
+      "target": "document:judging/judge-5-senior-skeptic.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/FINAL-REPORT.md",
+      "target": "document:judging/verifier-report.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round1-fixes.md",
+      "target": "document:judging/judge-1-novice.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round1-fixes.md",
+      "target": "document:judging/judge-2-casual-professional.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round1-fixes.md",
+      "target": "document:judging/judge-3-power-user.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round1-fixes.md",
+      "target": "document:judging/judge-4-junior-developer.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "document:judging/round1-fixes.md",
+      "target": "document:judging/judge-5-senior-skeptic.md",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    }
+  ]
+}

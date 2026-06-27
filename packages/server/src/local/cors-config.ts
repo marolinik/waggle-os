@@ -13,7 +13,9 @@ const BASE_ORIGINS = [
   'http://localhost:8080',  // waggle-os web frontend (Vite dev)
   'http://127.0.0.1:8080',
   'http://localhost:8081',
+  'http://127.0.0.1:8081',
   'http://localhost:8082',
+  'http://127.0.0.1:8082',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ];
@@ -48,6 +50,17 @@ if (process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION === '1') {
 
 export const ALLOWED_ORIGINS = [...BASE_ORIGINS, ...extensionOrigins];
 
+const LOOPBACK_HTTP_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
+
+function isLoopbackHttpOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === 'http:' && LOOPBACK_HTTP_HOSTS.has(url.hostname) && url.port !== '';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Exact-match CORS origin check for the Fastify CORS plugin.
  * A missing origin (same-origin request or non-browser client) is allowed.
@@ -55,7 +68,7 @@ export const ALLOWED_ORIGINS = [...BASE_ORIGINS, ...extensionOrigins];
  * `http://localhost:1420.evil.com` cannot pass by prefixing an allowed origin.
  */
 export function corsOriginAllowed(origin: string | undefined): boolean {
-  return !origin || ALLOWED_ORIGINS.includes(origin);
+  return !origin || ALLOWED_ORIGINS.includes(origin) || isLoopbackHttpOrigin(origin);
 }
 
 /**
@@ -66,6 +79,6 @@ export function corsOriginAllowed(origin: string | undefined): boolean {
  */
 export function validateOrigin(requestOrigin: string | undefined): string {
   if (!requestOrigin) return ALLOWED_ORIGINS[0];
-  if (ALLOWED_ORIGINS.includes(requestOrigin)) return requestOrigin;
+  if (ALLOWED_ORIGINS.includes(requestOrigin) || isLoopbackHttpOrigin(requestOrigin)) return requestOrigin;
   return ALLOWED_ORIGINS[0];
 }

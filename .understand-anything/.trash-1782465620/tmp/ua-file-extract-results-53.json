@@ -1,0 +1,3458 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 12,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "packages/memory-mcp/src/core/setup.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 233,
+      "nonEmptyLines": 198,
+      "functions": [
+        {
+          "name": "resolveDataDir",
+          "startLine": 37,
+          "endLine": 46,
+          "params": []
+        },
+        {
+          "name": "getAdapter",
+          "startLine": 77,
+          "endLine": 89,
+          "params": [
+            "source"
+          ]
+        },
+        {
+          "name": "initialize",
+          "startLine": 93,
+          "endLine": 170,
+          "params": []
+        },
+        {
+          "name": "getDataDir",
+          "startLine": 174,
+          "endLine": 174,
+          "params": []
+        },
+        {
+          "name": "getPersonalDb",
+          "startLine": 175,
+          "endLine": 175,
+          "params": []
+        },
+        {
+          "name": "getFrameStore",
+          "startLine": 176,
+          "endLine": 176,
+          "params": []
+        },
+        {
+          "name": "getSearch",
+          "startLine": 177,
+          "endLine": 177,
+          "params": []
+        },
+        {
+          "name": "getKnowledgeGraph",
+          "startLine": 178,
+          "endLine": 178,
+          "params": []
+        },
+        {
+          "name": "getIdentity",
+          "startLine": 179,
+          "endLine": 179,
+          "params": []
+        },
+        {
+          "name": "getAwareness",
+          "startLine": 180,
+          "endLine": 180,
+          "params": []
+        },
+        {
+          "name": "getSessions",
+          "startLine": 181,
+          "endLine": 181,
+          "params": []
+        },
+        {
+          "name": "getWorkspaceManager",
+          "startLine": 182,
+          "endLine": 182,
+          "params": []
+        },
+        {
+          "name": "getMindCache",
+          "startLine": 183,
+          "endLine": 183,
+          "params": []
+        },
+        {
+          "name": "getEmbedder",
+          "startLine": 184,
+          "endLine": 184,
+          "params": []
+        },
+        {
+          "name": "getHarvestSourceStore",
+          "startLine": 185,
+          "endLine": 185,
+          "params": []
+        },
+        {
+          "name": "getWorkspaceMind",
+          "startLine": 207,
+          "endLine": 224,
+          "params": [
+            "workspaceId"
+          ]
+        },
+        {
+          "name": "shutdown",
+          "startLine": 228,
+          "endLine": 233,
+          "params": []
+        }
+      ],
+      "exports": [
+        {
+          "name": "getAdapter",
+          "line": 77,
+          "isDefault": false
+        },
+        {
+          "name": "initialize",
+          "line": 93,
+          "isDefault": false
+        },
+        {
+          "name": "getDataDir",
+          "line": 174,
+          "isDefault": false
+        },
+        {
+          "name": "getPersonalDb",
+          "line": 175,
+          "isDefault": false
+        },
+        {
+          "name": "getFrameStore",
+          "line": 176,
+          "isDefault": false
+        },
+        {
+          "name": "getSearch",
+          "line": 177,
+          "isDefault": false
+        },
+        {
+          "name": "getKnowledgeGraph",
+          "line": 178,
+          "isDefault": false
+        },
+        {
+          "name": "getIdentity",
+          "line": 179,
+          "isDefault": false
+        },
+        {
+          "name": "getAwareness",
+          "line": 180,
+          "isDefault": false
+        },
+        {
+          "name": "getSessions",
+          "line": 181,
+          "isDefault": false
+        },
+        {
+          "name": "getWorkspaceManager",
+          "line": 182,
+          "isDefault": false
+        },
+        {
+          "name": "getMindCache",
+          "line": 183,
+          "isDefault": false
+        },
+        {
+          "name": "getEmbedder",
+          "line": 184,
+          "isDefault": false
+        },
+        {
+          "name": "getHarvestSourceStore",
+          "line": 185,
+          "isDefault": false
+        },
+        {
+          "name": "getWorkspaceMind",
+          "line": 207,
+          "isDefault": false
+        },
+        {
+          "name": "shutdown",
+          "line": 228,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "resolveDataDir",
+          "callee": "envDir.startsWith",
+          "lineNumber": 40
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "path.join",
+          "lineNumber": 41
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "os.homedir",
+          "lineNumber": 41
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "envDir.slice",
+          "lineNumber": 41
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "path.join",
+          "lineNumber": 45
+        },
+        {
+          "caller": "resolveDataDir",
+          "callee": "os.homedir",
+          "lineNumber": 45
+        },
+        {
+          "caller": "initialize",
+          "callee": "resolveDataDir",
+          "lineNumber": 96
+        },
+        {
+          "caller": "initialize",
+          "callee": "fs.mkdirSync",
+          "lineNumber": 99
+        },
+        {
+          "caller": "initialize",
+          "callee": "path.join",
+          "lineNumber": 101
+        },
+        {
+          "caller": "initialize",
+          "callee": "console.error",
+          "lineNumber": 130
+        },
+        {
+          "caller": "initialize",
+          "callee": "console.error",
+          "lineNumber": 131
+        },
+        {
+          "caller": "initialize",
+          "callee": "console.error",
+          "lineNumber": 132
+        },
+        {
+          "caller": "initialize",
+          "callee": "console.error",
+          "lineNumber": 133
+        },
+        {
+          "caller": "initialize",
+          "callee": "console.error",
+          "lineNumber": 134
+        },
+        {
+          "caller": "initialize",
+          "callee": "path.join",
+          "lineNumber": 141
+        },
+        {
+          "caller": "initialize",
+          "callee": "createEmbeddingProvider",
+          "lineNumber": 155
+        },
+        {
+          "caller": "initialize",
+          "callee": "_workspaceManager.getMindPath",
+          "lineNumber": 166
+        },
+        {
+          "caller": "getWorkspaceMind",
+          "callee": "_mindCache.getOrOpen",
+          "lineNumber": 208
+        },
+        {
+          "caller": "getWorkspaceMind",
+          "callee": "_workspaceMindLayerCache.get",
+          "lineNumber": 212
+        },
+        {
+          "caller": "getWorkspaceMind",
+          "callee": "_workspaceMindLayerCache.set",
+          "lineNumber": 222
+        },
+        {
+          "caller": "shutdown",
+          "callee": "_workspaceMindLayerCache.clear",
+          "lineNumber": 229
+        },
+        {
+          "caller": "shutdown",
+          "callee": "_mindCache.closeAll",
+          "lineNumber": 230
+        },
+        {
+          "caller": "shutdown",
+          "callee": "_personalDb?.close",
+          "lineNumber": 231
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 16,
+        "functionCount": 17,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/index.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 110,
+      "nonEmptyLines": 92,
+      "functions": [
+        {
+          "name": "main",
+          "startLine": 80,
+          "endLine": 91,
+          "params": []
+        },
+        {
+          "name": "handleShutdown",
+          "startLine": 95,
+          "endLine": 99,
+          "params": []
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "main",
+          "callee": "initialize",
+          "lineNumber": 82
+        },
+        {
+          "caller": "main",
+          "callee": "server.connect",
+          "lineNumber": 86
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 89
+        },
+        {
+          "caller": "main",
+          "callee": "console.error",
+          "lineNumber": 90
+        },
+        {
+          "caller": "handleShutdown",
+          "callee": "console.error",
+          "lineNumber": 96
+        },
+        {
+          "caller": "handleShutdown",
+          "callee": "shutdown",
+          "lineNumber": 97
+        },
+        {
+          "caller": "handleShutdown",
+          "callee": "process.exit",
+          "lineNumber": 98
+        }
+      ],
+      "metrics": {
+        "importCount": 11,
+        "exportCount": 0,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/resources/memory.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 189,
+      "nonEmptyLines": 170,
+      "functions": [
+        {
+          "name": "registerResources",
+          "startLine": 22,
+          "endLine": 189,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerResources",
+          "line": 22,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerResources",
+          "callee": "server.resource",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getFrameStore",
+          "lineNumber": 29
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getEmbedder",
+          "lineNumber": 31
+        },
+        {
+          "caller": "registerResources",
+          "callee": "frameStore.getStats",
+          "lineNumber": 33
+        },
+        {
+          "caller": "registerResources",
+          "callee": "kg.getEntityCount",
+          "lineNumber": 34
+        },
+        {
+          "caller": "registerResources",
+          "callee": "kg.getEntityTypeCounts",
+          "lineNumber": 35
+        },
+        {
+          "caller": "registerResources",
+          "callee": "embedder.getStatus",
+          "lineNumber": 36
+        },
+        {
+          "caller": "registerResources",
+          "callee": "JSON.stringify",
+          "lineNumber": 61
+        },
+        {
+          "caller": "registerResources",
+          "callee": "server.resource",
+          "lineNumber": 68
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getIdentity",
+          "lineNumber": 72
+        },
+        {
+          "caller": "registerResources",
+          "callee": "identity.exists",
+          "lineNumber": 75
+        },
+        {
+          "caller": "registerResources",
+          "callee": "identity.get",
+          "lineNumber": 78
+        },
+        {
+          "caller": "registerResources",
+          "callee": "JSON.stringify",
+          "lineNumber": 93
+        },
+        {
+          "caller": "registerResources",
+          "callee": "server.resource",
+          "lineNumber": 100
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getAwareness",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerResources",
+          "callee": "awareness.getAll",
+          "lineNumber": 105
+        },
+        {
+          "caller": "registerResources",
+          "callee": "items.map",
+          "lineNumber": 107
+        },
+        {
+          "caller": "registerResources",
+          "callee": "JSON.stringify",
+          "lineNumber": 120
+        },
+        {
+          "caller": "registerResources",
+          "callee": "server.resource",
+          "lineNumber": 127
+        },
+        {
+          "caller": "registerResources",
+          "callee": "uri.href.match",
+          "lineNumber": 132
+        },
+        {
+          "caller": "registerResources",
+          "callee": "JSON.stringify",
+          "lineNumber": 140
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getWorkspaceManager",
+          "lineNumber": 145
+        },
+        {
+          "caller": "registerResources",
+          "callee": "wm.get",
+          "lineNumber": 146
+        },
+        {
+          "caller": "registerResources",
+          "callee": "JSON.stringify",
+          "lineNumber": 153
+        },
+        {
+          "caller": "registerResources",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 161
+        },
+        {
+          "caller": "registerResources",
+          "callee": "mind.frameStore.getStats",
+          "lineNumber": 163
+        },
+        {
+          "caller": "registerResources",
+          "callee": "mind.knowledgeGraph.getEntityCount",
+          "lineNumber": 164
+        },
+        {
+          "caller": "registerResources",
+          "callee": "JSON.stringify",
+          "lineNumber": 184
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/awareness.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 139,
+      "nonEmptyLines": 124,
+      "functions": [
+        {
+          "name": "registerAwarenessTools",
+          "startLine": 11,
+          "endLine": 139,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerAwarenessTools",
+          "line": 11,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "server.tool",
+          "lineNumber": 14
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum(['task', 'action', 'pending', 'flag']).optional()\r\n        .describe",
+          "lineNumber": 18
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum(['task', 'action', 'pending', 'flag']).optional",
+          "lineNumber": 18
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum",
+          "lineNumber": 18
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "getAwareness",
+          "lineNumber": 22
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "awareness.getByCategory",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "awareness.getAll",
+          "lineNumber": 26
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "items.map",
+          "lineNumber": 37
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 49
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "server.tool",
+          "lineNumber": 56
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum(['task', 'action', 'pending', 'flag'])\r\n        .describe",
+          "lineNumber": 60
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum",
+          "lineNumber": 60
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.string().describe",
+          "lineNumber": 62
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.string",
+          "lineNumber": 62
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min(0).max(10).optional()\r\n        .describe",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min(0).max(10).optional",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min(0).max",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min(1).optional()\r\n        .describe",
+          "lineNumber": 65
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min(1).optional",
+          "lineNumber": 65
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().min",
+          "lineNumber": 65
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number",
+          "lineNumber": 65
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "getAwareness",
+          "lineNumber": 69
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "Date.now",
+          "lineNumber": 73
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "expiry.toISOString",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "awareness.add",
+          "lineNumber": 77
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 87
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "server.tool",
+          "lineNumber": 100
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().optional().describe",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number().optional",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.number",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum(['task', 'action', 'pending', 'flag']).optional()\r\n        .describe",
+          "lineNumber": 105
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum(['task', 'action', 'pending', 'flag']).optional",
+          "lineNumber": 105
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "z.enum",
+          "lineNumber": 105
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "getAwareness",
+          "lineNumber": 109
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "awareness.remove",
+          "lineNumber": 112
+        },
+        {
+          "caller": "registerAwarenessTools",
+          "callee": "awareness.clearCategory",
+          "lineNumber": 122
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/cleanup.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 422,
+      "nonEmptyLines": 375,
+      "functions": [
+        {
+          "name": "isNoiseEntity",
+          "startLine": 40,
+          "endLine": 61,
+          "params": [
+            "name",
+            "entityType"
+          ]
+        },
+        {
+          "name": "registerCleanupTools",
+          "startLine": 63,
+          "endLine": 422,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerCleanupTools",
+          "line": 63,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "isNoiseEntity",
+          "callee": "name.toLowerCase().trim",
+          "lineNumber": 41
+        },
+        {
+          "caller": "isNoiseEntity",
+          "callee": "name.toLowerCase",
+          "lineNumber": 41
+        },
+        {
+          "caller": "isNoiseEntity",
+          "callee": "NOISE_ENTITY_NAMES.has",
+          "lineNumber": 47
+        },
+        {
+          "caller": "isNoiseEntity",
+          "callee": "/^\\d+$/.test",
+          "lineNumber": 50
+        },
+        {
+          "caller": "isNoiseEntity",
+          "callee": "/^(step|phase|part|section|item|task|bug|fix|test)\\b/i.test",
+          "lineNumber": 55
+        },
+        {
+          "caller": "isNoiseEntity",
+          "callee": "/^(the|a|an|this|that|my|your)\\s/i.test",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "server.tool",
+          "lineNumber": 66
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.enum(['compact', 'wipe_imports', 'wipe_all', 'reconcile'])\r\n        .describe",
+          "lineNumber": 70
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.enum",
+          "lineNumber": 70
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 72
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.string().optional",
+          "lineNumber": 72
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.string",
+          "lineNumber": 72
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.number().optional()\r\n        .describe",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.number().optional",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.number",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.number().optional()\r\n        .describe",
+          "lineNumber": 76
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.number().optional",
+          "lineNumber": 76
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.number",
+          "lineNumber": 76
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 81
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getPersonalDb",
+          "lineNumber": 82
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 92
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getFrameStore",
+          "lineNumber": 93
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "db.getDatabase",
+          "lineNumber": 94
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "frameStore.compact",
+          "lineNumber": 97
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(\r\n          \"SELECT COUNT(*) as cnt FROM memory_frames WHERE source = 'import'\",\r\n        ).get",
+          "lineNumber": 116
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 116
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(\r\n          \"SELECT id FROM memory_frames WHERE source = 'import'\",\r\n        ).all",
+          "lineNumber": 127
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 127
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.transaction",
+          "lineNumber": 131
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run",
+          "lineNumber": 134
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 134
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run",
+          "lineNumber": 136
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 136
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(\"DELETE FROM memory_frames WHERE source = 'import'\").run",
+          "lineNumber": 139
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 139
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "deleteTx",
+          "lineNumber": 141
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 146
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "frameStore.getStats",
+          "lineNumber": 155
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.transaction",
+          "lineNumber": 157
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare('DELETE FROM memory_frames_fts').run",
+          "lineNumber": 158
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 158
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare('DELETE FROM memory_frames_vec').run",
+          "lineNumber": 159
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 159
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare('DELETE FROM memory_frames').run",
+          "lineNumber": 160
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 160
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare('DELETE FROM sessions').run",
+          "lineNumber": 161
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 161
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "deleteTx",
+          "lineNumber": 163
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 168
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "reconcileIndexes",
+          "lineNumber": 178
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getEmbedder",
+          "lineNumber": 178
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 182
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "server.tool",
+          "lineNumber": 199
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.enum(['audit', 'remove_noise', 'dedup', 'retire_orphans', 'wipe_all'])\r\n        .describe",
+          "lineNumber": 203
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.enum",
+          "lineNumber": 203
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 205
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.string().optional",
+          "lineNumber": 205
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "z.string",
+          "lineNumber": 205
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 210
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 211
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 213
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "getPersonalDb",
+          "lineNumber": 214
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "db.getDatabase",
+          "lineNumber": 223
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getEntities",
+          "lineNumber": 227
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "allEntities.filter",
+          "lineNumber": 228
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "isNoiseEntity",
+          "lineNumber": 228
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizeEntityName",
+          "lineNumber": 233
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "entity.entity_type.toLowerCase",
+          "lineNumber": 233
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizedGroups.get",
+          "lineNumber": 234
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizedGroups.set",
+          "lineNumber": 237
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "group.push",
+          "lineNumber": 239
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "Array.from(normalizedGroups.values()).filter",
+          "lineNumber": 241
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "Array.from",
+          "lineNumber": 241
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizedGroups.values",
+          "lineNumber": 241
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(`\r\n          SELECT COUNT(*) as cnt FROM knowledge_entities e\r\n          WHERE e.valid_to IS NULL\r\n            AND e.id NOT IN (SELECT source_id FROM knowledge_relations WHERE valid_to IS NULL)\r\n            AND e.id NOT IN (SELECT target_id FROM knowledge_relations WHERE valid_to IS NULL)\r\n        `).get",
+          "lineNumber": 244
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 244
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 254
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "noiseEntities.slice(0, 20).map",
+          "lineNumber": 258
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "noiseEntities.slice",
+          "lineNumber": 258
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "duplicateGroups.slice(0, 10).map",
+          "lineNumber": 260
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "duplicateGroups.slice",
+          "lineNumber": 260
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "g.map",
+          "lineNumber": 260
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getEntities",
+          "lineNumber": 268
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "allEntities.filter",
+          "lineNumber": 269
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "isNoiseEntity",
+          "lineNumber": 269
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.transaction",
+          "lineNumber": 272
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsFrom",
+          "lineNumber": 276
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsTo",
+          "lineNumber": 277
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.retireRelation",
+          "lineNumber": 280
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.retireEntity",
+          "lineNumber": 282
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "removeTx",
+          "lineNumber": 286
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 291
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getEntities",
+          "lineNumber": 300
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizeEntityName",
+          "lineNumber": 303
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "entity.entity_type.toLowerCase",
+          "lineNumber": 303
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizedGroups.get",
+          "lineNumber": 304
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizedGroups.set",
+          "lineNumber": 307
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "group.push",
+          "lineNumber": 309
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.transaction",
+          "lineNumber": 313
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "normalizedGroups.values",
+          "lineNumber": 314
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "group.sort",
+          "lineNumber": 318
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsFrom",
+          "lineNumber": 319
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsTo",
+          "lineNumber": 319
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsFrom",
+          "lineNumber": 320
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsTo",
+          "lineNumber": 320
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "sorted.slice",
+          "lineNumber": 324
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsFrom",
+          "lineNumber": 328
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.createRelation",
+          "lineNumber": 330
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.retireRelation",
+          "lineNumber": 332
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getRelationsTo",
+          "lineNumber": 334
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.createRelation",
+          "lineNumber": 336
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.retireRelation",
+          "lineNumber": 338
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.parse",
+          "lineNumber": 343
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.parse",
+          "lineNumber": 344
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.updateEntity",
+          "lineNumber": 346
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.retireEntity",
+          "lineNumber": 349
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "dedupTx",
+          "lineNumber": 354
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 359
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(`\r\n          SELECT id FROM knowledge_entities e\r\n          WHERE e.valid_to IS NULL\r\n            AND e.id NOT IN (SELECT source_id FROM knowledge_relations WHERE valid_to IS NULL)\r\n            AND e.id NOT IN (SELECT target_id FROM knowledge_relations WHERE valid_to IS NULL)\r\n        `).all",
+          "lineNumber": 368
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 368
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.transaction",
+          "lineNumber": 376
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.retireEntity",
+          "lineNumber": 378
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "retireTx",
+          "lineNumber": 382
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 387
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "kg.getEntityCount",
+          "lineNumber": 396
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.transaction",
+          "lineNumber": 398
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(\"UPDATE knowledge_relations SET valid_to = datetime('now') WHERE valid_to IS NULL\").run",
+          "lineNumber": 399
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 399
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare(\"UPDATE knowledge_entities SET valid_to = datetime('now') WHERE valid_to IS NULL\").run",
+          "lineNumber": 400
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "raw.prepare",
+          "lineNumber": 400
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "wipeTx",
+          "lineNumber": 402
+        },
+        {
+          "caller": "registerCleanupTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 407
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/harvest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 226,
+      "nonEmptyLines": 203,
+      "functions": [
+        {
+          "name": "registerHarvestTools",
+          "startLine": 20,
+          "endLine": 226,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerHarvestTools",
+          "line": 20,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerHarvestTools",
+          "callee": "server.tool",
+          "lineNumber": 23
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.enum([\r\n        'chatgpt', 'claude', 'claude-code', 'gemini', 'universal',\r\n      ]).describe",
+          "lineNumber": 27
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.enum",
+          "lineNumber": 27
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.string().optional",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.string",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 32
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.string().optional",
+          "lineNumber": 32
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "z.string",
+          "lineNumber": 32
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "fs.readFileSync",
+          "lineNumber": 51
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "JSON.parse",
+          "lineNumber": 52
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "JSON.parse",
+          "lineNumber": 54
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getAdapter",
+          "lineNumber": 67
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "adapter.parse",
+          "lineNumber": 68
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getFrameStore",
+          "lineNumber": 80
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getSessions",
+          "lineNumber": 81
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getSearch",
+          "lineNumber": 82
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 83
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getHarvestSourceStore",
+          "lineNumber": 84
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "sessions.ensure",
+          "lineNumber": 87
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getPersonalDb().getDatabase",
+          "lineNumber": 102
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getPersonalDb",
+          "lineNumber": 102
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "rawDb.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM memory_frames').get",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "rawDb.prepare",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "item.content.slice",
+          "lineNumber": 109
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "item.content.slice",
+          "lineNumber": 110
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "resolveRelativeDate",
+          "lineNumber": 117
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "frameStore.createIFrame",
+          "lineNumber": 121
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "search.indexFrame",
+          "lineNumber": 138
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "Array.isArray",
+          "lineNumber": 142
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "kg.createEntity",
+          "lineNumber": 145
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "writeRawTurnFrames",
+          "lineNumber": 161
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "harvestStore.upsert",
+          "lineNumber": 166
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "harvestStore.recordSync",
+          "lineNumber": 171
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 180
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "server.tool",
+          "lineNumber": 194
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "getHarvestSourceStore",
+          "lineNumber": 199
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "store.getAll",
+          "lineNumber": 200
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 214
+        },
+        {
+          "caller": "registerHarvestTools",
+          "callee": "sources.map",
+          "lineNumber": 214
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/identity.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 122,
+      "nonEmptyLines": 112,
+      "functions": [
+        {
+          "name": "registerIdentityTools",
+          "startLine": 10,
+          "endLine": 122,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerIdentityTools",
+          "line": 10,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerIdentityTools",
+          "callee": "server.tool",
+          "lineNumber": 13
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "getIdentity",
+          "lineNumber": 18
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "identity.exists",
+          "lineNumber": 20
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 24
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "identity.get",
+          "lineNumber": 32
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 36
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "server.tool",
+          "lineNumber": 52
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 56
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional",
+          "lineNumber": 56
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string",
+          "lineNumber": 56
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 58
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional",
+          "lineNumber": 58
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string",
+          "lineNumber": 58
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 60
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional",
+          "lineNumber": 60
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string",
+          "lineNumber": 60
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 61
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string().optional",
+          "lineNumber": 61
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "z.string",
+          "lineNumber": 61
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "getIdentity",
+          "lineNumber": 64
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "identity.exists",
+          "lineNumber": 66
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "identity.create",
+          "lineNumber": 68
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 79
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "Object.keys",
+          "lineNumber": 98
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "identity.update",
+          "lineNumber": 107
+        },
+        {
+          "caller": "registerIdentityTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 111
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/ingest.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 207,
+      "nonEmptyLines": 183,
+      "functions": [
+        {
+          "name": "registerIngestTools",
+          "startLine": 24,
+          "endLine": 173,
+          "params": [
+            "server"
+          ]
+        },
+        {
+          "name": "detectContentType",
+          "startLine": 176,
+          "endLine": 207,
+          "params": [
+            "input"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerIngestTools",
+          "line": 24,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerIngestTools",
+          "callee": "server.tool",
+          "lineNumber": 27
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.string()\r\n        .describe",
+          "lineNumber": 31
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.string",
+          "lineNumber": 31
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.enum(['markdown', 'plaintext', 'pdf', 'url', 'auto']).default('auto')\r\n        .describe",
+          "lineNumber": 33
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.enum(['markdown', 'plaintext', 'pdf', 'url', 'auto']).default",
+          "lineNumber": 33
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.enum",
+          "lineNumber": 33
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.enum(['critical', 'important', 'normal']).default('normal')\r\n        .describe",
+          "lineNumber": 35
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.enum(['critical', 'important', 'normal']).default",
+          "lineNumber": 35
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.enum",
+          "lineNumber": 35
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.array(z.string()).optional()\r\n        .describe",
+          "lineNumber": 37
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.array(z.string()).optional",
+          "lineNumber": 37
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.array",
+          "lineNumber": 37
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.string",
+          "lineNumber": 37
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 39
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.string().optional",
+          "lineNumber": 39
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "z.string",
+          "lineNumber": 39
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "detectContentType",
+          "lineNumber": 45
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "urlAdapter.fetchAndParse",
+          "lineNumber": 54
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "import",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "pdfAdapter.parseFile",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getAdapter",
+          "lineNumber": 62
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "adapter.parse",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "String",
+          "lineNumber": 69
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getFrameStore",
+          "lineNumber": 85
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getSessions",
+          "lineNumber": 86
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getSearch",
+          "lineNumber": 87
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 88
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getHarvestSourceStore",
+          "lineNumber": 89
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "new Date().toISOString().slice",
+          "lineNumber": 91
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "new Date().toISOString",
+          "lineNumber": 91
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "sessions.ensure",
+          "lineNumber": 92
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getPersonalDb().getDatabase",
+          "lineNumber": 101
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "getPersonalDb",
+          "lineNumber": 101
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "rawDb.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM memory_frames').get",
+          "lineNumber": 103
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "rawDb.prepare",
+          "lineNumber": 103
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "item.content.slice",
+          "lineNumber": 107
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "item.content.slice",
+          "lineNumber": 108
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "frameStore.createIFrame",
+          "lineNumber": 110
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "search.indexFrame",
+          "lineNumber": 124
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "Array.isArray",
+          "lineNumber": 129
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "kg.createEntity",
+          "lineNumber": 132
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "harvestStore.upsert",
+          "lineNumber": 147
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "content.startsWith",
+          "lineNumber": 150
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "harvestStore.recordSync",
+          "lineNumber": 152
+        },
+        {
+          "caller": "registerIngestTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 161
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "input.trim",
+          "lineNumber": 177
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.startsWith",
+          "lineNumber": 180
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.startsWith",
+          "lineNumber": 180
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.includes",
+          "lineNumber": 185
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.toLowerCase",
+          "lineNumber": 186
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "lower.endsWith",
+          "lineNumber": 187
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "lower.endsWith",
+          "lineNumber": 188
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "lower.endsWith",
+          "lineNumber": 188
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "lower.endsWith",
+          "lineNumber": 189
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "fs.existsSync",
+          "lineNumber": 193
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "lower.endsWith",
+          "lineNumber": 194
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "lower.endsWith",
+          "lineNumber": 195
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.startsWith",
+          "lineNumber": 202
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.includes",
+          "lineNumber": 202
+        },
+        {
+          "caller": "detectContentType",
+          "callee": "trimmed.includes",
+          "lineNumber": 202
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/knowledge.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 185,
+      "nonEmptyLines": 169,
+      "functions": [
+        {
+          "name": "registerKnowledgeTools",
+          "startLine": 15,
+          "endLine": 181,
+          "params": [
+            "server"
+          ]
+        },
+        {
+          "name": "safeParseJson",
+          "startLine": 183,
+          "endLine": 185,
+          "params": [
+            "raw"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerKnowledgeTools",
+          "line": 15,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "server.tool",
+          "lineNumber": 18
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().describe",
+          "lineNumber": 22
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string",
+          "lineNumber": 22
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.enum(ENTITY_TYPES).optional()\r\n        .describe",
+          "lineNumber": 23
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.enum(ENTITY_TYPES).optional",
+          "lineNumber": 23
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.enum",
+          "lineNumber": 23
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min(1).max(200).optional()\r\n        .describe",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min(1).max(200).optional",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min(1).max",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 27
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().optional",
+          "lineNumber": 27
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string",
+          "lineNumber": 27
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 32
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 33
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.getEntitiesByType",
+          "lineNumber": 38
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "typed.filter(e =>\r\n          e.name.toLowerCase().includes(query.toLowerCase())\r\n        ).slice",
+          "lineNumber": 39
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "typed.filter",
+          "lineNumber": 39
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "e.name.toLowerCase().includes",
+          "lineNumber": 40
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "e.name.toLowerCase",
+          "lineNumber": 40
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "query.toLowerCase",
+          "lineNumber": 40
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.searchEntities",
+          "lineNumber": 43
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "entities.map",
+          "lineNumber": 47
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.getRelationsFrom",
+          "lineNumber": 48
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.getRelationsTo",
+          "lineNumber": 49
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "safeParseJson",
+          "lineNumber": 54
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "relationsFrom.map",
+          "lineNumber": 58
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "relationsTo.map",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 84
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "server.tool",
+          "lineNumber": 91
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.enum(ENTITY_TYPES).describe",
+          "lineNumber": 95
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.enum",
+          "lineNumber": 95
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().describe",
+          "lineNumber": 96
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string",
+          "lineNumber": 96
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.record(z.unknown()).optional()\r\n        .describe",
+          "lineNumber": 97
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.record(z.unknown()).optional",
+          "lineNumber": 97
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.record",
+          "lineNumber": 97
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.unknown",
+          "lineNumber": 97
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 99
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().optional",
+          "lineNumber": 99
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string",
+          "lineNumber": 99
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 103
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 104
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.searchEntities(name, 10)\r\n        .find",
+          "lineNumber": 108
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.searchEntities",
+          "lineNumber": 108
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "e.name.toLowerCase",
+          "lineNumber": 111
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "name.toLowerCase",
+          "lineNumber": 111
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "safeParseJson",
+          "lineNumber": 117
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.updateEntity",
+          "lineNumber": 119
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.createEntity",
+          "lineNumber": 121
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 127
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "safeParseJson",
+          "lineNumber": 131
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "server.tool",
+          "lineNumber": 141
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().describe",
+          "lineNumber": 145
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number",
+          "lineNumber": 145
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().describe",
+          "lineNumber": 146
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number",
+          "lineNumber": 146
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().describe",
+          "lineNumber": 147
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string",
+          "lineNumber": 147
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min(0).max(1).optional()\r\n        .describe",
+          "lineNumber": 148
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min(0).max(1).optional",
+          "lineNumber": 148
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min(0).max",
+          "lineNumber": 148
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number().min",
+          "lineNumber": 148
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.number",
+          "lineNumber": 148
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.record(z.unknown()).optional()\r\n        .describe",
+          "lineNumber": 150
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.record(z.unknown()).optional",
+          "lineNumber": 150
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.record",
+          "lineNumber": 150
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.unknown",
+          "lineNumber": 150
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 152
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string().optional",
+          "lineNumber": 152
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "z.string",
+          "lineNumber": 152
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 156
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 157
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "kg.createRelation",
+          "lineNumber": 159
+        },
+        {
+          "caller": "registerKnowledgeTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 170
+        },
+        {
+          "caller": "safeParseJson",
+          "callee": "JSON.parse",
+          "lineNumber": 184
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 2,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/memory.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 190,
+      "nonEmptyLines": 173,
+      "functions": [
+        {
+          "name": "registerMemoryTools",
+          "startLine": 18,
+          "endLine": 190,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerMemoryTools",
+          "line": 18,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerMemoryTools",
+          "callee": "server.tool",
+          "lineNumber": 21
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string().describe",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['critical', 'important', 'normal', 'temporary']).optional()\r\n        .describe",
+          "lineNumber": 26
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['critical', 'important', 'normal', 'temporary']).optional",
+          "lineNumber": 26
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum",
+          "lineNumber": 26
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['user_stated', 'tool_verified', 'agent_inferred', 'system']).optional()\r\n        .describe",
+          "lineNumber": 28
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['user_stated', 'tool_verified', 'agent_inferred', 'system']).optional",
+          "lineNumber": 28
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum",
+          "lineNumber": 28
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string().optional",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string",
+          "lineNumber": 30
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 38
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getFrameStore",
+          "lineNumber": 39
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getSessions",
+          "lineNumber": 40
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getSearch",
+          "lineNumber": 41
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "new Date().toISOString().slice",
+          "lineNumber": 44
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "new Date().toISOString",
+          "lineNumber": 44
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "sessions.ensure",
+          "lineNumber": 45
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "frameStore.createIFrame",
+          "lineNumber": 48
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "search.indexFrame",
+          "lineNumber": 52
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 60
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "server.tool",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string().describe",
+          "lineNumber": 78
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string",
+          "lineNumber": 78
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.number().min(1).max(100).optional()\r\n        .describe",
+          "lineNumber": 79
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.number().min(1).max(100).optional",
+          "lineNumber": 79
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.number().min(1).max",
+          "lineNumber": 79
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.number().min",
+          "lineNumber": 79
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.number",
+          "lineNumber": 79
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 81
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string().optional",
+          "lineNumber": 81
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.string",
+          "lineNumber": 81
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['current', 'personal', 'all']).optional()\r\n        .describe",
+          "lineNumber": 83
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['current', 'personal', 'all']).optional",
+          "lineNumber": 83
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum",
+          "lineNumber": 83
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['balanced', 'recent', 'important', 'connected']).optional()\r\n        .describe",
+          "lineNumber": 85
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum(['balanced', 'recent', 'important', 'connected']).optional",
+          "lineNumber": 85
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "z.enum",
+          "lineNumber": 85
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getSearch",
+          "lineNumber": 111
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "search.search",
+          "lineNumber": 112
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "results.push",
+          "lineNumber": 114
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "Math.round",
+          "lineNumber": 119
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 128
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "wsMind.search.search",
+          "lineNumber": 130
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "results.push",
+          "lineNumber": 132
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "Math.round",
+          "lineNumber": 137
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getWorkspaceManager",
+          "lineNumber": 147
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "wm.list",
+          "lineNumber": 148
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 150
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "wsMind.search.search",
+          "lineNumber": 153
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "results.push",
+          "lineNumber": 155
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "Math.round",
+          "lineNumber": 160
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "results.sort",
+          "lineNumber": 170
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "results.slice",
+          "lineNumber": 171
+        },
+        {
+          "caller": "registerMemoryTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 185
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/wiki.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 232,
+      "nonEmptyLines": 212,
+      "functions": [
+        {
+          "name": "getSynthesizer",
+          "startLine": 28,
+          "endLine": 34,
+          "params": []
+        },
+        {
+          "name": "getCompiler",
+          "startLine": 36,
+          "endLine": 48,
+          "params": []
+        },
+        {
+          "name": "registerWikiTools",
+          "startLine": 50,
+          "endLine": 232,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerWikiTools",
+          "line": 50,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "getSynthesizer",
+          "callee": "resolveWikiSynthesizer",
+          "lineNumber": 30
+        },
+        {
+          "caller": "getSynthesizer",
+          "callee": "console.error",
+          "lineNumber": 31
+        },
+        {
+          "caller": "getCompiler",
+          "callee": "getPersonalDb",
+          "lineNumber": 37
+        },
+        {
+          "caller": "getCompiler",
+          "callee": "getSynthesizer",
+          "lineNumber": 39
+        },
+        {
+          "caller": "getCompiler",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 41
+        },
+        {
+          "caller": "getCompiler",
+          "callee": "getFrameStore",
+          "lineNumber": 42
+        },
+        {
+          "caller": "getCompiler",
+          "callee": "getSearch",
+          "lineNumber": 43
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "server.tool",
+          "lineNumber": 53
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.enum(['incremental', 'full']).default('incremental')\r\n        .describe",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.enum(['incremental', 'full']).default",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.enum",
+          "lineNumber": 57
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.array(z.string()).optional()\r\n        .describe",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.array(z.string()).optional",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.array",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.string",
+          "lineNumber": 59
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "getCompiler",
+          "lineNumber": 63
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "compiler.compile",
+          "lineNumber": 66
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "String",
+          "lineNumber": 93
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "server.tool",
+          "lineNumber": 102
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.string().describe",
+          "lineNumber": 106
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.string",
+          "lineNumber": 106
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "getCompiler",
+          "lineNumber": 109
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "state.getPage",
+          "lineNumber": 110
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "state.getAllPages",
+          "lineNumber": 114
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "allPages.filter",
+          "lineNumber": 115
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "p.slug.includes",
+          "lineNumber": 116
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "p.name.toLowerCase().includes",
+          "lineNumber": 116
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "p.name.toLowerCase",
+          "lineNumber": 116
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "slug.toLowerCase",
+          "lineNumber": 116
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "matches.map(m => `  - ${m.slug} (${m.name})`).join",
+          "lineNumber": 123
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "matches.map",
+          "lineNumber": 123
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 139
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "server.tool",
+          "lineNumber": 153
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.string().optional()\r\n        .describe",
+          "lineNumber": 157
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.string().optional",
+          "lineNumber": 157
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.string",
+          "lineNumber": 157
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.enum(['entity', 'concept', 'synthesis', 'index', 'health']).optional()\r\n        .describe",
+          "lineNumber": 159
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.enum(['entity', 'concept', 'synthesis', 'index', 'health']).optional",
+          "lineNumber": 159
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "z.enum",
+          "lineNumber": 159
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "getCompiler",
+          "lineNumber": 163
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "state.getPagesByType",
+          "lineNumber": 166
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "state.getAllPages",
+          "lineNumber": 167
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "query.toLowerCase",
+          "lineNumber": 170
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "pages.filter",
+          "lineNumber": 171
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "p.name.toLowerCase().includes",
+          "lineNumber": 172
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "p.name.toLowerCase",
+          "lineNumber": 172
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "p.slug.includes",
+          "lineNumber": 173
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 191
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "pages.map",
+          "lineNumber": 191
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "server.tool",
+          "lineNumber": 204
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "getCompiler",
+          "lineNumber": 209
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "compiler.compileHealth",
+          "lineNumber": 210
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 215
+        },
+        {
+          "caller": "registerWikiTools",
+          "callee": "report.issues.map",
+          "lineNumber": 220
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 3,
+        "classCount": 0
+      }
+    },
+    {
+      "path": "packages/memory-mcp/src/tools/workspace.ts",
+      "language": "typescript",
+      "fileCategory": "code",
+      "totalLines": 96,
+      "nonEmptyLines": 87,
+      "functions": [
+        {
+          "name": "registerWorkspaceTools",
+          "startLine": 10,
+          "endLine": 96,
+          "params": [
+            "server"
+          ]
+        }
+      ],
+      "exports": [
+        {
+          "name": "registerWorkspaceTools",
+          "line": 10,
+          "isDefault": false
+        }
+      ],
+      "callGraph": [
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "server.tool",
+          "lineNumber": 13
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "getWorkspaceManager",
+          "lineNumber": 18
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "wm.list",
+          "lineNumber": 19
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "getFrameStore",
+          "lineNumber": 22
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "getKnowledgeGraph",
+          "lineNumber": 23
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "personalFrameStore.getStats",
+          "lineNumber": 24
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "personalKg.getEntityCount",
+          "lineNumber": 25
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "workspaces.map",
+          "lineNumber": 34
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "getWorkspaceMind",
+          "lineNumber": 38
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "mind.frameStore.getStats",
+          "lineNumber": 40
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "mind.knowledgeGraph.getEntityCount",
+          "lineNumber": 41
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "wm.getDefault",
+          "lineNumber": 56
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 62
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "server.tool",
+          "lineNumber": 69
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "z.string().describe",
+          "lineNumber": 73
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "z.string",
+          "lineNumber": 73
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "z.string().optional().describe",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "z.string().optional",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "z.string",
+          "lineNumber": 74
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "getWorkspaceManager",
+          "lineNumber": 77
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "wm.create",
+          "lineNumber": 78
+        },
+        {
+          "caller": "registerWorkspaceTools",
+          "callee": "JSON.stringify",
+          "lineNumber": 86
+        }
+      ],
+      "metrics": {
+        "importCount": 1,
+        "exportCount": 1,
+        "functionCount": 1,
+        "classCount": 0
+      }
+    }
+  ]
+}

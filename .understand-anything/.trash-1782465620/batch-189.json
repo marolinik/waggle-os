@@ -1,0 +1,439 @@
+{
+  "nodes": [
+    {
+      "id": "file:apps/web/src/lib/activity-labels.test.ts",
+      "type": "file",
+      "name": "activity-labels.test.ts",
+      "filePath": "apps/web/src/lib/activity-labels.test.ts",
+      "summary": "Unit tests for the activity-labels utility, verifying that tool names and activity summaries are humanized correctly.",
+      "tags": ["test", "utility", "activity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/activity-labels.ts",
+      "type": "file",
+      "name": "activity-labels.ts",
+      "filePath": "apps/web/src/lib/activity-labels.ts",
+      "summary": "Provides helper functions to convert raw tool event strings (e.g. tool_use, tool_result) into human-readable activity labels for display in the UI.",
+      "tags": ["utility", "formatting", "activity"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/activity-labels.ts:humanizeActivitySummary",
+      "type": "function",
+      "name": "humanizeActivitySummary",
+      "filePath": "apps/web/src/lib/activity-labels.ts",
+      "lineRange": [33, 37],
+      "summary": "Parses a raw activity summary string and converts tool_use/tool_result/tool_call prefixes into a friendly tool name, falling back to the original trimmed string.",
+      "tags": ["utility", "formatting", "exported"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/modal-drag.test.ts",
+      "type": "file",
+      "name": "modal-drag.test.ts",
+      "filePath": "apps/web/src/lib/modal-drag.test.ts",
+      "summary": "Unit tests for the computeDragConstraints utility, covering boundary cases for modal positioning within various container dimensions.",
+      "tags": ["test", "utility", "modal"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/modal-drag.ts",
+      "type": "file",
+      "name": "modal-drag.ts",
+      "filePath": "apps/web/src/lib/modal-drag.ts",
+      "summary": "Provides the computeDragConstraints helper used by draggable modals to calculate the maximum allowed drag offsets based on container and modal dimensions.",
+      "tags": ["utility", "modal", "drag"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/modal-drag.ts:computeDragConstraints",
+      "type": "function",
+      "name": "computeDragConstraints",
+      "filePath": "apps/web/src/lib/modal-drag.ts",
+      "lineRange": [32, 47],
+      "summary": "Calculates the top/bottom/left/right drag constraints for a modal given the container and modal dimensions, ensuring the modal stays visible.",
+      "tags": ["utility", "modal", "geometry"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/onboarding-skip.test.ts",
+      "type": "file",
+      "name": "onboarding-skip.test.ts",
+      "filePath": "apps/web/src/lib/onboarding-skip.test.ts",
+      "summary": "Unit tests asserting the skip-setup defaults contract (templateId, personaId, workspaceName, group) to catch silent UX regressions.",
+      "tags": ["test", "onboarding", "utility"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/onboarding-skip.ts",
+      "type": "file",
+      "name": "onboarding-skip.ts",
+      "filePath": "apps/web/src/lib/onboarding-skip.ts",
+      "summary": "Defines and exports SKIP_SETUP_DEFAULTS, the canonical constant applied when a user skips onboarding setup, enabling regression-testable defaults without mounting the full React tree.",
+      "tags": ["utility", "onboarding", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/posthog.test.ts",
+      "type": "file",
+      "name": "posthog.test.ts",
+      "filePath": "apps/web/src/lib/posthog.test.ts",
+      "summary": "Tests for PostHog analytics integration, verifying initialization, event capture, and environment-gated behaviour (opt-in/opt-out, token presence).",
+      "tags": ["test", "analytics", "posthog"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/lib/providers.ts",
+      "type": "file",
+      "name": "providers.ts",
+      "filePath": "apps/web/src/lib/providers.ts",
+      "summary": "Single source of truth for the LLM provider and model registry used across OnboardingWizard, Settings, VaultApp, and the adapter; supports persisting custom providers via localStorage.",
+      "tags": ["service", "configuration", "data-model"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/web/src/lib/providers.ts:getProviders",
+      "type": "function",
+      "name": "getProviders",
+      "filePath": "apps/web/src/lib/providers.ts",
+      "lineRange": [215, 217],
+      "summary": "Returns the merged list of built-in and custom LLM providers as the authoritative provider catalog.",
+      "tags": ["utility", "exported", "data-access"],
+      "complexity": "simple"
+    },
+    {
+      "id": "function:apps/web/src/lib/providers.ts:getProvider",
+      "type": "function",
+      "name": "getProvider",
+      "filePath": "apps/web/src/lib/providers.ts",
+      "lineRange": [220, 222],
+      "summary": "Looks up a single provider by its ID from the merged provider list, returning undefined if not found.",
+      "tags": ["utility", "exported", "data-access"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/lib/tiers.test.ts",
+      "type": "file",
+      "name": "tiers.test.ts",
+      "filePath": "apps/web/src/lib/tiers.test.ts",
+      "summary": "Comprehensive unit tests for the tier system, covering all five tiers (TRIAL/FREE/PRO/TEAMS/ENTERPRISE), capability checks, and feature-gate boundaries.",
+      "tags": ["test", "tiers", "feature-flags"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/example.test.ts",
+      "type": "file",
+      "name": "example.test.ts",
+      "filePath": "apps/web/src/test/example.test.ts",
+      "summary": "Trivial smoke test verifying the Vitest test runner is configured and working in the web app.",
+      "tags": ["test", "smoke-test"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/light-mode-tokens.test.ts",
+      "type": "file",
+      "name": "light-mode-tokens.test.ts",
+      "filePath": "apps/web/src/test/light-mode-tokens.test.ts",
+      "summary": "Parses the waggle-theme.css file and verifies that all light-mode CSS custom properties meet minimum WCAG contrast ratio requirements between foreground and background tokens.",
+      "tags": ["test", "accessibility", "design-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/p2-onboarding-forcewizard.test.ts",
+      "type": "file",
+      "name": "p2-onboarding-forcewizard.test.ts",
+      "filePath": "apps/web/src/test/p2-onboarding-forcewizard.test.ts",
+      "summary": "Integration tests for the PR2 onboarding force-wizard behaviour, ensuring the wizard is surfaced when the user has no completed onboarding state.",
+      "tags": ["test", "onboarding", "integration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/p4-onboarding-status.test.ts",
+      "type": "file",
+      "name": "p4-onboarding-status.test.ts",
+      "filePath": "apps/web/src/test/p4-onboarding-status.test.ts",
+      "summary": "Tests for the PR4 onboarding status endpoint, verifying that the sidecar API correctly reflects wizard completion state.",
+      "tags": ["test", "onboarding", "api-handler"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/pr5-settings-reskin.test.tsx",
+      "type": "file",
+      "name": "pr5-settings-reskin.test.tsx",
+      "filePath": "apps/web/src/test/pr5-settings-reskin.test.tsx",
+      "summary": "Component tests for the PR5 Settings reskin, validating that the redesigned Settings screen renders its main sections and key controls correctly.",
+      "tags": ["test", "component", "settings"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/test/pr7a-billing.test.tsx",
+      "type": "file",
+      "name": "pr7a-billing.test.tsx",
+      "filePath": "apps/web/src/test/pr7a-billing.test.tsx",
+      "summary": "Component/integration tests for the PR7a Billing screen, covering Stripe-powered plan display, upgrade flows, and tier-gated UI behaviour.",
+      "tags": ["test", "billing", "stripe"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/pr7b-auth.test.tsx",
+      "type": "file",
+      "name": "pr7b-auth.test.tsx",
+      "filePath": "apps/web/src/test/pr7b-auth.test.tsx",
+      "summary": "Component/integration tests for the PR7b Auth screen, covering optional Clerk sign-in/sign-up flows, invalid-key boot guard, and accountless fallback behaviour.",
+      "tags": ["test", "auth", "clerk"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/src/test/setup.ts",
+      "type": "file",
+      "name": "setup.ts",
+      "filePath": "apps/web/src/test/setup.ts",
+      "summary": "Vitest setup file for the apps/web test suite, bootstrapping jsdom globals and configuring any shared test utilities used across all tests.",
+      "tags": ["test", "configuration", "setup"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/vite-env.d.ts",
+      "type": "file",
+      "name": "vite-env.d.ts",
+      "filePath": "apps/web/src/vite-env.d.ts",
+      "summary": "Vite environment type declarations that make import.meta.env and related Vite-specific globals available to the TypeScript compiler.",
+      "tags": ["type-definition", "configuration"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/src/waggle-theme.css",
+      "type": "file",
+      "name": "waggle-theme.css",
+      "filePath": "apps/web/src/waggle-theme.css",
+      "summary": "Hive Design System CSS custom property aliases (--bg, --surface, --text, --brand, --step-*, --kg-*) that bridge shadcn base tokens to Waggle-specific component semantics for both light and dark modes.",
+      "tags": ["design-system", "css", "configuration"],
+      "complexity": "moderate",
+      "languageNotes": "Uses @layer base with CSS custom properties referencing shadcn HSL variables, providing semantic aliases without redefining Tailwind's own tokens."
+    },
+    {
+      "id": "file:apps/web/tailwind.config.ts",
+      "type": "file",
+      "name": "tailwind.config.ts",
+      "filePath": "apps/web/tailwind.config.ts",
+      "summary": "Tailwind CSS configuration for apps/web defining content paths, theme extensions (Hive palette colours, fonts, animations, spacing), and any required plugins.",
+      "tags": ["configuration", "design-system", "build-system"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/web/vite.config.ts",
+      "type": "file",
+      "name": "vite.config.ts",
+      "filePath": "apps/web/vite.config.ts",
+      "summary": "Vite build configuration for the apps/web React frontend, setting up the dev server on port 8080, API/WebSocket proxying to the local Fastify sidecar on port 3333, and the @/ path alias.",
+      "tags": ["configuration", "build-system", "infrastructure"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/web/vitest.config.ts",
+      "type": "file",
+      "name": "vitest.config.ts",
+      "filePath": "apps/web/vitest.config.ts",
+      "summary": "Vitest configuration for the apps/web unit test suite, specifying the jsdom environment, setup files, and test file include patterns.",
+      "tags": ["configuration", "test", "build-system"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/__tests__/setup.ts",
+      "type": "file",
+      "name": "setup.ts",
+      "filePath": "apps/www/__tests__/setup.ts",
+      "summary": "Jest/Vitest setup file for the apps/www Next.js landing site tests, configuring jsdom and any global mocks needed by marketing page tests.",
+      "tags": ["test", "configuration", "setup"],
+      "complexity": "simple"
+    },
+    {
+      "id": "file:apps/www/app/(legal)/cookies/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/(legal)/cookies/page.tsx",
+      "summary": "Next.js App Router page component rendering the Waggle OS Cookie Policy, including sections on analytics, functional, and preference cookies with last-updated metadata.",
+      "tags": ["component", "legal", "documentation"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "file:apps/www/app/(legal)/eu-ai-act/page.tsx",
+      "type": "file",
+      "name": "page.tsx",
+      "filePath": "apps/www/app/(legal)/eu-ai-act/page.tsx",
+      "summary": "Next.js App Router page component rendering the Waggle OS EU AI Act compliance statement, covering risk classification, transparency obligations, and human oversight provisions.",
+      "tags": ["component", "legal", "compliance"],
+      "complexity": "complex"
+    },
+    {
+      "id": "function:apps/www/app/(legal)/cookies/page.tsx:CookiesPage",
+      "type": "function",
+      "name": "CookiesPage",
+      "filePath": "apps/www/app/(legal)/cookies/page.tsx",
+      "lineRange": [11, 94],
+      "summary": "Default export React component rendering the full Cookie Policy page with structured sections for Waggle OS's cookie usage.",
+      "tags": ["component", "legal", "exported"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "function:apps/www/app/(legal)/eu-ai-act/page.tsx:EuAiActPage",
+      "type": "function",
+      "name": "EuAiActPage",
+      "filePath": "apps/www/app/(legal)/eu-ai-act/page.tsx",
+      "lineRange": [11, 167],
+      "summary": "Default export React component rendering the EU AI Act compliance disclosure page, detailing Waggle OS's risk tier, data processing practices, and user rights under EU regulation.",
+      "tags": ["component", "legal", "compliance"],
+      "complexity": "moderate"
+    }
+  ],
+  "edges": [
+    {
+      "source": "file:apps/web/src/lib/activity-labels.test.ts",
+      "target": "file:apps/web/src/lib/activity-labels.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/lib/activity-labels.ts",
+      "target": "function:apps/web/src/lib/activity-labels.ts:humanizeActivitySummary",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/activity-labels.ts",
+      "target": "function:apps/web/src/lib/activity-labels.ts:humanizeActivitySummary",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/lib/activity-labels.test.ts",
+      "target": "file:apps/web/src/lib/activity-labels.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/modal-drag.test.ts",
+      "target": "file:apps/web/src/lib/modal-drag.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/lib/modal-drag.ts",
+      "target": "function:apps/web/src/lib/modal-drag.ts:computeDragConstraints",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/modal-drag.ts",
+      "target": "function:apps/web/src/lib/modal-drag.ts:computeDragConstraints",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/lib/modal-drag.test.ts",
+      "target": "file:apps/web/src/lib/modal-drag.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/onboarding-skip.test.ts",
+      "target": "file:apps/web/src/lib/onboarding-skip.ts",
+      "type": "imports",
+      "direction": "forward",
+      "weight": 0.7
+    },
+    {
+      "source": "file:apps/web/src/lib/onboarding-skip.test.ts",
+      "target": "file:apps/web/src/lib/onboarding-skip.ts",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/lib/providers.ts",
+      "target": "function:apps/web/src/lib/providers.ts:getProviders",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/providers.ts",
+      "target": "function:apps/web/src/lib/providers.ts:getProvider",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/web/src/lib/providers.ts",
+      "target": "function:apps/web/src/lib/providers.ts:getProviders",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/lib/providers.ts",
+      "target": "function:apps/web/src/lib/providers.ts:getProvider",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/web/src/waggle-theme.css",
+      "target": "file:apps/web/tailwind.config.ts",
+      "type": "related",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/src/test/light-mode-tokens.test.ts",
+      "target": "file:apps/web/src/waggle-theme.css",
+      "type": "tested_by",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "file:apps/web/vitest.config.ts",
+      "target": "file:apps/web/src/test/setup.ts",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    },
+    {
+      "source": "file:apps/www/app/(legal)/cookies/page.tsx",
+      "target": "function:apps/www/app/(legal)/cookies/page.tsx:CookiesPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/(legal)/cookies/page.tsx",
+      "target": "function:apps/www/app/(legal)/cookies/page.tsx:CookiesPage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    },
+    {
+      "source": "file:apps/www/app/(legal)/eu-ai-act/page.tsx",
+      "target": "function:apps/www/app/(legal)/eu-ai-act/page.tsx:EuAiActPage",
+      "type": "contains",
+      "direction": "forward",
+      "weight": 1.0
+    },
+    {
+      "source": "file:apps/www/app/(legal)/eu-ai-act/page.tsx",
+      "target": "function:apps/www/app/(legal)/eu-ai-act/page.tsx:EuAiActPage",
+      "type": "exports",
+      "direction": "forward",
+      "weight": 0.8
+    }
+  ]
+}

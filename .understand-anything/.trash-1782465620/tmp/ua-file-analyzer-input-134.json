@@ -1,0 +1,17 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "docs/launch/drafts/2026-05-10-day-0-linkedin-post.md", "language": "markdown", "sizeLines": 123, "fileCategory": "docs"},
+    {"path": "docs/launch/drafts/2026-05-10-pavlukhin-evolveschema-arxiv-email.md", "language": "markdown", "sizeLines": 70, "fileCategory": "docs"},
+    {"path": "docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md", "language": "markdown", "sizeLines": 239, "fileCategory": "docs"},
+    {"path": "docs/launch/drafts/2026-05-12-egzakta-legal-text-drafts.md", "language": "markdown", "sizeLines": 398, "fileCategory": "docs"}
+  ],
+  "batchImportData": {
+    "docs/launch/drafts/2026-05-10-day-0-linkedin-post.md": [],
+    "docs/launch/drafts/2026-05-10-pavlukhin-evolveschema-arxiv-email.md": [],
+    "docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md": [],
+    "docs/launch/drafts/2026-05-12-egzakta-legal-text-drafts.md": []
+  },
+  "batchImportData": {},
+  "neighborMap": {}
+}

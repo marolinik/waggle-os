@@ -1,14 +1,16 @@
 /**
  * Live Chat Flow — tests the REAL product loop with actual LLM calls.
  *
- * Requires: working API key in vault (Anthropic proxy).
+ * Requires: WAGGLE_E2E_LIVE_CHAT=1 and a deterministic live provider.
  * This is the test that proves the product actually works.
  */
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 
-const BASE = 'http://127.0.0.1:3333';
+const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
+const RUN_LIVE_CHAT = process.env.WAGGLE_E2E_LIVE_CHAT === '1';
 
-test.setTimeout(60_000);
+test.setTimeout(120_000);
+test.skip(!RUN_LIVE_CHAT, 'Set WAGGLE_E2E_LIVE_CHAT=1 with a deterministic live provider to run live chat assertions.');
 
 async function dismissOverlay(page: Page) {
   for (let i = 0; i < 3; i++) {
@@ -26,10 +28,30 @@ async function dismissOverlay(page: Page) {
 }
 
 async function gotoDesktop(page: Page) {
-  await page.goto(`${BASE}/?skipOnboarding=true&tier=power`);
-  await page.waitForLoadState('networkidle');
-  await page.waitForTimeout(2000);
+  await page.goto(`${BASE}/home?skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('[role="navigation"], main', { timeout: 15_000 });
+  await page.waitForTimeout(500);
   await dismissOverlay(page);
+}
+
+async function firstWorkspaceId(request: APIRequestContext): Promise<string> {
+  const wsRes = await request.get(`${BASE}/api/workspaces`);
+  const workspaces = await wsRes.json();
+  expect(Array.isArray(workspaces)).toBeTruthy();
+  expect(workspaces.length).toBeGreaterThan(0);
+  return workspaces[0].id;
+}
+
+async function createChatTurn(request: APIRequestContext, workspaceId: string, message: string) {
+  const res = await request.post(`${BASE}/api/chat`, {
+    data: { message, workspaceId },
+    headers: { 'Content-Type': 'application/json' },
+    timeout: 90_000,
+  });
+  expect(res.ok()).toBeTruthy();
+  const body = await res.text();
+  expect(body).toContain('event:');
+  expect(body.length).toBeGreaterThan(50);
 }
 
 // ── Verify LLM is available ───────────────────────────────────────────
@@ -48,14 +70,14 @@ test('send a message and get a real LLM response', async ({ page }) => {
 
   // Open chat
   await page.locator('button[aria-label="Chat"]').click();
-  await page.waitForTimeout(1500);
+  await page.waitForSelector('textarea', { timeout: 15_000 });
 
   // Find the chat input
-  const input = page.locator('textarea[placeholder*="Message"], textarea[placeholder*="message"]').first();
+  const input = page.locator('textarea').first();
   await expect(input).toBeVisible({ timeout: 5000 });
 
   // Type a simple message
-  await input.fill('Reply with exactly: WAGGLE_TEST_OK');
+  await input.fill('Reply with exactly WAGGLE_TEST_OK and no other text.');
   await page.waitForTimeout(300);
 
   // Send (press Enter or click send button)
@@ -64,47 +86,24 @@ test('send a message and get a real LLM response', async ({ page }) => {
   // Wait for the response — the agent should stream tokens back
   // Look for assistant message content appearing in the chat
   const response = page.locator('text=/WAGGLE_TEST_OK|waggle_test_ok|test.ok/i');
-  await expect(response.first()).toBeVisible({ timeout: 45_000 });
+  await expect(response.first()).toBeVisible({ timeout: 90_000 });
 });
 
 // ── Memory save flow ──────────────────────────────────────────────────
 
 test('agent response saves to session history', async ({ request }) => {
-  // After the chat test, verify session data exists
-  const wsRes = await request.get(`${BASE}/api/workspaces`);
-  const workspaces = await wsRes.json();
-  expect(Array.isArray(workspaces)).toBeTruthy();
+  const workspaceId = await firstWorkspaceId(request);
+  await createChatTurn(request, workspaceId, 'Say WAGGLE_HISTORY_OK in one token.');
 
-  if (workspaces.length > 0) {
-    const sessRes = await request.get(`${BASE}/api/workspaces/${workspaces[0].id}/sessions`);
-    const sessions = await sessRes.json();
-    expect(Array.isArray(sessions)).toBeTruthy();
-    // Should have at least one session from the chat test above
-    expect(sessions.length).toBeGreaterThan(0);
-  }
+  const sessRes = await request.get(`${BASE}/api/workspaces/${workspaceId}/sessions`);
+  const sessions = await sessRes.json();
+  expect(Array.isArray(sessions)).toBeTruthy();
+  expect(sessions.length).toBeGreaterThan(0);
 });
 
 // ── Chat streaming works ──────────────────────────────────────────────
 
 test('chat SSE stream delivers tokens', async ({ request }) => {
-  const wsRes = await request.get(`${BASE}/api/workspaces`);
-  const workspaces = await wsRes.json();
-  if (!Array.isArray(workspaces) || workspaces.length === 0) return;
-
-  const wsId = workspaces[0].id;
-
-  // Send a chat message via API and verify we get SSE events
-  const res = await request.post(`${BASE}/api/chat`, {
-    data: {
-      message: 'Say hello in one word.',
-      workspaceId: wsId,
-    },
-    headers: { 'Content-Type': 'application/json' },
-  });
-
-  expect(res.ok()).toBeTruthy();
-  const body = await res.text();
-  // SSE stream should contain token events and a done event
-  expect(body).toContain('event:');
-  expect(body.length).toBeGreaterThan(50);
+  const workspaceId = await firstWorkspaceId(request);
+  await createChatTurn(request, workspaceId, 'Say hello in one word.');
 });

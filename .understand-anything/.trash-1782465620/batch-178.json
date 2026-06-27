@@ -1,0 +1,48 @@
+{
+  "nodes": [
+    {
+      "id": "document:packages/memory-mcp/README.md",
+      "type": "document",
+      "name": "README.md",
+      "filePath": "packages/memory-mcp/README.md",
+      "summary": "Comprehensive documentation for the waggle-memory-mcp package, an MCP server providing persistent memory to Claude Code, Claude Desktop, and any MCP-compatible AI system, covering installation, tools (14 MCP tools), resources, architecture, embedding provider chain, and environment variables.",
+      "tags": ["documentation", "mcp-server", "memory", "api-schema", "configuration"],
+      "complexity": "moderate"
+    },
+    {
+      "id": "config:packages/memory-mcp/package.json",
+      "type": "config",
+      "name": "package.json",
+      "filePath": "packages/memory-mcp/package.json",
+      "summary": "Package manifest for the waggle-memory-mcp npm package, an MCP server binary exposing persistent memory capabilities powered by the Waggle OS memory engine, with dependencies on @waggle/core, @waggle/shared, @waggle/wiki-compiler, and the MCP SDK.",
+      "tags": ["configuration", "npm-package", "mcp-server", "build-system"],
+      "complexity": "simple",
+      "languageNotes": "Published as an ESM module with a CLI binary entry point (waggle-memory-mcp), making it installable via npx without any setup."
+    },
+    {
+      "id": "config:packages/memory-mcp/tsconfig.json",
+      "type": "config",
+      "name": "tsconfig.json",
+      "filePath": "packages/memory-mcp/tsconfig.json",
+      "summary": "TypeScript compiler configuration for the memory-mcp package, targeting ES2022 with strict mode, composite project references, and declaration map generation for use within the monorepo.",
+      "tags": ["configuration", "typescript", "build-system"],
+      "complexity": "simple"
+    }
+  ],
+  "edges": [
+    {
+      "source": "document:packages/memory-mcp/README.md",
+      "target": "config:packages/memory-mcp/package.json",
+      "type": "documents",
+      "direction": "forward",
+      "weight": 0.5
+    },
+    {
+      "source": "config:packages/memory-mcp/tsconfig.json",
+      "target": "config:packages/memory-mcp/package.json",
+      "type": "configures",
+      "direction": "forward",
+      "weight": 0.6
+    }
+  ]
+}

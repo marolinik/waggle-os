@@ -1,0 +1,823 @@
+{
+  "scriptCompleted": true,
+  "filesAnalyzed": 6,
+  "filesSkipped": [],
+  "results": [
+    {
+      "path": "docs/handoffs/2026-04-30-overnight-handoff-for-morning.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 90,
+      "nonEmptyLines": 53,
+      "sections": [
+        {
+          "heading": "Overnight Handoff — Marko Morning Wakeup 2026-05-01",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — UPDATE 02:00 — Marko ratifikovao \"extra usage radi\", PM nastavio dva ključna deliverable-a",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "§1 — Šta sam uradio dok si spavao (originalni plan, prošireno overnight)",
+          "level": 2,
+          "line": 21
+        },
+        {
+          "heading": "§2 — Šta NISAM uradio dok si spavao (svesno parkirano)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "§3 — Šta TI treba da uradiš ujutro (po prioritetu)",
+          "level": 2,
+          "line": 43
+        },
+        {
+          "heading": "§4 — Stanje četiri prioriteta (tvoja noćna 4-mapa)",
+          "level": 2,
+          "line": 53
+        },
+        {
+          "heading": "§5 — Day 0 readiness state na 1. maj jutro",
+          "level": 2,
+          "line": 64
+        },
+        {
+          "heading": "§6 — Sources",
+          "level": 2,
+          "line": 82
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 8
+      }
+    },
+    {
+      "path": "docs/handoffs/2026-05-01-end-of-day-handoff.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 87,
+      "nonEmptyLines": 53,
+      "sections": [
+        {
+          "heading": "End-of-Day Handoff — Marko Sutra Ujutro 2026-05-02",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "§0 — TL;DR",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "§1 — Šta se desilo danas (sažeto)",
+          "level": 2,
+          "line": 17
+        },
+        {
+          "heading": "§2 — Stanje ka launch-u",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "§3 — Šta TI radiš ujutro (po prioritetu)",
+          "level": 2,
+          "line": 47
+        },
+        {
+          "heading": "§4 — Šta NISAM uradio dok si spavao",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "§5 — Sources",
+          "level": 2,
+          "line": 77
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/handoffs/2026-05-02-day-0-readiness-checklist.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 73,
+      "nonEmptyLines": 45,
+      "sections": [
+        {
+          "heading": "Day 0 Readiness Checklist — 2026-05-02 Jutro",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "9 paralelnih track-ova — status",
+          "level": 2,
+          "line": 10
+        },
+        {
+          "heading": "Šta je smart paralelno DANAS (dok CC u Sesija D)",
+          "level": 2,
+          "line": 29
+        },
+        {
+          "heading": "Marko-side action queue (može odmah, ne čeka mene)",
+          "level": 3,
+          "line": 31
+        },
+        {
+          "heading": "PM-side queue (ja vodim solo dok CC radi)",
+          "level": 3,
+          "line": 39
+        },
+        {
+          "heading": "Interactive queue (treba Marko bandwidth)",
+          "level": 3,
+          "line": 45
+        },
+        {
+          "heading": "Moja preporuka za sledeći potez",
+          "level": 2,
+          "line": 55
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 7
+      }
+    },
+    {
+      "path": "docs/handoffs/2026-05-26-technical-team-handoff.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 952,
+      "nonEmptyLines": 743,
+      "sections": [
+        {
+          "heading": "Waggle OS — Technical Team Handoff",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "Table of contents",
+          "level": 2,
+          "line": 12
+        },
+        {
+          "heading": "1. Mission & strategic frame",
+          "level": 2,
+          "line": 28
+        },
+        {
+          "heading": "Tiers (canonical in `packages/shared/src/tiers.ts`)",
+          "level": 3,
+          "line": 34
+        },
+        {
+          "heading": "Moat strategy (memorize this)",
+          "level": 3,
+          "line": 44
+        },
+        {
+          "heading": "Substrate claims (publicly published, verified, peer-reviewable)",
+          "level": 3,
+          "line": 52
+        },
+        {
+          "heading": "2. ARCHITECTURE",
+          "level": 2,
+          "line": 63
+        },
+        {
+          "heading": "2.1 Tech stack (verified 2026-05-26)",
+          "level": 3,
+          "line": 65
+        },
+        {
+          "heading": "2.2 Repository topology",
+          "level": 3,
+          "line": 85
+        },
+        {
+          "heading": "2.3 System diagram (text)",
+          "level": 3,
+          "line": 111
+        },
+        {
+          "heading": "2.4 Subsystem map — what each package does",
+          "level": 3,
+          "line": 155
+        },
+        {
+          "heading": "Memory + harvest (the moat)",
+          "level": 4,
+          "line": 159
+        },
+        {
+          "heading": "Hook packages (7 × tools — reversible byte-identical install)",
+          "level": 4,
+          "line": 169
+        },
+        {
+          "heading": "Agent runtime",
+          "level": 4,
+          "line": 182
+        },
+        {
+          "heading": "Plumbing",
+          "level": 4,
+          "line": 189
+        },
+        {
+          "heading": "Surfaces",
+          "level": 4,
+          "line": 198
+        },
+        {
+          "heading": "2.5 Critical subsystems — deep dive",
+          "level": 3,
+          "line": 209
+        },
+        {
+          "heading": "2.5.1 Memory substrate (`hive-mind-core/src/mind/`)",
+          "level": 4,
+          "line": 211
+        },
+        {
+          "heading": "2.5.2 Harvest pipeline (`hive-mind-core/src/harvest/`)",
+          "level": 4,
+          "line": 232
+        },
+        {
+          "heading": "2.5.3 Agent runtime (`packages/agent/src/`)",
+          "level": 4,
+          "line": 244
+        },
+        {
+          "heading": "2.5.4 Evolution closed loop",
+          "level": 4,
+          "line": 270
+        },
+        {
+          "heading": "2.5.5 AI-OS arc (Path D — shipped 2026-05-20)",
+          "level": 4,
+          "line": 286
+        },
+        {
+          "heading": "2.5.6 Tier / billing / trust",
+          "level": 4,
+          "line": 310
+        },
+        {
+          "heading": "2.6 Data flows (end-to-end traces)",
+          "level": 3,
+          "line": 323
+        },
+        {
+          "heading": "Chat turn flow",
+          "level": 4,
+          "line": 325
+        },
+        {
+          "heading": "Harvest ingestion flow",
+          "level": 4,
+          "line": 342
+        },
+        {
+          "heading": "Cross-tool signal flow",
+          "level": 4,
+          "line": 353
+        },
+        {
+          "heading": "Skill diffusion flow",
+          "level": 4,
+          "line": 365
+        },
+        {
+          "heading": "Evolution closed loop",
+          "level": 4,
+          "line": 374
+        },
+        {
+          "heading": "2.7 External boundaries",
+          "level": 3,
+          "line": 390
+        },
+        {
+          "heading": "2.8 Security model",
+          "level": 3,
+          "line": 402
+        },
+        {
+          "heading": "3. DEVELOPMENT",
+          "level": 2,
+          "line": 417
+        },
+        {
+          "heading": "3.1 Build & deploy",
+          "level": 3,
+          "line": 419
+        },
+        {
+          "heading": "3.2 Testing posture",
+          "level": 3,
+          "line": 456
+        },
+        {
+          "heading": "3.3 OSS sync contract (waggle-os ↔ hive-mind)",
+          "level": 3,
+          "line": 474
+        },
+        {
+          "heading": "3.4 Operating contract — distilled from CLAUDE.md §3",
+          "level": 3,
+          "line": 487
+        },
+        {
+          "heading": "3.5 Code patterns to know — DON'T RECREATE",
+          "level": 3,
+          "line": 500
+        },
+        {
+          "heading": "3.6 Eval & benchmark stack",
+          "level": 3,
+          "line": 523
+        },
+        {
+          "heading": "Pillar 1 — Agent harness (orchestration + governance)",
+          "level": 4,
+          "line": 527
+        },
+        {
+          "heading": "Pillar 2 — Memory substrate",
+          "level": 4,
+          "line": 533
+        },
+        {
+          "heading": "Substrate claim (Stage 3 v6)",
+          "level": 4,
+          "line": 541
+        },
+        {
+          "heading": "4. BACKLOG",
+          "level": 2,
+          "line": 549
+        },
+        {
+          "heading": "4.1 P0 — Marko external blockers (NOT engineering)",
+          "level": 3,
+          "line": 553
+        },
+        {
+          "heading": "4.2 In-session engineering — actionable now (no blocker)",
+          "level": 3,
+          "line": 567
+        },
+        {
+          "heading": "4.3 Binary verification (needs runtime, no code)",
+          "level": 3,
+          "line": 580
+        },
+        {
+          "heading": "4.4 Marko-gated engineering",
+          "level": 3,
+          "line": 590
+        },
+        {
+          "heading": "4.5 Multi-week eval campaigns (mostly closed; two follow-ups open)",
+          "level": 3,
+          "line": 597
+        },
+        {
+          "heading": "4.6 Deferred post-launch arcs",
+          "level": 3,
+          "line": 610
+        },
+        {
+          "heading": "5. UX IMPROVEMENTS — DETAILED BY SURFACE",
+          "level": 2,
+          "line": 626
+        },
+        {
+          "heading": "5.1 Light mode finish (V-2)",
+          "level": 3,
+          "line": 630
+        },
+        {
+          "heading": "5.2 Onboarding — decision reduction (UX-1)",
+          "level": 3,
+          "line": 646
+        },
+        {
+          "heading": "5.3 Dock & launcher polish",
+          "level": 3,
+          "line": 660
+        },
+        {
+          "heading": "5.4 Memory app — provenance & filtering",
+          "level": 3,
+          "line": 679
+        },
+        {
+          "heading": "5.5 Spawn Agent",
+          "level": 3,
+          "line": 693
+        },
+        {
+          "heading": "5.6 Chat experience",
+          "level": 3,
+          "line": 705
+        },
+        {
+          "heading": "5.7 Wiki UI",
+          "level": 3,
+          "line": 716
+        },
+        {
+          "heading": "5.8 Settings & permissions",
+          "level": 3,
+          "line": 728
+        },
+        {
+          "heading": "5.9 Responsive gaps (R-1..R-5, D-7)",
+          "level": 3,
+          "line": 737
+        },
+        {
+          "heading": "5.10 Engagement features (ENG-1..ENG-7, D-8)",
+          "level": 3,
+          "line": 746
+        },
+        {
+          "heading": "5.11 A11Y (all 9 shipped — preservation only)",
+          "level": 3,
+          "line": 757
+        },
+        {
+          "heading": "6. RISKS, KNOWN ISSUES, TECH DEBT",
+          "level": 2,
+          "line": 765
+        },
+        {
+          "heading": "Tech debt",
+          "level": 3,
+          "line": 767
+        },
+        {
+          "heading": "Known operational risks",
+          "level": 3,
+          "line": 777
+        },
+        {
+          "heading": "Open architectural questions",
+          "level": 3,
+          "line": 787
+        },
+        {
+          "heading": "7. Strategic decisions pending (Marko)",
+          "level": 2,
+          "line": 795
+        },
+        {
+          "heading": "8. Onboarding checklist for a new engineer",
+          "level": 2,
+          "line": 808
+        },
+        {
+          "heading": "Day 1 (4 hours)",
+          "level": 3,
+          "line": 810
+        },
+        {
+          "heading": "Week 1",
+          "level": 3,
+          "line": 823
+        },
+        {
+          "heading": "Week 2",
+          "level": 3,
+          "line": 833
+        },
+        {
+          "heading": "9. Canonical file index",
+          "level": 2,
+          "line": 842
+        },
+        {
+          "heading": "Architecture",
+          "level": 3,
+          "line": 844
+        },
+        {
+          "heading": "AI-OS arc",
+          "level": 3,
+          "line": 852
+        },
+        {
+          "heading": "Backlog + open tasks",
+          "level": 3,
+          "line": 860
+        },
+        {
+          "heading": "Compliance + audits",
+          "level": 3,
+          "line": 866
+        },
+        {
+          "heading": "Eval / benchmark",
+          "level": 3,
+          "line": 872
+        },
+        {
+          "heading": "Launch",
+          "level": 3,
+          "line": 881
+        },
+        {
+          "heading": "Brand + content",
+          "level": 3,
+          "line": 886
+        },
+        {
+          "heading": "10. Rollback safety",
+          "level": 2,
+          "line": 892
+        },
+        {
+          "heading": "11. Glossary",
+          "level": 2,
+          "line": 917
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 79
+      }
+    },
+    {
+      "path": "docs/handoffs/2026-05-27-agent-core-review.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 174,
+      "nonEmptyLines": 142,
+      "sections": [
+        {
+          "heading": "Agent Core Review — `packages/agent/src/`",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Systemic findings — leverage-ordered",
+          "level": 2,
+          "line": 9
+        },
+        {
+          "heading": "1. Per-file findings (top 3 files; remaining 108 are healthy or out-of-scope for polish)",
+          "level": 2,
+          "line": 33
+        },
+        {
+          "heading": "`agent-loop.ts` (681 LOC)",
+          "level": 3,
+          "line": 35
+        },
+        {
+          "heading": "`orchestrator.ts` (1048 LOC)",
+          "level": 3,
+          "line": 59
+        },
+        {
+          "heading": "`behavioral-spec.ts` (449 LOC)",
+          "level": 3,
+          "line": 93
+        },
+        {
+          "heading": "2. Suggested PR breakdown (Claude-Code/Hermes-shaped target)",
+          "level": 2,
+          "line": 101
+        },
+        {
+          "heading": "3. Recommended Phase 1 — start here",
+          "level": 2,
+          "line": 123
+        },
+        {
+          "heading": "4. Risk + rollback",
+          "level": 2,
+          "line": 145
+        },
+        {
+          "heading": "5. Out-of-scope for this review",
+          "level": 2,
+          "line": 164
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 10
+      }
+    },
+    {
+      "path": "docs/handoffs/2026-05-27-web-guidelines-review.md",
+      "language": "markdown",
+      "fileCategory": "docs",
+      "totalLines": 710,
+      "nonEmptyLines": 633,
+      "sections": [
+        {
+          "heading": "Web Interface Guidelines Review — apps/web/src/components/os/apps/",
+          "level": 1,
+          "line": 1
+        },
+        {
+          "heading": "0. Systemic patterns — fix once, close many",
+          "level": 2,
+          "line": 8
+        },
+        {
+          "heading": "Recommended fix order (highest leverage first)",
+          "level": 3,
+          "line": 40
+        },
+        {
+          "heading": "1. Per-file findings",
+          "level": 2,
+          "line": 54
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/SettingsApp.tsx",
+          "level": 3,
+          "line": 58
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/DashboardApp.tsx",
+          "level": 3,
+          "line": 95
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/MissionControlApp.tsx",
+          "level": 3,
+          "line": 113
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/CockpitApp.tsx",
+          "level": 3,
+          "line": 133
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/TelemetryApp.tsx",
+          "level": 3,
+          "line": 152
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/BackupApp.tsx",
+          "level": 3,
+          "line": 169
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/EventsApp.tsx",
+          "level": 3,
+          "line": 187
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/ChatApp.tsx",
+          "level": 3,
+          "line": 213
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/ChatWindowInstance.tsx",
+          "level": 3,
+          "line": 250
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/AgentsApp.tsx",
+          "level": 3,
+          "line": 261
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/MemoryApp.tsx",
+          "level": 3,
+          "line": 289
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/VoiceApp.tsx",
+          "level": 3,
+          "line": 312
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/UserProfileApp.tsx",
+          "level": 3,
+          "line": 319
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/TimelineApp.tsx",
+          "level": 3,
+          "line": 354
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/ConnectorsApp.tsx",
+          "level": 3,
+          "line": 376
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/MarketplaceApp.tsx",
+          "level": 3,
+          "line": 407
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+          "level": 3,
+          "line": 434
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/VaultApp.tsx",
+          "level": 3,
+          "line": 477
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/FilesApp.tsx",
+          "level": 3,
+          "line": 515
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/FilesAppTabs.tsx",
+          "level": 3,
+          "line": 564
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/LauncherApp.tsx",
+          "level": 3,
+          "line": 574
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/WaggleDanceApp.tsx",
+          "level": 3,
+          "line": 590
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/RoomApp.tsx",
+          "level": 3,
+          "line": 606
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/ApprovalsApp.tsx",
+          "level": 3,
+          "line": 620
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/ScheduledJobsApp.tsx",
+          "level": 3,
+          "line": 638
+        },
+        {
+          "heading": "apps/web/src/components/os/apps/TeamGovernanceApp.tsx",
+          "level": 3,
+          "line": 658
+        },
+        {
+          "heading": "2. Out-of-scope / acceptable patterns (don't action)",
+          "level": 2,
+          "line": 671
+        },
+        {
+          "heading": "3. Verification gates (run after each fix PR)",
+          "level": 2,
+          "line": 681
+        },
+        {
+          "heading": "4. Suggested PR breakdown (matches §0 fix order)",
+          "level": 2,
+          "line": 691
+        }
+      ],
+      "metrics": {
+        "importCount": 0,
+        "exportCount": 0,
+        "functionCount": 0,
+        "classCount": 0,
+        "sectionCount": 33
+      }
+    }
+  ]
+}

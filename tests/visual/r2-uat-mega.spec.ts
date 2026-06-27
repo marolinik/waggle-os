@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test';
 
 const TOKEN = '36a36b027129a154c0e86122ed56927409b612b6eb41f612b9177c85848719d3';
-const BASE_URL = 'http://localhost:3333';
+const BASE_URL = process.env.WAGGLE_E2E_BASE_URL ?? 'http://localhost:3333';
 const SS = 'UAT 3/mega-test-v2/screenshots';
 
 async function setupPage(page: Page, theme = 'dark') {

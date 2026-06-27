@@ -1,0 +1,17 @@
+{
+  "projectRoot": "D:/Projects/waggle-os",
+  "batchFiles": [
+    {"path": "packages/waggle-dance/src/dispatcher.ts", "language": "typescript", "sizeLines": 324, "fileCategory": "code"},
+    {"path": "packages/waggle-dance/src/protocol.ts", "language": "typescript", "sizeLines": 16, "fileCategory": "code"},
+    {"path": "packages/waggle-dance/tests/dispatcher.test.ts", "language": "typescript", "sizeLines": 508, "fileCategory": "code"},
+    {"path": "packages/waggle-dance/tests/integration.test.ts", "language": "typescript", "sizeLines": 72, "fileCategory": "code"},
+    {"path": "packages/waggle-dance/tests/protocol.test.ts", "language": "typescript", "sizeLines": 55, "fileCategory": "code"}
+  ],
+  "batchImportData": {
+    "packages/waggle-dance/src/dispatcher.ts": ["packages/waggle-dance/src/protocol.ts"],
+    "packages/waggle-dance/src/protocol.ts": [],
+    "packages/waggle-dance/tests/dispatcher.test.ts": ["packages/waggle-dance/src/dispatcher.ts"],
+    "packages/waggle-dance/tests/integration.test.ts": ["packages/waggle-dance/src/dispatcher.ts"],
+    "packages/waggle-dance/tests/protocol.test.ts": ["packages/waggle-dance/src/protocol.ts"]
+  }
+}

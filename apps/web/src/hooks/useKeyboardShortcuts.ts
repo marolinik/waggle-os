@@ -32,7 +32,11 @@ const APP_SHORTCUTS: Record<string, AppId> = {
 /** Shortcuts that work even when an input/textarea is focused */
 function isGlobalShortcut(e: KeyboardEvent): boolean {
   const ctrl = e.ctrlKey || e.metaKey;
-  return (ctrl && e.key === 'k') || e.key === 'Escape';
+  return (
+    (ctrl && e.key === 'k')
+    || (ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n'))
+    || e.key === 'Escape'
+  );
 }
 
 function isInputFocused(): boolean {
@@ -99,8 +103,9 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
         return;
       }
 
-      // Ctrl+?: Keyboard help
-      if (ctrl && e.key === '?') {
+      // Ctrl+/ or Ctrl+?: Keyboard help. Browsers/OS layouts disagree on the
+      // reported key for the shifted slash shortcut, so accept both forms.
+      if (ctrl && (e.key === '?' || e.key === '/')) {
         e.preventDefault();
         opts.onToggleKeyboardHelp();
         return;
