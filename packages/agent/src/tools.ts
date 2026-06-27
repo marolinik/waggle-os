@@ -379,7 +379,7 @@ export function createMindTools(deps: MindToolDeps): ToolDefinition[] {
 
         // Untrusted args: validate against the canonical unions, default on mismatch.
         const VALID_IMPORTANCE: readonly Importance[] = ['critical', 'important', 'normal', 'temporary', 'deprecated'];
-        const VALID_SOURCE: readonly FrameSource[] = ['user_stated', 'tool_verified', 'agent_inferred', 'import', 'system', 'personal', 'workspace', 'team_sync'];
+        const VALID_SOURCE: readonly FrameSource[] = ['user_stated', 'tool_verified', 'agent_inferred', 'import', 'system'];
         let importance: Importance =
           typeof args.importance === 'string' && (VALID_IMPORTANCE as readonly string[]).includes(args.importance)
             ? (args.importance as Importance)

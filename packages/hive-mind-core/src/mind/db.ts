@@ -259,6 +259,20 @@ export class MindDB {
     this.db.exec(
       'CREATE INDEX IF NOT EXISTS idx_frames_content_hash ON memory_frames (content_hash)'
     );
+
+    // W4.1: KG entity↔frame bridge — powers the 'contextual' scoring signal by
+    // mapping query-seeded graph distances back onto frames. Idempotent; SCHEMA_SQL
+    // carries the same DDL for fresh DBs. frames.ts already DELETEs from this table
+    // on frame deletion; the ON DELETE CASCADE FK makes that belt-and-suspenders.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS kg_entity_frames (
+        entity_id INTEGER NOT NULL REFERENCES knowledge_entities(id) ON DELETE CASCADE,
+        frame_id INTEGER NOT NULL REFERENCES memory_frames(id) ON DELETE CASCADE,
+        PRIMARY KEY (entity_id, frame_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_kg_entity_frames_frame ON kg_entity_frames (frame_id);
+      CREATE INDEX IF NOT EXISTS idx_kg_entity_frames_entity ON kg_entity_frames (entity_id);
+    `);
     this.backfillContentHash();
 
     // 2026-04-15: EU AI Act Art. 12.1(a) — record inputs and outputs, not just

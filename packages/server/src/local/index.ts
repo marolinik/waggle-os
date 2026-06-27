@@ -1335,7 +1335,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               let inserted = 0;
               for (const f of pulled) {
                 try {
-                  wsFrameStore.createIFrame('team-sync', `[Team:${f.authorName}] ${f.content}`, f.importance, 'team_sync');
+                  // Provenance is carried in the content prefix ([Team:author]); the source
+                  // column must be schema-valid, so use 'import' (these frames are imported
+                  // from the team server). Previously passed 'team_sync', which violated the
+                  // memory_frames.source CHECK → every pulled frame was silently skipped.
+                  wsFrameStore.createIFrame('team-sync', `[Team:${f.authorName}] ${f.content}`, f.importance, 'import');
                   inserted++;
                 } catch { /* duplicate or constraint — skip */ }
               }

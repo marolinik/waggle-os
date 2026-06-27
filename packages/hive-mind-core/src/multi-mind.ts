@@ -9,7 +9,10 @@ const log = createCoreLogger('multi-mind');
 export type MindSource = 'personal' | 'workspace';
 export type SearchScope = 'personal' | 'workspace' | 'all';
 
-export interface MultiMindSearchResult extends MemoryFrame {
+export interface MultiMindSearchResult extends Omit<MemoryFrame, 'source'> {
+  /** Which mind this result came from. This intentionally REPURPOSES the
+   *  `source` field as the mind label (personal/workspace); the frame's own
+   *  DB-level source (FrameSource) is not surfaced in cross-mind results. */
   source: MindSource;
 }
 

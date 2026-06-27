@@ -75,7 +75,7 @@ export class CognifyPipeline {
     const extracted = extractEntities(trimmedContent);
 
     // 4. Upsert entities into KnowledgeGraph
-    const entityIds = this.upsertEntities(extracted);
+    const entityIds = this.upsertEntities(extracted, frame.id);
 
     // 5. Create co-occurrence relations between entities found in same text
     let relationsCreated = this.createCoOccurrenceRelations(entityIds);
@@ -116,7 +116,7 @@ export class CognifyPipeline {
     const maxContentLength = 10_000;
     const content = frame.content.slice(0, maxContentLength);
     const extracted = extractEntities(content);
-    const entityIds = this.upsertEntities(extracted);
+    const entityIds = this.upsertEntities(extracted, frame.id);
     let relationsCreated = this.createCoOccurrenceRelations(entityIds);
 
     relationsCreated += this.createSemanticRelations(content, extracted);
@@ -171,7 +171,7 @@ export class CognifyPipeline {
    * Upsert entities: if an entity with the same type+name exists, skip it;
    * otherwise create it. Returns the entity IDs (existing or new).
    */
-  private upsertEntities(extracted: ExtractedEntity[]): number[] {
+  private upsertEntities(extracted: ExtractedEntity[], frameId?: number): number[] {
     const ids: number[] = [];
     // Pre-fetch entities by type to avoid N queries in the loop
     const typeCache = new Map<string, { id: number; name: string }[]>();
@@ -198,6 +198,10 @@ export class CognifyPipeline {
         // Add to cache so subsequent dupes in this batch are caught
         cached.push({ id: created.id, name: nameLower });
       }
+    }
+    // Link every extracted entity to its frame (kg_entity_frames bridge — contextual scoring).
+    if (frameId !== undefined) {
+      for (const id of ids) this.knowledge.linkEntityToFrame(id, frameId);
     }
     return ids;
   }
