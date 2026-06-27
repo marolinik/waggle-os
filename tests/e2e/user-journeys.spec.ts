@@ -112,7 +112,16 @@ test.describe('User Journey Tests', () => {
   test('J6: chat textarea accepts input', async ({ page, request }) => {
     const workspacesRes = await request.get('/api/workspaces');
     const workspaces = await workspacesRes.json();
-    const workspaceId = Array.isArray(workspaces) ? workspaces[0]?.id : undefined;
+    let workspaceId = Array.isArray(workspaces) ? workspaces[0]?.id : undefined;
+    if (!workspaceId) {
+      const createRes = await request.post('/api/workspaces', {
+        data: { name: `Journey Chat ${Date.now()}`, group: 'Workspaces', description: 'Chat journey workspace' },
+      });
+      expect(createRes.ok()).toBeTruthy();
+      const created = await createRes.json();
+      const workspace = created.workspace ?? created.data ?? created;
+      workspaceId = workspace.id ?? workspace.name;
+    }
     expect(workspaceId).toBeTruthy();
 
     await gotoApp(page, `/workspaces/${workspaceId}/chat`);

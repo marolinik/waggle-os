@@ -952,18 +952,21 @@ test.describe('Act 10 — The Compulsion Loop: Full Value Cycle', () => {
     const ws = `compulsion-${Date.now()}`;
 
     // Step 1: User starts in their workspace
-    const wsRes = await request.get(`${API}/api/workspaces`);
-    expect(wsRes.ok()).toBe(true);
+    const createRes = await request.post(`${API}/api/workspaces`, {
+      data: { name: ws, group: 'Workspaces', description: 'Compulsion loop timing test' },
+    });
+    expect([200, 201, 409]).toContain(createRes.status());
 
     // Step 2: User tells the agent something (simulated memory save)
     const saveRes = await simulateMemorySave(request,
       'Need to prepare Q3 board presentation by Friday. Key metrics: ARR, NPS, burn rate.',
       ws,
     );
+    expect(saveRes.ok()).toBe(true);
 
     // Step 3: User comes back, asks agent to recall
     await new Promise(r => setTimeout(r, 200));
-    const searchRes = await request.get(`${API}/api/memory/frames?limit=3&workspace=${ws}`);
+    const searchRes = await request.get(`${API}/api/memory/frames?limit=3&workspace=${encodeURIComponent(ws)}`);
     expect(searchRes.ok()).toBe(true);
 
     const elapsed = Date.now() - start;

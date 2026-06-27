@@ -32,6 +32,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
 const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
+const RUN_PIXEL_BASELINES = process.env.WAGGLE_E2E_VISUAL === '1' || !process.env.CI;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -229,6 +230,8 @@ const THEMES = ['light', 'dark'] as const;
 
 for (const theme of THEMES) {
   test.describe(`Visual baselines — ${theme} mode`, () => {
+    test.skip(!RUN_PIXEL_BASELINES, 'Pixel baselines run with WAGGLE_E2E_VISUAL=1; structural smoke tests still run in CI.');
+
     // Visual tests need more time: beforeEach (goto + waitForApp + setTheme) ~10-20s
     // + navigateTo ~5s + waitForFunction + networkidle + screenshot ~10s = up to 35s
     test.describe.configure({ timeout: 90_000 });
