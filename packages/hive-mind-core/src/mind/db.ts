@@ -297,6 +297,44 @@ export class MindDB {
     this.db.exec(
       "CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update BEFORE UPDATE ON ai_interactions BEGIN SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)'); END"
     );
+
+    // W4.1: one-time backfill of the kg_entity_frames bridge over pre-existing
+    // frames (new writes populate it live via cognify/harvest). Sentinel-guarded.
+    this.backfillKgEntityFrames();
+  }
+
+  /** One-time backfill of the kg_entity_frames bridge so the 'contextual' scoring
+   *  signal works over frames written before the bridge existed. Offline (string
+   *  match, no LLM): an entity links to a frame whose content mentions its name.
+   *  Idempotent (INSERT OR IGNORE) and guarded by a meta sentinel unless `force`.
+   *  Returns the number of new (entity, frame) links created. */
+  backfillKgEntityFrames(force = false): number {
+    if (!force) {
+      const done = this.db.prepare("SELECT value FROM meta WHERE key = 'kg_bridge_backfilled'").get();
+      if (done) return 0;
+    }
+    const frames = this.db
+      .prepare('SELECT id, content FROM memory_frames')
+      .all() as { id: number; content: string }[];
+    const entsInFrame = this.db.prepare(
+      "SELECT id FROM knowledge_entities WHERE valid_to IS NULL AND length(name) >= 3 AND instr(lower(?), lower(name)) > 0 LIMIT 64"
+    );
+    const link = this.db.prepare(
+      'INSERT OR IGNORE INTO kg_entity_frames (entity_id, frame_id) VALUES (?, ?)'
+    );
+    let created = 0;
+    const run = this.db.transaction(() => {
+      for (const f of frames) {
+        for (const e of entsInFrame.all(f.content) as { id: number }[]) {
+          created += link.run(e.id, f.id).changes;
+        }
+      }
+      this.db
+        .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('kg_bridge_backfilled', '1')")
+        .run();
+    });
+    run();
+    return created;
   }
 
   /** Backfill memory_frames.content_hash for rows inserted before the column
