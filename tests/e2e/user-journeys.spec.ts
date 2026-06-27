@@ -129,7 +129,7 @@ test.describe('User Journey Tests', () => {
     expect(workspaceId).toBeTruthy();
 
     await gotoApp(page, `/workspaces/${workspaceId}/chat`);
-    const textarea = page.locator('textarea').first();
+    const textarea = page.getByRole('textbox').first();
     await expect(textarea).toBeVisible({ timeout: 10_000 });
 
     await textarea.fill('Hello Waggle, this is a test message');
