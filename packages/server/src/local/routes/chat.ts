@@ -627,8 +627,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // can persist the raw user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
-    let activeSessionId = session ?? workspace ?? 'default';
-    let activeWorkspaceId = workspace ?? 'default';
+    const activeSessionId = session ?? workspace ?? 'default';
+    const activeWorkspaceId = workspace ?? 'default';
     let activeHistory: Array<{ role: string; content: string }> | undefined;
 
     try {
