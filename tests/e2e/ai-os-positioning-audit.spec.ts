@@ -276,6 +276,28 @@ function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
 }
 
+function isValidFrameId(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return false;
+}
+
+function hasSavedFrameReference(record: Record<string, unknown>): boolean {
+  const frame = asRecord(record.frame);
+  const memory = asRecord(record.memory);
+  const data = asRecord(record.data);
+  return [
+    record.frameId,
+    record.id,
+    frame.frameId,
+    frame.id,
+    memory.frameId,
+    memory.id,
+    data.frameId,
+    data.id,
+  ].some(isValidFrameId);
+}
+
 function meaningfulTerms(...texts: string[]): string[] {
   const stopWords = new Set([
     'about',
@@ -385,7 +407,7 @@ async function saveMemory(request: APIRequestContext, workspace: string, content
 
   const body = await readResponseBody(response);
   const record = asRecord(body);
-  const acceptedBody = record.saved !== false || record.duplicate === true || !!record.frameId;
+  const acceptedBody = record.saved === true || record.duplicate === true || hasSavedFrameReference(record);
   return {
     saved: response.ok() && acceptedBody,
     evidence: [`Memory save returned ${response.status()} with ${bodySummary(body)}.`],
@@ -557,8 +579,25 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
   const personaIds = personaRows.map((persona) => String(persona.id ?? ''));
 
   const memory: ProbeContext['memory'] = {};
-  for (const persona of PERSONAS) {
-    memory[persona.id] = await probeMemory(page.request, persona);
+  const memoryResults = await Promise.allSettled(
+    PERSONAS.map(async (persona) => ({
+      persona,
+      result: await probeMemory(page.request, persona),
+    })),
+  );
+  for (let index = 0; index < memoryResults.length; index += 1) {
+    const result = memoryResults[index];
+    const persona = PERSONAS[index];
+    if (result.status === 'fulfilled') {
+      memory[result.value.persona.id] = result.value.result;
+    } else {
+      memory[persona.id] = {
+        saved: false,
+        recalled: false,
+        isolated: false,
+        evidence: [`Memory probe failed for ${persona.name}: ${requestErrorSummary(result.reason)}.`],
+      };
+    }
   }
 
   return {
@@ -744,6 +783,10 @@ function collectImprovementAreas(personas: PersonaScore[]): ImprovementArea[] {
   return selected.map((area, index) => ({ ...area, priority: index + 1 }));
 }
 
+function hasPersonaDimensionBelowMax(personas: PersonaScore[]): boolean {
+  return personas.some((persona) => persona.dimensions.some((dimension) => dimension.score < dimension.max));
+}
+
 function positioningVerdict(score: number): string {
   if (score >= 85) return 'Waggle can lead with AI OS positioning now, with persona-specific proof.';
   if (score >= 70) return 'Waggle has credible AI OS positioning for selected niches, but first-session proof must sharpen.';
@@ -852,6 +895,50 @@ test.describe('AI OS positioning audit', () => {
     expect(topFiveDimensions.size).toBeGreaterThan(1);
   });
 
+  test('allows perfect-score audits to report zero improvement areas', () => {
+    const perfectDimensions: DimensionScore[] = [
+      { id: 'onboarding', label: 'Onboarding clarity', max: 15, score: 15, evidence: ['Perfect onboarding.'], gaps: [] },
+      { id: 'timeToValue', label: 'Time to first value', max: 15, score: 15, evidence: ['Perfect time to value.'], gaps: [] },
+      { id: 'memory', label: 'Memory and continuity', max: 20, score: 20, evidence: ['Perfect memory.'], gaps: [] },
+      { id: 'workflowCoverage', label: 'Workflow coverage', max: 15, score: 15, evidence: ['Perfect workflow coverage.'], gaps: [] },
+      { id: 'competitiveAdvantage', label: 'Competitive advantage', max: 15, score: 15, evidence: ['Perfect advantage.'], gaps: [] },
+      { id: 'addiction', label: 'Addiction/return signal', max: 20, score: 20, evidence: ['Perfect return signal.'], gaps: [] },
+    ];
+    const perfectPersonas: PersonaScore[] = PERSONAS.map((definition) => ({
+      id: definition.id,
+      name: definition.name,
+      role: definition.role,
+      total: 100,
+      grade: gradeFor(100),
+      positioning: 'Can credibly position Waggle as an AI OS for this persona.',
+      currentDefault: definition.currentDefault,
+      competitorBaseline: definition.competitorBaseline,
+      oneToolCriterion: definition.oneToolCriterion,
+      dimensions: perfectDimensions.map((dimension) => ({ ...dimension })),
+      improvementAreas: [],
+    }));
+    const improvementAreas = collectImprovementAreas(perfectPersonas);
+    const audit: AuditResult = {
+      generatedAt: '2026-06-28T00:00:00.000Z',
+      overall: {
+        score: 100,
+        grade: gradeFor(100),
+        positioningVerdict: positioningVerdict(100),
+      },
+      addictionLevel: addictionLevelFor(100),
+      personas: perfectPersonas,
+      improvementAreas,
+      artifacts: {
+        markdownPath: 'ai-os-positioning-audit.md',
+        jsonPath: 'ai-os-positioning-audit.json',
+      },
+    };
+
+    expect(hasPersonaDimensionBelowMax(perfectPersonas)).toBe(false);
+    expect(improvementAreas).toHaveLength(0);
+    expect(renderMarkdown(audit)).toContain('## Improvement Areas');
+  });
+
   test('bounds probe requests and polls delayed memory recall', async () => {
     const calls: Array<{ method: 'get' | 'post'; url: string; options?: { timeout?: number; data?: Record<string, unknown> } }> = [];
     const response = (status: number, body: unknown) => ({
@@ -879,6 +966,16 @@ test.describe('AI OS positioning audit', () => {
 
     expect(calls.every((call) => typeof call.options?.timeout === 'number' && call.options.timeout > 0)).toBe(true);
 
+    const memorySaveResult = async (body: unknown) => saveMemory({
+      post: async () => response(200, body),
+    } as unknown as APIRequestContext, 'workspace', 'content');
+    await expect(memorySaveResult({})).resolves.toMatchObject({ saved: false });
+    await expect(memorySaveResult({ saved: false })).resolves.toMatchObject({ saved: false });
+    await expect(memorySaveResult({ saved: true })).resolves.toMatchObject({ saved: true });
+    await expect(memorySaveResult({ duplicate: true })).resolves.toMatchObject({ saved: true });
+    await expect(memorySaveResult({ frameId: 42 })).resolves.toMatchObject({ saved: true });
+    await expect(memorySaveResult({ frame: { id: 'frame-42' } })).resolves.toMatchObject({ saved: true });
+
     let recallSearches = 0;
     const persona = PERSONAS[0];
     const pollingRequest = {
@@ -902,7 +999,73 @@ test.describe('AI OS positioning audit', () => {
     expect(memory.recalled).toBe(true);
   });
 
-  test('generates a report-mode audit with five personas and improvement areas', async ({ page }, testInfo) => {
+  test('collects persona memory probes concurrently and records per-persona failures as evidence', async () => {
+    const response = (status: number, body: unknown) => ({
+      ok: () => status >= 200 && status < 300,
+      status: () => status,
+      statusText: () => String(status),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    let activeSaves = 0;
+    let maxActiveSaves = 0;
+    const request = {
+      get: async (url: string) => {
+        if (url.includes('/api/personas')) {
+          return response(200, { personas: [...new Set(PERSONAS.flatMap((persona) => persona.expectedPersonaIds))].map((id) => ({ id })) });
+        }
+        if (url.includes('/api/memory/search')) {
+          const parsed = new URL(url);
+          const workspace = parsed.searchParams.get('workspace') ?? '';
+          const persona = PERSONAS.find((definition) => workspace.includes(definition.id));
+          return response(200, { results: persona ? [{ content: persona.memoryAnchor }] : [] });
+        }
+        return response(200, {});
+      },
+      post: (url: string, options?: { timeout?: number; data?: Record<string, unknown> }) => {
+        if (url.includes('/api/workspaces')) {
+          const workspaceName = String(options?.data?.name ?? '');
+          if (workspaceName.endsWith('-isolation')) return Promise.resolve(response(500, { error: 'comparison unavailable' }));
+          return Promise.resolve(response(200, { id: workspaceName }));
+        }
+        if (url.includes('/api/memory/frames')) {
+          const workspace = String(options?.data?.workspace ?? '');
+          if (workspace.includes(PERSONAS[0].id)) {
+            throw new Error('sync memory probe failure');
+          }
+          activeSaves += 1;
+          maxActiveSaves = Math.max(maxActiveSaves, activeSaves);
+          return new Promise<ReturnType<typeof response>>((resolve) => {
+            setTimeout(() => {
+              activeSaves -= 1;
+              resolve(response(200, { saved: true, frameId: `frame-${workspace}` }));
+            }, 25);
+          });
+        }
+        return Promise.resolve(response(200, {}));
+      },
+    } as unknown as APIRequestContext;
+    const page = {
+      on: () => undefined,
+      goto: async () => response(200, {}),
+      waitForSelector: async () => undefined,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        innerText: async () => 'Waggle AI OS workspace with meaningful app shell content for the audit.',
+      }),
+      request,
+    } as unknown as Page;
+
+    const context = await collectProbeContext(page);
+    const failedProbe = context.memory[PERSONAS[0].id];
+
+    expect(Object.keys(context.memory)).toHaveLength(PERSONAS.length);
+    expect(failedProbe.saved).toBe(false);
+    expect(failedProbe.evidence.join('\n')).toContain('sync memory probe failure');
+    expect(maxActiveSaves).toBeGreaterThan(1);
+  });
+
+  test('generates a report-mode audit with five personas and score-aware improvement areas', async ({ page }, testInfo) => {
     const audit = await runAiOsPositioningAudit(page, testInfo);
     const expectedPersonaNames = ['Sofia', 'Mara', 'Imran', 'Daniel', 'Priya'];
 
@@ -912,7 +1075,11 @@ test.describe('AI OS positioning audit', () => {
     expect(audit.overall.score).toBeLessThanOrEqual(100);
     expect(audit.overall.grade).toMatch(/AI OS|chat|niche|promising|plausible/i);
     expect(audit.addictionLevel).toMatch(/weak|emerging|strong|very strong/i);
-    expect(audit.improvementAreas.length).toBeGreaterThan(0);
+    if (hasPersonaDimensionBelowMax(audit.personas)) {
+      expect(audit.improvementAreas.length).toBeGreaterThan(0);
+    } else {
+      expect(audit.improvementAreas).toHaveLength(0);
+    }
     for (const area of audit.improvementAreas) {
       expect(area.impact).toBeGreaterThan(0);
       expect(area.recommendation.trim().length).toBeGreaterThan(10);
