@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -1251,10 +1251,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // protect head/tail, LLM-summarize the middle using budget model ($0 cost).
         let windowedMessages: Array<{ role: string; content: string }>;
         if (budgetModel) {
+          // §B: size compaction to the actual model window so a local 4k/8k model
+          // is not treated as a 128k model. Local (ollama/*) models with an unknown
+          // window get a conservative 8k floor; non-local/unknown cloud ids we don't
+          // map yet (deepseek/mistral/openrouter/…) keep the prior 128k baseline so
+          // they aren't over-compacted.
+          const discoveredWindow = getModelContextWindow(resolvedModel);
+          const isLocalModel = resolvedModel.trim().toLowerCase().startsWith('ollama/');
+          const maxContextTokens = computeInputTokenBudget(0, discoveredWindow, false, {
+            conservativeDefault: isLocalModel ? 8192 : 128_000,
+          });
           const compressionConfig = createDefaultCompressionConfig({
             budgetModel,
             litellmUrl: getLitellmUrl(),
             litellmApiKey: server.agentState.litellmApiKey,
+            maxContextTokens,
           });
           const previousSummary = compressionSummaries.get(sessionId) ?? null;
           const compressionResult = await compressConversation(history, compressionConfig, previousSummary);

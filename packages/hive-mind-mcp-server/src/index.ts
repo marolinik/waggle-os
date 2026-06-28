@@ -25,6 +25,7 @@ import { registerCleanupTools } from './tools/cleanup.js';
 import { registerIngestTools } from './tools/ingest.js';
 import { registerWikiTools } from './tools/wiki.js';
 import { registerResources } from './resources/memory.js';
+import { parseScopes, isFullAccess, scopeGatedServer } from './scope.js';
 
 // ── Server creation ─────────────────────────────────────────────────
 
@@ -60,21 +61,28 @@ const server = new McpServer(
   },
 );
 
+// ── Scope gate (env-driven) ─────────────────────────────────────────
+// HIVE_MIND_SCOPES controls which tools register. Default (unset) = full
+// read+write for backward-compat; "memory:read" registers read tools only,
+// so a read-only client literally cannot call save/cleanup/ingest/etc.
+const scopes = parseScopes(process.env.HIVE_MIND_SCOPES);
+const target = isFullAccess(scopes) ? server : scopeGatedServer(server, scopes);
+
 // ── Register all tools ──────────────────────────────────────────────
 
-registerMemoryTools(server);
-registerKnowledgeTools(server);
-registerIdentityTools(server);
-registerAwarenessTools(server);
-registerWorkspaceTools(server);
-registerHarvestTools(server);
-registerCleanupTools(server);
-registerIngestTools(server);
-registerWikiTools(server);
+registerMemoryTools(target);
+registerKnowledgeTools(target);
+registerIdentityTools(target);
+registerAwarenessTools(target);
+registerWorkspaceTools(target);
+registerHarvestTools(target);
+registerCleanupTools(target);
+registerIngestTools(target);
+registerWikiTools(target);
 
 // ── Register all resources ──────────────────────────────────────────
 
-registerResources(server);
+registerResources(target);
 
 // ── Main ────────────────────────────────────────────────────────────
 
@@ -89,6 +97,11 @@ async function main(): Promise<void> {
   // Log to stderr (stdout is reserved for MCP protocol)
   console.error('Hive Mind Memory MCP server running on stdio');
   console.error(`Data directory: ${process.env.HIVE_MIND_DATA_DIR ?? '~/.hive-mind'}`);
+  if (!isFullAccess(scopes)) {
+    console.error(
+      `Scope gate active: ${[...scopes].sort().join(', ')} — write tools withheld`,
+    );
+  }
 }
 
 // ── Graceful shutdown ───────────────────────────────────────────────

@@ -134,7 +134,9 @@ describe('runAgentLoop', () => {
       (m: { role?: string; tool_call_id?: string }) => m.role === 'tool' && m.tool_call_id === 'call_1'
     );
     expect(toolResultMsg).toBeDefined();
-    expect(toolResultMsg.content).toBe('Echo: hi');
+    // §C: executed-tool output is fenced as untrusted data; the result is
+    // preserved verbatim inside the fence (was toBe before the fence landed).
+    expect(toolResultMsg.content).toContain('Echo: hi');
   });
 
   it('keeps the next model request valid after malformed tool-call arguments', async () => {

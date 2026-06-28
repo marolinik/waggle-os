@@ -72,7 +72,10 @@ describe('D6 — graceful partial-failure recovery without confabulation (premiu
     const toolMsg = (secondBody.messages as Array<{ role: string; content: string; tool_call_id?: string }>)
       .find(m => m.role === 'tool' && m.tool_call_id === 'c1');
     expect(toolMsg, 'failed tool must produce a role:tool result for the model').toBeDefined();
-    expect(toolMsg!.content).toBe('Error executing boom: disk exploded');
+    // §C: the error is surfaced inside the untrusted-data fence (a thrown tool's
+    // message can carry injection from a malicious MCP server). Still HONEST —
+    // the exact error reaches the model verbatim, not a fabricated success.
+    expect(toolMsg!.content).toContain('Error executing boom: disk exploded');
 
     // 3. Honest accounting: the attempt is recorded, not hidden.
     expect(result.toolsUsed).toContain('boom');

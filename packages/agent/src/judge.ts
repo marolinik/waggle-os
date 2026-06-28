@@ -255,7 +255,7 @@ export function parseJudgeResponse(raw: string): ParsedJudgeResponse | null {
  * Enumerate substrings that might be a JSON object, starting at each `{`.
  * Returns them in order (longest-first preference via outer `{` starts).
  */
-function extractJsonCandidates(text: string): string[] {
+export function extractJsonCandidates(text: string): string[] {
   const out: string[] = [];
   const starts: number[] = [];
   for (let i = 0; i < text.length; i++) {

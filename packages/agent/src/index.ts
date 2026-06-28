@@ -402,6 +402,18 @@ export {
   type RetireOptions, type RetireReport,
 } from './skill-retirement.js';
 export {
+  loadSkillHygiene, saveSkillHygiene, getSkillHygienePath,
+  demoteSkillToDraft, restoreSkillToActive, isSkillDraft,
+  type SkillHygieneEntry, type SkillHygieneIndex,
+  type SkillHygieneStatus, type SkillHygieneVerdict,
+} from './skill-hygiene-store.js';
+export {
+  runSkillHygieneScan, judgeSkillHygiene, parseHygieneVerdict,
+  buildHygienePrompt, loadActiveSkills, SKILL_HYGIENE_RUBRIC,
+  type SkillForHygiene, type SkillHygieneJudgement,
+  type SkillHygieneScanOptions, type SkillHygieneScanReport,
+} from './skill-hygiene.js';
+export {
   buildComplianceDocDefinition,
   renderComplianceReportPdf,
   writeComplianceReportPdf,
@@ -430,6 +442,11 @@ export {
   createDefaultCompressionConfig,
   type CompressionConfig, type CompressionResult, type CompressibleMessage,
 } from './context-compressor.js';
+export {
+  computeInputTokenBudget, getModelContextWindow,
+  DEFAULT_HARD_MAX, DEFAULT_HEADROOM, DEFAULT_CONTEXT_WINDOW,
+  type InputTokenBudgetOptions,
+} from './input-token-budget.js';
 export {
   CredentialPool, loadCredentialPool, extractStatusCode,
   type CredentialEntry, type CredentialPoolConfig, type PoolStatus, type VaultLike,

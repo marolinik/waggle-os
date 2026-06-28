@@ -4,6 +4,7 @@ import {
   runConnectorFetch,
   type ConnectorLike,
 } from '../../src/local/connector-harvest.js';
+import { OutlookConnector } from '@waggle/agent';
 
 describe('connectorDataToItems', () => {
   it('maps an array of objects, picking a title field', () => {
@@ -195,5 +196,67 @@ describe('runConnectorFetch', () => {
     });
     expect(res.skippedByFloor).toBe(false);
     expect(res.framesWritten).toBe(1);
+  });
+});
+
+// ── §A: Outlook inbox auto-harvest wiring ──
+describe('OutlookConnector harvest wiring', () => {
+  it('exposes a list_emails harvestAction (metadata+preview only) pointing at a low-risk action', () => {
+    const outlook = new OutlookConnector();
+    expect(outlook.harvestAction).toEqual({
+      action: 'list_emails',
+      params: { $select: 'subject,from,receivedDateTime,bodyPreview' },
+    });
+    // $select must NOT pull the full message body into durable memory frames.
+    expect(outlook.harvestAction!.params!.$select).not.toContain('body,');
+
+    const meta = outlook.actions.find((a) => a.name === outlook.harvestAction!.action);
+    expect(meta).toBeDefined();
+    expect(meta!.riskLevel).toBe('low'); // required by runConnectorFetch's low-risk guard
+  });
+
+  it('is picked up by runConnectorFetch and writes subject-titled inbox frames', async () => {
+    const outlook = new OutlookConnector();
+    // Use the REAL connector's metadata (id/name/harvestAction/actions) so the loop's
+    // low-risk guard runs against the shipped action list; stub only the network call
+    // with a realistic Graph /me/messages payload.
+    const graphPayload = {
+      '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#users/me/messages',
+      value: [
+        {
+          subject: 'Q3 roadmap sync',
+          from: { emailAddress: { name: 'Ana', address: 'ana@example.com' } },
+          bodyPreview: 'Can we lock the Q3 milestones before Friday?',
+          receivedDateTime: '2026-06-28T09:00:00Z',
+        },
+      ],
+    };
+    let calledAction: string | null = null;
+    const conn: ConnectorLike = {
+      id: outlook.id,
+      name: outlook.name,
+      harvestAction: outlook.harvestAction,
+      actions: outlook.actions,
+      execute: async (action) => {
+        calledAction = action;
+        return { success: true, data: graphPayload };
+      },
+    };
+
+    const h = harness();
+    const res = await runConnectorFetch({
+      connectors: [conn],
+      writeFrame: h.writeFrame,
+      loadState: h.loadState,
+      saveState: h.saveState,
+    });
+
+    expect(calledAction).toBe('list_emails'); // not refused, not skippedNoAction
+    expect(res.skippedNoAction).toBe(0);
+    expect(res.errors).toEqual([]);
+    expect(res.framesWritten).toBe(1);
+    expect(h.frames[0]).toContain('[Harvest:connector:outlook]');
+    expect(h.frames[0]).toContain('Q3 roadmap sync');     // subject became the frame title
+    expect(h.frames[0]).toContain('Q3 milestones');       // preview body survived
   });
 });

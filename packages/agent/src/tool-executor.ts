@@ -33,6 +33,7 @@ import type { LoopGuard } from './loop-guard.js';
 import { scanForInjection } from './injection-scanner.js';
 import { compressToolOutput } from './tool-output-compressor.js';
 import { logTurnEvent } from './turn-context.js';
+import { untrustedContextWrapper } from './untrusted-context.js';
 
 export interface ToolExecutorDeps {
   toolMap: ReadonlyMap<string, ToolDefinition>;
@@ -212,8 +213,17 @@ export async function executeToolCall(
     await hooks.fire('post:tool', { toolName: fnName, args: fnArgs, result });
   }
 
-  // ── Step 12: compress the model-facing result (subtractive, never enlarges) ──
+  // ── Step 12: compress, then fence genuine tool output as untrusted data ──
   // Observers above (9–11) received the full sanitized result; only the content
-  // returned into the model's next-turn context is compressed.
-  return { content: compressToolOutput(result), toolCallId: toolCall.id, countedAsUsed, toolName: fnName };
+  // returned into the model's next-turn context is compressed + fenced.
+  // Order is load-bearing: compress FIRST (subtractive — could otherwise truncate
+  // the closing marker), then wrap. We fence ONLY actual tool-execution output
+  // (`countedAsUsed`), including a thrown tool's error string (it can echo
+  // attacker-controlled bytes from a malicious tool/MCP server). First-party
+  // orchestration messages (loop-guard, capability-router recovery guidance,
+  // unknown-tool) are NOT fenced — they are trusted guidance the model SHOULD act
+  // on, and fencing them as "do not obey" would defeat recovery. §C / untrusted-context.ts.
+  const compressed = compressToolOutput(result);
+  const modelFacing = countedAsUsed ? untrustedContextWrapper(fnName, compressed) : compressed;
+  return { content: modelFacing, toolCallId: toolCall.id, countedAsUsed, toolName: fnName };
 }

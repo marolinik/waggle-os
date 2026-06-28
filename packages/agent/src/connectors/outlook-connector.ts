@@ -18,6 +18,15 @@ export class OutlookConnector extends BaseConnector {
   readonly substrate = 'waggle' as const;
   readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/microsoftoutlook.svg';
   readonly category = 'communication' as const;
+  // Auto-fetch: list_emails is read-only — safe to harvest recent inbox messages
+  // into memory on a PRO schedule. We pin `$select` to metadata + the short
+  // bodyPreview (NOT the full message body) so durable, model-visible memory
+  // frames don't persist entire email bodies (less secret/PII exposure). (gmail is
+  // NOT wired: its list_messages returns id-stubs only — needs list→get enrichment.)
+  readonly harvestAction = {
+    action: 'list_emails',
+    params: { $select: 'subject,from,receivedDateTime,bodyPreview' },
+  };
   readonly setupGuide = "Register an app in Azure AD with Mail permissions and use OAuth2 flow.";
 
   readonly actions: ConnectorAction[] = [

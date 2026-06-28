@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const log = createLogger('skills');
 import { PluginManager, getStarterSkillsDir, listStarterSkills, listCapabilityPacks, getPackManifest } from '@waggle/sdk';
-import { loadSkills, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, type SkillTemplate } from '@waggle/agent';
+import { loadSkills, loadSkillHygiene, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, type SkillTemplate } from '@waggle/agent';
 import { computeSkillHash } from '@waggle/core';
 
 /** Capability family definitions — user-job-first grouping */
@@ -345,6 +345,8 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
   // GET /api/skills — list all installed skills (with P5/D4 provenance)
   server.get('/api/skills', async () => {
     const skills = loadSkills(waggleHome);
+    // §D1: hygiene status (active/draft) per skill, from the sidecar.
+    const hygiene = loadSkillHygiene(waggleHome);
     // List rows are one-line summaries — raw markdown fragments ("## What to
     // do 1. **Identify…") read as broken text to every judge persona.
     const cleanPreview = (text: string): string =>
@@ -374,12 +376,17 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
             ? cleanPreview(parsed.frontmatter.description)
             : cleanPreview(parsed.body);
         } catch { /* not on disk (starter/builtin) — keep the content-based preview */ }
+        const hygieneEntry = hygiene[s.name];
         return {
           name: s.name,
           length: s.content.length,
           preview,
           initiator,
           source: provSource,
+          status: hygieneEntry?.status ?? 'active',
+          advisory: hygieneEntry?.status === 'draft'
+            ? { verdict: hygieneEntry.verdict, reason: hygieneEntry.reason }
+            : undefined,
         };
       }),
       count: skills.length,
