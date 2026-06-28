@@ -1,0 +1,118 @@
+Waggle OS — Claude Code Brief: Natural-Language Universal Command Bar (Ctrl+K Intent Layer)
+
+Owner: Marko Marković
+Authority chain: CLAUDE.md > this brief > all else. Where this brief conflicts with CLAUDE.md's standing rules (§3.2 simplicity, §3.3 surgical changes, §7 security), CLAUDE.md wins.
+Repo: marolinik/waggle-os @ main — app UI apps/web/src, sidecar packages/server/src/local, agent packages/agent/src, substrate packages/hive-mind-core/src.
+Current-state caveat: this brief's "current state" claims derive from docs/UX_REFACTOR_STATE_AUDIT.md (pre-June-refactor) + CLAUDE.md. The brief author could not read live source. Verify at source in Step 0 before building.
+
+
+0. Step 0 — Verify the command surface at source (before any code)
+
+Confirm and report a short note (not a full doc); flag any delta from this brief's assumptions, then proceed:
+
+
+apps/web/src/components/os/overlays/CommandCenter.tsx — confirm cmdk-based, the six verb groups (search/launch/create/run/navigate/extend), and that resolution is a structured matcher with no LLM call.
+/api/command/* handler (audit cited packages/server/src/local/routes/command.ts) — confirm which endpoints exist (search/recent/suggestions/execute) and whether any interpret/NL endpoint already exists.
+Post-refactor (D1), confirm the bar navigates via routes — handleSearchNavigate or its successor.
+The capability surface the agent already exposes: packages/agent/src/tool-filter.ts (filterToolsForContext), skill tools, connector tools, MCP tools, /api/automations, persona list (persona-data.ts).
+Approval surfaces: apps/web/src/components/ui/approval-modal.tsx and the in-chat SSE flow (chat.ts pre:tool → approval_required).
+Tier gate: requireTier() / assert-tier.ts and the global UpgradeModal 403 handler (the waggle:tier-insufficient event path).
+
+
+If anything material differs from this brief, stop and flag before building.
+
+
+1. Mission
+
+Add a natural-language intent layer to Ctrl+K: a user expresses intent in plain language and it resolves to a previewable, approval-gated action over the existing capability surface — without knowing menus. This is an NL front-end + a resolver + wiring. The execution backend already exists; do not rebuild it.
+
+
+2. Non-negotiable architecture (founder-ratified)
+
+
+Two-tier resolution. Tier 0 = existing cmdk fuzzy-match (instant, no LLM), preserved and unregressed. Tier 1 = NL intent resolver (LLM) for sentence/no-match input.
+Closed action registry. The resolver maps intent ONLY onto actions that exist in the agent's capability surface (tools / skills / connectors / MCP / automations / persona-switch / navigation / entity-creation). It never emits free code or actions outside the registry. This is the core safety property.
+Preview-and-approve for side-effects. Any side-effectful resolved action (send / publish / install / delete / external connector write) renders the existing approval surface before executing. Reads and navigation execute directly.
+Memory-aware resolution. The resolver receives awareness-layer state + workspace-state + recent sessions, so "yesterday's thing" / "the partner" resolve against the user's actual memory.
+Tier-gated intent surfaces the upgrade moment inline — resolution onto a capability above the user's tier returns the existing UpgradeModal path, at the instant of intent.
+v1 = single-action + approval. Multi-step planning is a fast-follow, not the first cut (§3.2 simplicity-first).
+
+
+
+3. The resolver (new)
+
+
+New endpoint, e.g. POST /api/command/interpret, in the command route module. Input: { text, workspaceId, context }.
+Uses LiteLLM with a fast model — resolution is routing, not a full agent turn. Keep it cheap and sub-second where possible.
+System prompt supplies: (a) the available action registry (names + param schemas, from filterToolsForContext + skills/connectors/MCP/automations/personas/nav), and (b) the memory context block (§6).
+Output is a strict JSON contract, one of:
+
+{ kind: 'action', action, params, sideEffect: boolean, requiresTier?: Tier }
+{ kind: 'plan', steps: [...] } — type now, do NOT execute in v1
+{ kind: 'clarify', question, options?: string[] }
+{ kind: 'tier_gated', capability, requiredTier }
+
+
+
+Parse defensively (JSON-only, strip fences). On parse/resolve failure, fall back to Tier 0 results + "couldn't interpret — here are matches."
+
+
+
+4. Frontend wiring (CommandCenter.tsx)
+
+
+Keep cmdk results as Tier 0. Trigger Tier 1 when there is no high-confidence cmdk match OR the input parses as a sentence (heuristic: word count + verb presence + no exact command hit). Call /api/command/interpret.
+Render the resolved result:
+
+action (read/nav) → execute directly (route push or read).
+action (sideEffect) → open ui/approval-modal.tsx with action / params / risk; on approve, dispatch to the existing handler for that action type.
+clarify → render the question inline in the palette; user answers; re-resolve.
+tier_gated → dispatch waggle:tier-insufficient → global UpgradeModal.
+
+
+
+Latency: Tier 0 stays instant; show a compact "interpreting…" state only on the Tier 1 path. Never block the cmdk list while interpreting.
+
+
+
+5. Execution — reuse existing paths
+
+
+The resolved action executes through the same mechanism the corresponding feature already uses (the agent tool, /api/automations create, connector install, route navigation). No new execution layer — the resolver's job ends at producing the structured action; a thin dispatcher keys on action type to existing handlers.
+Side-effect classification reuses the existing taxonomy (confirmation.ts ALWAYS_CONFIRM / isCritical sets + the D4 rulings). Destructive = always approve, every autonomy level.
+
+
+
+6. Memory context (the differentiator)
+
+
+Inject into the resolver context: current workspaceId, awareness-layer active task/state, top-N recent sessions/artifacts, and a compact workspace-state summary.
+Reuse existing builders — do not write new memory queries. Use recallMemory() and the workspace-state/context formatters the orchestrator and /api/home/* routes already call.
+This is what lets "continue yesterday's thing" / "draft the reply to the partner" resolve. If context budget is tight, prefer awareness + recent-sessions over full workspace-state.
+
+
+
+7. Acceptance criteria
+
+
+Tier 0 cmdk path unchanged in speed and behavior; existing command/navigation tests stay green.
+A plain-language request with no exact match resolves to a correct single action (e.g. "make a new workspace for the X project" → create-workspace with name filled).
+A side-effectful resolved action renders the approval modal and executes only on approve; dismiss ≠ execute.
+A memory-dependent request ("continue what I was working on") resolves against awareness/recent-sessions, not a generic guess.
+A tier-gated request at FREE surfaces the UpgradeModal with the correct required tier.
+The resolver maps only to registry actions; an out-of-scope request returns clarify or "can't do that," never an invented action or free code.
+Resolver failure degrades gracefully to Tier 0 results.
+plan kind is typed but not executed in v1 (returns clarify or single-action); a fast-follow ticket is opened for multi-step.
+
+
+
+8. Do not
+
+
+Do not build a parallel action/command registry — map onto the agent's existing capability surface.
+Do not regress or replace the cmdk fast path — layer on it.
+Do not execute side-effects without the approval surface.
+Do not let the resolver emit actions outside the closed registry, or any free-form code.
+Do not write new memory queries — reuse the orchestrator / home builders.
+Do not implement multi-step plan execution in v1.
+Do not weaken confirmation.ts / D4 gating for command-bar speed.
