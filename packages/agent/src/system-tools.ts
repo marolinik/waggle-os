@@ -671,7 +671,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         type: 'object',
         properties: {
           url: { type: 'string', description: 'URL to fetch' },
-          max_length: { type: 'number', description: 'Approx. max characters to return (default: 10000); enforced as a token budget so the cap is consistent across scripts' },
+          max_length: { type: 'number', description: 'Approx. max output (default 10000), enforced as a token budget (~max_length/4 tokens), so dense scripts like CJK return fewer characters than the number suggests' },
         },
         required: ['url'],
       },

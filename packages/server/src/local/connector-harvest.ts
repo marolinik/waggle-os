@@ -15,6 +15,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { scanForInjection, type ConnectorResult } from '@waggle/agent';
 
 export interface ConnectorHarvestItem {
   title: string;
@@ -56,8 +57,12 @@ export function connectorDataToItems(data: unknown, opts: { maxItems?: number } 
   if (Array.isArray(data)) {
     arr = data;
   } else if (data && typeof data === 'object') {
-    const arrEntry = Object.values(data as Record<string, unknown>).find((v) => Array.isArray(v));
-    if (arrEntry) arr = arrEntry as unknown[];
+    // Only unwrap when there is exactly ONE NON-EMPTY array field — picking the
+    // first (or an empty one) would silently drop data.
+    const arrays = Object.values(data as Record<string, unknown>).filter(
+      (v): v is unknown[] => Array.isArray(v) && v.length > 0,
+    );
+    if (arrays.length === 1) arr = arrays[0];
   }
 
   if (arr) {
@@ -80,21 +85,34 @@ export function connectorDataToItems(data: unknown, opts: { maxItems?: number } 
   return [{ title, content: text.slice(0, MAX_CONTENT_CHARS) }];
 }
 
-/** Minimal structural view of a connector the fetch loop needs. */
+/** Minimal structural view of a connector the fetch loop needs (a WaggleConnector). */
 export interface ConnectorLike {
-  id: string;
-  name: string;
-  harvestAction?: { action: string; params?: Record<string, unknown> };
-  execute(action: string, params: Record<string, unknown>): Promise<{ success: boolean; data?: unknown; error?: string }>;
+  readonly id: string;
+  readonly name: string;
+  readonly harvestAction?: { action: string; params?: Record<string, unknown> };
+  /** Declared actions (carry riskLevel) — used to refuse a non-read-only harvest. */
+  readonly actions?: ReadonlyArray<{ name: string; riskLevel: 'low' | 'medium' | 'high' }>;
+  execute(action: string, params: Record<string, unknown>): Promise<ConnectorResult>;
+}
+
+/** Persisted state: per-connector content hashes + the last REAL sweep time. */
+export interface ConnectorHarvestState {
+  /** ISO timestamp of the last actual connector sweep — drives the frequency floor. */
+  lastFetchedAt?: string;
+  /** Per-connector last-content-hash (skip-unchanged). */
+  hashes: Record<string, string>;
 }
 
 export interface RunConnectorFetchDeps {
   connectors: ReadonlyArray<ConnectorLike>;
   /** Persist one harvested item as a memory frame. */
   writeFrame: (content: string) => void;
-  /** Per-connector last-content-hash store (skip-unchanged). */
-  loadHashes: () => Record<string, string>;
-  saveHashes: (hashes: Record<string, string>) => void;
+  loadState: () => ConnectorHarvestState;
+  saveState: (state: ConnectorHarvestState) => void;
+  /** Minimum gap between real sweeps (frequency floor); omit to disable. */
+  minIntervalMs?: number;
+  /** Injectable clock (ms since epoch) for deterministic tests. */
+  now?: () => number;
   log?: (msg: string) => void;
   maxItemsPerConnector?: number;
 }
@@ -104,6 +122,10 @@ export interface ConnectorFetchResult {
   framesWritten: number;
   skippedUnchanged: number;
   skippedNoAction: number;
+  /** Frames dropped because their content tripped the injection scanner. */
+  skippedUnsafe: number;
+  /** True when the whole sweep was suppressed by the frequency floor. */
+  skippedByFloor: boolean;
   errors: string[];
 }
 
@@ -113,18 +135,44 @@ function hashItems(items: ConnectorHarvestItem[]): string {
 
 /**
  * Walk opted-in connectors, harvest each one's `harvestAction`, and write new
- * frames. Skips connectors whose result is byte-identical to last run (cheap
- * dedup). Each connector failure is isolated — one bad connector never sinks
- * the sweep.
+ * frames. Refuses any action not declared low-risk; injection-scans every frame
+ * before it lands in memory; skips connectors whose result is unchanged; and is
+ * frequency-floored on the last REAL sweep (NOT on cron ticks). Each connector
+ * failure is isolated — one bad connector never sinks the sweep.
  */
 export async function runConnectorFetch(deps: RunConnectorFetchDeps): Promise<ConnectorFetchResult> {
   const res: ConnectorFetchResult = {
-    connectorsFetched: 0, framesWritten: 0, skippedUnchanged: 0, skippedNoAction: 0, errors: [],
+    connectorsFetched: 0, framesWritten: 0, skippedUnchanged: 0, skippedNoAction: 0,
+    skippedUnsafe: 0, skippedByFloor: false, errors: [],
   };
-  const hashes = { ...deps.loadHashes() };
+  const nowMs = deps.now?.() ?? Date.now();
+  const state = deps.loadState();
+  const hashes = { ...state.hashes };
 
+  // Frequency floor — keyed on the last ACTUAL sweep (persisted here), never on
+  // schedule.last_run_at (which the scheduler advances on every tick, skip or not).
+  if (deps.minIntervalMs && state.lastFetchedAt) {
+    const since = nowMs - Date.parse(state.lastFetchedAt);
+    if (Number.isFinite(since) && since < deps.minIntervalMs) {
+      res.skippedByFloor = true;
+      deps.log?.(`within ${Math.round(deps.minIntervalMs / 3.6e6)}h floor — skipping`);
+      return res;
+    }
+  }
+
+  let attempted = 0;
   for (const c of deps.connectors) {
     if (!c.harvestAction) { res.skippedNoAction++; continue; }
+    // Refuse to auto-run anything but a DECLARED LOW-RISK action (defence against
+    // a connector author wiring a write/side-effect action as their harvest).
+    if (c.actions) {
+      const meta = c.actions.find((a) => a.name === c.harvestAction!.action);
+      if (!meta || meta.riskLevel !== 'low') {
+        res.errors.push(`${c.id}: harvestAction '${c.harvestAction.action}' is not a declared low-risk action — refusing`);
+        continue;
+      }
+    }
+    attempted++;
     try {
       const out = await c.execute(c.harvestAction.action, c.harvestAction.params ?? {});
       if (!out.success) { res.errors.push(`${c.id}: ${out.error ?? 'action failed'}`); continue; }
@@ -135,18 +183,29 @@ export async function runConnectorFetch(deps: RunConnectorFetchDeps): Promise<Co
       const hash = hashItems(items);
       if (hashes[c.id] === hash) { res.skippedUnchanged++; continue; }
 
+      let wrote = 0;
       for (const item of items) {
-        deps.writeFrame(`[Harvest:connector:${c.id}] ${item.title}\n\n${item.content}`);
-        res.framesWritten++;
+        const content = `[Harvest:connector:${c.id}] ${item.title}\n\n${item.content}`;
+        // §7: external connector data is injection-scanned before it lands in
+        // memory (it is recalled into model context in later sessions).
+        if (!scanForInjection(content, 'tool_output').safe) { res.skippedUnsafe++; continue; }
+        deps.writeFrame(content);
+        wrote++;
       }
+      res.framesWritten += wrote;
       hashes[c.id] = hash;
-      res.connectorsFetched++;
-      deps.log?.(`${c.id}: ${items.length} item(s) harvested`);
+      if (wrote > 0) res.connectorsFetched++;
+      deps.log?.(`${c.id}: ${wrote}/${items.length} item(s) harvested`);
     } catch (err) {
       res.errors.push(`${c.id}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
-  deps.saveHashes(hashes);
+  // Stamp the sweep time only if we actually hit ≥1 connector API, so an all-
+  // skipped tick (no opted-in connectors) doesn't reset the floor.
+  deps.saveState({
+    hashes,
+    lastFetchedAt: attempted > 0 ? new Date(nowMs).toISOString() : state.lastFetchedAt,
+  });
   return res;
 }

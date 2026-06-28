@@ -1922,13 +1922,6 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           }
           throw e;
         }
-        // Safety floor: never re-pull more than once per ~20h even if the cron
-        // expression is mis-set tight (auto-fetch is a daily cadence by design).
-        const MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
-        if (schedule.last_run_at && Date.now() - Date.parse(schedule.last_run_at) < MIN_INTERVAL_MS) {
-          log.info('[cron] connector_fetch: within 20h floor — skipping');
-          break;
-        }
         try {
           new SessionStore(multiMind.personal).ensure('harvest', 'harvest', 'Imported memory from external sources');
           const personalFrames = new FrameStore(multiMind.personal);
@@ -1936,18 +1929,27 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           const r = await runConnectorFetch({
             connectors: connectorRegistry.getConnected(),
             writeFrame: (content) => { personalFrames.createIFrame('harvest', content, 'normal', 'import'); },
-            loadHashes: () => {
-              try { return JSON.parse(fs.readFileSync(statePath, 'utf-8')) as Record<string, string>; }
-              catch { return {}; }
+            loadState: () => {
+              try {
+                const raw = JSON.parse(fs.readFileSync(statePath, 'utf-8')) as Partial<{ lastFetchedAt: string; hashes: Record<string, string> }>;
+                return { lastFetchedAt: raw.lastFetchedAt, hashes: raw.hashes ?? {} };
+              } catch { return { hashes: {} }; }
             },
-            saveHashes: (h) => {
-              try { fs.writeFileSync(statePath, JSON.stringify(h)); } catch { /* best-effort */ }
+            saveState: (s) => {
+              try { fs.writeFileSync(statePath, JSON.stringify(s)); } catch { /* best-effort */ }
             },
+            // Safety floor: at most one real sweep per ~20h even if the cron
+            // expression is mis-set tight (auto-fetch is a daily cadence by design).
+            minIntervalMs: 20 * 60 * 60 * 1000,
             log: (m) => log.info(`[cron] connector_fetch: ${m}`),
           });
-          log.info(`[cron] connector_fetch: ${r.framesWritten} frames from ${r.connectorsFetched} connector(s); ${r.skippedUnchanged} unchanged, ${r.errors.length} error(s)`);
+          if (r.skippedByFloor) {
+            log.info('[cron] connector_fetch: within frequency floor — skipped');
+          } else {
+            log.info(`[cron] connector_fetch: ${r.framesWritten} frames from ${r.connectorsFetched} connector(s); ${r.skippedUnchanged} unchanged, ${r.skippedUnsafe} unsafe, ${r.errors.length} error(s)`);
+          }
         } catch (err) {
-          log.warn(`[cron] connector_fetch failed: ${(err as Error).message}`);
+          log.warn(`[cron] connector_fetch failed: ${err instanceof Error ? err.message : String(err)}`);
         }
         break;
       }

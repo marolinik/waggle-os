@@ -97,8 +97,20 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
       // selected model is used as the on-device candidate when it is local.
       const currentModel = server.agentState?.currentModel;
       const localModel = currentModel?.startsWith('ollama/') ? currentModel : undefined;
+      // Fail closed: a privacy-required call with no on-device model must not
+      // touch the cloud — return an error rather than leaking the conversation.
+      if (input.privacyRequired && !localModel) {
+        return {
+          content: '', inTokens: 0, outTokens: 0, costUsd: 0,
+          latencyMs: Date.now() - started,
+          error: 'privacyRequired: no on-device model is configured',
+        };
+      }
+      // Don't reroute a local (Ollama) session's lightweight calls to cloud
+      // Haiku — keep them on-device. The lightweight→cheap-cloud override
+      // applies only when the session is already cloud-backed.
       const model = resolveModelForClass(input.model, {
-        klass: input.class,
+        class: localModel ? undefined : input.class,
         privacyRequired: input.privacyRequired,
         lightweightModel: LIGHTWEIGHT_MODEL,
         localModel,

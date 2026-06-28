@@ -19,8 +19,8 @@
 export type ModelClass = 'lightweight' | 'reasoning' | 'general';
 
 export interface ModelClassOpts {
-  /** Declared workload class for this call. */
-  klass?: ModelClass;
+  /** Declared workload class for this call (named `class` to match LlmCallInput). */
+  class?: ModelClass;
   /** When true, never route to a cloud budget model; keep on-device. */
   privacyRequired?: boolean;
   /** Cheap model for lightweight internal calls (default applied by the caller). */
@@ -35,13 +35,23 @@ export const LIGHTWEIGHT_MODEL = 'claude-haiku-4-5';
 /**
  * Resolve the effective model for a known internal call. Pure + synchronous.
  *
- *  - privacyRequired  → on-device model if provided, else the caller's model
- *                       (precedence over the lightweight override — never cloud).
+ *  - privacyRequired  → the on-device model; FAILS CLOSED (throws) when none is
+ *                       configured, rather than silently falling back to cloud.
  *  - class lightweight → the cheap model, when one is supplied.
  *  - otherwise         → unchanged.
+ *
+ * Callers that may pass `privacyRequired` must handle the throw (e.g. return an
+ * error result without making a network call).
  */
 export function resolveModelForClass(requestedModel: string, opts: ModelClassOpts = {}): string {
-  if (opts.privacyRequired) return opts.localModel ?? requestedModel;
-  if (opts.klass === 'lightweight' && opts.lightweightModel) return opts.lightweightModel;
+  if (opts.privacyRequired) {
+    if (!opts.localModel) {
+      throw new Error('privacyRequired: no on-device model is configured — refusing cloud fallback');
+    }
+    return opts.localModel;
+  }
+  if (opts.class === 'lightweight' && opts.lightweightModel) return opts.lightweightModel;
+  // 'reasoning' and 'general' are passthrough today; 'reasoning' is reserved for a
+  // future frontier/extended-thinking upsell once telemetry justifies the cost.
   return requestedModel;
 }

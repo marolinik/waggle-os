@@ -92,8 +92,10 @@ function crushJsonTable(raw: string): string {
 
 function cell(v: unknown): string {
   if (v === null || v === undefined) return '';
-  if (typeof v === 'object') return JSON.stringify(v);
-  return String(v).replace(/\s+/g, ' ').trim();
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  // Escape the column delimiter so a value containing '|' can't forge an extra
+  // table column (structural integrity of the pipe table).
+  return s.replace(/\s+/g, ' ').replace(/\|/g, '\\|').trim();
 }
 
 /** Indices to render: all rows when small; else head + tail + error rows + numeric outliers. */
@@ -123,6 +125,7 @@ function selectRows(rows: ReadonlyArray<Record<string, unknown>>, keys: readonly
 // or multibyte char is never split mid-codepoint.
 
 function cjkWeight(code: number): number {
+  if (code >= 0x10000) return 2; // emoji / non-BMP ≈ 2 tokens in most tokenizers
   return (code >= 0x3000 && code <= 0x9fff) ||
     (code >= 0xac00 && code <= 0xd7af) ||
     (code >= 0xf900 && code <= 0xfaff)
@@ -133,7 +136,7 @@ function cjkWeight(code: number): number {
 /** Dependency-free, CJK-aware token estimate. */
 export function estimateTokens(text: string): number {
   let tokens = 0;
-  for (const ch of text) tokens += cjkWeight(ch.codePointAt(0)!);
+  for (const ch of text) tokens += cjkWeight(ch.codePointAt(0) ?? 0);
   return Math.ceil(tokens);
 }
 
@@ -149,7 +152,7 @@ export function truncateToTokenBudget(text: string, maxTokens: number): string {
   let used = 0;
   let out = '';
   for (const ch of text) {
-    used += cjkWeight(ch.codePointAt(0)!);
+    used += cjkWeight(ch.codePointAt(0) ?? 0);
     if (used > maxTokens) break;
     out += ch;
   }
