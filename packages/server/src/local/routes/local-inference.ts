@@ -1,9 +1,9 @@
 /**
  * Local Inference Routes — hardware detection, model recommendations, Ollama management.
  *
- * Uses llmfit CLI binary (if on PATH or at LLMFIT_PATH) for hardware scanning and model scoring.
- * Falls back to basic detection (OS, RAM) when llmfit isn't installed.
- * Also checks Ollama and vLLM availability for local model serving.
+ * Uses an in-process clean-room hardware-fit engine (../hardware-detect for the scan,
+ * @waggle/agent cookbook for the ranking math). Falls back to RAM-only detection when
+ * GPU probes fail. Also checks Ollama and vLLM availability for local model serving.
  *
  * GET  /api/local-inference/hardware    — detect system hardware (GPU, RAM, CPU)
  * GET  /api/local-inference/models      — recommend models that fit this hardware
@@ -12,46 +12,24 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import os from 'node:os';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { rankModels, OLLAMA_CATALOG } from '@waggle/agent';
+import { detectHardware } from '../hardware-detect.js';
 
-const execFileAsync = promisify(execFile);
+// Cache the hardware scan: detectHardware() spawns a subprocess (nvidia-smi) on
+// non-Apple hosts, and these are unauthenticated, side-effect-free GET routes — so a
+// fresh spawn per request is a needless process-spawn DoS lever. Hardware is effectively
+// static for a session; a short TTL keeps availableRamGb roughly fresh while bounding
+// spawns to at most one per window. The in-flight PROMISE is cached so concurrent
+// requests share a single scan (detectHardware never throws — it degrades to a CPU floor).
+const HARDWARE_TTL_MS = 60_000;
+let hardwareCache: { at: number; promise: ReturnType<typeof detectHardware> } | null = null;
 
-interface HardwareInfo {
-  totalRamGb: number;
-  availableRamGb: number;
-  cpuCores: number;
-  cpuName: string;
-  platform: string;
-  hasGpu: boolean;
-  gpuName: string | null;
-  gpuVramGb: number | null;
-  gpuCount: number;
-  gpus: Array<{ name: string; vramGb: number; backend: string }>;
-  backend: string;
-}
-
-interface ModelRecommendation {
-  name: string;
-  provider: string;
-  parameterCount: string;
-  paramsB: number;
-  useCase: string;
-  category: string;
-  fitLevel: string;
-  score: number;
-  scoreComponents: { quality: number; speed: number; fit: number; context: number };
-  estimatedTps: number;
-  memoryRequiredGb: number;
-  memoryAvailableGb: number;
-  utilizationPct: number;
-  bestQuant: string;
-  runMode: string;
-  runtime: string;
-  contextLength: number;
-  isMoe: boolean;
-  notes: string[];
+function getHardware(): ReturnType<typeof detectHardware> {
+  const now = Date.now();
+  if (hardwareCache && now - hardwareCache.at < HARDWARE_TTL_MS) return hardwareCache.promise;
+  const promise = detectHardware();
+  hardwareCache = { at: now, promise };
+  return promise;
 }
 
 interface InferenceServerStatus {
@@ -60,111 +38,6 @@ interface InferenceServerStatus {
   url: string;
   models: string[];
   version?: string;
-}
-
-// ── llmfit CLI integration ──────────────────────────────────────────
-
-function findLlmfitBinary(): string {
-  return process.env.LLMFIT_PATH ?? 'llmfit';
-}
-
-interface LlmfitResult {
-  system: Record<string, unknown>;
-  models: Array<Record<string, unknown>>;
-  total_models: number;
-}
-
-async function callLlmfit(args: string[]): Promise<LlmfitResult | null> {
-  const binary = findLlmfitBinary();
-  try {
-    const { stdout } = await execFileAsync(binary, args, {
-      timeout: 30000,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    return JSON.parse(stdout) as LlmfitResult;
-  } catch {
-    return null;
-  }
-}
-
-async function detectHardwareViaLlmfit(): Promise<HardwareInfo | null> {
-  const result = await callLlmfit(['recommend', '--json', '--limit', '1']);
-  if (!result?.system) return null;
-  const sys = result.system;
-  return {
-    totalRamGb: (sys.total_ram_gb as number) ?? 0,
-    availableRamGb: (sys.available_ram_gb as number) ?? 0,
-    cpuCores: (sys.cpu_cores as number) ?? 0,
-    cpuName: (sys.cpu_name as string) ?? 'Unknown',
-    platform: `${os.platform()} ${os.arch()}`,
-    hasGpu: (sys.has_gpu as boolean) ?? false,
-    gpuName: (sys.gpu_name as string) ?? null,
-    gpuVramGb: (sys.gpu_vram_gb as number) ?? null,
-    gpuCount: (sys.gpu_count as number) ?? 0,
-    gpus: ((sys.gpus as Array<{ name: string; vram_gb: number; backend: string }>) ?? []).map(g => ({
-      name: g.name, vramGb: g.vram_gb, backend: g.backend,
-    })),
-    backend: (sys.backend as string) ?? `CPU (${os.arch()})`,
-  };
-}
-
-async function getModelsViaLlmfit(useCase?: string, limit = 20): Promise<ModelRecommendation[]> {
-  const args = ['recommend', '--json', '--limit', String(limit)];
-  if (useCase) args.push('--use-case', useCase);
-  const result = await callLlmfit(args);
-  if (!result?.models) return [];
-  return result.models.map((m: Record<string, unknown>) => ({
-    name: (m.name as string) ?? '',
-    provider: (m.provider as string) ?? '',
-    parameterCount: (m.parameter_count as string) ?? '',
-    paramsB: (m.params_b as number) ?? 0,
-    useCase: (m.use_case as string) ?? '',
-    category: (m.category as string) ?? '',
-    fitLevel: (m.fit_level as string) ?? 'marginal',
-    score: (m.score as number) ?? 0,
-    scoreComponents: (m.score_components as { quality: number; speed: number; fit: number; context: number }) ?? { quality: 0, speed: 0, fit: 0, context: 0 },
-    estimatedTps: (m.estimated_tps as number) ?? 0,
-    memoryRequiredGb: (m.memory_required_gb as number) ?? 0,
-    memoryAvailableGb: (m.memory_available_gb as number) ?? 0,
-    utilizationPct: (m.utilization_pct as number) ?? 0,
-    bestQuant: (m.best_quant as string) ?? '',
-    runMode: (m.run_mode as string) ?? '',
-    runtime: (m.runtime_label as string) ?? '',
-    contextLength: (m.context_length as number) ?? 0,
-    isMoe: (m.is_moe as boolean) ?? false,
-    notes: (m.notes as string[]) ?? [],
-  }));
-}
-
-// ── Basic fallback (no llmfit) ──────────────────────────────────────
-
-function detectHardwareBasic(): HardwareInfo {
-  const totalRam = os.totalmem() / (1024 ** 3);
-  const freeRam = os.freemem() / (1024 ** 3);
-  const cpus = os.cpus();
-  return {
-    totalRamGb: Math.round(totalRam * 10) / 10,
-    availableRamGb: Math.round(freeRam * 10) / 10,
-    cpuCores: cpus.length,
-    cpuName: cpus[0]?.model ?? 'Unknown',
-    platform: `${os.platform()} ${os.arch()}`,
-    hasGpu: false,
-    gpuName: null,
-    gpuVramGb: null,
-    gpuCount: 0,
-    gpus: [],
-    backend: cpus[0]?.model?.includes('Apple') ? 'Metal (Apple Silicon)' : `CPU (${os.arch()})`,
-  };
-}
-
-function basicModelRecommendations(ramGb: number): ModelRecommendation[] {
-  const models: ModelRecommendation[] = [];
-  const base = { scoreComponents: { quality: 0, speed: 0, fit: 0, context: 0 }, memoryAvailableGb: ramGb, utilizationPct: 0, isMoe: false, notes: [] as string[], runtime: 'Ollama' };
-  if (ramGb >= 8) models.push({ ...base, name: 'llama3.2:3b', provider: 'Meta', parameterCount: '3B', paramsB: 3, useCase: 'General chat', category: 'General', fitLevel: 'Good', score: 75, estimatedTps: 30, memoryRequiredGb: 2.5, bestQuant: 'Q4_K_M', runMode: 'CPU', contextLength: 8192 });
-  if (ramGb >= 16) models.push({ ...base, name: 'qwen2.5-coder:7b', provider: 'Qwen', parameterCount: '7B', paramsB: 7, useCase: 'Code generation', category: 'Coding', fitLevel: 'Good', score: 82, estimatedTps: 15, memoryRequiredGb: 5.5, bestQuant: 'Q4_K_M', runMode: 'CPU', contextLength: 32768 });
-  if (ramGb >= 16) models.push({ ...base, name: 'mistral:7b', provider: 'Mistral', parameterCount: '7B', paramsB: 7, useCase: 'General chat', category: 'General', fitLevel: 'Good', score: 80, estimatedTps: 14, memoryRequiredGb: 5.2, bestQuant: 'Q4_K_M', runMode: 'CPU', contextLength: 32768 });
-  if (ramGb >= 32) models.push({ ...base, name: 'llama3.3:70b', provider: 'Meta', parameterCount: '70B', paramsB: 70, useCase: 'General chat', category: 'General', fitLevel: 'Marginal', score: 90, estimatedTps: 3, memoryRequiredGb: 24, bestQuant: 'Q4_K_M', runMode: 'CPU', contextLength: 8192 });
-  return models;
 }
 
 // ── Ollama / vLLM checks ────────────────────────────────────────────
@@ -203,22 +76,20 @@ export async function localInferenceRoutes(fastify: FastifyInstance) {
   const OLLAMA_URL = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
   const VLLM_URL = process.env.VLLM_HOST ?? 'http://localhost:8000';
 
-  // GET /api/local-inference/hardware
+  // GET /api/local-inference/hardware — in-process clean-room scan (no external binary)
   fastify.get('/api/local-inference/hardware', async () => {
-    const llmfit = await detectHardwareViaLlmfit();
-    if (llmfit) return { hardware: llmfit, source: 'llmfit', llmfitAvailable: true };
-    return { hardware: detectHardwareBasic(), source: 'basic', llmfitAvailable: false };
+    const hardware = await getHardware();
+    return { hardware, source: 'native', llmfitAvailable: false };
   });
 
-  // GET /api/local-inference/models
+  // GET /api/local-inference/models — rank the curated Ollama catalog against the scan
   fastify.get<{ Querystring: { useCase?: string; limit?: string } }>(
     '/api/local-inference/models',
     async (request) => {
-      const limit = parseInt(request.query.limit ?? '20', 10);
-      const models = await getModelsViaLlmfit(request.query.useCase, limit);
-      if (models.length > 0) return { models, source: 'llmfit', totalScanned: models.length };
-      const ram = os.totalmem() / (1024 ** 3);
-      return { models: basicModelRecommendations(ram), source: 'basic', totalScanned: 0 };
+      const limit = Math.max(1, Math.min(Number.parseInt(request.query.limit ?? '20', 10) || 20, 100));
+      const hardware = await getHardware();
+      const models = rankModels(OLLAMA_CATALOG, hardware, { useCase: request.query.useCase, limit });
+      return { models, source: 'native', totalScanned: OLLAMA_CATALOG.length };
     },
   );
 

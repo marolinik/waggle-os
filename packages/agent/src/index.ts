@@ -448,6 +448,11 @@ export {
   type InputTokenBudgetOptions,
 } from './input-token-budget.js';
 export {
+  rankModels, OLLAMA_CATALOG, estimateMemoryGb, estimateTps, qualityScore, fitScore,
+  type Hardware, type ModelRecommendation as CookbookModelRecommendation,
+  type CatalogModel, type RankOptions,
+} from './cookbook/index.js';
+export {
   CredentialPool, loadCredentialPool, extractStatusCode,
   type CredentialEntry, type CredentialPoolConfig, type PoolStatus, type VaultLike,
 } from './credential-pool.js';
