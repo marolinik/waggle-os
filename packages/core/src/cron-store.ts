@@ -12,7 +12,7 @@ import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type CronJobType = 'agent_task' | 'memory_consolidation' | 'workspace_health' | 'proactive' | 'prompt_optimization' | 'monthly_assessment';
+export type CronJobType = 'agent_task' | 'memory_consolidation' | 'workspace_health' | 'proactive' | 'prompt_optimization' | 'monthly_assessment' | 'connector_fetch';
 
 export const VALID_JOB_TYPES: Set<string> = new Set([
   'agent_task',
@@ -21,6 +21,7 @@ export const VALID_JOB_TYPES: Set<string> = new Set([
   'proactive',
   'prompt_optimization',
   'monthly_assessment',
+  'connector_fetch',
 ]);
 
 export interface CronSchedule {

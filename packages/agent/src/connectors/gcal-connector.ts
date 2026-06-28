@@ -19,6 +19,9 @@ export class GoogleCalendarConnector extends BaseConnector {
   readonly substrate = 'waggle' as const;
   readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/googlecalendar.svg';
   readonly category = 'productivity' as const;
+  // Auto-fetch: list_events is read-only with no required params — safe to
+  // harvest upcoming events into memory on a PRO schedule.
+  readonly harvestAction = { action: 'list_events' };
   readonly setupGuide = "Enable Google Calendar API at console.cloud.google.com and create OAuth2 credentials.";
 
   readonly actions: ConnectorAction[] = [

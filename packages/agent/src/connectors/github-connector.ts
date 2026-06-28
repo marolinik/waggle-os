@@ -18,6 +18,9 @@ export class GitHubConnector extends BaseConnector {
   readonly substrate = 'waggle' as const;
   readonly logoUrl = 'https://cdn.jsdelivr.net/npm/simple-icons@v11/icons/github.svg';
   readonly category = 'development' as const;
+  // Auto-fetch: list_repos is read-only with no required params — safe to
+  // harvest the user's repositories into memory on a PRO schedule.
+  readonly harvestAction = { action: 'list_repos' };
   readonly setupGuide = "Create a Personal Access Token at github.com/settings/tokens with repo scope.";
 
   readonly actions: ConnectorAction[] = [

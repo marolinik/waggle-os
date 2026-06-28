@@ -42,6 +42,12 @@ export interface WaggleConnector {
   readonly authType: 'bearer' | 'oauth2' | 'api_key' | 'basic';
   /** Available actions when connected */
   readonly actions: ConnectorAction[];
+  /**
+   * Opt-in for the PRO `connector_fetch` auto-harvest loop: a SAFE, read-only,
+   * no-required-param action (+ optional default params) whose result is folded
+   * into memory on a schedule. Connectors without it are skipped by auto-fetch.
+   */
+  readonly harvestAction?: { action: string; params?: Record<string, unknown> };
   /** Which substrate manages this connector */
   readonly substrate: 'waggle' | 'kvark';
   /** CDN URL for SVG logo */

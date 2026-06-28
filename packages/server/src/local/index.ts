@@ -62,8 +62,9 @@ import {
 } from '@waggle/agent';
 import { PluginRuntimeManager, getStarterSkillsDir, validatePluginManifest } from '@waggle/sdk';
 import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '@waggle/marketplace';
-import { parseTier } from '@waggle/shared';
+import { parseTier, assertTierCapability, TierError } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
+import { runConnectorFetch } from './connector-harvest.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -1905,6 +1906,48 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           }
         } catch (err) {
           log.warn(`[cron] agent_task handler failed: ${(err as Error).message}`);
+        }
+        break;
+      }
+      case 'connector_fetch': {
+        // PRO auto-fetch (§3.C): pull fresh data from opted-in connectors into
+        // the personal mind. Cost-free — raw frames, no LLM extraction.
+        const tier = readTierFromDataDir(fullConfig.dataDir);
+        try {
+          assertTierCapability(tier, 'PRO');
+        } catch (e) {
+          if (e instanceof TierError) {
+            log.info(`[cron] connector_fetch: requires PRO (on ${tier}) — skipping`);
+            break;
+          }
+          throw e;
+        }
+        // Safety floor: never re-pull more than once per ~20h even if the cron
+        // expression is mis-set tight (auto-fetch is a daily cadence by design).
+        const MIN_INTERVAL_MS = 20 * 60 * 60 * 1000;
+        if (schedule.last_run_at && Date.now() - Date.parse(schedule.last_run_at) < MIN_INTERVAL_MS) {
+          log.info('[cron] connector_fetch: within 20h floor — skipping');
+          break;
+        }
+        try {
+          new SessionStore(multiMind.personal).ensure('harvest', 'harvest', 'Imported memory from external sources');
+          const personalFrames = new FrameStore(multiMind.personal);
+          const statePath = path.join(fullConfig.dataDir, 'connector-harvest-state.json');
+          const r = await runConnectorFetch({
+            connectors: connectorRegistry.getConnected(),
+            writeFrame: (content) => { personalFrames.createIFrame('harvest', content, 'normal', 'import'); },
+            loadHashes: () => {
+              try { return JSON.parse(fs.readFileSync(statePath, 'utf-8')) as Record<string, string>; }
+              catch { return {}; }
+            },
+            saveHashes: (h) => {
+              try { fs.writeFileSync(statePath, JSON.stringify(h)); } catch { /* best-effort */ }
+            },
+            log: (m) => log.info(`[cron] connector_fetch: ${m}`),
+          });
+          log.info(`[cron] connector_fetch: ${r.framesWritten} frames from ${r.connectorsFetched} connector(s); ${r.skippedUnchanged} unchanged, ${r.errors.length} error(s)`);
+        } catch (err) {
+          log.warn(`[cron] connector_fetch failed: ${(err as Error).message}`);
         }
         break;
       }
