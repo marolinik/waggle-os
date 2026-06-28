@@ -208,7 +208,7 @@ const PERSONAS: PersonaDefinition[] = [
     expectedConnectorTerms: ['github', 'mcp', 'webhook'],
     externalTriggerNeed: 'OS hotkey, launcher, or scheduled automation',
     internalTriggerNeed: 'I need one control surface for all my AI work',
-    competitorBaseline: 'Developer tools are powerful for code but do not give a non-coding AI OS cockpit.',
+    competitorBaseline: 'Developer tools are powerful for code but do not give a non-coding personal AI workspace.',
   },
 ];
 
@@ -217,8 +217,8 @@ function clampScore(score: number, max: number): number {
 }
 
 function gradeFor(score: number): string {
-  if (score >= 90) return 'Strong AI OS position';
-  if (score >= 75) return 'Strong niche AI OS fit';
+  if (score >= 90) return 'Strong personal AI workspace position';
+  if (score >= 75) return 'Strong niche AI workspace fit';
   if (score >= 60) return 'Promising but still competitor-dependent';
   if (score >= 40) return 'Plausible positioning, weak product proof';
   return 'Likely perceived as another AI chat/tool wrapper';
@@ -243,15 +243,22 @@ function textIncludesAny(haystack: string, needles: string[]): boolean {
   return needles.some((needle) => lower.includes(needle.toLowerCase()));
 }
 
+function hasPersonalWorkAwarePositioning(shellText: string): boolean {
+  const personalSignal = /knows you|remembers you|personal|how you work|work style|stays yours|yours/i.test(shellText);
+  const workSignal = /knows your work|projects?|decisions?|context|work-in-progress|work itself|workspace/i.test(shellText);
+  const guidanceSignal = /runs the AI|right AI|AI underneath|guides? the next step|evolves?|routing|models?|AI workspace/i.test(shellText);
+  return personalSignal && workSignal && guidanceSignal;
+}
+
 function renderMarkdown(audit: AuditResult): string {
   const lines: string[] = [];
-  lines.push('# Waggle AI OS Positioning Audit');
+  lines.push('# Waggle Personal AI Workspace Positioning Audit');
   lines.push('');
   lines.push(`Generated: ${audit.generatedAt}`);
   lines.push(`Overall score: ${audit.overall.score}/100`);
   lines.push(`Grade: ${audit.overall.grade}`);
   lines.push(`Cold-start readiness: ${audit.overall.coldStartScore}/100 (${audit.overall.coldStartGrade})`);
-  lines.push(`AI OS verdict: ${audit.overall.positioningVerdict}`);
+  lines.push(`Positioning verdict: ${audit.overall.positioningVerdict}`);
   lines.push(`Addiction level: ${audit.addictionLevel}`);
   lines.push('');
   lines.push('## Cold-Start Readiness');
@@ -420,7 +427,7 @@ async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: s
     headers: auth?.headers,
     data: {
       name: workspaceName,
-      group: 'AI OS Audit',
+      group: 'Positioning Audit',
       icon: 'sparkles',
       storageType: 'virtual',
     },
@@ -635,7 +642,7 @@ async function probeWorkflowCompletion(request: APIRequestContext, persona: Pers
       headers: auth?.headers,
       data: {
         title,
-        creatorName: 'AI OS audit',
+        creatorName: 'Positioning audit',
         assigneeName: persona.name,
       },
     });
@@ -811,7 +818,7 @@ function scorePersona(persona: PersonaDefinition, context: ProbeContext): Person
   const relevantConnectors = textIncludesAny(context.connectorsText, persona.expectedConnectorTerms);
   const osSurfaces = ['hooks', 'fleet', 'events', 'tier'].filter((key) => context.api[key]?.ok || [403, 404].includes(context.api[key]?.status ?? 0));
   const hasBasicShellPositioning = /Waggle|workspace|AI/i.test(context.shellText);
-  const hasExplicitAiOsPositioning = /AI OS|operating system/i.test(context.shellText);
+  const hasPersonalPositioning = hasPersonalWorkAwarePositioning(context.shellText);
 
   const dimensions: DimensionScore[] = [
     {
@@ -822,17 +829,17 @@ function scorePersona(persona: PersonaDefinition, context: ProbeContext): Person
         (context.shellLoaded ? 10 : 0)
         + (context.consoleErrors.length === 0 ? 3 : 0)
         + (hasBasicShellPositioning ? 1 : 0)
-        + (hasExplicitAiOsPositioning ? 1 : 0),
+        + (hasPersonalPositioning ? 1 : 0),
         15,
       ),
       evidence: [
         context.shellLoaded ? 'App shell loaded meaningful content.' : 'App shell did not load meaningful content.',
         `${context.consoleErrors.length} console error(s) captured on first load.`,
-        hasExplicitAiOsPositioning ? 'Loaded shell explicitly mentions AI OS or operating-system positioning.' : 'Loaded shell does not explicitly mention AI OS or operating-system positioning.',
+        hasPersonalPositioning ? 'Loaded shell clearly positions Waggle as a personal, work-aware AI workspace.' : 'Loaded shell does not clearly position Waggle as personal, work-aware, and guided by AI.',
       ],
       gaps: [
         ...(context.shellLoaded ? [] : ['Make first-load shell resilient and clearly explain what Waggle is.']),
-        ...(hasExplicitAiOsPositioning ? [] : ['AI OS positioning is not explicit in the loaded shell text.']),
+        ...(hasPersonalPositioning ? [] : ['Personal work-aware positioning is not explicit in the loaded shell text.']),
       ],
     },
     {
@@ -908,7 +915,7 @@ function scorePersona(persona: PersonaDefinition, context: ProbeContext): Person
     role: persona.role,
     total,
     grade: gradeFor(total),
-    positioning: total >= 75 ? 'Can credibly position Waggle as an AI OS for this persona.' : 'Needs sharper proof before AI OS positioning will feel earned.',
+    positioning: total >= 75 ? 'Can credibly position Waggle as a personal AI workspace for this persona.' : 'Needs sharper proof before personal AI workspace positioning will feel earned.',
     currentDefault: persona.currentDefault,
     competitorBaseline: persona.competitorBaseline,
     oneToolCriterion: persona.oneToolCriterion,
@@ -972,10 +979,10 @@ function hasPersonaDimensionBelowMax(personas: PersonaScore[]): boolean {
 }
 
 function positioningVerdict(score: number): string {
-  if (score >= 85) return 'Waggle can lead with AI OS positioning now, with persona-specific proof.';
-  if (score >= 70) return 'Waggle has credible AI OS positioning for selected niches, but first-session proof must sharpen.';
-  if (score >= 55) return 'Waggle should position as a memory-native AI workspace before claiming full AI OS broadly.';
-  return 'Waggle should fix core value proof before using AI OS as the main market claim.';
+  if (score >= 85) return 'Waggle can lead with personal AI workspace positioning now, with persona-specific proof.';
+  if (score >= 70) return 'Waggle has credible personal AI workspace positioning for selected niches, but first-session proof must sharpen.';
+  if (score >= 55) return 'Waggle should position as a memory-native AI workspace before making broader command-center claims.';
+  return 'Waggle should fix core value proof before making broad market claims.';
 }
 
 function scoreColdStart(context: ProbeContext): ColdStartScore {
@@ -1066,7 +1073,33 @@ async function runAiOsPositioningAudit(page: Page, testInfo: TestInfo): Promise<
   return audit;
 }
 
-test.describe('AI OS positioning audit', () => {
+test.describe('personal AI workspace positioning audit', () => {
+  test('awards onboarding clarity for personal work-aware positioning without literal AI OS language', () => {
+    const persona = PERSONAS[0];
+    const context: ProbeContext = {
+      shellLoaded: true,
+      shellText: 'Waggle is the personal AI workspace that remembers you, knows your projects, evolves with your work, and guides the next step while it runs the AI underneath.',
+      consoleErrors: [],
+      coldHealth: { status: 200, ok: true, ms: 100, body: {} },
+      api: {},
+      personaIds: [],
+      personaText: '',
+      skillsText: '',
+      connectorsText: '',
+      marketplaceText: '',
+      memory: {},
+      workflowCompletion: {},
+    };
+
+    const score = scorePersona(persona, context);
+    const onboarding = score.dimensions.find((dimension) => dimension.id === 'onboarding');
+
+    expect(context.shellText).not.toMatch(/AI OS|operating system/i);
+    expect(onboarding?.score).toBe(15);
+    expect(onboarding?.gaps).not.toContain('Personal work-aware positioning is not explicit in the loaded shell text.');
+    expect(onboarding?.evidence).toContain('Loaded shell clearly positions Waggle as a personal, work-aware AI workspace.');
+  });
+
   test('keeps scoring evidence internally consistent and diverse', () => {
     const persona = PERSONAS[0];
     const context: ProbeContext = {
@@ -1097,7 +1130,7 @@ test.describe('AI OS positioning audit', () => {
     const onboarding = score.dimensions.find((dimension) => dimension.id === 'onboarding');
     const timeToValue = score.dimensions.find((dimension) => dimension.id === 'timeToValue');
 
-    expect(onboarding?.gaps).toContain('AI OS positioning is not explicit in the loaded shell text.');
+    expect(onboarding?.gaps).toContain('Personal work-aware positioning is not explicit in the loaded shell text.');
     expect(onboarding?.score).toBeLessThan(onboarding?.max ?? 0);
     expect(timeToValue?.evidence.join('\n')).toContain('personas responded in 950ms');
     expect(timeToValue?.evidence.join('\n')).toContain('workspaces returned 503');
@@ -1144,7 +1177,7 @@ test.describe('AI OS positioning audit', () => {
       role: definition.role,
       total: 100,
       grade: gradeFor(100),
-      positioning: 'Can credibly position Waggle as an AI OS for this persona.',
+      positioning: 'Can credibly position Waggle as a personal AI workspace for this persona.',
       currentDefault: definition.currentDefault,
       competitorBaseline: definition.competitorBaseline,
       oneToolCriterion: definition.oneToolCriterion,
@@ -1294,7 +1327,7 @@ test.describe('AI OS positioning audit', () => {
       waitForSelector: async () => undefined,
       waitForTimeout: async () => undefined,
       locator: () => ({
-        innerText: async () => 'Waggle AI OS workspace with meaningful app shell content for the audit.',
+        innerText: async () => 'Waggle personal AI workspace with meaningful app shell content for the audit.',
       }),
       request,
     } as unknown as Page;
@@ -1360,7 +1393,7 @@ test.describe('AI OS positioning audit', () => {
       waitForSelector: async () => undefined,
       waitForTimeout: async () => undefined,
       locator: () => ({
-        innerText: async () => 'Waggle AI OS workspace with meaningful app shell content for the audit.',
+        innerText: async () => 'Waggle personal AI workspace with meaningful app shell content for the audit.',
       }),
       request,
     } as unknown as Page;
@@ -1548,7 +1581,7 @@ test.describe('AI OS positioning audit', () => {
     expect(audit.personas.map((persona) => persona.name)).toEqual(expect.arrayContaining(expectedPersonaNames));
     expect(audit.overall.score).toBeGreaterThanOrEqual(0);
     expect(audit.overall.score).toBeLessThanOrEqual(100);
-    expect(audit.overall.grade).toMatch(/AI OS|chat|niche|promising|plausible/i);
+    expect(audit.overall.grade).toMatch(/workspace|chat|niche|promising|plausible/i);
     expect(audit.addictionLevel).toMatch(/weak|emerging|strong|very strong/i);
     if (hasPersonaDimensionBelowMax(audit.personas)) {
       expect(audit.improvementAreas.length).toBeGreaterThan(0);
@@ -1563,9 +1596,9 @@ test.describe('AI OS positioning audit', () => {
     expect(audit.artifacts.jsonPath).toMatch(/ai-os-positioning-audit\.json$/);
 
     const markdown = await readFile(audit.artifacts.markdownPath, 'utf8');
-    expect(markdown).toContain('# Waggle AI OS Positioning Audit');
+    expect(markdown).toContain('# Waggle Personal AI Workspace Positioning Audit');
     expect(markdown).toContain('Overall score:');
-    expect(markdown).toContain('AI OS verdict:');
+    expect(markdown).toContain('Positioning verdict:');
     expect(markdown).toContain('Addiction level:');
     expect(markdown).toContain('## Persona Scores');
     expect(markdown).toContain('## Improvement Areas');

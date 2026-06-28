@@ -128,13 +128,13 @@ const jetbrainsMono = JetBrains_Mono({
 /* `getTranslations`-driven values pulled at request time.             */
 /* ────────────────────────────────────────────────────────────────── */
 
-const META_TITLE = 'Waggle — The AI Workspace for Experts';
+const META_TITLE = 'Waggle — Your Personal AI Workspace';
 const META_DESCRIPTION =
-  "Be the expert. We'll be the AI. The workspace where you go to work — it knows you, knows your projects, and runs the AI so you don't have to. Local-first.";
+  'Your AI should know how you work. Waggle remembers you, your projects, and your decisions, then runs the right AI underneath so you stay focused on the work. Local-first.';
 const META_OG_DESCRIPTION =
-  "Be the expert. We'll be the AI. It knows you, knows your projects, runs the AI for you, and stays yours. Where experts go to work — local-first.";
+  'Your AI should know how you work. Waggle remembers you, your projects, and your decisions, guides the next step, and stays yours. Local-first.';
 const META_TWITTER_DESCRIPTION =
-  "Be the expert. We'll be the AI. The workspace that knows you and your work, runs the AI for you, and stays yours.";
+  'The personal AI workspace that remembers you, knows your work, evolves with each project, and stays yours.';
 const META_CANONICAL = 'https://waggle-os.ai/';
 const META_OG_IMAGE = 'https://waggle-os.ai/brand/logo.jpeg';
 

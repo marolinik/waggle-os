@@ -34,13 +34,13 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
       />
     </div>
     <span className="inline-block text-xs font-display font-semibold tracking-[0.3em] uppercase text-primary mb-4">
-      Your AI Operating System
+      Personal AI Workspace
     </span>
     <h1 className="text-4xl font-display font-bold text-foreground mb-3">
-      Welcome to the Hive
+      Your AI should know how you work
     </h1>
     <p className="text-muted-foreground text-sm max-w-md mx-auto mb-6">
-      Remembers everything. Improves itself. Built for knowledge work.
+      Waggle remembers you, knows your projects, evolves with each decision, and guides the next step.
     </p>
 
     {/* C28: static, disabled language chip — no i18n exists yet, so this is a

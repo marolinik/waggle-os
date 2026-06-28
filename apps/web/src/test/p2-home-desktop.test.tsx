@@ -126,6 +126,16 @@ describe('HomeCockpit (P2)', () => {
     });
     expect(screen.getByText(expected)).toBeTruthy();
   });
+
+  it('renders the personal work-aware positioning in the shell', async () => {
+    await renderHome(briefing());
+    const positioning = screen.getByTestId('home-cockpit-positioning').textContent ?? '';
+
+    expect(positioning).toMatch(/personal AI workspace/i);
+    expect(positioning).toMatch(/remembers you/i);
+    expect(positioning).toMatch(/knows your projects/i);
+    expect(positioning).toMatch(/guides the next step/i);
+  });
 });
 
 // ── Workspace Desktop: error-state branching (P1b error contract) ──────────

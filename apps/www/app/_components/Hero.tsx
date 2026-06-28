@@ -24,9 +24,8 @@ const MICROCOPY_KEYS = [
  * FLAT keys under `landing.hero.*`. The `variant_*` blocks remain in en.json
  * as inert data for the resolver/dev-tabs only.
  *
- * The headline ("Be the expert. We'll be the AI.") renders with the second
- * sentence in honey for visual parity with the prior split-color treatment.
- * The single microcopy line is replaced by the 3 committed chips.
+ * The headline can still render a second sentence in honey when present, but
+ * the committed copy is now a single direct positioning line.
  *
  * All strings load from `messages/en.json` under `landing.hero.*`.
  * `<HeroVisual>` is a Client Component (animations + dev variant tabs);
@@ -35,11 +34,8 @@ const MICROCOPY_KEYS = [
 export default async function Hero({ variantId }: HeroProps) {
   const t = await getTranslations('landing.hero');
 
-  // Committed headline is one locked string ("Be the expert. We'll be the
-  // AI."). Split on the first sentence boundary to render the second sentence
-  // in honey for visual parity with the prior split-color treatment, while
-  // keeping the copy i18n-driven (no hardcoded JSX literal that could drift
-  // from en.json). Falls back to the whole string if the boundary is absent.
+  // Split on the first sentence boundary when a two-part headline is used.
+  // Current copy is one sentence, so this usually renders as a single line.
   const headline = t('headline');
   const splitAt = headline.indexOf('. ');
   const headlineLead = splitAt >= 0 ? headline.slice(0, splitAt + 1) : headline;

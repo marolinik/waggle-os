@@ -111,16 +111,16 @@ function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCr
   return (
     <div className="mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit-empty">
       <h1 className="mb-1 font-display text-[clamp(28px,4vw,40px)] font-semibold leading-tight text-[var(--text)]">{greeting}</h1>
-      <p className="mb-8 text-[15px] text-[var(--text-muted)]">Let's set up your first workspace.</p>
+      <p className="mb-8 text-[15px] text-[var(--text-muted)]">Your AI should know how you work. Let's set up your first workspace.</p>
 
       <div className="relative overflow-hidden rounded-[26px] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-8 text-center shadow-[var(--shadow)]">
         <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(circle,var(--honey-glow),transparent_70%)]" />
         <div className="relative">
           <HexAvatar label="W" size={48} className="mx-auto mb-4" />
-          <h2 className="mb-1.5 font-display text-[19px] font-semibold text-[var(--text)]">Your hive is empty — for now</h2>
+          <h2 className="mb-1.5 font-display text-[19px] font-semibold text-[var(--text)]">Your personal AI workspace starts here</h2>
           <p className="mx-auto mb-6 max-w-md text-[14px] leading-relaxed text-[var(--text-muted)]">
-            Create a workspace and Waggle starts remembering your work. Tomorrow this screen
-            greets you with what you did, what ran overnight, and what to do next.
+            Waggle remembers you, knows your projects, evolves with each decision, and guides the next step
+            while it runs the right AI underneath.
           </p>
           <button
             type="button"
@@ -153,6 +153,13 @@ function GreetingHeader({
       <h1 className="font-display text-[clamp(34px,5vw,52px)] font-semibold leading-[1.04] tracking-[-0.02em] text-[var(--text)]">
         {greeting}
       </h1>
+      <p
+        className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--text-muted)]"
+        data-testid="home-cockpit-positioning"
+      >
+        Waggle is your personal AI workspace: it remembers you, knows your projects, evolves with each decision,
+        guides the next step, and runs the right AI underneath.
+      </p>
       {workspaceCount > 0 && (
         <p className="mt-2 text-[clamp(17px,2.2vw,22px)] font-medium text-[var(--text-2)]">
           {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you.

@@ -1,12 +1,12 @@
 {
   "landing": {
     "metadata": {
-      "title": "Waggle — The AI Workspace for Experts",
-      "description": "Be the expert. We'll be the AI. The workspace where you go to work — it knows you, knows your projects, and runs the AI so you don't have to. Local-first.",
-      "og_title": "Waggle — The AI Workspace for Experts",
-      "og_description": "Be the expert. We'll be the AI. It knows you, knows your projects, runs the AI for you, and stays yours. Where experts go to work — local-first.",
-      "twitter_title": "Waggle — The AI Workspace for Experts",
-      "twitter_description": "Be the expert. We'll be the AI. The workspace that knows you and your work, runs the AI for you, and stays yours."
+      "title": "Waggle — Your Personal AI Workspace",
+      "description": "Your AI should know how you work. Waggle remembers you, your projects, and your decisions, then runs the right AI underneath so you stay focused on the work. Local-first.",
+      "og_title": "Waggle — Your Personal AI Workspace",
+      "og_description": "Your AI should know how you work. Waggle remembers you, your projects, and your decisions, guides the next step, and stays yours. Local-first.",
+      "twitter_title": "Waggle — Your Personal AI Workspace",
+      "twitter_description": "The personal AI workspace that remembers you, knows your work, evolves with each project, and stays yours."
     },
     "navbar": {
       "links": {
@@ -57,14 +57,14 @@
         "subhead": "Local-first by design, bar association compatible, full audit log per matter — work stays on your machine.",
         "body": "ChatGPT-as-malpractice-risk has stalled adoption in legal. Waggle's hive lives on the device; every recall carries provenance, every matter has a trail."
       },
-      "eyebrow": "The AI workspace for experts, not AI experts.",
-      "headline": "Be the expert. We'll be the AI.",
-      "subhead": "You didn't become an expert to babysit a model. Do your work; we'll run the AI.",
+      "eyebrow": "Personal AI workspace for experts",
+      "headline": "Your AI should know how you work.",
+      "subhead": "Waggle remembers you, your projects, and the way you make decisions. It evolves with the work, guides the next step, and runs the right AI underneath.",
       "cta_primary": "Start free",
-      "secondary_cta": "Want the full controls back? They're one click away.",
-      "microcopy_local_first": "Local-first",
-      "microcopy_any_model": "Any model, including small ones",
-      "microcopy_data": "Your data never leaves"
+      "secondary_cta": "See how it learns your work.",
+      "microcopy_local_first": "Knows you",
+      "microcopy_any_model": "Knows your work",
+      "microcopy_data": "Stays yours"
     },
     "hero_visual": {
       "aria_label": "Waggle hive memory visualization",
@@ -102,7 +102,7 @@
       "human_quote": ""
     },
     "pillars": {
-      "headline": "Two memories working together: one that knows how you like to work, one that knows the work itself — so you never start from a stranger.",
+      "headline": "One memory knows how you work. Another remembers the work itself. Together, they make every AI session feel like it already belongs to you.",
       "pillar_01": {
         "title": "It knows you",
         "body": "You're known here — so you never re-introduce yourself, never start from a stranger again. It already knows how you think and how you like your work done."
@@ -112,8 +112,8 @@
         "body": "Nothing is lost — walk back into any project after a day, a week, a quarter, and it's all still there, exactly as you left it."
       },
       "pillar_03": {
-        "title": "It runs the AI",
-        "body": "You stay the expert in your work. The prompting, routing, and scaffolding run underneath — on tap when you want them, out of your way when you don't. Keep every control you have today; we just stop making you use them."
+        "title": "It guides the AI",
+        "body": "You stay the expert in your work. Waggle handles the prompting, routing, and scaffolding underneath, then shows the next useful step instead of making you operate the machinery."
       },
       "pillar_04": {
         "title": "Your best work, and it's yours",
@@ -126,8 +126,8 @@
     },
     "comparison": {
       "eyebrow": "AI for doing your work — not operating it.",
-      "headline": "All the power of the tools built for engineers. None of the homework.",
-      "body": "The most powerful AI tools were built for people who want to operate AI — endless settings, prompts, and plumbing to master before you produce anything. Waggle takes the opposite bet: your time is too valuable to spend on AI plumbing, so we run it for you and hand back the finished work. You didn't become an expert to babysit a model."
+      "headline": "Stop starting over with a stranger.",
+      "body": "Most AI tools make you explain yourself again and again: the client, the voice, the decision, the file, the standard. Waggle takes the opposite bet. It keeps the memory of you and your work, then runs the models underneath so the next session starts where the last one left off."
     },
     "wow": {
       "headline": "It's 6pm. You thought about your work all day — not the AI.",
@@ -135,8 +135,8 @@
     },
     "how_it_works": {
       "eyebrow": "How it works",
-      "headline": "A simple division of labor.",
-      "subhead": "You bring the judgment. Waggle brings the AI. Open it once and your context and your work-in-progress are already there waiting — nothing re-explained, nothing lost.",
+      "headline": "It learns the work around you.",
+      "subhead": "You bring the judgment. Waggle remembers the context, guides the next step, and brings the right AI to the moment. Open it once and your work-in-progress is already waiting — nothing re-explained, nothing lost.",
       "step_01": {
         "number": "01",
         "title": "Bring it all in",
@@ -242,8 +242,8 @@
       }
     },
     "final_cta": {
-      "headline": "Be the expert. We'll be the AI.",
-      "subhead": "Bring your work home to the one place that knows you, knows your projects, and makes everything you ship genuinely your best — then pick up exactly where you left off.",
+      "headline": "Your AI should know how you work.",
+      "subhead": "Bring your work home to the one place that remembers you, knows your projects, evolves with every decision, and makes the next step easier to take.",
       "compare_cta": "Compare tiers →",
       "kvark_text": "Need it on your organization's sovereign infrastructure?",
       "kvark_cta": "Talk to KVARK team →"
