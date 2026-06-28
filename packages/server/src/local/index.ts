@@ -2269,6 +2269,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
 
   // P0-3: Cached API key validation — verify key actually works, not just exists
   let keyValidationCache: { valid: boolean; checkedAt: number; keyHash: string } | null = null;
+  let keyValidationInFlight: Promise<void> | null = null;
   const KEY_VALIDATION_TTL = 30 * 1000; // 30 seconds — short so vault updates are picked up quickly
 
   function hashKey(key: string): string {
@@ -2280,10 +2281,33 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     return String(h);
   }
 
+  function getAnthropicApiKey(): string {
+    const vaultKey = server.vault?.get('anthropic')?.value;
+    return vaultKey || process.env.ANTHROPIC_API_KEY || '';
+  }
+
+  function freshAnthropicValidation(): boolean | null {
+    const apiKey = getAnthropicApiKey();
+    if (!apiKey) return false;
+    const currentHash = hashKey(apiKey);
+    if (
+      keyValidationCache &&
+      keyValidationCache.keyHash === currentHash &&
+      Date.now() - keyValidationCache.checkedAt < KEY_VALIDATION_TTL
+    ) {
+      return keyValidationCache.valid;
+    }
+    return null;
+  }
+
+  function markAnthropicProxyDegraded(detail = 'Built-in Anthropic proxy (API key invalid or expired — update in Settings > API Keys)'): void {
+    server.agentState.llmProvider.health = 'degraded';
+    server.agentState.llmProvider.detail = detail;
+  }
+
   async function validateAnthropicKey(): Promise<boolean> {
     // Read key from vault first, fall back to env var
-    const vaultKey = server.vault?.get('anthropic')?.value;
-    const apiKey = vaultKey || process.env.ANTHROPIC_API_KEY || '';
+    const apiKey = getAnthropicApiKey();
 
     if (!apiKey) return false;
 
@@ -2321,6 +2345,20 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       // Network error — don't cache failure, key might be fine
       return keyValidationCache?.valid ?? true;
     }
+  }
+
+  function validateAnthropicKeyInBackground(): void {
+    if (keyValidationInFlight) return;
+    keyValidationInFlight = validateAnthropicKey()
+      .then((valid) => {
+        if (!valid && server.agentState.llmProvider.provider === 'anthropic-proxy') {
+          markAnthropicProxyDegraded();
+        }
+      })
+      .finally(() => {
+        keyValidationInFlight = null;
+      });
+    keyValidationInFlight.catch(() => { /* fire-and-forget guard */ });
   }
 
   // Expose cache invalidation for settings route to call after key update
@@ -2421,13 +2459,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
 
     // P0-3: If provider is anthropic-proxy and claims healthy, validate the key actually works
     if (llm.provider === 'anthropic-proxy' && llm.health === 'healthy') {
-      const keyValid = await validateAnthropicKey();
-      if (!keyValid) {
+      const keyValid = freshAnthropicValidation();
+      if (keyValid === false) {
         llm.health = 'degraded';
         llm.detail = 'Built-in Anthropic proxy (API key invalid or expired — update in Settings > API Keys)';
-        // Also update the cached provider status so chat route picks it up
-        server.agentState.llmProvider.health = 'degraded';
-        server.agentState.llmProvider.detail = llm.detail;
+        markAnthropicProxyDegraded(llm.detail);
+      } else if (keyValid === null) {
+        validateAnthropicKeyInBackground();
       }
     }
     const dbHealthy = (() => {

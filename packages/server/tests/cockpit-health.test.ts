@@ -1,7 +1,7 @@
 /**
  * Cockpit health endpoint enhancements — memoryStats, serviceHealth, defaultModel.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -85,5 +85,27 @@ describe('Cockpit health endpoint enhancements', () => {
     expect(body.llm.health).toBeDefined();
     expect(body.database).toBeDefined();
     expect(body.database.healthy).toBe(true);
+  });
+
+  it('does not block first health response on slow live provider validation', async () => {
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'healthy',
+      detail: 'test provider',
+      checkedAt: new Date().toISOString(),
+    };
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return { status: 200 } as Response;
+    });
+    const started = Date.now();
+    try {
+      const res = await server.inject({ method: 'GET', url: '/health' });
+      const elapsed = Date.now() - started;
+      expect(res.statusCode).toBe(200);
+      expect(elapsed).toBeLessThan(100);
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

@@ -42,6 +42,18 @@ interface DimensionScore {
   gaps: string[];
 }
 
+interface ColdStartScore {
+  score: number;
+  grade: string;
+  evidence: string[];
+  gaps: string[];
+}
+
+interface WorkflowCompletion {
+  completed: boolean;
+  evidence: string[];
+}
+
 interface PersonaScore {
   id: string;
   name: string;
@@ -71,8 +83,11 @@ interface AuditResult {
   overall: {
     score: number;
     grade: string;
+    coldStartScore: number;
+    coldStartGrade: string;
     positioningVerdict: string;
   };
+  coldStart: ColdStartScore;
   addictionLevel: string;
   personas: PersonaScore[];
   improvementAreas: ImprovementArea[];
@@ -86,6 +101,7 @@ interface ProbeContext {
   shellLoaded: boolean;
   shellText: string;
   consoleErrors: string[];
+  coldHealth: { status: number; ok: boolean; ms: number; body: unknown; error?: string };
   authEvidence?: string[];
   api: Record<string, { status: number; ok: boolean; ms: number; body: unknown; error?: string }>;
   personaIds: string[];
@@ -94,11 +110,23 @@ interface ProbeContext {
   connectorsText: string;
   marketplaceText: string;
   memory: Record<string, { saved: boolean; recalled: boolean; isolated: boolean; evidence: string[] }>;
+  workflowCompletion: Record<string, WorkflowCompletion>;
 }
 
 interface ProbeAuth {
   headers: Record<string, string>;
   evidence: string[];
+}
+
+interface ProbeWorkspace {
+  available: boolean;
+  id: string;
+  evidence: string[];
+}
+
+interface ProbeWorkspacePool {
+  primary: ProbeWorkspace;
+  comparison: ProbeWorkspace;
 }
 
 const PERSONAS: PersonaDefinition[] = [
@@ -203,6 +231,13 @@ function addictionLevelFor(score: number): string {
   return 'weak';
 }
 
+function coldStartGradeFor(score: number): string {
+  if (score >= 90) return 'Fast first-session readiness';
+  if (score >= 75) return 'Usable but monitor first-session speed';
+  if (score >= 55) return 'Noticeable cold-start drag';
+  return 'Cold-start risk';
+}
+
 function textIncludesAny(haystack: string, needles: string[]): boolean {
   const lower = haystack.toLowerCase();
   return needles.some((needle) => lower.includes(needle.toLowerCase()));
@@ -215,8 +250,19 @@ function renderMarkdown(audit: AuditResult): string {
   lines.push(`Generated: ${audit.generatedAt}`);
   lines.push(`Overall score: ${audit.overall.score}/100`);
   lines.push(`Grade: ${audit.overall.grade}`);
+  lines.push(`Cold-start readiness: ${audit.overall.coldStartScore}/100 (${audit.overall.coldStartGrade})`);
   lines.push(`AI OS verdict: ${audit.overall.positioningVerdict}`);
   lines.push(`Addiction level: ${audit.addictionLevel}`);
+  lines.push('');
+  lines.push('## Cold-Start Readiness');
+  lines.push('');
+  lines.push(`Score: ${audit.coldStart.score}/100`);
+  for (const evidence of audit.coldStart.evidence) {
+    lines.push(`- ${evidence}`);
+  }
+  for (const gap of audit.coldStart.gaps) {
+    lines.push(`- Gap: ${gap}`);
+  }
   lines.push('');
   lines.push('## Persona Scores');
   lines.push('');
@@ -367,7 +413,7 @@ async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: string, auth?: ProbeAuth): Promise<{ available: boolean; id: string; evidence: string[] }> {
+async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: string, auth?: ProbeAuth): Promise<ProbeWorkspace> {
   const evidence: string[] = [];
   const response = await request.post(`${BASE}/api/workspaces`, {
     timeout: API_PROBE_TIMEOUT_MS,
@@ -523,10 +569,10 @@ async function pollMemorySearch(
   };
 }
 
-async function probeMemory(request: APIRequestContext, persona: PersonaDefinition, auth?: ProbeAuth) {
+async function probeMemory(request: APIRequestContext, persona: PersonaDefinition, auth?: ProbeAuth, pool?: ProbeWorkspacePool, runId = '') {
   const workspace = `ai-os-audit-${persona.id}-${Date.now()}`;
   const otherWorkspace = `${workspace}-isolation`;
-  const primary = await ensureProbeWorkspace(request, workspace, auth);
+  const primary = pool?.primary ?? await ensureProbeWorkspace(request, workspace, auth);
 
   if (!primary.available) {
     return {
@@ -540,13 +586,15 @@ async function probeMemory(request: APIRequestContext, persona: PersonaDefinitio
     };
   }
 
-  const comparison = await ensureProbeWorkspace(request, otherWorkspace, auth);
-  const save = await saveMemory(request, primary.id, persona.memoryAnchor, auth);
+  const comparison = pool?.comparison ?? await ensureProbeWorkspace(request, otherWorkspace, auth);
+  const memoryAnchor = runId ? `${persona.memoryAnchor} Audit run ${runId}.` : persona.memoryAnchor;
+  const memoryQuery = runId ? `${persona.memoryQuery} ${runId}` : persona.memoryQuery;
+  const save = await saveMemory(request, primary.id, memoryAnchor, auth);
   const recall = save.saved
-    ? await pollMemorySearch(request, primary.id, persona.memoryQuery, persona.memoryAnchor, 'Recall', auth)
+    ? await pollMemorySearch(request, primary.id, memoryQuery, memoryAnchor, 'Recall', auth)
     : { found: false, checked: false, evidence: ['Memory recall skipped because the memory save did not succeed.'] };
   const isolation = comparison.available
-    ? await pollMemorySearch(request, comparison.id, persona.memoryAnchor, persona.memoryAnchor, 'Isolation', auth)
+    ? await pollMemorySearch(request, comparison.id, memoryAnchor, memoryAnchor, 'Isolation', auth)
     : { found: false, checked: false, evidence: ['Isolation search skipped because the comparison workspace was unavailable.'] };
   const isolationProven = comparison.available && isolation.checked && !isolation.found;
   return {
@@ -569,12 +617,79 @@ async function probeMemory(request: APIRequestContext, persona: PersonaDefinitio
   };
 }
 
+async function probeWorkflowCompletion(request: APIRequestContext, persona: PersonaDefinition, auth?: ProbeAuth, probeWorkspace?: ProbeWorkspace, runId = ''): Promise<WorkflowCompletion> {
+  const workspaceName = `ai-os-flow-${persona.id}-${Date.now()}`;
+  const workspace = probeWorkspace ?? await ensureProbeWorkspace(request, workspaceName, auth);
+  const evidence = [...workspace.evidence];
+  if (!workspace.available) {
+    return {
+      completed: false,
+      evidence: [...evidence, 'Workflow proof skipped because the probe workspace was unavailable.'],
+    };
+  }
+
+  try {
+    const title = `${persona.name}: prove ${persona.oneToolCriterion}${runId ? ` (${runId})` : ''}`;
+    const createTask = await request.post(`${BASE}/api/workspaces/${encodeURIComponent(workspace.id)}/tasks`, {
+      timeout: API_PROBE_TIMEOUT_MS,
+      headers: auth?.headers,
+      data: {
+        title,
+        creatorName: 'AI OS audit',
+        assigneeName: persona.name,
+      },
+    });
+    const createBody = await readResponseBody(createTask);
+    const created = asRecord(createBody);
+    const taskId = typeof created.id === 'string' ? created.id : '';
+    evidence.push(`Workflow task create returned ${createTask.status()} with ${bodySummary(createBody)}.`);
+    if (!createTask.ok() || !taskId) {
+      return { completed: false, evidence: [...evidence, 'Workflow task was not created with a readable task id.'] };
+    }
+
+    const completeTask = await request.patch(`${BASE}/api/workspaces/${encodeURIComponent(workspace.id)}/tasks/${encodeURIComponent(taskId)}`, {
+      timeout: API_PROBE_TIMEOUT_MS,
+      headers: auth?.headers,
+      data: { status: 'done' },
+    });
+    const completeBody = await readResponseBody(completeTask);
+    evidence.push(`Workflow task completion returned ${completeTask.status()} with ${bodySummary(completeBody)}.`);
+    if (!completeTask.ok()) {
+      return { completed: false, evidence };
+    }
+
+    const listDone = await request.get(`${BASE}/api/workspaces/${encodeURIComponent(workspace.id)}/tasks?status=done`, {
+      timeout: API_PROBE_TIMEOUT_MS,
+      headers: auth?.headers,
+    });
+    const listBody = await readResponseBody(listDone);
+    const rows = Array.isArray(asRecord(listBody).tasks) ? asRecord(listBody).tasks as unknown[] : [];
+    const listedDone = rows.map(asRecord).some((task) => task.id === taskId && task.status === 'done');
+    evidence.push(`Workflow done-task list returned ${listDone.status()} with ${rows.length} done task(s).`);
+    return {
+      completed: listDone.ok() && listedDone,
+      evidence: [
+        ...evidence,
+        listedDone
+          ? 'Workflow proof completed: task was created, marked done, and found in the done list.'
+          : 'Workflow proof did not find the completed task in the done list.',
+      ],
+    };
+  } catch (error) {
+    return {
+      completed: false,
+      evidence: [...evidence, `Workflow proof failed: ${requestErrorSummary(error)}.`],
+    };
+  }
+}
+
 async function collectProbeContext(page: Page): Promise<ProbeContext> {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
 
+  const coldHealth = await timedGet(page.request, '/health');
   let shellText = '';
   let shellLoaded = false;
   const shellResponse = await page.goto(`${BASE}/home?${SKIP}`, { waitUntil: 'domcontentloaded' }).catch((error: unknown) => {
@@ -613,12 +728,17 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
   const personaBody = api.personas?.body as { personas?: Array<{ id?: string; name?: string; description?: string }> } | Array<{ id?: string }>;
   const personaRows = Array.isArray(personaBody) ? personaBody : Array.isArray(personaBody?.personas) ? personaBody.personas : [];
   const personaIds = personaRows.map((persona) => String(persona.id ?? ''));
+  const runId = `audit-${Date.now()}`;
+  const workspacePool: ProbeWorkspacePool = {
+    primary: await ensureProbeWorkspace(page.request, `ai-os-audit-primary-${runId}`, auth),
+    comparison: await ensureProbeWorkspace(page.request, `ai-os-audit-isolation-${runId}`, auth),
+  };
 
   const memory: ProbeContext['memory'] = {};
   const memoryResults = await Promise.allSettled(
     PERSONAS.map(async (persona) => ({
       persona,
-      result: await probeMemory(page.request, persona, auth),
+      result: await probeMemory(page.request, persona, auth, workspacePool, runId),
     })),
   );
   for (let index = 0; index < memoryResults.length; index += 1) {
@@ -636,10 +756,31 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
     }
   }
 
+  const workflowCompletion: ProbeContext['workflowCompletion'] = {};
+  const workflowResults = await Promise.allSettled(
+    PERSONAS.map(async (persona) => ({
+      persona,
+      result: await probeWorkflowCompletion(page.request, persona, auth, workspacePool.primary, runId),
+    })),
+  );
+  for (let index = 0; index < workflowResults.length; index += 1) {
+    const result = workflowResults[index];
+    const persona = PERSONAS[index];
+    if (result.status === 'fulfilled') {
+      workflowCompletion[result.value.persona.id] = result.value.result;
+    } else {
+      workflowCompletion[persona.id] = {
+        completed: false,
+        evidence: [`Workflow probe failed for ${persona.name}: ${requestErrorSummary(result.reason)}.`],
+      };
+    }
+  }
+
   return {
     shellLoaded,
     shellText,
     consoleErrors,
+    coldHealth,
     authEvidence: auth.evidence,
     api,
     personaIds,
@@ -648,11 +789,13 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
     connectorsText: JSON.stringify(api.connectors?.body ?? ''),
     marketplaceText: JSON.stringify(api.marketplace?.body ?? ''),
     memory,
+    workflowCompletion,
   };
 }
 
 function scorePersona(persona: PersonaDefinition, context: ProbeContext): PersonaScore {
   const memory = context.memory[persona.id];
+  const workflowCompletion = context.workflowCompletion?.[persona.id];
   const coreApiKeys = ['health', 'personas', 'workspaces'];
   const fastCoreApis = coreApiKeys.filter((key) => context.api[key]?.ok && context.api[key].ms < 800);
   const coreApiEvidence = coreApiKeys.map((key) => {
@@ -662,6 +805,7 @@ function scorePersona(persona: PersonaDefinition, context: ProbeContext): Person
     if (result.ok) return `${key} responded in ${result.ms}ms, slower than the 800ms target.`;
     return `${key} returned ${result.status || 'no status'} in ${result.ms}ms with ${bodySummary(result.body)}.`;
   });
+  const completedWorkflow = workflowCompletion?.completed === true;
   const relevantPersona = persona.expectedPersonaIds.some((id) => context.personaIds.includes(id));
   const relevantSkills = textIncludesAny(`${context.skillsText} ${context.marketplaceText}`, persona.expectedSkillTerms);
   const relevantConnectors = textIncludesAny(context.connectorsText, persona.expectedConnectorTerms);
@@ -715,16 +859,19 @@ function scorePersona(persona: PersonaDefinition, context: ProbeContext): Person
       id: 'workflowCoverage',
       label: 'Workflow coverage',
       max: 15,
-      score: clampScore((relevantPersona ? 5 : 0) + (relevantSkills ? 5 : 0) + (relevantConnectors ? 5 : 0), 15),
+      score: clampScore((relevantPersona ? 4 : 0) + (relevantSkills ? 4 : 0) + (relevantConnectors ? 4 : 0) + (completedWorkflow ? 3 : 0), 15),
       evidence: [
         relevantPersona ? 'Relevant persona is present.' : `Missing obvious persona match from ${persona.expectedPersonaIds.join(', ')}.`,
         relevantSkills ? 'Relevant skill or marketplace language found.' : `No clear skill match for ${persona.expectedSkillTerms.join(', ')}.`,
         relevantConnectors ? 'Relevant connector language found.' : `No clear connector match for ${persona.expectedConnectorTerms.join(', ')}.`,
+        completedWorkflow ? 'A real workflow was created, completed, and listed.' : 'No completed workflow proof was recorded.',
+        ...(workflowCompletion?.evidence.slice(0, 3) ?? []),
       ],
       gaps: [
         ...(relevantPersona ? [] : ['Add or surface a persona that matches this workflow.']),
         ...(relevantSkills ? [] : ['Improve skill/template coverage for this workflow.']),
         ...(relevantConnectors ? [] : ['Improve connector coverage or setup guidance for this workflow.']),
+        ...(completedWorkflow ? [] : ['Actual workflow completion was not proven by this audit.']),
       ],
     },
     {
@@ -831,10 +978,57 @@ function positioningVerdict(score: number): string {
   return 'Waggle should fix core value proof before using AI OS as the main market claim.';
 }
 
+function scoreColdStart(context: ProbeContext): ColdStartScore {
+  const warmHealth = context.api.health;
+  const cold = context.coldHealth;
+  const coldLatency = cold.ok
+    ? cold.ms < 800
+      ? 35
+      : cold.ms < 1500
+        ? 22
+        : 10
+    : 0;
+  const warmLatency = warmHealth?.ok
+    ? warmHealth.ms < 800
+      ? 25
+      : warmHealth.ms < 1500
+        ? 15
+        : 5
+    : 0;
+  const score = clampScore(
+    coldLatency
+    + warmLatency
+    + (context.shellLoaded ? 25 : 0)
+    + (context.consoleErrors.length === 0 ? 15 : 0),
+    100,
+  );
+  const gaps = [
+    ...(cold.ok ? [] : ['Cold health probe did not respond successfully.']),
+    ...(cold.ok && cold.ms < 800 ? [] : ['Cold health probe should return under 800ms.']),
+    ...(warmHealth?.ok && warmHealth.ms < 800 ? [] : ['Warm health probe should return under 800ms.']),
+    ...(context.shellLoaded ? [] : ['First meaningful shell did not load.']),
+    ...(context.consoleErrors.length === 0 ? [] : ['Console errors appeared during first load.']),
+  ];
+  return {
+    score,
+    grade: coldStartGradeFor(score),
+    evidence: [
+      `Cold health returned ${cold.status || 'no status'} in ${cold.ms}ms with ${bodySummary(cold.body)}.`,
+      warmHealth
+        ? `Warm health returned ${warmHealth.status || 'no status'} in ${warmHealth.ms}ms with ${bodySummary(warmHealth.body)}.`
+        : 'Warm health was not probed.',
+      context.shellLoaded ? 'First meaningful shell loaded.' : 'First meaningful shell did not load.',
+      `${context.consoleErrors.length} console error(s) captured on first load.`,
+    ],
+    gaps,
+  };
+}
+
 async function runAiOsPositioningAudit(page: Page, testInfo: TestInfo): Promise<AuditResult> {
   const context = await collectProbeContext(page);
   const personas = PERSONAS.map((persona) => scorePersona(persona, context));
   const overallScore = Math.round(personas.reduce((sum, persona) => sum + persona.total, 0) / personas.length);
+  const coldStart = scoreColdStart(context);
   const generatedAt = new Date().toISOString();
   const markdownPath = testInfo.outputPath('ai-os-positioning-audit.md');
   const jsonPath = testInfo.outputPath('ai-os-positioning-audit.json');
@@ -849,8 +1043,11 @@ async function runAiOsPositioningAudit(page: Page, testInfo: TestInfo): Promise<
     overall: {
       score: overallScore,
       grade: gradeFor(overallScore),
+      coldStartScore: coldStart.score,
+      coldStartGrade: coldStart.grade,
       positioningVerdict: positioningVerdict(overallScore),
     },
+    coldStart,
     addictionLevel: addictionLevelFor(addictionScore),
     personas,
     improvementAreas: collectImprovementAreas(personas),
@@ -960,7 +1157,15 @@ test.describe('AI OS positioning audit', () => {
       overall: {
         score: 100,
         grade: gradeFor(100),
+        coldStartScore: 100,
+        coldStartGrade: coldStartGradeFor(100),
         positioningVerdict: positioningVerdict(100),
+      },
+      coldStart: {
+        score: 100,
+        grade: coldStartGradeFor(100),
+        evidence: ['Perfect cold start.'],
+        gaps: [],
       },
       addictionLevel: addictionLevelFor(100),
       personas: perfectPersonas,
@@ -1054,8 +1259,9 @@ test.describe('AI OS positioning audit', () => {
         if (url.includes('/api/memory/search')) {
           const parsed = new URL(url);
           const workspace = parsed.searchParams.get('workspace') ?? '';
-          const persona = PERSONAS.find((definition) => workspace.includes(definition.id));
-          return response(200, { results: persona ? [{ content: persona.memoryAnchor }] : [] });
+          return response(200, {
+            results: workspace.includes('isolation') ? [] : [{ content: PERSONAS.map((definition) => definition.memoryAnchor).join(' ') }],
+          });
         }
         return response(200, {});
       },
@@ -1066,8 +1272,8 @@ test.describe('AI OS positioning audit', () => {
           return Promise.resolve(response(200, { id: workspaceName }));
         }
         if (url.includes('/api/memory/frames')) {
-          const workspace = String(options?.data?.workspace ?? '');
-          if (workspace.includes(PERSONAS[0].id)) {
+          const content = String(options?.data?.content ?? '');
+          if (content.includes(PERSONAS[0].memoryAnchor)) {
             throw new Error('sync memory probe failure');
           }
           activeSaves += 1;
@@ -1075,7 +1281,7 @@ test.describe('AI OS positioning audit', () => {
           return new Promise<ReturnType<typeof response>>((resolve) => {
             setTimeout(() => {
               activeSaves -= 1;
-              resolve(response(200, { saved: true, frameId: `frame-${workspace}` }));
+              resolve(response(200, { saved: true, frameId: `frame-${activeSaves}` }));
             }, 25);
           });
         }
@@ -1166,6 +1372,172 @@ test.describe('AI OS positioning audit', () => {
     expect(context.api.workspaces.ok).toBe(true);
     expect(context.memory[PERSONAS[0].id].saved).toBe(true);
     expect(protectedProbeUrls.length).toBeGreaterThan(0);
+  });
+
+  test('reports cold-start readiness separately from warm product score', async ({}, testInfo) => {
+    const response = (status: number, body: unknown) => ({
+      ok: () => status >= 200 && status < 300,
+      status: () => status,
+      statusText: () => String(status),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    let healthCalls = 0;
+    const request = {
+      get: async (url: string) => {
+        if (url.includes('/api/auth/session-token')) return response(200, { token: 'audit-token' });
+        if (url.includes('/health')) {
+          healthCalls += 1;
+          if (healthCalls === 1) await wait(900);
+          return response(200, { status: 'ok' });
+        }
+        if (url.includes('/api/personas')) {
+          return response(200, { personas: PERSONAS.flatMap((persona) => persona.expectedPersonaIds).map((id) => ({ id })) });
+        }
+        if (url.includes('/api/memory/search')) {
+          const parsed = new URL(url);
+          const workspace = parsed.searchParams.get('workspace') ?? '';
+          return response(200, {
+            results: workspace.includes('isolation') ? [] : [{ content: PERSONAS.map((definition) => definition.memoryAnchor).join(' ') }],
+          });
+        }
+        if (url.includes('/tasks')) return response(200, { tasks: [{ id: 'task-1', status: 'done' }] });
+        return response(200, {
+          results: [{
+            name: 'gmail google slack notion calendar excel microsoft github mcp webhook email marketing document presentation research writing brand markdown spreadsheet csv analysis skill automation agent',
+          }],
+        });
+      },
+      post: async (url: string, options?: { data?: Record<string, unknown> }) => {
+        if (url.includes('/tasks')) return response(201, { id: 'task-1', title: options?.data?.title, status: 'open' });
+        if (url.includes('/api/workspaces')) return response(200, { id: options?.data?.name ?? 'workspace' });
+        if (url.includes('/api/memory/frames')) return response(200, { saved: true, frameId: 'frame-1' });
+        return response(200, {});
+      },
+      patch: async () => response(200, { id: 'task-1', status: 'done' }),
+    } as unknown as APIRequestContext;
+    const page = {
+      on: () => undefined,
+      goto: async () => response(200, {}),
+      waitForSelector: async () => undefined,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        innerText: async () => 'Waggle is the personal AI workspace that remembers your work, keeps context, and helps you move from capture to finished outcomes.',
+      }),
+      request,
+    } as unknown as Page;
+
+    const audit = await runAiOsPositioningAudit(page, testInfo);
+
+    expect(audit.overall.score).toBeGreaterThanOrEqual(90);
+    expect(audit.overall.coldStartScore).toBeLessThan(audit.overall.score);
+    expect(audit.coldStart.evidence.join('\n')).toContain('Cold health');
+    expect(healthCalls).toBeGreaterThanOrEqual(2);
+  });
+
+  test('requires completed workflow proof before awarding full workflow coverage', () => {
+    const persona = PERSONAS[0];
+    const context: ProbeContext = {
+      shellLoaded: true,
+      shellText: 'Waggle workspace AI for customer follow-ups.',
+      consoleErrors: [],
+      api: {
+        health: { status: 200, ok: true, ms: 100, body: {} },
+        personas: { status: 200, ok: true, ms: 100, body: {} },
+        workspaces: { status: 200, ok: true, ms: 100, body: {} },
+        marketplace: { status: 200, ok: true, ms: 100, body: {} },
+        hooks: { status: 200, ok: true, ms: 100, body: {} },
+        fleet: { status: 200, ok: true, ms: 100, body: {} },
+        events: { status: 200, ok: true, ms: 100, body: {} },
+        tier: { status: 200, ok: true, ms: 100, body: {} },
+      },
+      personaIds: persona.expectedPersonaIds,
+      personaText: '',
+      skillsText: persona.expectedSkillTerms.join(' '),
+      connectorsText: persona.expectedConnectorTerms.join(' '),
+      marketplaceText: '',
+      memory: {
+        [persona.id]: { saved: true, recalled: true, isolated: true, evidence: ['Memory proof exists.'] },
+      },
+      workflowCompletion: {
+        [persona.id]: { completed: false, evidence: ['No completed workflow proof.'] },
+      },
+    };
+
+    const score = scorePersona(persona, context);
+    const workflow = score.dimensions.find((dimension) => dimension.id === 'workflowCoverage');
+
+    expect(workflow?.score).toBeLessThan(workflow?.max ?? 0);
+    expect(workflow?.gaps).toContain('Actual workflow completion was not proven by this audit.');
+  });
+
+  test('reuses bounded probe workspaces so report mode does not exhaust free-tier limits', async () => {
+    const response = (status: number, body: unknown) => ({
+      ok: () => status >= 200 && status < 300,
+      status: () => status,
+      statusText: () => String(status),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    let workspaceCreates = 0;
+    const taskRows: Record<string, unknown> = {};
+    const request = {
+      get: async (url: string) => {
+        if (url.includes('/api/auth/session-token')) return response(200, { token: 'audit-token' });
+        if (url.includes('/health')) return response(200, { status: 'ok' });
+        if (url.includes('/api/personas')) {
+          return response(200, { personas: PERSONAS.flatMap((persona) => persona.expectedPersonaIds).map((id) => ({ id })) });
+        }
+        if (url.includes('/api/memory/search')) {
+          const parsed = new URL(url);
+          const workspace = parsed.searchParams.get('workspace') ?? '';
+          return response(200, {
+            results: workspace.includes('isolation') ? [] : [{ content: PERSONAS.map((persona) => persona.memoryAnchor).join(' ') }],
+          });
+        }
+        if (url.includes('/tasks')) return response(200, { tasks: Object.values(taskRows) });
+        return response(200, {
+          results: [{
+            name: 'gmail google slack notion calendar excel microsoft github mcp webhook email marketing document presentation research writing brand markdown spreadsheet csv analysis skill automation agent',
+          }],
+        });
+      },
+      post: async (url: string, options?: { data?: Record<string, unknown> }) => {
+        if (url.endsWith('/api/workspaces')) {
+          workspaceCreates += 1;
+          if (workspaceCreates > 2) return response(403, { error: 'Workspace limit reached for FREE tier (2 max).' });
+          return response(201, { id: options?.data?.name ?? `workspace-${workspaceCreates}` });
+        }
+        if (url.includes('/tasks')) {
+          const id = `task-${Object.keys(taskRows).length + 1}`;
+          taskRows[id] = { id, title: options?.data?.title, status: 'done' };
+          return response(201, { id, status: 'open' });
+        }
+        if (url.includes('/api/memory/frames')) return response(200, { saved: true, frameId: 'frame-1' });
+        return response(200, {});
+      },
+      patch: async (url: string) => {
+        const taskId = url.split('/').pop() ?? '';
+        taskRows[taskId] = { ...(asRecord(taskRows[taskId])), id: taskId, status: 'done' };
+        return response(200, taskRows[taskId]);
+      },
+    } as unknown as APIRequestContext;
+    const page = {
+      on: () => undefined,
+      goto: async () => response(200, {}),
+      waitForSelector: async () => undefined,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        innerText: async () => 'Waggle is the personal AI workspace that remembers your work, keeps context, and helps you move from capture to finished outcomes.',
+      }),
+      request,
+    } as unknown as Page;
+
+    const context = await collectProbeContext(page);
+
+    expect(workspaceCreates).toBeLessThanOrEqual(2);
+    expect(Object.values(context.memory).every((memory) => memory.saved && memory.recalled)).toBe(true);
+    expect(Object.values(context.workflowCompletion).every((workflow) => workflow.completed)).toBe(true);
   });
 
   test('generates a report-mode audit with five personas and score-aware improvement areas', async ({ page }, testInfo) => {
