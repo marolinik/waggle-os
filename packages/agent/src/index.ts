@@ -414,6 +414,20 @@ export {
   type SkillHygieneScanOptions, type SkillHygieneScanReport,
 } from './skill-hygiene.js';
 export {
+  getSkillAuditPath, loadSkillAudit, saveSkillAudit,
+  recordAuditBadge, getAuditBadge, isSkillVerified, clearAuditBadge, shouldSkipAudit,
+  type SkillAuditBadge, type SkillAuditIndex, type SkipAuditOptions,
+} from './skill-audit-store.js';
+export {
+  auditSkill, runSkillAuditBatch, synthesizeAuditTask, runSkillUnderTest,
+  rewriteSkill, validateProposedRewrite,
+  AUDIT_SYNTH_RUBRIC, AUDIT_REWRITE_RUBRIC,
+  DEFAULT_VERIFY_THRESHOLD, DEFAULT_MAX_ATTEMPTS, MAX_ATTEMPTS_CAP,
+  DEMOTE_SCORE_FLOOR, DEFAULT_MIN_CONSECUTIVE_FAILS,
+  type SkillForAudit, type AuditTask, type SkillAuditOptions, type SkillAuditHooks,
+  type SkillAuditOutcome, type SkillAuditReport, type RewriteValidation,
+} from './skill-audit.js';
+export {
   buildComplianceDocDefinition,
   renderComplianceReportPdf,
   writeComplianceReportPdf,

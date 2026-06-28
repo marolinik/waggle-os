@@ -82,6 +82,7 @@ import { agentRoutes } from './routes/agent.js';
 import { skillRoutes } from './routes/skills.js';
 import { skillsAliasRoutes } from './routes/skills-aliases.js';
 import { skillsHygieneRoutes } from './routes/skills-hygiene.js';
+import { skillsAuditRoutes } from './routes/skills-audit.js';
 import { approvalRoutes } from './routes/approval.js';
 import { anthropicProxyRoutes } from './routes/anthropic-proxy.js';
 import { teamRoutes } from './routes/team.js';
@@ -2148,6 +2149,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // skillRoutes handlers, so it registers right after them.
   await server.register(skillsAliasRoutes);
   await server.register(skillsHygieneRoutes);
+  await server.register(skillsAuditRoutes);
   await server.register(approvalRoutes);
   await server.register(anthropicProxyRoutes);
   await server.register(teamRoutes);

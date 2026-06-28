@@ -82,6 +82,8 @@ const CapabilitiesApp = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [testResult, setTestResult] = useState<{ name: string; preview: string; metadata?: Record<string, unknown> } | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
+  /** §D2 — name of the skill currently being run-and-graded by the audit loop. */
+  const [verifying, setVerifying] = useState<string | null>(null);
   /** M-45 / P29 — pack detail drawer target. Null when closed. */
   const [selectedPack, setSelectedPack] = useState<SkillPack | null>(null);
   const [editingSkill, setEditingSkill] = useState<string | null>(null);
@@ -162,10 +164,13 @@ const CapabilitiesApp = () => {
         if (skillsRes.status === 'fulfilled') {
           setSkills(skillsRes.value.map((s) => {
             const name = s.id || s.name;
-            const meta = s as SkillPack & { preview?: string; initiator?: 'agent' | 'user'; source?: string };
+            const meta = s as SkillPack & { preview?: string; initiator?: 'agent' | 'user' | 'built-in'; source?: string; verified?: boolean; confidence?: number };
             return {
               name,
               preview: meta.preview,
+              // §D2: the run-and-grade "verified" badge rides the same GET /api/skills row.
+              verified: meta.verified === true,
+              confidence: meta.confidence,
               // P5/D4: agent provenance is authoritative — an agent-authored skill
               // is badged regardless of catalog membership.
               initiator: meta.initiator ?? 'user',
@@ -192,6 +197,30 @@ const CapabilitiesApp = () => {
     if (connecting) return;
     load();
   }, [load, connecting]);
+
+  /**
+   * §D2 — run the run-and-grade audit for ONE skill (scoped POST = a few LLM
+   * calls), then reload so a freshly-minted "verified" badge appears. A 403
+   * (non-PRO tier) throws AdapterHttpError and is routed to the UpgradeModal by
+   * the fetch chokepoint; any other failure surfaces in the result panel.
+   */
+  const handleVerifySkill = async (skillName: string) => {
+    setVerifying(skillName);
+    try {
+      const { report } = await adapter.auditSkills([skillName]);
+      const verdict = report.verified.includes(skillName)
+        ? 'verified ✓'
+        : report.flagged.includes(skillName) ? 'flagged for review (injection)'
+        : report.inconclusive.includes(skillName) ? 'inconclusive — try again'
+        : 'did not pass verification';
+      setTestResult({ name: skillName, preview: `Audit result: ${verdict}` });
+      load(); // refresh the badge
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'server unreachable';
+      setTestResult({ name: skillName, preview: `Verification unavailable — ${message}` });
+    }
+    finally { setVerifying(null); }
+  };
 
   // Shared 403→UpgradeModal routing. Other errors fall through to the caller
   // so they can show a toast or inline state without duplicating tier logic.
@@ -493,8 +522,10 @@ const CapabilitiesApp = () => {
                 key={s.name}
                 skill={s}
                 testing={testing === s.name}
+                verifying={verifying === s.name}
                 onTest={(sk) => void handleTestSkill(sk.name)}
                 onEdit={(sk) => setEditingSkill(sk.name)}
+                onVerify={(sk) => void handleVerifySkill(sk.name)}
               />
             ))}
           </ul>

@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const log = createLogger('skills');
 import { PluginManager, getStarterSkillsDir, listStarterSkills, listCapabilityPacks, getPackManifest } from '@waggle/sdk';
-import { loadSkills, loadSkillHygiene, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, type SkillTemplate } from '@waggle/agent';
+import { loadSkills, loadSkillHygiene, loadSkillAudit, clearAuditBadge, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, type SkillTemplate } from '@waggle/agent';
 import { computeSkillHash } from '@waggle/core';
 
 /** Capability family definitions — user-job-first grouping */
@@ -347,6 +347,8 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     const skills = loadSkills(waggleHome);
     // §D1: hygiene status (active/draft) per skill, from the sidecar.
     const hygiene = loadSkillHygiene(waggleHome);
+    // §D2: run-and-grade "verified" badge per skill, from the audit sidecar.
+    const audit = loadSkillAudit(waggleHome);
     // List rows are one-line summaries — raw markdown fragments ("## What to
     // do 1. **Identify…") read as broken text to every judge persona.
     const cleanPreview = (text: string): string =>
@@ -377,6 +379,14 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
             : cleanPreview(parsed.body);
         } catch { /* not on disk (starter/builtin) — keep the content-based preview */ }
         const hygieneEntry = hygiene[s.name];
+        const auditEntry = audit[s.name];
+        // §D2 staleness-on-read: a "verified" badge is only honest while the content
+        // it was earned on is unchanged. s.content is loadSkills (trimmed) content —
+        // the same domain the audit recorded its lastAuditedHash in — so an edit (via
+        // API or out-of-band) flips the hash and the badge silently goes unverified.
+        const verified = auditEntry?.verified === true
+          && auditEntry.lastAuditedHash != null
+          && auditEntry.lastAuditedHash === computeSkillHash(s.content);
         return {
           name: s.name,
           length: s.content.length,
@@ -387,6 +397,9 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
           advisory: hygieneEntry?.status === 'draft'
             ? { verdict: hygieneEntry.verdict, reason: hygieneEntry.reason }
             : undefined,
+          // §D2: the sellable "verified" badge — only when the audit confirmed it AND the content is unchanged.
+          verified,
+          confidence: verified ? auditEntry?.confidence : undefined,
         };
       }),
       count: skills.length,
@@ -563,6 +576,10 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
       server.skillHashStore.setHash(name, computeSkillHash(fs.readFileSync(result.path!, 'utf-8')));
     } catch { /* best-effort */ }
 
+    // §D2: an edit invalidates any "verified" badge — the audit was on the OLD
+    // content. Clear it so the card never shows verified on freshly-edited content.
+    try { clearAuditBadge(waggleHome, name); } catch { /* best-effort */ }
+
     return { ok: true, name };
   });
 
@@ -591,6 +608,10 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
     try {
       server.skillHashStore.removeHash(name);
     } catch { /* best-effort */ }
+
+    // §D2: a deleted skill has no badge — drop the audit entry so a re-created
+    // skill of the same name starts unverified.
+    try { clearAuditBadge(waggleHome, name); } catch { /* best-effort */ }
 
     return { ok: true, name };
   });

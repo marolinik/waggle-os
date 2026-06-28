@@ -1262,6 +1262,23 @@ class LocalAdapter {
     if (!res.ok) throw new Error(`updateSkill failed: ${res.status}`);
   }
 
+  /**
+   * §D2: run the run-and-grade skill-audit loop (PRO) to mint the "verified"
+   * badge. Pass a names[] to scope the run to specific skills (keeps each POST
+   * to a few LLM calls). A 403 (FREE/expired tier) throws AdapterHttpError and
+   * is routed to the UpgradeModal by the fetch chokepoint, like createSkill.
+   */
+  async auditSkills(names?: string[]): Promise<{
+    ok: boolean;
+    report: { verified: string[]; failed: string[]; flagged: string[]; inconclusive: string[]; demoted: string[]; skipped: string[] };
+  }> {
+    const res = await this.fetch('/api/skills/audit', {
+      method: 'POST',
+      body: JSON.stringify(names && names.length ? { names } : {}),
+    });
+    return res.json();
+  }
+
   /** C37 preview-only test: injected-prompt + parsed metadata, no LLM call. */
   async testSkill(id: string, testInput?: string): Promise<{
     skill: Record<string, unknown>;

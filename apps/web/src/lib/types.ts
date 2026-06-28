@@ -574,6 +574,13 @@ export interface Skill {
    */
   initiator?: 'agent' | 'user' | 'built-in';
   source?: string;
+  /**
+   * §D2 skill-audit: the run-and-grade "verified" badge (PRO upgrade artifact).
+   * Present + true only when the audit loop confirmed the skill passed; confidence
+   * is the deciding grade 0–1, shown as a percentage on the card.
+   */
+  verified?: boolean;
+  confidence?: number;
 }
 
 export interface FleetSession {

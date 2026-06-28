@@ -16,7 +16,11 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 export type SkillHygieneStatus = 'active' | 'draft';
-export type SkillHygieneVerdict = 'necessary' | 'redundant' | 'generic';
+// 'unverified' is produced ONLY by the D2 skill-audit loop (skill-audit.ts) when
+// it demotes a skill that persistently failed verification — it reuses this single
+// demotion path so there is one active/draft owner. The D1 hygiene judge never emits
+// it (HYGIENE_VERDICTS in skill-hygiene.ts stays the original three).
+export type SkillHygieneVerdict = 'necessary' | 'redundant' | 'generic' | 'unverified';
 
 export interface SkillHygieneEntry {
   status: SkillHygieneStatus;
