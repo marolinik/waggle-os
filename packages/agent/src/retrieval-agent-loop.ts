@@ -62,6 +62,7 @@ import {
 // variant not in REGISTRY. Otherwise: bucket-deterministic per requestId.
 // Audit: gepa-phase-5/manifest.yaml § canary_toggle, § scope_LOCKED.
 import { routeRequestToVariant } from './canary/phase-5-router.js';
+import type { ModelClass } from './model-class-router.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Injected dependencies
@@ -73,6 +74,14 @@ export interface LlmCallInput {
   thinking?: boolean;
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Declared workload class. A `'lightweight'` internal call (compaction,
+   * classification, short extraction) is deterministically routed to the cheap
+   * model by the LlmCallFn implementation. See model-class-router.ts.
+   */
+  class?: ModelClass;
+  /** When true, never route this call to a cloud budget model (keep on-device). */
+  privacyRequired?: boolean;
 }
 
 export interface LlmCallResult {

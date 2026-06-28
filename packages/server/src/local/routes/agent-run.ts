@@ -24,6 +24,8 @@ import {
   type LlmCallInput,
   type LlmCallResult,
   type RetrievalSearchFn,
+  resolveModelForClass,
+  LIGHTWEIGHT_MODEL,
 } from '@waggle/agent';
 
 // CC Sesija A A3.2 (2026-04-30): register Faza 1 GEPA-evolved variants into
@@ -88,15 +90,28 @@ export const agentRunRoutes: FastifyPluginAsync = async (server) => {
   function makeLlmCall(): LlmCallFn {
     return async (input: LlmCallInput): Promise<LlmCallResult> => {
       const started = Date.now();
-      const isQwen = input.model.includes('qwen');
+      // Deterministic capability-aware routing: a declared-lightweight internal
+      // call (compaction etc.) drops to Haiku-on-proxy (cheap, universal — works
+      // for a FREE user with no local model). privacyRequired keeps the call
+      // on-device and never downgrades to the cloud budget model. The agent's
+      // selected model is used as the on-device candidate when it is local.
+      const currentModel = server.agentState?.currentModel;
+      const localModel = currentModel?.startsWith('ollama/') ? currentModel : undefined;
+      const model = resolveModelForClass(input.model, {
+        klass: input.class,
+        privacyRequired: input.privacyRequired,
+        lightweightModel: LIGHTWEIGHT_MODEL,
+        localModel,
+      });
+      const isQwen = model.includes('qwen');
       const payload: Record<string, unknown> = {
-        model: input.model,
+        model,
         messages: input.messages,
         max_tokens: input.maxTokens ?? (isQwen ? 16384 : 4096),
       };
-      if (input.model.startsWith('claude-opus')) {
+      if (model.startsWith('claude-opus')) {
         payload.temperature = 1.0;
-      } else if (input.model === 'gpt-5.4' || input.model === 'minimax-m27-via-openrouter') {
+      } else if (model === 'gpt-5.4' || model === 'minimax-m27-via-openrouter') {
         // omit temperature (model rejects it)
       } else {
         payload.temperature = input.temperature ?? 0.3;

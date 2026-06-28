@@ -9,6 +9,7 @@ export {
 } from './turn-context.js';
 export { createMindTools, createToolUtilizationTracker, formatCombinedResult, type ToolDefinition, type MindToolDeps, type ToolUtilizationTracker, type ConfidenceLevel } from './tools.js';
 export { createSystemTools, type FileBackend, type SystemToolDeps } from './system-tools.js';
+export { resolveModelForClass, LIGHTWEIGHT_MODEL, type ModelClass, type ModelClassOpts } from './model-class-router.js';
 export {
   ModelRouter,
   createLiteLLMRouter,

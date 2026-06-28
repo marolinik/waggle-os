@@ -192,6 +192,9 @@ async function summarizeMiddleViaLlmCall(
     messages: summarizerMessages,
     maxTokens,
     temperature: 0.1,
+    // Compaction is a known-lightweight internal call → route to the cheap model
+    // (model-class-router). Saves Waggle-funded proxy spend on every compaction.
+    class: 'lightweight',
   });
 
   if (r.error || !r.content) {
