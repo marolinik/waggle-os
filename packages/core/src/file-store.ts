@@ -54,12 +54,141 @@ export interface FileStore {
 
 // ── Path safety ─────────────────────────────────────────────────────
 
-function resolveSafe(root: string, relativePath: string): string {
-  const resolved = path.resolve(root, relativePath);
-  if (!resolved.startsWith(path.resolve(root))) {
+/**
+ * Directory segments that, anywhere in a path, almost always hold secrets.
+ * Matched (normalized, case-insensitive) against each path segment.
+ */
+const SENSITIVE_DIR_SEGMENTS = new Set([
+  '.ssh', '.aws', '.gnupg', '.gpg', '.docker', '.kube', '.azure', '.terraform', '.terraform.d',
+]);
+
+/** Exact basenames (normalized) that are secret material. */
+const SENSITIVE_BASENAMES = new Set([
+  'id_rsa', 'id_dsa', 'id_ecdsa', 'id_ed25519', 'authorized_keys', 'known_hosts',
+  '.netrc', '.pgpass', '.npmrc', '.pypirc', '.git-credentials',
+  'credentials', 'credentials.json', 'service-account.json',
+  'terraform.tfstate', 'terraform.tfstate.backup',
+]);
+
+/** Extensions that are (almost always) private-key material. */
+const SENSITIVE_EXTENSIONS = new Set(['.pem']);
+
+/** Backup/copy suffixes — strip and re-test the base (id_rsa.bak → id_rsa). */
+const BACKUP_SUFFIX_RE = /\.(bak|old|backup|orig|copy|save|swp)$/i;
+
+/** `.env` files are secrets — but the documented, checked-in templates are not. */
+const ENV_TEMPLATE_ALLOW = new Set(['.env.example', '.env.sample', '.env.template', '.env.dist', '.env.defaults']);
+
+/**
+ * Normalize one path segment to the name the OS will actually open: lower-case
+ * (case-insensitive FS), strip a Windows NTFS alternate-data-stream suffix
+ * (`id_rsa::$DATA` → `id_rsa`) and any trailing dots/spaces (`id_rsa.`, `.env `
+ * → the base) which Windows silently removes when opening.
+ */
+function normalizeSegment(seg: string): string {
+  return seg.toLowerCase().replace(/::.*$/, '').replace(/[. ]+$/, '');
+}
+
+function isSensitiveBase(base: string): boolean {
+  if (SENSITIVE_BASENAMES.has(base)) return true;
+  const dot = base.lastIndexOf('.');
+  if (dot > 0 && SENSITIVE_EXTENSIONS.has(base.slice(dot))) return true;
+  if (base === '.env' || base.startsWith('.env.')) return !ENV_TEMPLATE_ALLOW.has(base);
+  return false;
+}
+
+/**
+ * True when a path points at well-known secret material (SSH/GPG keys, cloud
+ * credentials, dotenv files, terraform state, …). Used to deny reads/writes
+ * inside LINKED external folders so an agent given a project directory cannot
+ * exfiltrate or clobber the user's secrets.
+ *
+ * It is a BLOCKLIST (defense-in-depth), not a sandbox: it raises the bar against
+ * obvious secrets but cannot enumerate every secret a home dir holds. Conservative
+ * on extensions (only *.pem) to avoid denying legitimate files. Path-separator
+ * agnostic; segments are normalized for case + Windows ADS/trailing-char tricks.
+ */
+export function isSensitiveFilePath(relativePath: string): boolean {
+  const segments = relativePath.replace(/\\/g, '/').split('/').map(normalizeSegment).filter(Boolean);
+  if (segments.length === 0) return false;
+  for (const seg of segments) {
+    if (SENSITIVE_DIR_SEGMENTS.has(seg)) return true;
+  }
+  const base = segments[segments.length - 1];
+  if (isSensitiveBase(base)) return true;
+  if (BACKUP_SUFFIX_RE.test(base) && isSensitiveBase(base.replace(BACKUP_SUFFIX_RE, ''))) return true;
+  return false;
+}
+
+interface ResolveSafeOptions {
+  /** Reject paths flagged by isSensitiveFilePath (linked external dirs only). */
+  denySensitive?: boolean;
+}
+
+/** realpathSync, falling back to the input if it can't be resolved (e.g. not created yet). */
+function safeRealpath(p: string): string {
+  try { return fs.realpathSync(p); } catch { return p; }
+}
+
+/** Walk up to the deepest ancestor of `p` that exists on disk. */
+function deepestExisting(p: string): string {
+  let cur = p;
+  while (cur !== path.dirname(cur) && !fs.existsSync(cur)) cur = path.dirname(cur);
+  return cur;
+}
+
+/**
+ * Resolve `relativePath` under `root` and assert it cannot escape the boundary.
+ *
+ * Two layers:
+ *  1. LEXICAL segment-boundary containment — the resolved path is the root or
+ *     sits under `root + sep` (a bare `startsWith(root)` wrongly admits a sibling
+ *     like `${root}-evil/secret`).
+ *  2. SYMLINK-aware containment — `path.resolve` is lexical but `fs.*` follows
+ *     symlinks, so we realpath the deepest EXISTING ancestor of the target and
+ *     re-check it is still under the realpath'd root. This blocks a benign-named
+ *     symlink that points outside the boundary, while still permitting in-root
+ *     symlinks (e.g. monorepo package links). The sensitive-file deny then runs
+ *     on BOTH the lexical and the real in-root path, so an in-root symlink to a
+ *     secret (`alias → ./.env`) cannot launder it past a benign basename.
+ */
+function resolveSafe(root: string, relativePath: string, opts: ResolveSafeOptions = {}): string {
+  const resolvedRoot = path.resolve(root);
+  const resolved = path.resolve(resolvedRoot, relativePath);
+  if (resolved !== resolvedRoot && !resolved.startsWith(resolvedRoot + path.sep)) {
     throw new Error(`Path traversal denied: ${relativePath}`);
   }
+
+  // Symlink-aware containment only applies once the root exists on disk — if it
+  // doesn't, nothing inside it exists to be a symlink, and walking the deepest
+  // existing ancestor above the (not-yet-created) root would compare against an
+  // unrelated real dir (e.g. an OS temp-dir symlink). Lexical containment holds.
+  const realRoot = safeRealpath(resolvedRoot);
+  let realTarget = realRoot;
+  if (fs.existsSync(resolvedRoot)) {
+    realTarget = safeRealpath(deepestExisting(resolved));
+    if (realTarget !== realRoot && !realTarget.startsWith(realRoot + path.sep)) {
+      throw new Error(`Path traversal denied (symlink): ${relativePath}`);
+    }
+  }
+
+  if (opts.denySensitive) {
+    const lexicalRel = path.relative(resolvedRoot, resolved);
+    const realRel = path.relative(realRoot, realTarget);
+    if (isSensitiveFilePath(lexicalRel) || isSensitiveFilePath(realRel)) {
+      throw new Error(`Access to sensitive file denied: ${relativePath}`);
+    }
+  }
   return resolved;
+}
+
+/** Keep only glob matches that resolve back inside `root` (glob `../` patterns can escape cwd). */
+function containGlobMatches(root: string, matches: string[]): string[] {
+  const resolvedRoot = path.resolve(root);
+  return matches.filter(m => {
+    const abs = path.resolve(resolvedRoot, m);
+    return abs === resolvedRoot || abs.startsWith(resolvedRoot + path.sep);
+  });
 }
 
 function ensureDir(dirPath: string): void {
@@ -110,7 +239,8 @@ export class LocalFileStore implements FileStore {
       nodir: true,
       ignore: ['node_modules/**', '.git/**'],
     });
-    return matches.slice(0, 200).map(match => {
+    // A glob pattern with `../` can escape cwd — keep only matches inside root.
+    return containGlobMatches(this.root, matches).slice(0, 200).map(match => {
       const fullPath = path.join(this.root, match);
       try {
         const stat = fs.statSync(fullPath);
@@ -192,18 +322,27 @@ export class LinkedDirStore implements FileStore {
   getRootPath(): string { return this.root; }
   getStorageType(): 'linked' { return 'linked'; }
 
+  // Linked stores point at a REAL external folder (a code project, even the home
+  // dir), so every path op denies well-known secret files — the agent cannot
+  // read or clobber ~/.ssh, .env, cloud credentials, etc. (LocalFileStore is a
+  // sandboxed virtual dir and needs no such deny.)
+  private static readonly DENY = { denySensitive: true } as const;
+
   async readFile(relativePath: string): Promise<Buffer> {
-    const fullPath = resolveSafe(this.root, relativePath);
+    const fullPath = resolveSafe(this.root, relativePath, LinkedDirStore.DENY);
     return fs.readFileSync(fullPath);
   }
 
   async listFiles(directory?: string): Promise<FileEntry[]> {
-    const dir = directory ? resolveSafe(this.root, directory) : this.root;
+    const dir = directory ? resolveSafe(this.root, directory, LinkedDirStore.DENY) : this.root;
     if (!fs.existsSync(dir)) return [];
 
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     return entries
       .filter(e => !e.name.startsWith('.') && e.name !== 'node_modules')
+      // Don't disclose the existence/size/mtime of non-dot secrets (credentials.json,
+      // id_rsa, known_hosts, …) — symmetric with searchFiles + the read deny.
+      .filter(e => !isSensitiveFilePath(e.name))
       .map(entry => {
         const fullPath = path.join(dir, entry.name);
         try {
@@ -225,9 +364,11 @@ export class LinkedDirStore implements FileStore {
     const matches = await glob(pattern, {
       cwd: this.root,
       nodir: true,
-      ignore: ['node_modules/**', '.git/**', 'dist/**', 'build/**'],
+      ignore: ['node_modules/**', '.git/**', 'dist/**', 'build/**', '**/.ssh/**', '**/.aws/**', '**/.gnupg/**'],
     });
-    return matches.slice(0, 200).map(match => {
+    // Contain `../`-escaping globs to the root, then drop any secret a creative
+    // pattern still matched — search never discloses the existence/path of secrets.
+    return containGlobMatches(this.root, matches).filter(m => !isSensitiveFilePath(m)).slice(0, 200).map(match => {
       const fullPath = path.join(this.root, match);
       try {
         const stat = fs.statSync(fullPath);
@@ -245,21 +386,21 @@ export class LinkedDirStore implements FileStore {
   }
 
   async writeFile(relativePath: string, content: Buffer | string): Promise<void> {
-    const fullPath = resolveSafe(this.root, relativePath);
+    const fullPath = resolveSafe(this.root, relativePath, LinkedDirStore.DENY);
     ensureDir(path.dirname(fullPath));
     fs.writeFileSync(fullPath, content);
   }
 
   async deleteFile(relativePath: string): Promise<void> {
-    const fullPath = resolveSafe(this.root, relativePath);
+    const fullPath = resolveSafe(this.root, relativePath, LinkedDirStore.DENY);
     if (fs.existsSync(fullPath)) {
       fs.unlinkSync(fullPath);
     }
   }
 
   async moveFile(from: string, to: string): Promise<void> {
-    const fromPath = resolveSafe(this.root, from);
-    const toPath = resolveSafe(this.root, to);
+    const fromPath = resolveSafe(this.root, from, LinkedDirStore.DENY);
+    const toPath = resolveSafe(this.root, to, LinkedDirStore.DENY);
     ensureDir(path.dirname(toPath));
     fs.renameSync(fromPath, toPath);
   }

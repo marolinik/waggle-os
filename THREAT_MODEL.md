@@ -90,6 +90,20 @@ save/cleanup/ingest. Default (unset) stays full read+write for backward-compat;
 `memory:write` implies `memory:read`. This keeps a poisoned or buggy external agent from
 writing junk into the substrate.
 
+### 7. Workspace filesystem boundary + secret deny — `file-store.ts`
+`packages/core/src/file-store.ts`. Every FileStore op resolves the caller path and asserts
+it cannot escape the workspace root: a **segment-boundary** containment check (not a string
+prefix — `${root}-evil` is rejected) plus **symlink-aware** containment (the realpath'd
+target must stay under the realpath'd root, so a benign-named symlink/junction pointing at
+`~/.ssh` or `/etc` is denied, while in-root monorepo links still work). For LINKED external
+folders, `isSensitiveFilePath` additionally denies reads/writes/listing of well-known secret
+material (SSH/GPG keys, cloud + terraform credentials, `.env`, `id_rsa`, `authorized_keys`,
+backup copies, `*.pem`), normalized against Windows ADS (`::$DATA`) and trailing-dot/space
+tricks. `searchFiles`/`listFiles` filter the same set so search never even discloses a
+secret's existence. **This is real containment + a defense-in-depth BLOCKLIST — not a
+sandbox:** the deny is a curated list (it cannot enumerate every secret a home dir holds) and
+is deny-by-default with no per-workspace override yet.
+
 ## Known Gaps (open, honest)
 
 1. **Pattern-based scanner.** `scanForInjection` is regex/heuristic — novel phrasings,
@@ -98,8 +112,15 @@ writing junk into the substrate.
    sufficiently capable model can still be jailbroken from inside a correctly-fenced block.
    Both controls reduce, not eliminate, injection risk.
 2. **No filesystem/shell sandbox.** File and command tools run as the app-process user.
-   A successful injection reaching a write/exec tool is bounded only by the confirmation
-   gate (control 3), not by OS-level confinement.
+   Control 7 now confines FileStore ops to the workspace boundary and blocks well-known
+   secrets in linked dirs, but it is a path-level guard + blocklist, not OS-level confinement;
+   shell/command tools remain bounded only by the confirmation gate (control 3). The linked-dir
+   secret deny is also a curated blocklist (whole secret classes — e.g. browser profiles,
+   shell history, `.config/gh|gcloud` tokens — are out of scope) and has no per-workspace
+   override, so legitimate `.env`/`.npmrc` edits in a linked project are denied by default.
+   `S3FileStore` (TEAMS/cloud backend) still performs no path normalization and its
+   `searchFiles` builds a `RegExp` from the raw pattern (ReDoS / injection) — a separate
+   pre-existing hardening item, out of scope for the desktop sovereign-fs control above.
 3. **Fence scope is tool output only.** Recalled memory carries an equivalent prose
    preamble (`orchestrator.ts`) but is not yet wrapped in the same structural fence;
    harvest content is scanned at ingest but not re-fenced per frame. Extending the fence to
