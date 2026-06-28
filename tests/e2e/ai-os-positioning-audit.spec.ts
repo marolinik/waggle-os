@@ -86,6 +86,7 @@ interface ProbeContext {
   shellLoaded: boolean;
   shellText: string;
   consoleErrors: string[];
+  authEvidence?: string[];
   api: Record<string, { status: number; ok: boolean; ms: number; body: unknown; error?: string }>;
   personaIds: string[];
   personaText: string;
@@ -93,6 +94,11 @@ interface ProbeContext {
   connectorsText: string;
   marketplaceText: string;
   memory: Record<string, { saved: boolean; recalled: boolean; isolated: boolean; evidence: string[] }>;
+}
+
+interface ProbeAuth {
+  headers: Record<string, string>;
+  evidence: string[];
 }
 
 const PERSONAS: PersonaDefinition[] = [
@@ -253,9 +259,35 @@ function requestErrorSummary(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function timedGet(request: APIRequestContext, path: string) {
+async function bootstrapProbeAuth(request: APIRequestContext): Promise<ProbeAuth> {
+  const response = await request.get(`${BASE}/api/auth/session-token`, { timeout: API_PROBE_TIMEOUT_MS }).catch((error: unknown) => {
+    return { error: requestErrorSummary(error) };
+  });
+  if ('error' in response) {
+    return {
+      headers: {},
+      evidence: [`Session-token bootstrap failed within ${API_PROBE_TIMEOUT_MS}ms: ${response.error}.`],
+    };
+  }
+
+  const body = await readResponseBody(response);
+  const token = typeof asRecord(body).token === 'string' ? String(asRecord(body).token) : '';
+  if (response.ok() && token) {
+    return {
+      headers: { Authorization: `Bearer ${token}` },
+      evidence: [`Session-token bootstrap returned ${response.status()} and protected probes used bearer auth.`],
+    };
+  }
+
+  return {
+    headers: {},
+    evidence: [`Session-token bootstrap returned ${response.status()} with ${bodySummary(body)}; protected probes continued without bearer auth.`],
+  };
+}
+
+async function timedGet(request: APIRequestContext, path: string, auth?: ProbeAuth) {
   const started = Date.now();
-  const response = await request.get(`${BASE}${path}`, { timeout: API_PROBE_TIMEOUT_MS }).catch((error: unknown) => {
+  const response = await request.get(`${BASE}${path}`, { timeout: API_PROBE_TIMEOUT_MS, headers: auth?.headers }).catch((error: unknown) => {
     return { error: requestErrorSummary(error) };
   });
   const ms = Date.now() - started;
@@ -335,10 +367,11 @@ async function wait(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: string): Promise<{ available: boolean; id: string; evidence: string[] }> {
+async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: string, auth?: ProbeAuth): Promise<{ available: boolean; id: string; evidence: string[] }> {
   const evidence: string[] = [];
   const response = await request.post(`${BASE}/api/workspaces`, {
     timeout: API_PROBE_TIMEOUT_MS,
+    headers: auth?.headers,
     data: {
       name: workspaceName,
       group: 'AI OS Audit',
@@ -362,7 +395,7 @@ async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: s
     evidence.push('Workspace create did not return a response.');
   }
 
-  const listResponse = await request.get(`${BASE}/api/workspaces`, { timeout: API_PROBE_TIMEOUT_MS }).catch((error: unknown) => {
+  const listResponse = await request.get(`${BASE}/api/workspaces`, { timeout: API_PROBE_TIMEOUT_MS, headers: auth?.headers }).catch((error: unknown) => {
     evidence.push(`Workspace confirmation list failed within ${API_PROBE_TIMEOUT_MS}ms: ${requestErrorSummary(error)}.`);
     return null;
   });
@@ -391,9 +424,10 @@ async function ensureProbeWorkspace(request: APIRequestContext, workspaceName: s
   return { available: true, id, evidence };
 }
 
-async function saveMemory(request: APIRequestContext, workspace: string, content: string): Promise<{ saved: boolean; evidence: string[] }> {
+async function saveMemory(request: APIRequestContext, workspace: string, content: string, auth?: ProbeAuth): Promise<{ saved: boolean; evidence: string[] }> {
   const response = await request.post(`${BASE}/api/memory/frames`, {
     timeout: API_PROBE_TIMEOUT_MS,
+    headers: auth?.headers,
     data: { content, workspace, source: 'user_stated', importance: 'normal' },
   }).catch((error: unknown) => {
     return { error: requestErrorSummary(error) };
@@ -414,10 +448,10 @@ async function saveMemory(request: APIRequestContext, workspace: string, content
   };
 }
 
-async function searchMemory(request: APIRequestContext, workspace: string, query: string, expectedContent = query): Promise<{ found: boolean; checked: boolean; evidence: string[] }> {
+async function searchMemory(request: APIRequestContext, workspace: string, query: string, expectedContent = query, auth?: ProbeAuth): Promise<{ found: boolean; checked: boolean; evidence: string[] }> {
   const response = await request.get(
     `${BASE}/api/memory/search?q=${encodeURIComponent(query)}&workspace=${encodeURIComponent(workspace)}&scope=workspace&limit=5`,
-    { timeout: API_PROBE_TIMEOUT_MS },
+    { timeout: API_PROBE_TIMEOUT_MS, headers: auth?.headers },
   ).catch((error: unknown) => {
     return { error: requestErrorSummary(error) };
   });
@@ -456,6 +490,7 @@ async function pollMemorySearch(
   query: string,
   expectedContent: string,
   label: string,
+  auth?: ProbeAuth,
 ): Promise<{ found: boolean; checked: boolean; evidence: string[] }> {
   const started = Date.now();
   let attempts = 0;
@@ -467,7 +502,7 @@ async function pollMemorySearch(
 
   while (Date.now() - started <= MEMORY_POLL_TIMEOUT_MS) {
     attempts += 1;
-    lastResult = await searchMemory(request, workspace, query, expectedContent);
+    lastResult = await searchMemory(request, workspace, query, expectedContent, auth);
     if (lastResult.found) {
       return {
         found: true,
@@ -488,10 +523,10 @@ async function pollMemorySearch(
   };
 }
 
-async function probeMemory(request: APIRequestContext, persona: PersonaDefinition) {
+async function probeMemory(request: APIRequestContext, persona: PersonaDefinition, auth?: ProbeAuth) {
   const workspace = `ai-os-audit-${persona.id}-${Date.now()}`;
   const otherWorkspace = `${workspace}-isolation`;
-  const primary = await ensureProbeWorkspace(request, workspace);
+  const primary = await ensureProbeWorkspace(request, workspace, auth);
 
   if (!primary.available) {
     return {
@@ -505,13 +540,13 @@ async function probeMemory(request: APIRequestContext, persona: PersonaDefinitio
     };
   }
 
-  const comparison = await ensureProbeWorkspace(request, otherWorkspace);
-  const save = await saveMemory(request, primary.id, persona.memoryAnchor);
+  const comparison = await ensureProbeWorkspace(request, otherWorkspace, auth);
+  const save = await saveMemory(request, primary.id, persona.memoryAnchor, auth);
   const recall = save.saved
-    ? await pollMemorySearch(request, primary.id, persona.memoryQuery, persona.memoryAnchor, 'Recall')
+    ? await pollMemorySearch(request, primary.id, persona.memoryQuery, persona.memoryAnchor, 'Recall', auth)
     : { found: false, checked: false, evidence: ['Memory recall skipped because the memory save did not succeed.'] };
   const isolation = comparison.available
-    ? await pollMemorySearch(request, comparison.id, persona.memoryAnchor, persona.memoryAnchor, 'Isolation')
+    ? await pollMemorySearch(request, comparison.id, persona.memoryAnchor, persona.memoryAnchor, 'Isolation', auth)
     : { found: false, checked: false, evidence: ['Isolation search skipped because the comparison workspace was unavailable.'] };
   const isolationProven = comparison.available && isolation.checked && !isolation.found;
   return {
@@ -557,6 +592,7 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
     shellLoaded = shellResponse.ok() && shellText.length > 80 && !/error boundary|something went wrong/i.test(shellText);
   }
 
+  const auth = await bootstrapProbeAuth(page.request);
   const endpoints = {
     health: '/health',
     personas: '/api/personas',
@@ -571,7 +607,7 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
   };
 
   const apiEntries = await Promise.all(
-    Object.entries(endpoints).map(async ([key, path]) => [key, await timedGet(page.request, path)] as const),
+    Object.entries(endpoints).map(async ([key, path]) => [key, await timedGet(page.request, path, auth)] as const),
   );
   const api = Object.fromEntries(apiEntries);
   const personaBody = api.personas?.body as { personas?: Array<{ id?: string; name?: string; description?: string }> } | Array<{ id?: string }>;
@@ -582,7 +618,7 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
   const memoryResults = await Promise.allSettled(
     PERSONAS.map(async (persona) => ({
       persona,
-      result: await probeMemory(page.request, persona),
+      result: await probeMemory(page.request, persona, auth),
     })),
   );
   for (let index = 0; index < memoryResults.length; index += 1) {
@@ -604,6 +640,7 @@ async function collectProbeContext(page: Page): Promise<ProbeContext> {
     shellLoaded,
     shellText,
     consoleErrors,
+    authEvidence: auth.evidence,
     api,
     personaIds,
     personaText: JSON.stringify(api.personas?.body ?? ''),
@@ -659,7 +696,7 @@ function scorePersona(persona: PersonaDefinition, context: ProbeContext): Person
       label: 'Time to first value',
       max: 15,
       score: clampScore(fastCoreApis.length * 4 + (context.api.marketplace?.ok ? 3 : 0), 15),
-      evidence: coreApiEvidence,
+      evidence: [...(context.authEvidence ?? []), ...coreApiEvidence],
       gaps: fastCoreApis.length >= 3 ? [] : ['Core first-value APIs should respond quickly and consistently.'],
     },
     {
@@ -1063,6 +1100,72 @@ test.describe('AI OS positioning audit', () => {
     expect(failedProbe.saved).toBe(false);
     expect(failedProbe.evidence.join('\n')).toContain('sync memory probe failure');
     expect(maxActiveSaves).toBeGreaterThan(1);
+  });
+
+  test('bootstraps session token before probing protected product APIs', async () => {
+    const response = (status: number, body: unknown) => ({
+      ok: () => status >= 200 && status < 300,
+      status: () => status,
+      statusText: () => String(status),
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    });
+    const hasAuth = (options?: { headers?: Record<string, string> }) => options?.headers?.Authorization === 'Bearer audit-token';
+    let tokenCalls = 0;
+    const protectedProbeUrls: string[] = [];
+    const request = {
+      get: async (url: string, options?: { timeout?: number; headers?: Record<string, string> }) => {
+        if (url.includes('/api/auth/session-token')) {
+          tokenCalls += 1;
+          return response(200, { token: 'audit-token' });
+        }
+        if (url.includes('/health')) return response(200, { status: 'ok' });
+        if (url.includes('/api/memory/search')) {
+          protectedProbeUrls.push(url);
+          if (!hasAuth(options)) return response(401, { error: 'Unauthorized', code: 'MISSING_TOKEN' });
+          const parsed = new URL(url);
+          const workspace = parsed.searchParams.get('workspace') ?? '';
+          const persona = PERSONAS.find((definition) => workspace.includes(definition.id));
+          return response(200, { results: workspace.includes('-isolation') || !persona ? [] : [{ content: persona.memoryAnchor }] });
+        }
+        if (url.includes('/api/personas')) {
+          protectedProbeUrls.push(url);
+          return hasAuth(options)
+            ? response(200, { personas: PERSONAS.flatMap((persona) => persona.expectedPersonaIds).map((id) => ({ id })) })
+            : response(401, { error: 'Unauthorized', code: 'MISSING_TOKEN' });
+        }
+        if (url.includes('/api/')) {
+          protectedProbeUrls.push(url);
+          return hasAuth(options) ? response(200, {}) : response(401, { error: 'Unauthorized', code: 'MISSING_TOKEN' });
+        }
+        return response(200, {});
+      },
+      post: async (url: string, options?: { timeout?: number; headers?: Record<string, string>; data?: Record<string, unknown> }) => {
+        if (url.includes('/api/')) protectedProbeUrls.push(url);
+        if (!hasAuth(options)) return response(401, { error: 'Unauthorized', code: 'MISSING_TOKEN' });
+        if (url.includes('/api/workspaces')) return response(200, { id: options?.data?.name ?? 'workspace' });
+        if (url.includes('/api/memory/frames')) return response(200, { saved: true, frameId: 'frame-1' });
+        return response(200, {});
+      },
+    } as unknown as APIRequestContext;
+    const page = {
+      on: () => undefined,
+      goto: async () => response(200, {}),
+      waitForSelector: async () => undefined,
+      waitForTimeout: async () => undefined,
+      locator: () => ({
+        innerText: async () => 'Waggle AI OS workspace with meaningful app shell content for the audit.',
+      }),
+      request,
+    } as unknown as Page;
+
+    const context = await collectProbeContext(page);
+
+    expect(tokenCalls).toBe(1);
+    expect(context.api.personas.ok).toBe(true);
+    expect(context.api.workspaces.ok).toBe(true);
+    expect(context.memory[PERSONAS[0].id].saved).toBe(true);
+    expect(protectedProbeUrls.length).toBeGreaterThan(0);
   });
 
   test('generates a report-mode audit with five personas and score-aware improvement areas', async ({ page }, testInfo) => {
