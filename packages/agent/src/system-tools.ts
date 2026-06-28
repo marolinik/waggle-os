@@ -5,6 +5,7 @@ import { execFile, type ChildProcess } from 'node:child_process';
 import { glob } from 'glob';
 import type { ToolDefinition } from './tools.js';
 import { SearchCache, RateLimiter } from './web-search-utils.js';
+import { dedupTextResults, truncateToTokenBudget } from './tool-output-compressor.js';
 import {
   IMAGE_EXTENSIONS, DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
   checkDeniedBinaries, createSanitizedEnv, truncateOutput, resolveSafe,
@@ -636,7 +637,19 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           if (results.length === 0) return 'No search results found.';
 
-          const output = results
+          // Collapse near-duplicate results before formatting: exact-URL dupes
+          // first, then snippets that are >=85% trigram-similar to a kept one.
+          // Search engines routinely surface the same passage from several URLs;
+          // sending all of them just spends tokens (TokenJuice subset).
+          const seenUrls = new Set<string>();
+          const urlUnique = results.filter((r) => {
+            if (seenUrls.has(r.url)) return false;
+            seenUrls.add(r.url);
+            return true;
+          });
+          const deduped = dedupTextResults(urlUnique, (r) => r.snippet);
+
+          const output = deduped
             .map((r, i) => `[${i + 1}] ${r.title}\n    ${r.url}\n    ${r.snippet}`)
             .join('\n\n');
 
@@ -658,7 +671,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         type: 'object',
         properties: {
           url: { type: 'string', description: 'URL to fetch' },
-          max_length: { type: 'number', description: 'Max characters to return (default: 10000)' },
+          max_length: { type: 'number', description: 'Approx. max characters to return (default: 10000); enforced as a token budget so the cap is consistent across scripts' },
         },
         required: ['url'],
       },
@@ -666,6 +679,9 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         try {
           const url = args.url as string;
           const maxLength = (args.max_length as number) ?? 10_000;
+          // Token-budgeted cut (~4 chars/token) instead of a blunt char slice:
+          // grapheme-safe and consistent across prose/code/JSON/CJK.
+          const maxTokens = Math.max(1, Math.ceil(maxLength / 4));
 
           let parsed: URL;
           try {
@@ -701,9 +717,9 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           // JSON — return formatted
           if (contentType.includes('application/json')) {
             try {
-              return JSON.stringify(JSON.parse(body), null, 2).slice(0, maxLength);
+              return truncateToTokenBudget(JSON.stringify(JSON.parse(body), null, 2), maxTokens);
             } catch {
-              return body.slice(0, maxLength);
+              return truncateToTokenBudget(body, maxTokens);
             }
           }
 
@@ -727,7 +743,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             .trim();
 
           if (!text) return 'Page fetched but no text content found.';
-          return text.slice(0, maxLength);
+          return truncateToTokenBudget(text, maxTokens);
         } catch (err: unknown) {
           if (err instanceof Error && err.name === 'AbortError') return 'Error: Request timed out (15s)';
           return `Fetch error: ${err instanceof Error ? err.message : String(err)}`;

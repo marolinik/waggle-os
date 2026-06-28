@@ -17,10 +17,13 @@
  *   9. onToolResult callback (sanitized content)
  *  10. post:memory-write hook (save_memory only, sanitized)
  *  11. post:tool hook (sanitized)
+ *  12. compress model-facing result (subtractive; observers keep full fidelity)
  *
  * Critical invariant (Review C2): steps 8 → 9 → 10 → 11 must stay in this
  * order. Sanitization output is what flows into both model context AND
- * every downstream observer (audit / telemetry / team-sync / UI).
+ * every downstream observer (audit / telemetry / team-sync / UI). Step 12 is
+ * subtractive-only and applies ONLY to the returned (model-facing) content —
+ * observers at 9–11 still receive the full sanitized result.
  */
 
 import type { ToolDefinition } from './tools.js';
@@ -28,6 +31,7 @@ import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { LoopGuard } from './loop-guard.js';
 import { scanForInjection } from './injection-scanner.js';
+import { compressToolOutput } from './tool-output-compressor.js';
 import { logTurnEvent } from './turn-context.js';
 
 export interface ToolExecutorDeps {
@@ -208,5 +212,8 @@ export async function executeToolCall(
     await hooks.fire('post:tool', { toolName: fnName, args: fnArgs, result });
   }
 
-  return { content: result, toolCallId: toolCall.id, countedAsUsed, toolName: fnName };
+  // ── Step 12: compress the model-facing result (subtractive, never enlarges) ──
+  // Observers above (9–11) received the full sanitized result; only the content
+  // returned into the model's next-turn context is compressed.
+  return { content: compressToolOutput(result), toolCallId: toolCall.id, countedAsUsed, toolName: fnName };
 }
