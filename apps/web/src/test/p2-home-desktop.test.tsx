@@ -71,14 +71,29 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 // ── Home Cockpit: J08 banner + date ────────────────────────────────────────
 
 describe('HomeCockpit (P2)', () => {
-  async function renderHome(b: ReturnType<typeof briefing>) {
+  async function renderHome(
+    b: ReturnType<typeof briefing>,
+    handlers: {
+      onContinue?: (workspaceId: string, sessionId?: string) => void;
+      onOpenWorkspaceDesktop?: (workspaceId: string) => void;
+      onCreateWorkspace?: () => void;
+    } = {},
+  ) {
     const { default: HomeCockpit } = await import('@/components/os/apps/HomeCockpit');
     mocks.adapter.getHomeBriefing.mockResolvedValue(b);
     mocks.adapter.getHomeOvernight.mockResolvedValue(null);
+    const onContinue = handlers.onContinue ?? vi.fn();
+    const onOpenWorkspaceDesktop = handlers.onOpenWorkspaceDesktop ?? vi.fn();
+    const onCreateWorkspace = handlers.onCreateWorkspace ?? vi.fn();
     render(
-      <HomeCockpit onContinue={() => {}} onOpenWorkspaceDesktop={() => {}} onCreateWorkspace={() => {}} />,
+      <HomeCockpit
+        onContinue={onContinue}
+        onOpenWorkspaceDesktop={onOpenWorkspaceDesktop}
+        onCreateWorkspace={onCreateWorkspace}
+      />,
     );
     await waitFor(() => expect(screen.getByTestId('home-cockpit')).toBeTruthy());
+    return { onContinue, onOpenWorkspaceDesktop, onCreateWorkspace };
   }
 
   it('renders the J08 review banner and deep-links to the Memory Center filter', async () => {
@@ -135,6 +150,46 @@ describe('HomeCockpit (P2)', () => {
     expect(positioning).toMatch(/remembers you/i);
     expect(positioning).toMatch(/knows your projects/i);
     expect(positioning).toMatch(/guides the next step/i);
+  });
+
+  it('promotes the best suggested action into one Start Here move', async () => {
+    const onContinue = vi.fn();
+    await renderHome(briefing({
+      recentWorkspaces: [
+        { id: 'board', name: 'Board Update', group: 'Finance', summary: 'Variance narrative is half drafted.', lastActive: RAW_ISO, pendingCount: 1, continueSessionId: 'fallback-session' },
+      ],
+      suggestedActions: [
+        { label: 'Draft the churn explanation', workspaceId: 'board', sessionId: 'suggestion-session', kind: 'draft' },
+      ],
+    }), { onContinue });
+
+    const startHere = screen.getByTestId('home-cockpit-start-here');
+    expect(startHere.textContent).toContain('Start here');
+    expect(startHere.textContent).toContain('Draft the churn explanation');
+    expect(startHere.textContent).toContain('Board Update');
+    expect(startHere.textContent).toContain('Because Waggle found this as the next useful move');
+
+    fireEvent.click(screen.getByTestId('home-cockpit-start-primary'));
+    expect(onContinue).toHaveBeenCalledWith('board', 'suggestion-session');
+  });
+
+  it('falls back to the most urgent workspace when no suggested action exists', async () => {
+    const onContinue = vi.fn();
+    await renderHome(briefing({
+      recentWorkspaces: [
+        { id: 'quiet', name: 'Quiet Research', group: 'Research', summary: 'Archived notes are settled.', lastActive: '2026-06-09T09:00:00.000Z', pendingCount: 0 },
+        { id: 'launch', name: 'Launch Plan', group: 'Marketing', summary: 'Three decisions still need review.', lastActive: '2026-06-12T09:00:00.000Z', pendingCount: 3, continueSessionId: 'launch-session' },
+      ],
+      suggestedActions: [],
+    }), { onContinue });
+
+    const startHere = screen.getByTestId('home-cockpit-start-here');
+    expect(startHere.textContent).toContain('Review 3 pending items');
+    expect(startHere.textContent).toContain('Launch Plan');
+    expect(startHere.textContent).toContain('Because this workspace has unresolved decisions');
+
+    fireEvent.click(screen.getByTestId('home-cockpit-start-primary'));
+    expect(onContinue).toHaveBeenCalledWith('launch', 'launch-session');
   });
 });
 

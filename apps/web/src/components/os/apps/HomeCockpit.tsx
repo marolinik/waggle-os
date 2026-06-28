@@ -55,6 +55,16 @@ const UP_NEXT_ICON: Record<UpNextItem['kind'], typeof Calendar> = {
   schedule: Clock,
 };
 
+interface StartHereMove {
+  title: string;
+  workspaceName?: string;
+  reason: string;
+  primaryLabel: string;
+  workspaceId: string;
+  sessionId?: string;
+  mode: 'continue' | 'open';
+}
+
 function formatRelative(iso?: string): string {
   if (!iso) return '';
   const t = new Date(iso).getTime();
@@ -88,6 +98,78 @@ function formatClock(iso: string): string {
 /** Honey-accented key number inside a composed sentence. */
 function honey(n: ReactNode): ReactNode {
   return <span className="font-semibold text-[var(--honey)]">{n}</span>;
+}
+
+function rankTimestamp(iso?: string): number {
+  if (!iso) return 0;
+  const ts = new Date(iso).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
+function mostUrgentWorkspace(cards: RecentWorkspaceCard[]): RecentWorkspaceCard | undefined {
+  const pending = cards.filter(card => card.pendingCount > 0);
+  if (pending.length > 0) {
+    return [...pending].sort((a, b) => b.pendingCount - a.pendingCount || rankTimestamp(b.lastActive) - rankTimestamp(a.lastActive))[0];
+  }
+  return cards[0];
+}
+
+function buildStartHereMove(briefing: HomeBriefing, wsById: Map<string, RecentWorkspaceCard>): StartHereMove | null {
+  const suggested = briefing.suggestedActions?.[0];
+  if (suggested?.workspaceId) {
+    const workspace = wsById.get(suggested.workspaceId);
+    return {
+      title: suggested.label,
+      workspaceName: workspace?.name,
+      reason: 'Because Waggle found this as the next useful move in your current work.',
+      primaryLabel: 'Resume',
+      workspaceId: suggested.workspaceId,
+      sessionId: suggested.sessionId,
+      mode: 'continue',
+    };
+  }
+
+  const workspace = mostUrgentWorkspace(briefing.recentWorkspaces ?? []);
+  if (workspace) {
+    if (workspace.pendingCount > 0) {
+      return {
+        title: `Review ${workspace.pendingCount} pending ${workspace.pendingCount === 1 ? 'item' : 'items'}`,
+        workspaceName: workspace.name,
+        reason: 'Because this workspace has unresolved decisions and the most live context.',
+        primaryLabel: 'Resume',
+        workspaceId: workspace.id,
+        sessionId: workspace.continueSessionId,
+        mode: 'continue',
+      };
+    }
+
+    return {
+      title: `Continue ${workspace.name}`,
+      workspaceName: workspace.name,
+      reason: workspace.summary
+        ? `Because you left off here: ${workspace.summary}`
+        : 'Because this is your most recent workspace.',
+      primaryLabel: 'Resume',
+      workspaceId: workspace.id,
+      sessionId: workspace.continueSessionId,
+      mode: 'continue',
+    };
+  }
+
+  const upcoming = (briefing.upNext ?? []).find(item => item.workspaceId);
+  if (upcoming?.workspaceId) {
+    const workspaceForEvent = wsById.get(upcoming.workspaceId);
+    return {
+      title: upcoming.label,
+      workspaceName: workspaceForEvent?.name,
+      reason: 'Because this is next on your work timeline.',
+      primaryLabel: 'Open',
+      workspaceId: upcoming.workspaceId,
+      mode: 'open',
+    };
+  }
+
+  return null;
 }
 
 // ── Loading skeleton ─────────────────────────────────────────────────────
@@ -166,6 +248,67 @@ function GreetingHeader({
         </p>
       )}
     </header>
+  );
+}
+
+function StartHereCard({
+  move, onContinue, onOpenWorkspaceDesktop,
+}: {
+  move: StartHereMove | null;
+  onContinue: (id: string, sessionId?: string) => void;
+  onOpenWorkspaceDesktop: (id: string) => void;
+}) {
+  if (!move) return null;
+  const handlePrimary = () => {
+    if (move.mode === 'open') {
+      onOpenWorkspaceDesktop(move.workspaceId);
+      return;
+    }
+    onContinue(move.workspaceId, move.sessionId);
+  };
+
+  return (
+    <section
+      className="mb-9 overflow-hidden rounded-[22px] border border-[var(--honey-line)] bg-[linear-gradient(145deg,var(--honey-wash),var(--surface))] p-5 shadow-[var(--shadow-honey)]"
+      data-testid="home-cockpit-start-here"
+    >
+      <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
+        <Sparkles className="h-3.5 w-3.5" />
+        <span>Start here</span>
+      </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="font-display text-[clamp(22px,3vw,30px)] font-semibold leading-tight text-[var(--text)]">
+            {move.title}
+          </h2>
+          {move.workspaceName && (
+            <p className="mt-1 font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
+              {move.workspaceName}
+            </p>
+          )}
+          <p className="mt-3 max-w-[62ch] text-[14px] leading-relaxed text-[var(--text-muted)]">
+            {move.reason}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handlePrimary}
+            className="inline-flex items-center gap-1.5 rounded-[12px] bg-[var(--honey)] px-4 py-2 text-[13px] font-semibold text-[#1a1407] transition-opacity hover:opacity-90"
+            data-testid="home-cockpit-start-primary"
+          >
+            {move.primaryLabel} <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenWorkspaceDesktop(move.workspaceId)}
+            className="inline-flex items-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-[var(--surface)] px-4 py-2 text-[13px] font-medium text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
+          >
+            Open workspace
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -489,6 +632,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   // Suggestion sub-line, composed from the linked workspace (label-only server
   // payload has no sub — derive an honest one from the workspace + recency).
   const wsById = new Map(recentWorkspaces.map(w => [w.id, w]));
+  const startHereMove = buildStartHereMove(briefing, wsById);
   const subForAction = (a: SuggestedAction): string | undefined => {
     const w = wsById.get(a.workspaceId);
     if (!w) return undefined;
@@ -526,6 +670,12 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   return (
     <div className="relative mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit">
       <GreetingHeader greeting={greeting} date={briefing.date} workspaceCount={recentWorkspaces.length} />
+
+      <StartHereCard
+        move={startHereMove}
+        onContinue={onContinue}
+        onOpenWorkspaceDesktop={onOpenWorkspaceDesktop}
+      />
 
       {needsReviewCount > 0 && (
         <div
