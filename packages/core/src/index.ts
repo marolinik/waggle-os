@@ -119,6 +119,7 @@ export {
   CronStore, CRON_SCHEDULES_TABLE_SQL, VALID_JOB_TYPES, cronExprError,
   type CronSchedule, type CreateScheduleInput, type CronJobType,
   type CronExecutionRow,
+  type PendingActionRow, type PendingActionStatus, type SavePendingActionInput,
 } from './cron-store.js';
 export { VaultStore, type VaultEntry } from './vault.js';
 export { TelemetryStore, TelemetryCollector, TELEMETRY_EVENTS, type TelemetryEvent, type TelemetrySummary } from './telemetry.js';
