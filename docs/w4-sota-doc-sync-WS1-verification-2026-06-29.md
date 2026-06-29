@@ -41,6 +41,17 @@ These present `73.1`/`73.4` **not as "the current SOTA figure"** but as a *conve
 - ✅ **Clean `git status`** on `docs/w4-sota-doc-sync` after both commits.
 - ⚠️ **`grep 73.1` → "no current refs"**: cannot be met *as literally stated* without rewriting (C) above — the locked preregs (B) must stay, and the landing/methodology (C) is a founder claims-call. **Recommended interpretation:** the *operating docs* (CLAUDE.md, cornerstone) now carry no current 73.1 headline (✅ achieved); the landing/methodology 87.66 migration is tracked as a separate, deliberate claims decision.
 
-## Recommendation
+## Recommendation (original)
 
 Ship WS1 as-is (tasks 1–3 + this verification). **Do not** bundle an apps/www / methodology.md rewrite into this zero-risk sync — surface it to the founder as a scoped "migrate public landing copy from conservative v5 trio-strict (67.8% / 73.1-vs-73.4) to the 87.66 same-judge SOTA arc?" decision, since it changes public marketing claims and their judging protocol.
+
+## Addendum — founder decision: MIGRATE the landing (2026-06-29)
+
+Founder chose to migrate the public landing + methodology to the 87.66 arc. Executed, mirroring the **already-shipped, verified 87.66 framing in `apps/web/.../BenchmarkApp.tsx`** (no fabricated numbers — every figure traces to `memory/project_sota_results_index.md`). Class-C files migrated:
+
+- `apps/www/messages/en.json` (`proof.subhead` + `proof.methodology`): 67.8% trio-strict → 87.66% same-judge. **Critically removed the "three rival models had to agree" framing** — that describes the trio-strict ensemble; 87.66 is *single-judge* (GPT-4.1-mini answerer+judge), so keeping it would have been false. Replaced with the truthful "previous leader's own protocol and judge, reproduced to 0.03pp" framing.
+- `apps/www/app/_data/proof-points.ts`: convergence card (0.3-pt / 73.1-vs-73.4) → **87.66% SOTA card**; single-hop card 87.5% trio-strict → **92.75% same-judge**; portable-layer card (sovereignty, no stale number) kept; header comment updated.
+- `apps/www/app/docs/methodology/page.tsx`: SEO `metadata.description` → 87.66 framing.
+- `docs/methodology.md`: bumped v2→**v3**; added a leading **§0 "Current canonical headline — 87.66%"** (full category table + Mem0 re-run + token Pareto + protocol note that 87.66 is same-judge/more-permissive than the trio-strict bar below + evidence pointers). The v5/N=320 trio-strict content (§1–§8) is **retained and reframed** as the earlier conservative arc, not deleted. **No fabricated W3.3 artifacts** (no invented rescore commands / SHAs / pairwise-agreement tables) — §0 cites the real evidence locations instead. This file also renders at the public `/docs/methodology` page.
+
+Gates after migration: `apps/www` `tsc --noEmit` exit 0; `en.json` valid JSON; `grep` of the old v5 numbers across `apps/www` returns nothing in live copy (only historical `SESIJA-*-MANIFEST.md` session records remain, untouched). `BenchmarkApp.tsx` (already 87.66) and the landing are now consistent.

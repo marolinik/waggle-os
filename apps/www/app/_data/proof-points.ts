@@ -1,12 +1,14 @@
 /**
- * 3 honest proof point cards for the proof band (N2 rewrite).
+ * 3 honest proof point cards for the proof band (87.66 SOTA arc, 2026-06).
  *
- * Only verifiable claims: the 0.3-point convergence (73.1 vs 73.4 on the same
- * memory layer) and 87.5% single-hop trio-strict. The 67.8% AND-of-3 LoCoMo
- * lead and the raw judge-ensemble math live in the proof copy keys
- * (landing.proof.subhead / landing.proof.methodology), not here.
+ * Verified claims (LoCoMo, N=1,540, GPT-4.1-mini answerer+judge — the prior
+ * SOTA's own protocol): 87.66% overall, a new state of the art at +5.71pp over
+ * Memori 81.95 (z=4.42, p<10⁻⁵); 92.75% single-hop (~1pt off the full-context
+ * ceiling); fully local, on-device. The judge protocol + reproduction live in
+ * the proof copy keys (landing.proof.subhead / landing.proof.methodology).
  *
- * No +12.5pp GEPA claim, no 74% / Mem0-win, no 91% — those were removed.
+ * Numbers MUST match apps/web BenchmarkApp + docs/methodology.md §0. Do not
+ * fabricate. No +12.5pp GEPA claim, no 74% / oracle-ceiling, no 91% target.
  */
 
 export interface ProofPoint {
@@ -19,20 +21,20 @@ export interface ProofPoint {
 
 export const proofPoints: readonly ProofPoint[] = Object.freeze([
   {
-    id: 'convergence',
-    caption: 'Same memory layer',
-    stat: '0.3 pts',
-    name: 'Small model, frontier class',
+    id: 'sota',
+    caption: 'LoCoMo · same-judge',
+    stat: '87.66%',
+    name: 'State of the art on memory',
     description:
-      'Two very different models land within 0.3 points on the same memory layer — so a small local model performs in the same class as a frontier one. The layer, not the model, does the work.',
+      "On LoCoMo — the standard long-term conversational-memory test — Waggle's open-source layer scores 87.66%, beating the prior best by +5.71 points under its own protocol and judge. The layer, not the model, does the work.",
   },
   {
     id: 'single-hop',
-    caption: 'Trio-strict',
-    stat: '87.5%',
-    name: 'Single-hop reasoning',
+    caption: 'Single-hop',
+    stat: '92.75%',
+    name: '~1 point off the ceiling',
     description:
-      'Single-hop reasoning, trio-strict: 87.5%. Three rival models had to agree before an answer counted.',
+      'Single-hop recall lands at 92.75% — within about a point of handing the model the entire conversation. Near-perfect retrieval of what you actually said.',
   },
   {
     id: 'portable-layer',
