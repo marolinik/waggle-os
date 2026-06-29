@@ -71,3 +71,50 @@ export function describeTrigger(a: Pick<Automation, 'triggerType' | 'schedule'>)
   if (a.triggerType === 'manual') return 'Manual — runs only via "Run now"';
   return describeCronExpr(a.schedule ?? '');
 }
+
+/**
+ * Human label for the workspace an automation runs in. The sentinel ids
+ * ('*'/'global'/empty) mean cross-workspace → "All workspaces"; a known id
+ * resolves to its name; an unknown id falls back to the raw id (never blank).
+ */
+export function workspaceLabel(
+  id: string | undefined,
+  workspaces: ReadonlyArray<{ id: string; name: string }>,
+): string {
+  if (!id || id === '*' || id === 'global') return 'All workspaces';
+  return workspaces.find(w => w.id === id)?.name ?? id;
+}
+
+export interface AutomationGroup {
+  key: string;
+  label: string;
+  automations: Automation[];
+}
+
+/**
+ * Partition automations by the workspace they run in, so the Center can show
+ * "which workspaces" at a glance. The cross-workspace ('*') group sorts first,
+ * the rest alphabetically by label. Empty input → []. Preserves input order
+ * within each group.
+ */
+export function groupAutomationsByWorkspace(
+  rows: Automation[],
+  labelFor: (id: string | undefined) => string,
+): AutomationGroup[] {
+  if (rows.length === 0) return [];
+  const byKey = new Map<string, AutomationGroup>();
+  for (const a of rows) {
+    const key = a.workspaceId || '*';
+    let group = byKey.get(key);
+    if (!group) {
+      group = { key, label: labelFor(key), automations: [] };
+      byKey.set(key, group);
+    }
+    group.automations.push(a);
+  }
+  return [...byKey.values()].sort((x, y) => {
+    if (x.key === '*' && y.key !== '*') return -1;
+    if (y.key === '*' && x.key !== '*') return 1;
+    return x.label.localeCompare(y.label);
+  });
+}

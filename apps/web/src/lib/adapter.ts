@@ -21,7 +21,7 @@ import type {
   HomeBriefing, OvernightSummary, QuickCaptureInput,
   WorkspaceStateView, WorkspaceActivityEvent, WorkspaceTask,
   Artifact, RelatedSearchResult,
-  Agent, AgentTrace, Automation, AutomationLog,
+  Agent, AgentTrace, Automation, AutomationLog, EngineStatus,
   MemoryTrace,
 } from './types';
 import type {
@@ -1624,6 +1624,22 @@ class LocalAdapter {
     if (!res.ok) throw new Error(`listAutomations failed: ${res.status}`);
     const body = await res.json() as { automations?: Automation[] };
     return body.automations ?? [];
+  }
+
+  /**
+   * Loops engine liveness for the sovereignty status pill. Resolves null on any
+   * error (offline server / not yet connected) so the pill degrades to a calm
+   * "checking…" rather than throwing into the Automation Center's error panel.
+   */
+  async getEngineStatus(): Promise<EngineStatus | null> {
+    try {
+      const res = await this.fetch('/api/automations/engine');
+      if (!res.ok) return null;
+      const body = await res.json() as { engine?: EngineStatus };
+      return body.engine ?? null;
+    } catch {
+      return null;
+    }
   }
 
   async createAutomation(input: {

@@ -4,9 +4,9 @@ import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import type { Automation } from '@waggle/shared';
-import type { AutomationLog } from '@/lib/types';
+import type { AutomationLog, Workspace, EngineStatus } from '@/lib/types';
 import { consumeDeepLink } from '@/lib/app-deeplink';
-import { successRateFromLogs, formatRatePercent, describeTrigger } from '@/lib/automation-display';
+import { successRateFromLogs, formatRatePercent, describeTrigger, workspaceLabel, groupAutomationsByWorkspace } from '@/lib/automation-display';
 import AutomationRow from './automations/AutomationRow';
 import AutomationLogList, { type NamedLog } from './automations/AutomationLogList';
 import AutomationBuilder, { type AutomationDraft } from './automations/AutomationBuilder';
@@ -52,6 +52,9 @@ const AutomationCenterApp = () => {
   const [saving, setSaving] = useState(false);
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set());
   const [logsTarget, setLogsTarget] = useState<string | null>(null);
+  // Multi-workspace grouping + the Loops-engine sovereignty pill.
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [engine, setEngine] = useState<EngineStatus | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -87,6 +90,20 @@ const AutomationCenterApp = () => {
     if (connecting) return;
     void refresh();
   }, [refresh, connecting]);
+
+  // Workspaces (for grouping) load once; the engine status polls so the
+  // sovereignty pill reflects whether the local Loops engine is live right now.
+  useEffect(() => {
+    if (connecting) return;
+    adapter.getWorkspaces().then(setWorkspaces).catch(() => {});
+    let active = true;
+    const poll = () => adapter.getEngineStatus()
+      .then(s => { if (active) setEngine(s); })
+      .catch(() => { if (active) setEngine(null); });
+    void poll();
+    const timer = setInterval(() => void poll(), 30_000);
+    return () => { active = false; clearInterval(timer); };
+  }, [connecting]);
 
   // Journey 16 / M-09: Home failure items open this app on a specific tab,
   // optionally preselecting the failing automation's log. Two paths:
@@ -221,6 +238,34 @@ const AutomationCenterApp = () => {
     </ul>
   );
 
+  const labelFor = (id: string | undefined) => workspaceLabel(id, workspaces);
+
+  // "Which workspaces": group rows by workspace with a per-group count + success
+  // rate. With ≤1 group, render the flat list byte-identical to before so
+  // single-workspace setups (and the existing tests) are unchanged.
+  const renderGrouped = (rows: Automation[]) => {
+    const groups = groupAutomationsByWorkspace(rows, labelFor);
+    if (groups.length <= 1) return renderRows(rows);
+    return (
+      <div className="space-y-3" data-testid="automation-workspace-groups">
+        {groups.map(g => {
+          const groupLogs = g.automations.flatMap(a => logsMap[a.id] ?? []);
+          return (
+            <div key={g.key}>
+              <div className="flex items-center justify-between px-1 mb-1">
+                <span className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">{g.label}</span>
+                <span className="text-[10px] text-muted-foreground tabular-nums">
+                  {g.automations.length} · {formatRatePercent(successRateFromLogs(groupLogs))}
+                </span>
+              </div>
+              {renderRows(g.automations)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between">
@@ -228,6 +273,23 @@ const AutomationCenterApp = () => {
           <Clock className="w-5 h-5 text-primary" />
           <h2 className="text-sm font-display font-semibold text-foreground">Automation Center</h2>
           <span className="text-[11px] text-muted-foreground">{automations.length} automation{automations.length === 1 ? '' : 's'}</span>
+          {/* Loops-engine sovereignty pill: automations only run while this
+              machine (or your self-hosted server) is live — nothing leaves the
+              perimeter to a cloud cron. */}
+          <span
+            data-testid="automation-engine-pill"
+            title="Loops run locally on your machine — nothing leaves your device."
+            className="flex items-center gap-1 rounded-full border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                engine === null ? 'bg-muted-foreground/40' : engine.running ? 'bg-[var(--healthy)]' : 'bg-[var(--risk)]'
+              }`}
+            />
+            {engine?.running
+              ? `Engine live · on ${engine.host}`
+              : engine === null ? 'Checking engine…' : 'Engine offline'}
+          </span>
         </div>
         <button
           onClick={() => { setCreating(true); setEditing(null); }}
@@ -376,7 +438,7 @@ const AutomationCenterApp = () => {
             )}
 
             {tab === 'running' && (
-              runningList.length > 0 ? renderRows(runningList) : (
+              runningList.length > 0 ? renderGrouped(runningList) : (
                 <div role="status" className="text-center py-8">
                   <Clock className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">Nothing running right now.</p>
@@ -391,7 +453,7 @@ const AutomationCenterApp = () => {
                   <Clock className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">No automations yet</p>
                 </div>
-              ) : renderRows(automations)
+              ) : renderGrouped(automations)
             )}
 
             {tab === 'triggers' && (

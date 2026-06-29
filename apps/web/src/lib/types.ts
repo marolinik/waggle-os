@@ -126,6 +126,24 @@ export interface AutomationLog {
   error: string | null;
 }
 
+/**
+ * Loops engine liveness (GET /api/automations/engine). The scheduler ticks in
+ * the Waggle process, so automations only run while THIS machine (or the user's
+ * self-hosted server) is live — the sovereignty story. Drives the engine pill.
+ */
+export interface EngineStatus {
+  running: boolean;
+  lastTickAt: string | null;
+  nextTickDueAt: string | null;
+  intervalMs: number | null;
+  host: string;
+  disabledJobCount: number;
+  consecutiveFailureCap: number;
+  device?: string;
+  platform?: string;
+  sovereign?: boolean;
+}
+
 // NOTE: the stale `AppView` union (superseded by `AppId` in lib/dock-tiers.ts)
 // was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
 

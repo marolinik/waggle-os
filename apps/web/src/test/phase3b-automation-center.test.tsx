@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
     // jobType/jobConfig read off the cron rows.
     getWorkspaces: vi.fn(),
     getCronJobs: vi.fn(),
+    // Multi-workspace UX (engine pill + grouping).
+    getEngineStatus: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -56,6 +58,7 @@ beforeEach(() => {
   mocks.adapter.getAutomationLogs.mockResolvedValue([]);
   mocks.adapter.getWorkspaces.mockResolvedValue([]);
   mocks.adapter.getCronJobs.mockResolvedValue([]);
+  mocks.adapter.getEngineStatus.mockResolvedValue({ running: true, host: 'test-host' });
 });
 afterEach(cleanup);
 
@@ -70,6 +73,46 @@ describe('AutomationCenterApp', () => {
     expect(screen.getByText('Active schedules')).toBeInTheDocument();
     // No "hours saved" tile anywhere (C27).
     expect(screen.queryByText(/hours saved/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the Loops engine pill as live with the host (sovereignty)', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]);
+    mocks.adapter.getEngineStatus.mockResolvedValue({ running: true, host: 'lab-box' });
+    renderApp();
+    expect(await screen.findByText(/Engine live/)).toBeInTheDocument();
+    expect(screen.getByTestId('automation-engine-pill')).toHaveTextContent('lab-box');
+  });
+
+  it('shows the engine pill as offline when the local engine is not running', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]);
+    mocks.adapter.getEngineStatus.mockResolvedValue({ running: false, host: 'lab-box' });
+    renderApp();
+    expect(await screen.findByText('Engine offline')).toBeInTheDocument();
+  });
+
+  it('groups the Scheduled tab by workspace when automations span multiple workspaces', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([
+      makeAutomation({ id: '1', name: 'Sales digest', workspaceId: 'w1' }),
+      makeAutomation({ id: '2', name: 'Legal sweep', workspaceId: 'w2' }),
+    ]);
+    mocks.adapter.getWorkspaces.mockResolvedValue([
+      { id: 'w1', name: 'Acme Sales' }, { id: 'w2', name: 'Legal' },
+    ]);
+    renderApp();
+    await screen.findByTestId('automation-overview-tiles');
+    fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
+    expect(await screen.findByTestId('automation-workspace-groups')).toBeInTheDocument();
+    expect(screen.getByText('Acme Sales')).toBeInTheDocument();
+    expect(screen.getByText('Legal')).toBeInTheDocument();
+  });
+
+  it('does not group the Scheduled tab when all automations share one workspace', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]); // workspaceId '*'
+    renderApp();
+    await screen.findByTestId('automation-overview-tiles');
+    fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
+    expect(await screen.findByText('Nightly consolidation')).toBeInTheDocument();
+    expect(screen.queryByTestId('automation-workspace-groups')).toBeNull();
   });
 
   it('surfaces a failed latest run in the attention list and as a Failed badge', async () => {

@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { AutomationLog } from '@/lib/types';
+import type { Automation } from '@waggle/shared';
 import {
   AUTOMATION_STATE_META,
   type AutomationViewStatus,
@@ -14,7 +15,14 @@ import {
   successRateFromLogs,
   formatRatePercent,
   describeTrigger,
+  workspaceLabel,
+  groupAutomationsByWorkspace,
 } from './automation-display';
+
+const auto = (id: string, workspaceId: string): Automation => ({
+  id, name: `A${id}`, triggerType: 'schedule', schedule: '0 9 * * *',
+  actions: [], workspaceId, status: 'active',
+});
 
 const ALL_STATES: AutomationViewStatus[] = [
   'draft', 'scheduled', 'running', 'success', 'failed', 'paused', 'awaiting_approval', 'disabled',
@@ -23,6 +31,42 @@ const ALL_STATES: AutomationViewStatus[] = [
 function log(success: boolean): AutomationLog {
   return { id: 1, executedAt: '2026-06-10T01:00:00Z', durationMs: 1200, success, resultSummary: success ? 'ok' : null, error: success ? null : 'boom' };
 }
+
+describe('workspaceLabel', () => {
+  const ws = [{ id: 'w1', name: 'Acme Sales' }, { id: 'w2', name: 'Legal' }];
+  it('maps the cross-workspace sentinels to "All workspaces"', () => {
+    expect(workspaceLabel('*', ws)).toBe('All workspaces');
+    expect(workspaceLabel('global', ws)).toBe('All workspaces');
+    expect(workspaceLabel(undefined, ws)).toBe('All workspaces');
+    expect(workspaceLabel('', ws)).toBe('All workspaces');
+  });
+  it('resolves a known id to its name and falls back to the raw id', () => {
+    expect(workspaceLabel('w1', ws)).toBe('Acme Sales');
+    expect(workspaceLabel('w9', ws)).toBe('w9');
+  });
+});
+
+describe('groupAutomationsByWorkspace', () => {
+  const labelFor = (id: string | undefined) =>
+    workspaceLabel(id, [{ id: 'w1', name: 'Acme' }, { id: 'w2', name: 'Legal' }]);
+  it('returns [] for no rows', () => {
+    expect(groupAutomationsByWorkspace([], labelFor)).toEqual([]);
+  });
+  it('partitions by workspace with the cross-workspace group first', () => {
+    const groups = groupAutomationsByWorkspace(
+      [auto('1', 'w2'), auto('2', '*'), auto('3', 'w1'), auto('4', 'w2')],
+      labelFor,
+    );
+    expect(groups.map(g => g.key)).toEqual(['*', 'w1', 'w2']);
+    expect(groups[0].label).toBe('All workspaces');
+    expect(groups.find(g => g.key === 'w2')?.automations).toHaveLength(2);
+  });
+  it('treats a blank workspaceId as the cross-workspace group', () => {
+    const groups = groupAutomationsByWorkspace([auto('1', '')], labelFor);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].key).toBe('*');
+  });
+});
 
 describe('AUTOMATION_STATE_META — §14.6 full vocabulary', () => {
   it('maps every state to a non-empty label and tone', () => {
