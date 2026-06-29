@@ -71,6 +71,44 @@ export interface NotificationRow {
   created_at: string;
 }
 
+// ── L2 assisted loops: durable "held action" approval queue ──────────────
+// A held action is a self-contained proposed tool call drafted by a headless
+// run (e.g. an assist-mode Loop) that needs a human's one-click approval before
+// it executes. Durable so it survives a sidecar restart (the in-memory live
+// approval Promise does not). Execute-on-approve, never mid-run suspend/resume.
+
+export type PendingActionStatus = 'held' | 'approved' | 'denied' | 'executed' | 'failed' | 'expired';
+
+export interface PendingActionRow {
+  id: string;               // requestId (uuid)
+  workspace_id: string | null;
+  source: string;           // e.g. 'loop:<scheduleId>'
+  tool_name: string;
+  args_json: string;
+  summary: string | null;   // the maker's plain-language rationale
+  risk_level: string;       // low | medium | high | critical
+  approval_class: string;
+  status: PendingActionStatus;
+  result_summary: string | null;
+  error: string | null;
+  created_at: string;
+  decided_at: string | null;
+  executed_at: string | null;
+  expires_at: string | null;
+}
+
+export interface SavePendingActionInput {
+  id: string;
+  workspaceId: string | null;
+  source: string;
+  toolName: string;
+  argsJson: string;
+  summary?: string;
+  riskLevel: string;
+  approvalClass: string;
+  expiresAt?: string;
+}
+
 // ── Table DDL ──────────────────────────────────────────────────────────
 
 export const CRON_SCHEDULES_TABLE_SQL = `
@@ -117,6 +155,28 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_created ON notifications (created_at);
+`;
+
+// L2: durable held-action approval queue
+export const PENDING_ACTIONS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS pending_actions (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT,
+  source TEXT NOT NULL,
+  tool_name TEXT NOT NULL,
+  args_json TEXT NOT NULL,
+  summary TEXT,
+  risk_level TEXT NOT NULL,
+  approval_class TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'held',
+  result_summary TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  decided_at TEXT,
+  executed_at TEXT,
+  expires_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pending_actions_status ON pending_actions (status, created_at);
 `;
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -173,6 +233,13 @@ export class CronStore {
     ).get();
     if (!notifExists) {
       raw.exec(NOTIFICATIONS_TABLE_SQL);
+    }
+    // L2: Ensure pending_actions (held-action approval queue) table
+    const pendingExists = raw.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='pending_actions'",
+    ).get();
+    if (!pendingExists) {
+      raw.exec(PENDING_ACTIONS_TABLE_SQL);
     }
   }
 
@@ -368,5 +435,85 @@ export class CronStore {
   countUnread(): number {
     const row = this.db.getDatabase().prepare('SELECT COUNT(*) as cnt FROM notifications WHERE read = 0').get() as { cnt: number };
     return row.cnt;
+  }
+
+  // ── L2: Held-action approval queue ─────────────────────────────────
+
+  /** Enqueue a held action (status 'held'). Returns the persisted row. */
+  savePendingAction(input: SavePendingActionInput): PendingActionRow {
+    this.db.getDatabase().prepare(`
+      INSERT INTO pending_actions (id, workspace_id, source, tool_name, args_json, summary, risk_level, approval_class, status, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held', ?)
+    `).run(
+      input.id,
+      input.workspaceId,
+      input.source,
+      input.toolName,
+      input.argsJson,
+      input.summary ?? null,
+      input.riskLevel,
+      input.approvalClass,
+      input.expiresAt ?? null,
+    );
+    return this.getPendingAction(input.id)!;
+  }
+
+  /** List held actions (newest first) — defaults to the 'held' queue. */
+  listPendingActions(status: PendingActionStatus = 'held'): PendingActionRow[] {
+    return this.db.getDatabase().prepare(
+      'SELECT * FROM pending_actions WHERE status = ? ORDER BY created_at DESC',
+    ).all(status) as PendingActionRow[];
+  }
+
+  /** Get one held action by id. */
+  getPendingAction(id: string): PendingActionRow | undefined {
+    return this.db.getDatabase().prepare(
+      'SELECT * FROM pending_actions WHERE id = ?',
+    ).get(id) as PendingActionRow | undefined;
+  }
+
+  /**
+   * Atomically claim a held action — transition 'held' → 'approved' | 'denied'.
+   * This is the idempotency gate: exactly ONE caller wins (the `WHERE status =
+   * 'held'` makes it atomic in SQLite), so a double-approve / approve-after-deny
+   * is a no-op. Returns the updated row if THIS call won the claim, else
+   * undefined (already decided or missing).
+   */
+  claimPendingAction(id: string, status: 'approved' | 'denied', decidedAt: string): PendingActionRow | undefined {
+    const result = this.db.getDatabase().prepare(
+      "UPDATE pending_actions SET status = ?, decided_at = ? WHERE id = ? AND status = 'held'",
+    ).run(status, decidedAt, id);
+    if (result.changes === 0) return undefined;
+    return this.getPendingAction(id);
+  }
+
+  /**
+   * Record the terminal outcome of a claimed action ('approved' → 'executed' |
+   * 'failed'). Unconditional — the caller already won claimPendingAction(), so
+   * it owns the row and no further guard is needed.
+   */
+  updatePendingActionResult(id: string, changes: { status: 'executed' | 'failed'; resultSummary?: string; error?: string; executedAt?: string }): void {
+    const sets: string[] = ['status = ?'];
+    const vals: unknown[] = [changes.status];
+    if (changes.resultSummary !== undefined) { sets.push('result_summary = ?'); vals.push(changes.resultSummary); }
+    if (changes.error !== undefined) { sets.push('error = ?'); vals.push(changes.error); }
+    if (changes.executedAt !== undefined) { sets.push('executed_at = ?'); vals.push(changes.executedAt); }
+    vals.push(id);
+    this.db.getDatabase().prepare(
+      `UPDATE pending_actions SET ${sets.join(', ')} WHERE id = ?`,
+    ).run(...vals);
+  }
+
+  /** Flip held actions past their expires_at to 'expired'. Returns rows changed. */
+  expireStalePendingActions(): number {
+    const result = this.db.getDatabase().prepare(
+      "UPDATE pending_actions SET status = 'expired' WHERE status = 'held' AND expires_at IS NOT NULL AND expires_at < datetime('now')",
+    ).run();
+    return result.changes;
+  }
+
+  /** Clear all pending actions (for testing). */
+  clearPendingActions(): void {
+    this.db.getDatabase().prepare('DELETE FROM pending_actions').run();
   }
 }

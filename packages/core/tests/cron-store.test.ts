@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import { MindDB } from '@waggle/hive-mind-core';
-import { CronStore, type CreateScheduleInput } from '../src/cron-store.js';
+import { CronStore, type CreateScheduleInput, type SavePendingActionInput } from '../src/cron-store.js';
 
 describe('CronStore', () => {
   let tmpDir: string;
@@ -188,5 +188,64 @@ describe('CronStore', () => {
     const remaining = store.getExecutionHistory(created.id);
     expect(remaining).toHaveLength(1);
     expect(remaining[0].success).toBe(1);
+  });
+
+  describe('pending_actions (L2 held-action queue)', () => {
+    function held(over?: Partial<SavePendingActionInput>): SavePendingActionInput {
+      return {
+        id: 'pa-1', workspaceId: null, source: 'loop:1', toolName: 'send_email',
+        argsJson: JSON.stringify({ to: 'x@y.z', subject: 'hi' }), summary: 'Send follow-up',
+        riskLevel: 'medium', approvalClass: 'elevated', ...over,
+      };
+    }
+
+    it('saves and lists held actions, filtered by status', () => {
+      store.savePendingAction(held());
+      store.savePendingAction(held({ id: 'pa-2', toolName: 'write_file' }));
+      const heldRows = store.listPendingActions('held');
+      expect(heldRows).toHaveLength(2);
+      expect(heldRows.map(r => r.tool_name).sort()).toEqual(['send_email', 'write_file']);
+      expect(store.listPendingActions('executed')).toHaveLength(0);
+    });
+
+    it('claimPendingAction is an atomic idempotency gate (double-claim no-ops)', () => {
+      store.savePendingAction(held());
+      const first = store.claimPendingAction('pa-1', 'approved', '2026-06-29T10:00:00Z');
+      expect(first?.status).toBe('approved');
+      expect(first?.decided_at).toBe('2026-06-29T10:00:00Z');
+      // A second claim (double-approve / approve-after-deny) wins nothing.
+      expect(store.claimPendingAction('pa-1', 'approved', '2026-06-29T10:05:00Z')).toBeUndefined();
+      expect(store.claimPendingAction('pa-1', 'denied', '2026-06-29T10:05:00Z')).toBeUndefined();
+      // Unknown id → undefined.
+      expect(store.claimPendingAction('nope', 'approved', '2026-06-29T10:00:00Z')).toBeUndefined();
+    });
+
+    it('updatePendingActionResult records the terminal outcome after a claim', () => {
+      store.savePendingAction(held());
+      store.claimPendingAction('pa-1', 'approved', '2026-06-29T10:00:00Z');
+      store.updatePendingActionResult('pa-1', { status: 'executed', resultSummary: 'sent', executedAt: '2026-06-29T10:01:00Z' });
+      const row = store.getPendingAction('pa-1');
+      expect(row?.status).toBe('executed');
+      expect(row?.result_summary).toBe('sent');
+      expect(row?.executed_at).toBe('2026-06-29T10:01:00Z');
+    });
+
+    it('persists held actions across a DB reopen (durable queue)', () => {
+      store.savePendingAction(held());
+      db.close();
+      db = new MindDB(path.join(tmpDir, 'test.mind'));
+      store = new CronStore(db);
+      const rows = store.listPendingActions('held');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe('pa-1');
+    });
+
+    it('expireStalePendingActions flips past-due held rows to expired', () => {
+      store.savePendingAction(held({ expiresAt: '2000-01-01T00:00:00Z' }));        // long past
+      store.savePendingAction(held({ id: 'pa-2', expiresAt: '2999-01-01T00:00:00Z' })); // future
+      expect(store.expireStalePendingActions()).toBe(1);
+      expect(store.listPendingActions('held').map(r => r.id)).toEqual(['pa-2']);
+      expect(store.listPendingActions('expired').map(r => r.id)).toEqual(['pa-1']);
+    });
   });
 });
