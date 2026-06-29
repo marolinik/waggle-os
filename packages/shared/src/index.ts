@@ -8,3 +8,4 @@ export * from './connector-recommendations.js';
 export * from './tool-detection.js';
 export * from './risk.js';
 export * from './command-intent.js';
+export * from './loop-templates.js';

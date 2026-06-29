@@ -4,6 +4,7 @@ import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import type { Automation } from '@waggle/shared';
+import { LOOP_TEMPLATES, type LoopTemplate } from '@waggle/shared';
 import type { AutomationLog, Workspace, EngineStatus } from '@/lib/types';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import { successRateFromLogs, formatRatePercent, describeTrigger, workspaceLabel, groupAutomationsByWorkspace } from '@/lib/automation-display';
@@ -55,6 +56,8 @@ const AutomationCenterApp = () => {
   // Multi-workspace grouping + the Loops-engine sovereignty pill.
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [engine, setEngine] = useState<EngineStatus | null>(null);
+  /** Template currently being created (disables its button). */
+  const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -203,6 +206,28 @@ const AutomationCenterApp = () => {
       toast({ title: editing ? 'Failed to update automation' : 'Failed to create automation', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // One-click create a report-only Loop from a knowledge-worker template. Loops
+  // carry their own prompt, so they are created from templates (not the generic
+  // Builder job-type dropdown) — the template is the safe, prefilled starting point.
+  const createFromTemplate = async (t: LoopTemplate) => {
+    setCreatingTemplateId(t.id);
+    try {
+      await adapter.createAutomation({
+        name: t.name,
+        trigger: { type: 'schedule', cron: t.defaultCron },
+        jobType: 'loop',
+        jobConfig: t.jobConfig,
+        enabled: true,
+      });
+      toast({ title: 'Loop created', description: `${t.name} — report-only, runs on your machine` });
+      await refresh();
+    } catch (err) {
+      toast({ title: 'Failed to create loop', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
+    } finally {
+      setCreatingTemplateId(null);
     }
   };
 
@@ -434,6 +459,26 @@ const AutomationCenterApp = () => {
                     </div>
                   </div>
                 )}
+                <div data-testid="automation-templates" className="rounded-lg border border-border/30 bg-secondary/10 px-2.5 py-2">
+                  <p className="text-[10px] font-display uppercase tracking-wide text-muted-foreground mb-1.5">Start from a template</p>
+                  <div className="grid sm:grid-cols-2 gap-1.5">
+                    {LOOP_TEMPLATES.map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => void createFromTemplate(t)}
+                        disabled={creatingTemplateId !== null}
+                        data-testid={`automation-template-${t.id}`}
+                        className="text-left rounded-lg border border-border/40 bg-card/40 px-2 py-1.5 hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
+                      >
+                        <span className="block text-[11px] font-medium text-foreground">{t.name}</span>
+                        <span className="block text-[10px] text-muted-foreground leading-tight">{t.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1.5">
+                    Templates create report-only Loops — they summarise from this workspace&apos;s memory and notify you; they never act on your behalf.
+                  </p>
+                </div>
               </>
             )}
 

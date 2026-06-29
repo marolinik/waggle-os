@@ -4,7 +4,7 @@
  * validation-only Test preview framing, pause flow, empty + error states.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Automation } from '@waggle/shared';
 import type { AutomationLog } from '@/lib/types';
@@ -113,6 +113,18 @@ describe('AutomationCenterApp', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
     expect(await screen.findByText('Nightly consolidation')).toBeInTheDocument();
     expect(screen.queryByTestId('automation-workspace-groups')).toBeNull();
+  });
+
+  it('creates a report-only Loop from a knowledge-worker template', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([]);
+    mocks.adapter.createAutomation.mockResolvedValue(makeAutomation());
+    renderApp();
+    fireEvent.click(await screen.findByTestId('automation-template-daily-desk-brief'));
+    await waitFor(() => expect(mocks.adapter.createAutomation).toHaveBeenCalled());
+    const arg = mocks.adapter.createAutomation.mock.calls[0][0];
+    expect(arg.jobType).toBe('loop');
+    expect(arg.trigger).toEqual({ type: 'schedule', cron: '0 8 * * *' });
+    expect(arg.jobConfig.prompt).toContain('attention today');
   });
 
   it('surfaces a failed latest run in the attention list and as a Failed badge', async () => {
