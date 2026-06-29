@@ -52,6 +52,21 @@ describe('CronStore', () => {
     ).toThrow(/workspace/i);
   });
 
+  it('create loop job type round-trips with its job_config', () => {
+    const schedule = store.create(makeInput({
+      jobType: 'loop',
+      jobConfig: { prompt: 'Summarize what changed in this workspace.' },
+    }));
+    expect(schedule.job_type).toBe('loop');
+    expect(JSON.parse(schedule.job_config).prompt).toBe('Summarize what changed in this workspace.');
+  });
+
+  it('create loop without workspaceId succeeds (loops can run on the personal mind)', () => {
+    const schedule = store.create(makeInput({ jobType: 'loop' }));
+    expect(schedule.job_type).toBe('loop');
+    expect(schedule.workspace_id).toBeNull();
+  });
+
   it('create agent_task with workspaceId succeeds', () => {
     const schedule = store.create(makeInput({
       jobType: 'agent_task',

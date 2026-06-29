@@ -12,7 +12,7 @@ import type { MindDB } from '@waggle/hive-mind-core';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type CronJobType = 'agent_task' | 'memory_consolidation' | 'workspace_health' | 'proactive' | 'prompt_optimization' | 'monthly_assessment' | 'connector_fetch';
+export type CronJobType = 'agent_task' | 'memory_consolidation' | 'workspace_health' | 'proactive' | 'prompt_optimization' | 'monthly_assessment' | 'connector_fetch' | 'loop';
 
 export const VALID_JOB_TYPES: Set<string> = new Set([
   'agent_task',
@@ -22,6 +22,10 @@ export const VALID_JOB_TYPES: Set<string> = new Set([
   'prompt_optimization',
   'monthly_assessment',
   'connector_fetch',
+  // Loop v0: a stateful, memory-powered, report-only (L1) scheduled automation.
+  // Composes recall + maker (toolless LLM) + checker (LLMJudge) + memory write.
+  // job_type TEXT has no CHECK constraint, so this is additive — no migration.
+  'loop',
 ]);
 
 export interface CronSchedule {

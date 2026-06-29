@@ -65,6 +65,7 @@ import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '
 import { parseTier, assertTierCapability, TierError } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { runConnectorFetch } from './connector-harvest.js';
+import { runLoopTick } from './loop-executor.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -1968,6 +1969,50 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
           });
         } catch (err) {
           log.warn(`[cron] Monthly assessment failed: ${(err as Error).message}`);
+        }
+        break;
+      }
+      case 'loop': {
+        // Loop v0 (L1, report-only): a stateful, memory-powered scheduled
+        // automation. Resolve the target mind (a specific workspace, else the
+        // personal mind), build a toolless completion against the local proxy,
+        // and delegate to runLoopTick (recall → maker → checker → memory write).
+        // Throws from the maker/checker LLM path are intentionally NOT caught
+        // here so the scheduler records the failure and auto-disables after
+        // repeated failures (recall/write failures are caught inside runLoopTick).
+        const wsId = schedule.workspace_id;
+        const mindDb = wsId && wsId !== '*' ? getWorkspaceMindDb(wsId) : multiMind.personal;
+        if (!mindDb) {
+          log.warn(`[cron] loop "${schedule.name}" references unknown workspace "${wsId}" — skipping`);
+          break;
+        }
+        if (wsId && wsId !== '*') activateWorkspaceMindWithWeaver(wsId);
+        const loopModel = server.agentState.currentModel ?? 'claude-sonnet-4-6';
+        const loopProxyUrl = `http://127.0.0.1:${fullConfig.port ?? 3333}/v1/chat/completions`;
+        const loopChat = async (prompt: string, maxTokens = 2048): Promise<string> => {
+          const resp = await fetch(loopProxyUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: loopModel,
+              max_tokens: maxTokens,
+              messages: [{ role: 'user', content: prompt }],
+            }),
+            signal: AbortSignal.timeout(120_000),
+          });
+          if (!resp.ok) throw new Error(`Loop LLM call failed: HTTP ${resp.status}`);
+          const body = await resp.json() as { choices?: Array<{ message?: { content?: string } }> };
+          return body.choices?.[0]?.message?.content ?? '';
+        };
+        const loopResult = await runLoopTick({ schedule, mindDb, embedder, chat: loopChat, log });
+        if (!loopResult.skipped) {
+          emitNotification(server, {
+            title: `Loop: ${schedule.name}`,
+            body: loopResult.summary || 'Loop ran',
+            category: 'cron',
+            actionUrl: wsId && wsId !== '*' ? `/workspace/${wsId}` : '/',
+          });
+          log.info(`[cron] loop "${schedule.name}" ran${loopResult.score !== undefined ? ` (score ${loopResult.score.toFixed(2)})` : ''}${loopResult.wrote ? ', wrote 1 frame' : ''}`);
         }
         break;
       }
