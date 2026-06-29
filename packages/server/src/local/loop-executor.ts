@@ -59,6 +59,13 @@ export interface LoopTickDeps {
   log: LoopLogger;
 }
 
+/** A single follow-up action an assist-mode Loop proposes (held for approval). */
+export interface ProposedAction {
+  tool: string;
+  args: Record<string, unknown>;
+  summary: string;
+}
+
 export interface LoopTickResult {
   /** true when the tick did no work (no prompt, throttled, empty output). */
   skipped?: boolean;
@@ -69,6 +76,9 @@ export interface LoopTickResult {
   score?: number;
   /** Whether a memory frame was written this tick. */
   wrote?: boolean;
+  /** Assist mode: the single action the maker proposed (the caller enqueues it
+   *  — runLoopTick stays pure and never touches the held-action store). */
+  proposedAction?: ProposedAction;
 }
 
 /**
@@ -86,6 +96,38 @@ interface LoopSpec {
   rubric?: string;
   writeToMemory: boolean;
   minIntervalMs: number;
+  /** 'report' = L1 (default). 'assist' = L2: the maker may propose ONE action
+   *  that is held for human approval. The maker stays toolless either way. */
+  mode: 'report' | 'assist';
+}
+
+/** Matches a fenced ```json … ``` block (used to extract / strip a proposal). */
+const PROPOSAL_FENCE_RE = /```json\s*([\s\S]*?)```/gi;
+
+/**
+ * Extract the LAST ```json fence from an assist-mode maker reply as a proposed
+ * action. Returns null for no fence, malformed JSON, an explicit {"none":true},
+ * or a missing tool. Pure + dependency-free. The args are NOT validated here —
+ * the enqueue boundary (enqueueHeldAction) allowlists + injection-scans them.
+ */
+export function parseProposal(makerOutput: string): ProposedAction | null {
+  const matches = [...makerOutput.matchAll(PROPOSAL_FENCE_RE)];
+  if (matches.length === 0) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(matches[matches.length - 1][1].trim());
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const o = parsed as Record<string, unknown>;
+  if (o.none === true) return null;
+  if (typeof o.tool !== 'string' || !o.tool.trim()) return null;
+  return {
+    tool: o.tool,
+    args: o.args && typeof o.args === 'object' ? o.args as Record<string, unknown> : {},
+    summary: typeof o.summary === 'string' ? o.summary : '',
+  };
 }
 
 /** Parse + validate the loop's job_config blob into a LoopSpec. */
@@ -108,6 +150,7 @@ export function parseLoopSpec(jobConfig: string): LoopSpec | null {
     rubric: typeof cfg.rubric === 'string' && cfg.rubric.trim() ? cfg.rubric : undefined,
     writeToMemory: cfg.writeToMemory !== false,
     minIntervalMs: Math.max(0, minRaw),
+    mode: cfg.mode === 'assist' ? 'assist' : 'report',
   };
 }
 
@@ -117,6 +160,8 @@ export function buildMakerPrompt(opts: {
   prompt: string;
   priorResult: string;
   recalled: string;
+  /** assist mode (L2) — ask the maker to optionally propose ONE action. */
+  assist?: boolean;
 }): string {
   const parts = [
     `You are running a scheduled knowledge-work automation called "${opts.name}".`,
@@ -128,11 +173,23 @@ export function buildMakerPrompt(opts: {
     parts.push(`Relevant context recalled from this workspace's memory:\n${opts.recalled}`);
   }
   parts.push(`Your task:\n${opts.prompt}`);
-  parts.push(
-    'Produce a concise, factual report. Emphasise what is NEW or changed since the previous ' +
-      'run. Do not invent facts — ground every claim in the recalled context, or say plainly ' +
-      'what you could not determine. This is a report only; do not take any action.',
-  );
+  if (opts.assist) {
+    parts.push(
+      'Produce a concise, factual report grounded in the recalled context. Then, IF AND ONLY IF a ' +
+        'concrete follow-up action would clearly help, propose exactly ONE action by ending your reply ' +
+        'with a single fenced JSON block:\n' +
+        '```json\n{"tool":"send_email","args":{"to":"…","subject":"…","body":"…"},"summary":"one line: what it does and why"}\n```\n' +
+        'Allowed tools: send_email, write_file, edit_file, or a connector write action. If no action is ' +
+        'warranted, end with ```json\n{"none":true}\n```. You are NOT executing anything — a human reviews ' +
+        'and approves every proposal before it runs. Do not invent facts.',
+    );
+  } else {
+    parts.push(
+      'Produce a concise, factual report. Emphasise what is NEW or changed since the previous ' +
+        'run. Do not invent facts — ground every claim in the recalled context, or say plainly ' +
+        'what you could not determine. This is a report only; do not take any action.',
+    );
+  }
   return parts.join('\n\n');
 }
 
@@ -194,15 +251,26 @@ export async function runLoopTick(deps: LoopTickDeps): Promise<LoopTickResult> {
     priorResult = '';
   }
 
-  // Maker — toolless report generation.
-  const report = (await chat(buildMakerPrompt({
+  // Maker — toolless report generation. In assist mode it may append a single
+  // ```json proposal fence (parsed + stripped below; never executed here).
+  const rawReport = (await chat(buildMakerPrompt({
     name: schedule.name,
     prompt: spec.prompt,
     priorResult,
     recalled,
+    assist: spec.mode === 'assist',
   }), 2048)).trim();
-  if (!report) {
+  if (!rawReport) {
     return { skipped: true, reason: 'empty report', summary: '' };
+  }
+
+  // Assist mode: lift the proposed action out and strip its fence from the
+  // human-facing report. runLoopTick stays pure — the caller enqueues it.
+  let proposedAction: ProposedAction | undefined;
+  let report = rawReport;
+  if (spec.mode === 'assist') {
+    proposedAction = parseProposal(rawReport) ?? undefined;
+    report = rawReport.replace(PROPOSAL_FENCE_RE, '').trim() || rawReport;
   }
 
   // Checker — LLMJudge verifies the report (the verification gate). Best-effort:
@@ -254,5 +322,5 @@ export async function runLoopTick(deps: LoopTickDeps): Promise<LoopTickResult> {
   }
 
   const summary = report.length > 200 ? `${report.slice(0, 197)}...` : report;
-  return { summary, score, wrote };
+  return { summary, score, wrote, ...(proposedAction ? { proposedAction } : {}) };
 }

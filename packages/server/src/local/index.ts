@@ -66,6 +66,7 @@ import { parseTier, assertTierCapability, TierError } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { runConnectorFetch } from './connector-harvest.js';
 import { runLoopTick } from './loop-executor.js';
+import { enqueueHeldAction } from './held-action-executor.js';
 import { workspaceRoutes } from './routes/workspaces.js';
 import { chatRoutes, type AgentRunner } from './routes/chat.js';
 import { memoryRoutes } from './routes/memory.js';
@@ -2013,6 +2014,23 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             actionUrl: wsId && wsId !== '*' ? `/workspace/${wsId}` : '/',
           });
           log.info(`[cron] loop "${schedule.name}" ran${loopResult.score !== undefined ? ` (score ${loopResult.score.toFixed(2)})` : ''}${loopResult.wrote ? ', wrote 1 frame' : ''}`);
+          // L2 assist mode: hold the maker's proposed action for human approval.
+          // enqueueHeldAction validates (allowlist + critical + injection) and
+          // persists 'held'; nothing executes until a human approves.
+          if (loopResult.proposedAction) {
+            const enq = enqueueHeldAction(server, {
+              workspaceId: wsId ?? null,
+              source: `loop:${schedule.id}`,
+              tool: loopResult.proposedAction.tool,
+              args: loopResult.proposedAction.args,
+              summary: loopResult.proposedAction.summary || undefined,
+            });
+            log.info(
+              'refused' in enq
+                ? `[cron] loop "${schedule.name}" proposed ${loopResult.proposedAction.tool} — refused (${enq.refused})`
+                : `[cron] loop "${schedule.name}" proposed ${loopResult.proposedAction.tool} — held for approval (${enq.id})`,
+            );
+          }
         }
         break;
       }

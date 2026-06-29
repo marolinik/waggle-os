@@ -6,6 +6,7 @@ import { MindDB, AwarenessLayer, type Embedder } from '@waggle/core';
 import {
   runLoopTick,
   parseLoopSpec,
+  parseProposal,
   buildMakerPrompt,
   LOOP_MIN_INTERVAL_MS,
   type LoopSchedule,
@@ -207,5 +208,76 @@ describe('buildMakerPrompt', () => {
     const p = buildMakerPrompt({ name: 'L', prompt: 'task', priorResult: 'PRIOR', recalled: 'RECALL' });
     expect(p).toContain('PRIOR');
     expect(p).toContain('RECALL');
+  });
+
+  it('assist mode swaps the report-only line for a proposal instruction', () => {
+    const p = buildMakerPrompt({ name: 'L', prompt: 'task', priorResult: '', recalled: '', assist: true });
+    expect(p).toContain('propose exactly ONE action');
+    expect(p).toContain('a human reviews');
+    expect(p).not.toContain('do not take any action');
+  });
+});
+
+describe('parseProposal', () => {
+  it('extracts the last json fence as a proposed action', () => {
+    const out = 'Report text.\n```json\n{"tool":"send_email","args":{"to":"a@b.c"},"summary":"follow up"}\n```';
+    expect(parseProposal(out)).toEqual({ tool: 'send_email', args: { to: 'a@b.c' }, summary: 'follow up' });
+  });
+  it('returns null for no fence, {none:true}, malformed JSON, or a missing tool', () => {
+    expect(parseProposal('no fence here')).toBeNull();
+    expect(parseProposal('```json\n{"none":true}\n```')).toBeNull();
+    expect(parseProposal('```json\n{not json}\n```')).toBeNull();
+    expect(parseProposal('```json\n{"args":{}}\n```')).toBeNull();
+  });
+  it('defaults args to {} and summary to "" when omitted', () => {
+    expect(parseProposal('```json\n{"tool":"write_file"}\n```')).toEqual({ tool: 'write_file', args: {}, summary: '' });
+  });
+});
+
+describe('runLoopTick — assist mode (L2 proposals)', () => {
+  let tmpDir: string;
+  let db: MindDB;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-loop-a-'));
+    db = new MindDB(path.join(tmpDir, 'test.mind'));
+  });
+  afterEach(() => { db.close(); fs.rmSync(tmpDir, { recursive: true, force: true }); });
+
+  function assistChat(report: string, fence: string) {
+    return vi.fn(async (prompt: string) => {
+      if (prompt.includes('Return the JSON now')) {
+        return '{"correctness": 8, "procedure": 7, "conciseness": 9, "feedback": "ok"}';
+      }
+      return `${report}\n\n\`\`\`json\n${fence}\n\`\`\``;
+    });
+  }
+  const sched = (cfg: Record<string, unknown>): LoopSchedule => ({ id: 1, name: 'Assist Loop', job_config: JSON.stringify(cfg), last_run_at: null });
+
+  it('report mode never proposes an action', async () => {
+    const chat = vi.fn(async () => 'A plain report, no fence.');
+    const res = await runLoopTick({ schedule: sched({ prompt: 'sweep' }), mindDb: db, embedder, chat, log: silentLog });
+    expect(res.proposedAction).toBeUndefined();
+  });
+
+  it('assist mode returns the proposed action and strips the fence from the report + memory', async () => {
+    const chat = assistChat('Three deals went quiet.', '{"tool":"send_email","args":{"to":"x@y.z"},"summary":"nudge them"}');
+    const res = await runLoopTick({
+      schedule: sched({ prompt: 'sweep', mode: 'assist' }),
+      mindDb: db, embedder, chat, log: silentLog,
+    });
+    expect(res.proposedAction).toEqual({ tool: 'send_email', args: { to: 'x@y.z' }, summary: 'nudge them' });
+    expect(res.summary).toContain('Three deals went quiet');
+    expect(res.summary).not.toContain('```json');
+    // The frame written to memory must be the clean report, not the JSON fence.
+    const frames = db.getDatabase().prepare("SELECT content FROM memory_frames WHERE gop_id='loop'").all() as Array<{ content: string }>;
+    expect(frames).toHaveLength(1);
+    expect(frames[0].content).not.toContain('```json');
+  });
+
+  it('assist mode with a {none:true} proposal yields no action', async () => {
+    const chat = assistChat('Nothing actionable today.', '{"none":true}');
+    const res = await runLoopTick({ schedule: sched({ prompt: 'sweep', mode: 'assist' }), mindDb: db, embedder, chat, log: silentLog });
+    expect(res.proposedAction).toBeUndefined();
+    expect(res.summary).toContain('Nothing actionable');
   });
 });
