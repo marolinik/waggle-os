@@ -191,6 +191,33 @@ function containGlobMatches(root: string, matches: string[]): string[] {
   });
 }
 
+/**
+ * Convert a `*`/`?` glob to a RegExp that is SAFE against catastrophic
+ * backtracking (ReDoS). Every regex metacharacter is escaped first, so the only
+ * specials left are the two wildcards we re-introduce (`.*`, `.`) — neither can
+ * nest a quantifier, so a hostile pattern like `(a+)+x` becomes a harmless
+ * literal. Used by S3FileStore.searchFiles where the pattern is caller-controlled.
+ * Unanchored (substring match) to preserve the prior behavior.
+ */
+function globToRegExp(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const body = escaped.replace(/\\\*/g, '.*').replace(/\\\?/g, '.');
+  return new RegExp(body, 'i');
+}
+
+/**
+ * Reject an S3 key relative-path that would escape its workspace prefix. S3 keys
+ * are literal, but MinIO (path-style, filesystem-backed) can normalize `..`, so a
+ * `..` segment could cross into a sibling workspace's prefix. Makes the file
+ * header's "all operations enforce path traversal protection" true for S3 too.
+ */
+function assertSafeRelativeKey(relativePath: string): void {
+  const segments = relativePath.replace(/\\/g, '/').split('/');
+  if (segments.some(s => s === '..')) {
+    throw new Error(`Path traversal denied: ${relativePath}`);
+  }
+}
+
 function ensureDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
@@ -474,6 +501,7 @@ export class S3FileStore implements FileStore {
   getStorageType(): 'virtual' | 'linked' { return 'virtual'; }
 
   async readFile(relativePath: string): Promise<Buffer> {
+    assertSafeRelativeKey(relativePath);
     const client = await this.getClient();
     const { GetObjectCommand } = await import('@aws-sdk/client-s3');
     const key = this.config.prefix + relativePath;
@@ -490,6 +518,7 @@ export class S3FileStore implements FileStore {
   }
 
   async writeFile(relativePath: string, content: Buffer | string): Promise<void> {
+    assertSafeRelativeKey(relativePath);
     const client = await this.getClient();
     const { PutObjectCommand } = await import('@aws-sdk/client-s3');
     const key = this.config.prefix + relativePath;
@@ -501,6 +530,7 @@ export class S3FileStore implements FileStore {
   }
 
   async deleteFile(relativePath: string): Promise<void> {
+    assertSafeRelativeKey(relativePath);
     const client = await this.getClient();
     const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
     const key = this.config.prefix + relativePath;
@@ -511,6 +541,7 @@ export class S3FileStore implements FileStore {
   }
 
   async listFiles(directory?: string): Promise<FileEntry[]> {
+    if (directory) assertSafeRelativeKey(directory);
     const client = await this.getClient();
     const { ListObjectsV2Command } = await import('@aws-sdk/client-s3');
     const pfx = this.config.prefix + (directory ? directory + '/' : '');
@@ -547,11 +578,13 @@ export class S3FileStore implements FileStore {
 
   async searchFiles(pattern: string): Promise<FileEntry[]> {
     const all = await this.listFiles();
-    const regex = new RegExp(pattern.replace(/\*/g, '.*').replace(/\?/g, '.'), 'i');
+    const regex = globToRegExp(pattern); // ReDoS-safe glob→regex (pattern is caller-controlled)
     return all.filter(f => regex.test(f.path) || regex.test(f.name));
   }
 
   async moveFile(from: string, to: string): Promise<void> {
+    assertSafeRelativeKey(from);
+    assertSafeRelativeKey(to);
     const client = await this.getClient();
     const { CopyObjectCommand, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
     const fromKey = this.config.prefix + from;

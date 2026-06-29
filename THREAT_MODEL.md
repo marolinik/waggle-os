@@ -118,9 +118,9 @@ is deny-by-default with no per-workspace override yet.
    secret deny is also a curated blocklist (whole secret classes — e.g. browser profiles,
    shell history, `.config/gh|gcloud` tokens — are out of scope) and has no per-workspace
    override, so legitimate `.env`/`.npmrc` edits in a linked project are denied by default.
-   `S3FileStore` (TEAMS/cloud backend) still performs no path normalization and its
-   `searchFiles` builds a `RegExp` from the raw pattern (ReDoS / injection) — a separate
-   pre-existing hardening item, out of scope for the desktop sovereign-fs control above.
+   (`S3FileStore` — the TEAMS/cloud backend — now rejects `..` traversal in keys and uses a
+   ReDoS-safe glob matcher for search, but it has no secret-deny blocklist; its bucket prefix
+   is the isolation boundary.)
 3. **Fence scope is tool output only.** Recalled memory carries an equivalent prose
    preamble (`orchestrator.ts`) but is not yet wrapped in the same structural fence;
    harvest content is scanned at ingest but not re-fenced per frame. Extending the fence to

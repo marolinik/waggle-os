@@ -214,6 +214,36 @@ describe('S3FileStore', () => {
     expect(results[1].name).toBe('data.md');
   });
 
+  it('searchFiles is ReDoS-safe with a hostile regex pattern', async () => {
+    mockSend.mockResolvedValueOnce({
+      Contents: [{ Key: 'workspaces/ws-123/' + 'a'.repeat(40) + 'X', Size: 1, LastModified: new Date() }],
+      CommonPrefixes: [],
+    });
+    const start = Date.now();
+    // Under the old `new RegExp(pattern…)` this built /(a+)+$/i and catastrophically
+    // backtracked on the key. Now the metachars are escaped → a literal match → instant.
+    const results = await store.searchFiles('(a+)+$');
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(results).toHaveLength(0); // matched literally; no key contains "(a+)+$"
+  });
+
+  // ── key traversal protection ────────────────────────────────────
+
+  it('rejects ../ traversal in every op BEFORE any S3 call', async () => {
+    await expect(store.readFile('../ws-456/secret')).rejects.toThrow(/traversal denied/i);
+    await expect(store.writeFile('../ws-456/x', 'y')).rejects.toThrow(/traversal denied/i);
+    await expect(store.deleteFile('../../etc/passwd')).rejects.toThrow(/traversal denied/i);
+    await expect(store.moveFile('ok', '../ws-456/b')).rejects.toThrow(/traversal denied/i);
+    await expect(store.listFiles('../ws-456')).rejects.toThrow(/traversal denied/i);
+    expect(mockSend).not.toHaveBeenCalled();
+  });
+
+  it('allows a normal nested key', async () => {
+    mockSend.mockResolvedValueOnce({});
+    await store.writeFile('docs/sub/file.md', 'x');
+    expect(mockSend.mock.calls[0][0].Key).toBe('workspaces/ws-123/docs/sub/file.md');
+  });
+
   // ── getStorageInfo ──────────────────────────────────────────────
 
   it('getStorageInfo sums sizes from S3 listing', async () => {
