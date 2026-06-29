@@ -30,7 +30,7 @@ import {
   type MindDB,
   type Embedder,
 } from '@waggle/core';
-import { LLMJudge } from '@waggle/agent';
+import { LLMJudge, scanForInjection } from '@waggle/agent';
 
 /** Minimal slice of a CronSchedule the loop executor needs (decoupled for tests). */
 export interface LoopSchedule {
@@ -152,18 +152,25 @@ export async function runLoopTick(deps: LoopTickDeps): Promise<LoopTickResult> {
     return { skipped: true, reason: 'no prompt', summary: '' };
   }
 
-  // Cost floor — throttle minute-crons.
-  if (schedule.last_run_at) {
-    const elapsed = Date.now() - Date.parse(schedule.last_run_at);
-    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < spec.minIntervalMs) {
-      return { skipped: true, reason: 'within min interval', summary: '' };
-    }
-  }
-
   const stateKey = `loop:${schedule.id}`; // namespaced so loops don't collide on awareness.status
   const awareness = new AwarenessLayer(mindDb);
   const prior = awareness.getByStatus(stateKey)[0];
-  const priorResult = prior ? String(awareness.parseMetadata(prior).result ?? '') : '';
+  const priorMeta = prior ? awareness.parseMetadata(prior) : undefined;
+  let priorResult = priorMeta ? String(priorMeta.result ?? '') : '';
+
+  // Cost floor — throttle a loop that ran within its min interval. Measured
+  // against the awareness `lastTickAt` (ISO-8601 + timezone, written ONLY after
+  // a genuine run), NOT schedule.last_run_at: the scheduler rewrites that via
+  // markRun even on a SKIP (which would reset the window every tick), and it is
+  // SQLite's `datetime('now')` space format that V8 parses as LOCAL time
+  // (timezone-dependent breakage). lastTickAt is the correct, TZ-safe signal.
+  const lastTick = priorMeta?.lastTickAt ? Date.parse(String(priorMeta.lastTickAt)) : NaN;
+  if (Number.isFinite(lastTick)) {
+    const elapsed = Date.now() - lastTick;
+    if (elapsed >= 0 && elapsed < spec.minIntervalMs) {
+      return { skipped: true, reason: 'within min interval', summary: '' };
+    }
+  }
 
   // Recall prior context by meaning (best-effort — a recall failure must not kill the tick).
   let recalled = '';
@@ -172,6 +179,19 @@ export async function runLoopTick(deps: LoopTickDeps): Promise<LoopTickResult> {
     recalled = hits.map(h => h.frame.content).join('\n---\n');
   } catch (err) {
     log.warn(`[loop] "${schedule.name}" recall failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Defense-in-depth: recalled memory and the prior tick's output are untrusted
+  // input to the maker prompt — drop any context that trips the injection
+  // scanner (the same guard connector-harvest applies before a memory write).
+  // Matters more once loops gain tools, but cheap and consistent to enforce at L1.
+  if (recalled && !scanForInjection(recalled, 'tool_output').safe) {
+    log.warn(`[loop] "${schedule.name}" recalled memory tripped injection scan — dropping context`);
+    recalled = '';
+  }
+  if (priorResult && !scanForInjection(priorResult, 'tool_output').safe) {
+    log.warn(`[loop] "${schedule.name}" prior-tick state tripped injection scan — dropping context`);
+    priorResult = '';
   }
 
   // Maker — toolless report generation.

@@ -423,6 +423,15 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
       }
     }
 
+    // Loop parity — the loop executor (loop-executor.ts) skips a tick whose
+    // jobConfig has no usable prompt, same as agent_task.
+    if (jobType === 'loop') {
+      const prompt = jobConfig.prompt;
+      if (typeof prompt !== 'string' || !prompt.trim()) {
+        issues.push('loop requires jobConfig.prompt — the executor skips runs without one');
+      }
+    }
+
     // Workspace resolution — an unknown workspaceId means no run target.
     if (b.workspaceId && b.workspaceId !== '*' && b.workspaceId !== 'global') {
       try {

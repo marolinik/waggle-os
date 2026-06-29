@@ -352,6 +352,21 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(empty.statusCode).toBe(200);
     expect(empty.json().previewResult.ok).toBe(false);
 
+    // A 'loop' draft with no jobConfig.prompt — the loop executor would skip it,
+    // so the preview must flag it (parity with the agent_task prompt check).
+    const loopNoPrompt = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { trigger: { type: 'schedule', cron: '0 8 * * *' }, jobType: 'loop' },
+    });
+    expect(loopNoPrompt.json().previewResult.ok).toBe(false);
+    expect(loopNoPrompt.json().previewResult.issues.join(' ')).toMatch(/prompt/);
+    // ...and a loop WITH a prompt previews clean (no workspaceId required).
+    const loopOk = await server.inject({
+      method: 'POST', url: '/api/automations/test',
+      payload: { trigger: { type: 'schedule', cron: '0 8 * * *' }, jobType: 'loop', jobConfig: { prompt: 'Brief me' } },
+    });
+    expect(loopOk.json().previewResult.ok).toBe(true);
+
     // Across ALL previews: nothing executed, nothing persisted.
     expect(executed).toHaveLength(0);
     expect(cronStore.list()).toHaveLength(0);

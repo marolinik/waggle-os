@@ -42,6 +42,13 @@ function framesIn(db: MindDB, gop: string): Array<{ content: string; source: str
     .all(gop) as Array<{ content: string; source: string }>;
 }
 
+/** Seed a prior-tick awareness row so the cost floor has a lastTickAt to read. */
+function seedPriorTick(db: MindDB, scheduleId: number, lastTickAt: string) {
+  new AwarenessLayer(db).add('pending', `Loop ${scheduleId}`, 0, undefined, {
+    status: `loop:${scheduleId}`, result: 'previous report', lastTickAt,
+  });
+}
+
 describe('runLoopTick (Loop v0 — L1 report-only)', () => {
   let tmpDir: string;
   let db: MindDB;
@@ -85,8 +92,11 @@ describe('runLoopTick (Loop v0 — L1 report-only)', () => {
   });
 
   it('persists cross-tick state and feeds the prior report into the next maker prompt', async () => {
+    // Disable the cost floor so the back-to-back ticks both run (the first stamps
+    // lastTickAt = now, which would otherwise throttle the second).
+    const noFloor = JSON.stringify({ prompt: 'Observe the pipeline.', minIntervalMs: 0 });
     const chat1 = makeChat('First run: 3 deals at risk.');
-    await runLoopTick({ schedule: schedule(), mindDb: db, embedder, chat: chat1, log: silentLog });
+    await runLoopTick({ schedule: schedule({ job_config: noFloor }), mindDb: db, embedder, chat: chat1, log: silentLog });
 
     // Prior state lives under the namespaced status key.
     const items = new AwarenessLayer(db).getByStatus('loop:1');
@@ -95,7 +105,7 @@ describe('runLoopTick (Loop v0 — L1 report-only)', () => {
 
     // Second tick: the maker prompt must carry the prior report.
     const chat2 = makeChat('Second run: 1 new at-risk deal.');
-    await runLoopTick({ schedule: schedule(), mindDb: db, embedder, chat: chat2, log: silentLog });
+    await runLoopTick({ schedule: schedule({ job_config: noFloor }), mindDb: db, embedder, chat: chat2, log: silentLog });
     const makerCall = chat2.mock.calls.find(c => !String(c[0]).includes('Return the JSON now'));
     expect(makerCall?.[0]).toContain('First run: 3 deals at risk');
 
@@ -114,26 +124,32 @@ describe('runLoopTick (Loop v0 — L1 report-only)', () => {
     expect(framesIn(db, 'loop')).toHaveLength(1); // the report itself is "not json at all" — still written
   });
 
-  it('throttles a tick that fires within the cost floor (no LLM call)', async () => {
+  it('throttles a tick whose last real run (awareness lastTickAt) is within the cost floor', async () => {
     const chat = makeChat();
-    const justRan = new Date(Date.now() - 60_000).toISOString(); // 1 min ago
-    const res = await runLoopTick({
-      schedule: schedule({ last_run_at: justRan }),
-      mindDb: db, embedder, chat, log: silentLog,
-    });
+    seedPriorTick(db, 1, new Date(Date.now() - 60_000).toISOString()); // ran 1 min ago
+    const res = await runLoopTick({ schedule: schedule(), mindDb: db, embedder, chat, log: silentLog });
     expect(res.skipped).toBe(true);
     expect(res.reason).toBe('within min interval');
     expect(chat).not.toHaveBeenCalled();
     expect(framesIn(db, 'loop')).toHaveLength(0);
   });
 
-  it('runs when the previous run is older than the cost floor', async () => {
+  it('runs when the last real run is older than the cost floor', async () => {
     const chat = makeChat();
-    const longAgo = new Date(Date.now() - (LOOP_MIN_INTERVAL_MS + 60_000)).toISOString();
-    const res = await runLoopTick({
-      schedule: schedule({ last_run_at: longAgo }),
-      mindDb: db, embedder, chat, log: silentLog,
-    });
+    seedPriorTick(db, 1, new Date(Date.now() - (LOOP_MIN_INTERVAL_MS + 60_000)).toISOString());
+    const res = await runLoopTick({ schedule: schedule(), mindDb: db, embedder, chat, log: silentLog });
+    expect(res.skipped).toBeFalsy();
+    expect(chat).toHaveBeenCalled();
+  });
+
+  it('does NOT throttle on schedule.last_run_at — only on awareness lastTickAt (TZ-safe regression)', async () => {
+    // The scheduler rewrites last_run_at via markRun on every tick (incl. skips)
+    // in SQLite's space format, which V8 parses as local time — so it must never
+    // drive the floor. With no prior awareness lastTickAt, the loop runs even
+    // when last_run_at looks "just now".
+    const chat = makeChat();
+    const justNowSqlite = new Date().toISOString().slice(0, 19).replace('T', ' '); // 'YYYY-MM-DD HH:MM:SS'
+    const res = await runLoopTick({ schedule: schedule({ last_run_at: justNowSqlite }), mindDb: db, embedder, chat, log: silentLog });
     expect(res.skipped).toBeFalsy();
     expect(chat).toHaveBeenCalled();
   });

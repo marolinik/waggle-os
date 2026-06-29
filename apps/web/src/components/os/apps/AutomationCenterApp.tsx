@@ -58,6 +58,8 @@ const AutomationCenterApp = () => {
   const [engine, setEngine] = useState<EngineStatus | null>(null);
   /** Template currently being created (disables its button). */
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
+  /** Which workspace a template-created Loop should run in ('' = all / personal). */
+  const [templateWorkspaceId, setTemplateWorkspaceId] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -98,8 +100,8 @@ const AutomationCenterApp = () => {
   // sovereignty pill reflects whether the local Loops engine is live right now.
   useEffect(() => {
     if (connecting) return;
-    adapter.getWorkspaces().then(setWorkspaces).catch(() => {});
     let active = true;
+    adapter.getWorkspaces().then(ws => { if (active) setWorkspaces(ws); }).catch(() => {});
     const poll = () => adapter.getEngineStatus()
       .then(s => { if (active) setEngine(s); })
       .catch(() => { if (active) setEngine(null); });
@@ -220,6 +222,9 @@ const AutomationCenterApp = () => {
         trigger: { type: 'schedule', cron: t.defaultCron },
         jobType: 'loop',
         jobConfig: t.jobConfig,
+        // Bind to the chosen workspace so the Loop reads that workspace's memory
+        // (and groups under it); '' runs on the cross-workspace personal mind.
+        ...(templateWorkspaceId ? { workspaceId: templateWorkspaceId } : {}),
         enabled: true,
       });
       toast({ title: 'Loop created', description: `${t.name} — report-only, runs on your machine` });
@@ -244,6 +249,9 @@ const AutomationCenterApp = () => {
   const overallRate = successRateFromLogs(allLogs);
   const logsTargetAutomation = automations.find(a => a.id === logsTarget) ?? null;
   const runningList = automations.filter(a => runningIds.has(a.id));
+  const engineLabel = engine?.running
+    ? `Engine live · on ${engine.host}`
+    : engine === null ? 'Checking engine…' : 'Engine offline';
 
   const renderRows = (rows: Automation[]) => (
     <ul className="space-y-2">
@@ -276,15 +284,18 @@ const AutomationCenterApp = () => {
         {groups.map(g => {
           const groupLogs = g.automations.flatMap(a => logsMap[a.id] ?? []);
           return (
-            <div key={g.key}>
+            <section key={g.key} role="group" aria-label={g.label}>
               <div className="flex items-center justify-between px-1 mb-1">
                 <span className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">{g.label}</span>
-                <span className="text-[10px] text-muted-foreground tabular-nums">
+                <span
+                  className="text-[10px] text-muted-foreground tabular-nums"
+                  aria-label={`${g.automations.length} automation${g.automations.length === 1 ? '' : 's'}, ${formatRatePercent(successRateFromLogs(groupLogs))} recent success rate`}
+                >
                   {g.automations.length} · {formatRatePercent(successRateFromLogs(groupLogs))}
                 </span>
               </div>
               {renderRows(g.automations)}
-            </div>
+            </section>
           );
         })}
       </div>
@@ -303,17 +314,19 @@ const AutomationCenterApp = () => {
               perimeter to a cloud cron. */}
           <span
             data-testid="automation-engine-pill"
+            role="status"
+            aria-live="polite"
+            aria-label={`${engineLabel}. Loops run locally on your machine — nothing leaves your device.`}
             title="Loops run locally on your machine — nothing leaves your device."
             className="flex items-center gap-1 rounded-full border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[10px] text-muted-foreground"
           >
             <span
+              aria-hidden="true"
               className={`w-1.5 h-1.5 rounded-full ${
                 engine === null ? 'bg-muted-foreground/40' : engine.running ? 'bg-[var(--healthy)]' : 'bg-[var(--risk)]'
               }`}
             />
-            {engine?.running
-              ? `Engine live · on ${engine.host}`
-              : engine === null ? 'Checking engine…' : 'Engine offline'}
+            {engineLabel}
           </span>
         </div>
         <button
@@ -460,23 +473,41 @@ const AutomationCenterApp = () => {
                   </div>
                 )}
                 <div data-testid="automation-templates" className="rounded-lg border border-border/30 bg-secondary/10 px-2.5 py-2">
-                  <p className="text-[10px] font-display uppercase tracking-wide text-muted-foreground mb-1.5">Start from a template</p>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <p className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Start from a template</p>
+                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                      Runs in:
+                      <select
+                        value={templateWorkspaceId}
+                        onChange={(e) => setTemplateWorkspaceId(e.target.value)}
+                        aria-label="Workspace for the new Loop"
+                        data-testid="automation-template-workspace"
+                        className="bg-muted/40 text-[10px] py-0.5 px-1 rounded border border-border/40 text-foreground"
+                      >
+                        <option value="">All workspaces</option>
+                        {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
                   <div className="grid sm:grid-cols-2 gap-1.5">
                     {LOOP_TEMPLATES.map(t => (
                       <button
                         key={t.id}
                         onClick={() => void createFromTemplate(t)}
                         disabled={creatingTemplateId !== null}
+                        aria-busy={creatingTemplateId === t.id}
                         data-testid={`automation-template-${t.id}`}
                         className="text-left rounded-lg border border-border/40 bg-card/40 px-2 py-1.5 hover:border-primary/40 hover:bg-primary/5 transition-colors disabled:opacity-50"
                       >
-                        <span className="block text-[11px] font-medium text-foreground">{t.name}</span>
+                        <span className="block text-[11px] font-medium text-foreground">
+                          {t.name}{creatingTemplateId === t.id ? ' · Creating…' : ''}
+                        </span>
                         <span className="block text-[10px] text-muted-foreground leading-tight">{t.description}</span>
                       </button>
                     ))}
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1.5">
-                    Templates create report-only Loops — they summarise from this workspace&apos;s memory and notify you; they never act on your behalf.
+                    Templates create report-only Loops — they summarise from the selected workspace&apos;s memory and notify you; they never act on your behalf.
                   </p>
                 </div>
               </>
