@@ -185,6 +185,14 @@ export interface ConfirmationGateConfig {
   interactive?: boolean;
   autoApprove?: string[];
   promptFn?: (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+  /**
+   * Headless (cron / Loop tick) mode. When true, a confirmation-requiring tool
+   * with no promptFn and no interactive human DENIES instead of auto-approving.
+   * Closes the scheduled-tick footgun where a background loop could silently
+   * auto-approve a critical action (e.g. send_email). Default false — every
+   * existing interactive/non-interactive caller is unaffected.
+   */
+  headless?: boolean;
 }
 
 // ── Phase B.5: tiered autonomy ────────────────────────────────────────
@@ -298,18 +306,26 @@ export class ConfirmationGate {
   private interactive: boolean;
   private autoApprove: Set<string>;
   private promptFn?: (toolName: string, args: Record<string, unknown>) => Promise<boolean>;
+  private headless: boolean;
 
   constructor(config: ConfirmationGateConfig = {}) {
     this.interactive = config.interactive ?? true;
     this.autoApprove = new Set(config.autoApprove ?? []);
     this.promptFn = config.promptFn;
+    this.headless = config.headless ?? false;
   }
 
   async confirm(toolName: string, args: Record<string, unknown>): Promise<boolean> {
-    if (!this.interactive) return true;
+    // L1 reads / recall / notify never gate — let them flow even in headless.
+    // (Checked FIRST so the headless deny-default cannot block read-only work.)
     if (!needsConfirmation(toolName, args)) return true;
     if (this.autoApprove.has(toolName)) return true;
+    // Legacy non-interactive behaviour is preserved when headless=false; a
+    // headless tick denies the confirmation-requiring action instead.
+    if (!this.interactive) return this.headless ? false : true;
     if (this.promptFn) return this.promptFn(toolName, args);
-    return true; // no promptFn = auto-approve
+    // No promptFn: interactive sessions auto-approve (legacy); a headless tick
+    // with no human to ask must DENY — this is the closed :313 footgun.
+    return this.headless ? false : true;
   }
 }

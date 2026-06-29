@@ -179,3 +179,43 @@ describe('ConfirmationGate', () => {
     expect(promptFn).not.toHaveBeenCalled();
   });
 });
+
+describe('ConfirmationGate headless deny-default (scheduled-tick footgun)', () => {
+  it('denies a confirmation-requiring write with no promptFn', async () => {
+    const gate = new ConfirmationGate({ headless: true });
+    expect(await gate.confirm('write_file', { path: '/tmp/x' })).toBe(false);
+  });
+
+  it('denies a destructive bash command with no promptFn', async () => {
+    const gate = new ConfirmationGate({ headless: true });
+    expect(await gate.confirm('bash', { command: 'rm -rf /' })).toBe(false);
+  });
+
+  it('denies the always-high-risk connector send_email with no promptFn', async () => {
+    const gate = new ConfirmationGate({ headless: true });
+    expect(await gate.confirm('connector_gmail_send_email', { to: 'x@y.z' })).toBe(false);
+  });
+
+  it('still flows L1 read-only work (read_file, safe bash) in headless', async () => {
+    const gate = new ConfirmationGate({ headless: true });
+    expect(await gate.confirm('read_file', { path: '/tmp/x' })).toBe(true);
+    expect(await gate.confirm('bash', { command: 'ls -la' })).toBe(true);
+  });
+
+  it('routes gated actions through promptFn when one is wired (L2 approval seam)', async () => {
+    const promptFn = vi.fn().mockResolvedValue(true);
+    const gate = new ConfirmationGate({ headless: true, promptFn });
+    expect(await gate.confirm('write_file', { path: '/tmp/x' })).toBe(true);
+    expect(promptFn).toHaveBeenCalledWith('write_file', { path: '/tmp/x' });
+  });
+
+  it('REGRESSION: default (non-headless) gate still auto-approves with no promptFn', async () => {
+    const gate = new ConfirmationGate({});
+    expect(await gate.confirm('write_file', { path: '/tmp/x' })).toBe(true);
+  });
+
+  it('REGRESSION: non-interactive non-headless still auto-approves everything', async () => {
+    const gate = new ConfirmationGate({ interactive: false });
+    expect(await gate.confirm('bash', { command: 'rm -rf /' })).toBe(true);
+  });
+});
