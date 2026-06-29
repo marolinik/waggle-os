@@ -497,6 +497,7 @@ export {
   type ToolLauncherDeps,
   type LaunchOptions,
   type LaunchResult,
+  type ObservedHandle,
   type HookAction,
   type HookCommandOptions,
   type HookCommandResult,
@@ -506,3 +507,9 @@ export {
   type TrackedProcess,
   type ToolProcessTrackerDeps,
 } from './tool-process-tracker.js';
+export {
+  ToolOutputBuffer,
+  stripAnsi,
+  type OutputTail,
+  type ToolOutputBufferDeps,
+} from './tool-output-buffer.js';
