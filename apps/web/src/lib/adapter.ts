@@ -21,7 +21,7 @@ import type {
   HomeBriefing, OvernightSummary, QuickCaptureInput,
   WorkspaceStateView, WorkspaceActivityEvent, WorkspaceTask,
   Artifact, RelatedSearchResult,
-  Agent, AgentTrace, Automation, AutomationLog, EngineStatus,
+  Agent, AgentTrace, Automation, AutomationLog, EngineStatus, PendingApprovalItem,
   MemoryTrace,
 } from './types';
 import type {
@@ -1837,7 +1837,7 @@ class LocalAdapter {
   }
 
   // --- Approval ---
-  async getPendingApprovals(): Promise<{ pending: Array<{ requestId: string; toolName: string; input: Record<string, unknown>; timestamp: number }>; count: number }> {
+  async getPendingApprovals(): Promise<{ pending: PendingApprovalItem[]; count: number }> {
     const res = await this.fetch('/api/approval/pending');
     return res.json();
   }

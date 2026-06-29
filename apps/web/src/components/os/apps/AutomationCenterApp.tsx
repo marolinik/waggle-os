@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Clock, Plus, Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Clock, Plus, Loader2, AlertTriangle, RefreshCw, Check, X, ShieldAlert } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import type { Automation } from '@waggle/shared';
 import { LOOP_TEMPLATES, type LoopTemplate } from '@waggle/shared';
-import type { AutomationLog, Workspace, EngineStatus } from '@/lib/types';
+import type { AutomationLog, Workspace, EngineStatus, PendingApprovalItem } from '@/lib/types';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import { successRateFromLogs, formatRatePercent, describeTrigger, workspaceLabel, groupAutomationsByWorkspace } from '@/lib/automation-display';
 import AutomationRow from './automations/AutomationRow';
@@ -60,6 +60,12 @@ const AutomationCenterApp = () => {
   const [creatingTemplateId, setCreatingTemplateId] = useState<string | null>(null);
   /** Which workspace a template-created Loop should run in ('' = all / personal). */
   const [templateWorkspaceId, setTemplateWorkspaceId] = useState('');
+  /** L2: held actions awaiting the user's approval (source:'held'). */
+  const [pendingActions, setPendingActions] = useState<PendingApprovalItem[]>([]);
+  /** Approve/reject in flight for a held action. */
+  const [decidingId, setDecidingId] = useState<string | null>(null);
+  /** Template create: assist mode (the Loop proposes actions for approval). */
+  const [assistMode, setAssistMode] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -102,9 +108,15 @@ const AutomationCenterApp = () => {
     if (connecting) return;
     let active = true;
     adapter.getWorkspaces().then(ws => { if (active) setWorkspaces(ws); }).catch(() => {});
-    const poll = () => adapter.getEngineStatus()
-      .then(s => { if (active) setEngine(s); })
-      .catch(() => { if (active) setEngine(null); });
+    const poll = () => {
+      adapter.getEngineStatus()
+        .then(s => { if (active) setEngine(s); })
+        .catch(() => { if (active) setEngine(null); });
+      // L2: held actions an assist-mode Loop drafted, awaiting approval.
+      adapter.getPendingApprovals()
+        .then(r => { if (active) setPendingActions(r.pending.filter(p => p.source === 'held')); })
+        .catch(() => { if (active) setPendingActions([]); });
+    };
     void poll();
     const timer = setInterval(() => void poll(), 30_000);
     return () => { active = false; clearInterval(timer); };
@@ -218,21 +230,44 @@ const AutomationCenterApp = () => {
     setCreatingTemplateId(t.id);
     try {
       await adapter.createAutomation({
-        name: t.name,
+        name: assistMode ? `${t.name} (assist)` : t.name,
         trigger: { type: 'schedule', cron: t.defaultCron },
         jobType: 'loop',
-        jobConfig: t.jobConfig,
+        // assist mode lets the Loop propose ONE action per run for your approval
+        // (still toolless — nothing runs until you approve).
+        jobConfig: assistMode ? { ...t.jobConfig, mode: 'assist' } : t.jobConfig,
         // Bind to the chosen workspace so the Loop reads that workspace's memory
         // (and groups under it); '' runs on the cross-workspace personal mind.
         ...(templateWorkspaceId ? { workspaceId: templateWorkspaceId } : {}),
         enabled: true,
       });
-      toast({ title: 'Loop created', description: `${t.name} — report-only, runs on your machine` });
+      toast({
+        title: 'Loop created',
+        description: assistMode
+          ? `${t.name} — proposes actions for your approval`
+          : `${t.name} — report-only, runs on your machine`,
+      });
       await refresh();
     } catch (err) {
       toast({ title: 'Failed to create loop', description: err instanceof Error ? err.message : undefined, variant: 'destructive' });
     } finally {
       setCreatingTemplateId(null);
+    }
+  };
+
+  // L2: approve or reject a held action. Approve runs the real tool server-side
+  // (idempotent + re-validated); reject marks it denied. Either way it leaves
+  // the queue.
+  const decideAction = async (id: string, approved: boolean) => {
+    setDecidingId(id);
+    try {
+      await adapter.respondApproval(id, approved);
+      setPendingActions(prev => prev.filter(p => p.requestId !== id));
+      toast({ title: approved ? 'Action approved & run' : 'Action rejected' });
+    } catch {
+      toast({ title: 'Failed to update approval', variant: 'destructive' });
+    } finally {
+      setDecidingId(null);
     }
   };
 
@@ -391,6 +426,39 @@ const AutomationCenterApp = () => {
 
             {tab === 'overview' && (
               <>
+                {pendingActions.length > 0 && (
+                  <div data-testid="automation-pending-actions" className="rounded-lg border border-[var(--accent)]/40 bg-[var(--accent)]/5 px-2.5 py-2 space-y-1.5">
+                    <p className="text-[11px] font-medium text-foreground flex items-center gap-1">
+                      <ShieldAlert className="w-3 h-3 text-[var(--accent)]" /> {pendingActions.length} action{pendingActions.length === 1 ? '' : 's'} awaiting your approval
+                    </p>
+                    {pendingActions.map(p => (
+                      <div key={p.requestId} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-card/40 px-2 py-1.5">
+                        <span className="min-w-0">
+                          <span className="block text-[11px] text-foreground truncate">{p.summary || p.toolName}</span>
+                          <span className="block text-[10px] text-muted-foreground">{p.toolName}{p.riskLevel ? ` · ${p.riskLevel} risk` : ''}</span>
+                        </span>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => void decideAction(p.requestId, true)}
+                            disabled={decidingId === p.requestId}
+                            aria-label={`Approve ${p.toolName}`}
+                            className="inline-flex items-center gap-0.5 rounded-md bg-[var(--healthy)]/15 text-[var(--healthy)] px-1.5 py-0.5 text-[10px] hover:bg-[var(--healthy)]/25 disabled:opacity-50"
+                          >
+                            <Check className="w-3 h-3" /> Approve
+                          </button>
+                          <button
+                            onClick={() => void decideAction(p.requestId, false)}
+                            disabled={decidingId === p.requestId}
+                            aria-label={`Reject ${p.toolName}`}
+                            className="inline-flex items-center gap-0.5 rounded-md bg-[var(--risk)]/15 text-[var(--risk)] px-1.5 py-0.5 text-[10px] hover:bg-[var(--risk)]/25 disabled:opacity-50"
+                          >
+                            <X className="w-3 h-3" /> Reject
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-2" data-testid="automation-overview-tiles">
                   <div className="rounded-lg bg-secondary/20 border border-border/30 px-2.5 py-2">
                     <div className="text-lg font-display font-semibold tabular-nums text-foreground">{enabledCount}</div>
@@ -473,21 +541,33 @@ const AutomationCenterApp = () => {
                   </div>
                 )}
                 <div data-testid="automation-templates" className="rounded-lg border border-border/30 bg-secondary/10 px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                     <p className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Start from a template</p>
-                    <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      Runs in:
-                      <select
-                        value={templateWorkspaceId}
-                        onChange={(e) => setTemplateWorkspaceId(e.target.value)}
-                        aria-label="Workspace for the new Loop"
-                        data-testid="automation-template-workspace"
-                        className="bg-muted/40 text-[10px] py-0.5 px-1 rounded border border-border/40 text-foreground"
-                      >
-                        <option value="">All workspaces</option>
-                        {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
-                      </select>
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        Runs in:
+                        <select
+                          value={templateWorkspaceId}
+                          onChange={(e) => setTemplateWorkspaceId(e.target.value)}
+                          aria-label="Workspace for the new Loop"
+                          data-testid="automation-template-workspace"
+                          className="bg-muted/40 text-[10px] py-0.5 px-1 rounded border border-border/40 text-foreground"
+                        >
+                          <option value="">All workspaces</option>
+                          {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-1 text-[10px] text-muted-foreground" title="The Loop drafts one action per run and holds it for your approval — nothing runs until you approve.">
+                        <input
+                          type="checkbox"
+                          checked={assistMode}
+                          onChange={(e) => setAssistMode(e.target.checked)}
+                          data-testid="automation-template-assist"
+                          className="accent-[var(--accent)]"
+                        />
+                        Propose actions for approval
+                      </label>
+                    </div>
                   </div>
                   <div className="grid sm:grid-cols-2 gap-1.5">
                     {LOOP_TEMPLATES.map(t => (
@@ -507,7 +587,9 @@ const AutomationCenterApp = () => {
                     ))}
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1.5">
-                    Templates create report-only Loops — they summarise from the selected workspace&apos;s memory and notify you; they never act on your behalf.
+                    {assistMode
+                      ? 'Assist Loops summarise from the selected workspace’s memory and may propose ONE action per run — held for your approval. Nothing runs until you approve.'
+                      : 'Templates create report-only Loops — they summarise from the selected workspace’s memory and notify you; they never act on your behalf.'}
                   </p>
                 </div>
               </>

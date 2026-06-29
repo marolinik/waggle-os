@@ -28,6 +28,9 @@ const mocks = vi.hoisted(() => ({
     getCronJobs: vi.fn(),
     // Multi-workspace UX (engine pill + grouping).
     getEngineStatus: vi.fn(),
+    // L2 approval queue.
+    getPendingApprovals: vi.fn(),
+    respondApproval: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -59,6 +62,8 @@ beforeEach(() => {
   mocks.adapter.getWorkspaces.mockResolvedValue([]);
   mocks.adapter.getCronJobs.mockResolvedValue([]);
   mocks.adapter.getEngineStatus.mockResolvedValue({ running: true, host: 'test-host' });
+  mocks.adapter.getPendingApprovals.mockResolvedValue({ pending: [], count: 0 });
+  mocks.adapter.respondApproval.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
 
@@ -125,6 +130,31 @@ describe('AutomationCenterApp', () => {
     expect(arg.jobType).toBe('loop');
     expect(arg.trigger).toEqual({ type: 'schedule', cron: '0 8 * * *' });
     expect(arg.jobConfig.prompt).toContain('attention today');
+  });
+
+  it('surfaces held actions awaiting approval and approves via respondApproval (L2)', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([]);
+    mocks.adapter.getPendingApprovals.mockResolvedValue({
+      pending: [{ requestId: 'pa-1', toolName: 'send_email', input: { to: 'x@y.z' }, timestamp: 1, source: 'held', riskLevel: 'medium', summary: 'Send a follow-up to x' }],
+      count: 1,
+    });
+    renderApp();
+    expect(await screen.findByTestId('automation-pending-actions')).toBeInTheDocument();
+    expect(screen.getByText('Send a follow-up to x')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Approve send_email' }));
+    await waitFor(() => expect(mocks.adapter.respondApproval).toHaveBeenCalledWith('pa-1', true));
+  });
+
+  it('creates an assist-mode Loop from a template when the toggle is on (L2)', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([]);
+    mocks.adapter.createAutomation.mockResolvedValue(makeAutomation());
+    renderApp();
+    await screen.findByTestId('automation-overview-tiles');
+    fireEvent.click(screen.getByTestId('automation-template-assist')); // turn assist on
+    fireEvent.click(await screen.findByTestId('automation-template-daily-desk-brief'));
+    await waitFor(() => expect(mocks.adapter.createAutomation).toHaveBeenCalled());
+    const arg = mocks.adapter.createAutomation.mock.calls[0][0];
+    expect(arg.jobConfig.mode).toBe('assist');
   });
 
   it('surfaces a failed latest run in the attention list and as a Failed badge', async () => {

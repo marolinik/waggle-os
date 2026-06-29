@@ -144,6 +144,22 @@ export interface EngineStatus {
   sovereign?: boolean;
 }
 
+/**
+ * One pending approval from GET /api/approval/pending — the union of live
+ * interactive approvals and durable held actions (L2). `source: 'held'` rows
+ * carry risk + a plain-language summary the UI can surface.
+ */
+export interface PendingApprovalItem {
+  requestId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  timestamp: number;
+  source?: 'live' | 'held';
+  riskLevel?: string;
+  approvalClass?: string;
+  summary?: string | null;
+}
+
 // NOTE: the stale `AppView` union (superseded by `AppId` in lib/dock-tiers.ts)
 // was removed in the UX-refactor Phase 0 IA cleanup — it had zero references.
 
