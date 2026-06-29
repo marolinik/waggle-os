@@ -1,5 +1,12 @@
 # Waggle OS — Cornerstone
 
+> ⚠️ **PARTIALLY SUPERSEDED — re-baseline pending (flagged 2026-06-29).**
+> This 2026-04-11 document is retained for product-thesis context, but several specifics are now out of date. For current operating truth, **`CLAUDE.md` wins**.
+> - **Pricing:** now **$19/mo (PRO) / $49/seat (TEAMS)** — *not* the $15/$79 "Basic/Teams" funnel described below. Canonical source: `packages/shared/src/tiers.ts` (TRIAL → FREE → PRO → TEAMS → ENTERPRISE).
+> - **Window manager retired** (`a6dc2e4`, 2026-06): the draggable-windows/dock desktop shell flipped to the AppShell + URL-navigation model. All "window manager" / "desktop OS" descriptions below are historical.
+> - **Repositioning:** the product framing is now a **"personal AI workspace"**, not a "desktop-native OS".
+> - **Memory SOTA:** the canonical figure is **87.66% on LoCoMo** (W3.3, Memori same-judge, +5.71pp over Memori, p<10⁻⁵ — see `docs/paper/` and `memory/project_sota_results_index.md`), *not* the earlier ~91.6% Mem0-parity target used as a goal in older planning material.
+
 **Date:** 2026-04-11
 **Status:** LIVING DOCUMENT — the single source of truth for what Waggle OS is today and what we're building next.
 **Reading time:** 25 minutes. Written for a non-coder product owner and any engineer who joins the project.
