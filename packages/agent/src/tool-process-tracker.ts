@@ -42,6 +42,12 @@ export interface TrackedProcess {
   toolId: ToolId;
   startedAt: string;
   workspaceId?: string;
+  /**
+   * True for OBSERVED (piped-stdio) launches. These are tethered to the
+   * sidecar and cannot survive a restart, so they are tracked in memory only
+   * and excluded from the persisted pidfile (see `persist()`).
+   */
+  observed?: boolean;
 }
 
 export interface ToolProcessTrackerDeps {
@@ -89,7 +95,8 @@ function isTrackedProcess(x: unknown): x is TrackedProcess {
     r.pid > 0 &&
     typeof r.toolId === 'string' &&
     typeof r.startedAt === 'string' &&
-    (r.workspaceId === undefined || typeof r.workspaceId === 'string')
+    (r.workspaceId === undefined || typeof r.workspaceId === 'string') &&
+    (r.observed === undefined || typeof r.observed === 'boolean')
   );
 }
 
@@ -181,9 +188,18 @@ export class ToolProcessTracker {
     if (persisted.length !== this.processes.size) this.persist();
   }
 
-  /** Write the current snapshot to the store when persistence is on. */
+  /**
+   * Write the current snapshot to the store when persistence is on. Observed
+   * (tethered) processes are excluded — they cannot survive a restart, so
+   * persisting them would risk a stale 'Running' badge / pid-reuse false
+   * positive on the next boot reconcile.
+   */
   private persist(): void {
-    if (this.persists) this.savePersisted(Array.from(this.processes.values()));
+    if (this.persists) {
+      this.savePersisted(
+        Array.from(this.processes.values()).filter((p) => !p.observed),
+      );
+    }
   }
 
   /**
@@ -195,12 +211,14 @@ export class ToolProcessTracker {
     pid: number,
     toolId: ToolId,
     workspaceId?: string,
+    opts?: { observed?: boolean },
   ): TrackedProcess {
     const record: TrackedProcess = {
       pid,
       toolId,
       startedAt: this.now().toISOString(),
       ...(workspaceId !== undefined ? { workspaceId } : {}),
+      ...(opts?.observed ? { observed: true } : {}),
     };
     this.processes.set(pid, record);
     this.persist();

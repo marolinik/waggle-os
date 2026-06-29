@@ -261,3 +261,28 @@ describe('ToolProcessTracker — persistence', () => {
     expect(store.saves).toHaveLength(0);
   });
 });
+
+describe('observed processes are in-memory only', () => {
+  it('lists observed pids but never persists them', () => {
+    const saved: TrackedProcess[][] = [];
+    const tracker = new ToolProcessTracker({
+      savePersisted: (recs) => saved.push([...recs]),
+      isAlive: () => true,
+      now: () => new Date('2026-06-30T00:00:00Z'),
+    });
+    tracker.register(11, 'claude-code', 'ws1'); // detached
+    tracker.register(22, 'cursor', 'ws1', { observed: true }); // observed
+
+    // Both are live in memory:
+    expect(tracker.list().map((p) => p.pid).sort((a, b) => a - b)).toEqual([11, 22]);
+    // But the most recent persisted snapshot excludes the observed pid:
+    const last = saved[saved.length - 1];
+    expect(last.map((p) => p.pid)).toEqual([11]);
+  });
+
+  it('marks the record observed:true', () => {
+    const tracker = new ToolProcessTracker({ isAlive: () => true });
+    const rec = tracker.register(33, 'codex', undefined, { observed: true });
+    expect(rec.observed).toBe(true);
+  });
+});
