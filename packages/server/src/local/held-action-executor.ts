@@ -110,6 +110,12 @@ export async function executeHeldAction(server: FastifyInstance, row: PendingAct
   const claimed = store.claimPendingAction(row.id, 'approved', nowIso());
   if (!claimed) return { ok: false, status: row.status, error: 'already decided' };
 
+  // Expiry guard: never run a proposal that sat past its TTL (stale context).
+  if (row.expires_at && Date.parse(row.expires_at) < Date.now()) {
+    store.updatePendingActionResult(row.id, { status: 'failed', error: 'held action expired', executedAt: nowIso() });
+    return { ok: false, status: 'failed', error: 'expired' };
+  }
+
   let args: Record<string, unknown>;
   try {
     args = JSON.parse(row.args_json) as Record<string, unknown>;
@@ -130,10 +136,20 @@ export async function executeHeldAction(server: FastifyInstance, row: PendingAct
     const wsId = row.workspace_id && row.workspace_id !== '*' ? row.workspace_id : 'default';
     const wsPath = path.join(server.localConfig.dataDir, 'workspaces', wsId, 'files');
     const tools = server.agentState.buildToolsForWorkspace(wsPath, undefined, row.workspace_id ?? undefined);
-    const tool = tools.find(t => t.name === row.tool_name);
+    // The maker proposes the friendly bare name `send_email`; the real tool is a
+    // connector (connector_<id>_send_email). Resolve the alias against the LIVE
+    // pool at execute time (connection state can change between propose + approve).
+    let tool = tools.find(t => t.name === row.tool_name);
+    if (!tool && row.tool_name === 'send_email') {
+      tool = tools.find(t => /^connector_[^_]+_send_email$/.test(t.name))
+        ?? tools.find(t => /^connector_[^_]+_send(_|$)/.test(t.name));
+    }
     if (!tool) {
-      store.updatePendingActionResult(row.id, { status: 'failed', error: `unknown tool: ${row.tool_name}`, executedAt: nowIso() });
-      return { ok: false, status: 'failed', error: 'unknown tool' };
+      const error = row.tool_name === 'send_email'
+        ? 'no email connector connected — connect Gmail/Outlook to send'
+        : `unknown tool: ${row.tool_name}`;
+      store.updatePendingActionResult(row.id, { status: 'failed', error, executedAt: nowIso() });
+      return { ok: false, status: 'failed', error };
     }
     const result = await tool.execute(args);
     const summary = result.length > 280 ? `${result.slice(0, 277)}...` : result;

@@ -25,6 +25,10 @@ interface PendingApproval {
   toolName: string;
   input: Record<string, unknown>;
   timestamp: number;
+  /** 'held' = a durable L2 action (assist Loop) — no grant path, approve runs it now. */
+  source?: 'live' | 'held';
+  riskLevel?: string;
+  summary?: string | null;
 }
 
 interface Grant {
@@ -56,7 +60,12 @@ function formatRelative(iso: string | number): string {
 }
 
 function summarizeInput(input: Record<string, unknown>): string {
-  // Show the most informative field for common gated tools
+  // Show the most informative field for common gated tools — including the
+  // send_email recipient, the highest-exfiltration-risk field a human must see.
+  if (input.to ?? input.recipient) {
+    const to = String(input.to ?? input.recipient);
+    return `To: ${to}${input.subject ? ` — ${String(input.subject)}` : ''}`;
+  }
   const path = input.path ?? input.file_path ?? input.target_workspace_id;
   if (path) return String(path);
   if (input.command) return String(input.command).slice(0, 80);
@@ -115,20 +124,20 @@ const ApprovalsApp = () => {
   }, [refresh]);
 
   const respond = async (req: PendingApproval, approved: boolean, always: boolean) => {
+    const isHeld = req.source === 'held';
     try {
-      await adapter.respondApproval(req.requestId, approved, { always });
+      const r = await adapter.respondApproval(req.requestId, approved, { always });
       setPending(prev => prev.filter(p => p.requestId !== req.requestId));
-      if (always && approved) {
-        toast({
-          title: 'Always allowed',
-          description: `${req.toolName} is now allowed without prompting for this target.`,
-        });
+      if (!approved) {
+        toast({ title: 'Denied', description: `${req.toolName} will not run.` });
+      } else if (r?.ok === false) {
+        // A held action approved but refused/failed at execute (200 {ok:false}).
+        toast({ title: 'Action could not run', description: r.error, variant: 'destructive' });
+      } else if (always && !isHeld) {
+        toast({ title: 'Always allowed', description: `${req.toolName} is now allowed without prompting for this target.` });
         refresh();
       } else {
-        toast({
-          title: approved ? 'Approved' : 'Denied',
-          description: `${req.toolName} ${approved ? 'will run' : 'will not run'}.`,
-        });
+        toast({ title: 'Approved', description: `${req.toolName} ${isHeld ? 'has run' : 'will run'}.` });
       }
     } catch {
       toast({ title: 'Failed to send response', variant: 'destructive' });
@@ -212,8 +221,9 @@ const ApprovalsApp = () => {
           )}
           {pending.map(req => {
             const inputSummary = summarizeInput(req.input);
-            // Risk is DERIVED from the real tool name (the backend payload carries
-            // no risk field) — a transparent classification, not fabricated data.
+            // Held (L2) actions have no "always allow" grant path — approve runs
+            // them now. Risk is derived from the real tool name (trustworthy).
+            const isHeld = req.source === 'held';
             const risk = riskToneForTool(req.toolName, req.input);
             const isElevated = risk !== 'low';
             return (
@@ -236,6 +246,9 @@ const ApprovalsApp = () => {
                       {inputSummary && (
                         <p className="mt-1 text-[11px] text-[var(--text-muted)] font-mono truncate">{inputSummary}</p>
                       )}
+                      {isHeld && req.summary && (
+                        <p className="mt-0.5 text-[10px] text-[var(--text-dim)] truncate">Automation: {req.summary}</p>
+                      )}
                     </div>
                   </div>
                   <span className="text-[10px] text-[var(--text-dim)] flex items-center gap-1 shrink-0">
@@ -243,24 +256,44 @@ const ApprovalsApp = () => {
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => respond(req, true, false)}
-                    className="flex-1 px-2 py-1 rounded-md bg-[var(--honey)] text-[#1a1407] text-[11px] font-display font-semibold hover:bg-[var(--honey-bright)] transition-colors"
-                  >
-                    Allow once
-                  </button>
-                  <button
-                    onClick={() => respond(req, true, true)}
-                    className="flex-1 px-2 py-1 rounded-md bg-[var(--healthy-wash)] text-[var(--healthy)] text-[11px] font-display hover:brightness-110 transition-[filter]"
-                  >
-                    Always allow
-                  </button>
-                  <button
-                    onClick={() => respond(req, false, false)}
-                    className="flex-1 px-2 py-1 rounded-md bg-[var(--risk-wash)] text-[var(--risk)] text-[11px] font-display hover:brightness-110 transition-[filter]"
-                  >
-                    Deny
-                  </button>
+                  {isHeld ? (
+                    // Held (L2): no "always allow" grant path — approve runs it now.
+                    <>
+                      <button
+                        onClick={() => respond(req, true, false)}
+                        className="flex-1 px-2 py-1 rounded-md bg-[var(--healthy-wash)] text-[var(--healthy)] text-[11px] font-display font-semibold hover:brightness-110 transition-[filter]"
+                      >
+                        Approve &amp; run
+                      </button>
+                      <button
+                        onClick={() => respond(req, false, false)}
+                        className="flex-1 px-2 py-1 rounded-md bg-[var(--risk-wash)] text-[var(--risk)] text-[11px] font-display hover:brightness-110 transition-[filter]"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => respond(req, true, false)}
+                        className="flex-1 px-2 py-1 rounded-md bg-[var(--honey)] text-[#1a1407] text-[11px] font-display font-semibold hover:bg-[var(--honey-bright)] transition-colors"
+                      >
+                        Allow once
+                      </button>
+                      <button
+                        onClick={() => respond(req, true, true)}
+                        className="flex-1 px-2 py-1 rounded-md bg-[var(--healthy-wash)] text-[var(--healthy)] text-[11px] font-display hover:brightness-110 transition-[filter]"
+                      >
+                        Always allow
+                      </button>
+                      <button
+                        onClick={() => respond(req, false, false)}
+                        className="flex-1 px-2 py-1 rounded-md bg-[var(--risk-wash)] text-[var(--risk)] text-[11px] font-display hover:brightness-110 transition-[filter]"
+                      >
+                        Deny
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             );

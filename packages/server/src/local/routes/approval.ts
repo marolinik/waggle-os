@@ -11,6 +11,13 @@ function safeParseArgs(json: string): Record<string, unknown> {
   }
 }
 
+/** SQLite datetime('now') is 'YYYY-MM-DD HH:MM:SS' (UTC, no TZ); V8 parses the
+ *  space form as LOCAL time, skewing it against live UTC epochs. Normalize. */
+function toEpoch(ts: string): number {
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts) ? `${ts.replace(' ', 'T')}Z` : ts;
+  return Date.parse(iso);
+}
+
 export const approvalRoutes: FastifyPluginAsync = async (server) => {
   // POST /api/approval/:requestId — approve or deny a pending tool execution.
   // Phase B.3: `always` persists the approval to the grant store so subsequent
@@ -77,7 +84,7 @@ export const approvalRoutes: FastifyPluginAsync = async (server) => {
         requestId: a.id,
         toolName: a.tool_name,
         input: safeParseArgs(a.args_json),
-        timestamp: Date.parse(a.created_at),
+        timestamp: toEpoch(a.created_at),
         source: 'held',
         riskLevel: a.risk_level,
         approvalClass: a.approval_class,

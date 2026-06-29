@@ -1846,8 +1846,11 @@ class LocalAdapter {
     requestId: string,
     approved: boolean,
     opts: { always?: boolean; sourceWorkspaceId?: string | null } = {},
-  ): Promise<void> {
-    await this.fetch(`/api/approval/${requestId}`, {
+  ): Promise<{ ok: boolean; approved?: boolean; status?: string; error?: string }> {
+    // Return the body so callers can distinguish a held action that was approved
+    // but REFUSED/FAILED at execute (the route replies 200 {ok:false}) from a
+    // genuine success — otherwise the UI falsely reports "approved & run".
+    const res = await this.fetch(`/api/approval/${requestId}`, {
       method: 'POST',
       body: JSON.stringify({
         approved,
@@ -1855,6 +1858,11 @@ class LocalAdapter {
         sourceWorkspaceId: opts.sourceWorkspaceId ?? null,
       }),
     });
+    try {
+      return await res.json();
+    } catch {
+      return { ok: res.ok };
+    }
   }
 
   async getApprovalGrants(): Promise<{

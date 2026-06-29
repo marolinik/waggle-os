@@ -77,6 +77,13 @@ describe('held-action-executor', () => {
       expect(r).toEqual({ refused: 'injection' });
       expect(store.listPendingActions('held')).toHaveLength(0);
     });
+
+    it('refuses an irreversible connector delete as critical (F3)', () => {
+      const server = makeServer(store);
+      const r = enqueueHeldAction(server, { workspaceId: null, source: 'loop:1', tool: 'connector_github_delete_repository', args: { repo: 'x' } });
+      expect(r).toEqual({ refused: 'critical' });
+      expect(store.listPendingActions('held')).toHaveLength(0);
+    });
   });
 
   describe('executeHeldAction', () => {
@@ -116,6 +123,35 @@ describe('held-action-executor', () => {
       hold();
       const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
       expect(r.ok).toBe(false);
+      expect(store.getPendingAction('pa-1')!.status).toBe('failed');
+    });
+
+    it('resolves the bare send_email alias to a connected connector tool', async () => {
+      const execSpy = vi.fn(async () => 'email sent via gmail');
+      const server = makeServer(store, { name: 'connector_gmail_send_email', execute: execSpy });
+      hold(); // tool_name 'send_email'
+      const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
+      expect(r.ok).toBe(true);
+      expect(execSpy).toHaveBeenCalledWith({ to: 'x@y.z' });
+      expect(store.getPendingAction('pa-1')!.status).toBe('executed');
+    });
+
+    it('fails a bare send_email with a clear error when no email connector is connected', async () => {
+      const server = makeServer(store, { name: 'read_file', execute: vi.fn() });
+      hold();
+      const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/no email connector/);
+    });
+
+    it('refuses to run a held action past its expiry', async () => {
+      const execSpy = vi.fn(async () => 'sent');
+      const server = makeServer(store, { name: 'send_email', execute: execSpy });
+      hold({ expiresAt: '2000-01-01T00:00:00Z' });
+      const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/expired/);
+      expect(execSpy).not.toHaveBeenCalled();
       expect(store.getPendingAction('pa-1')!.status).toBe('failed');
     });
 

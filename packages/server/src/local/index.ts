@@ -1609,6 +1609,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
         // now writes a row per tick (Journey 16), so prune >30-day rows on the
         // same nightly consolidation cadence (mirrors optStore.pruneOlderThan).
         try { cronStore.pruneExecutionHistory(30); } catch { /* best-effort */ }
+        // L2: flip held actions past their 7-day TTL to 'expired' so stale
+        // proposals stop being approvable and the queue doesn't grow unbounded.
+        try { cronStore.expireStalePendingActions(); } catch { /* best-effort */ }
         break;
       }
       case 'workspace_health':

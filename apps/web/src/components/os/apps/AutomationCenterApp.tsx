@@ -7,7 +7,7 @@ import type { Automation } from '@waggle/shared';
 import { LOOP_TEMPLATES, type LoopTemplate } from '@waggle/shared';
 import type { AutomationLog, Workspace, EngineStatus, PendingApprovalItem } from '@/lib/types';
 import { consumeDeepLink } from '@/lib/app-deeplink';
-import { successRateFromLogs, formatRatePercent, describeTrigger, workspaceLabel, groupAutomationsByWorkspace } from '@/lib/automation-display';
+import { successRateFromLogs, formatRatePercent, describeTrigger, workspaceLabel, groupAutomationsByWorkspace, describeActionTarget } from '@/lib/automation-display';
 import AutomationRow from './automations/AutomationRow';
 import AutomationLogList, { type NamedLog } from './automations/AutomationLogList';
 import AutomationBuilder, { type AutomationDraft } from './automations/AutomationBuilder';
@@ -62,8 +62,8 @@ const AutomationCenterApp = () => {
   const [templateWorkspaceId, setTemplateWorkspaceId] = useState('');
   /** L2: held actions awaiting the user's approval (source:'held'). */
   const [pendingActions, setPendingActions] = useState<PendingApprovalItem[]>([]);
-  /** Approve/reject in flight for a held action. */
-  const [decidingId, setDecidingId] = useState<string | null>(null);
+  /** Held actions whose approve/reject is in flight (per-row lock). */
+  const [decidingIds, setDecidingIds] = useState<Set<string>>(new Set());
   /** Template create: assist mode (the Loop proposes actions for approval). */
   const [assistMode, setAssistMode] = useState(false);
 
@@ -259,15 +259,20 @@ const AutomationCenterApp = () => {
   // (idempotent + re-validated); reject marks it denied. Either way it leaves
   // the queue.
   const decideAction = async (id: string, approved: boolean) => {
-    setDecidingId(id);
+    setDecidingIds(prev => new Set(prev).add(id));
     try {
-      await adapter.respondApproval(id, approved);
+      const r = await adapter.respondApproval(id, approved);
+      // The row leaves the queue either way (the server row is now terminal), but
+      // the toast must reflect the REAL outcome — a held action can be approved
+      // yet refused/failed at execute (route replies 200 {ok:false}).
       setPendingActions(prev => prev.filter(p => p.requestId !== id));
-      toast({ title: approved ? 'Action approved & run' : 'Action rejected' });
+      if (!approved) toast({ title: 'Action rejected' });
+      else if (r?.ok === false) toast({ title: 'Action could not run', description: r.error, variant: 'destructive' });
+      else toast({ title: 'Action approved & run' });
     } catch {
       toast({ title: 'Failed to update approval', variant: 'destructive' });
     } finally {
-      setDecidingId(null);
+      setDecidingIds(prev => { const next = new Set(prev); next.delete(id); return next; });
     }
   };
 
@@ -389,6 +394,9 @@ const AutomationCenterApp = () => {
             }`}
           >
             {t.label}
+            {t.id === 'overview' && pendingActions.length > 0 && (
+              <span className="ml-1 px-1 rounded-full bg-[var(--accent)]/20 text-[var(--accent)] text-[9px] font-semibold" aria-label={`${pendingActions.length} awaiting approval`}>{pendingActions.length}</span>
+            )}
           </button>
         ))}
       </div>
@@ -434,13 +442,16 @@ const AutomationCenterApp = () => {
                     {pendingActions.map(p => (
                       <div key={p.requestId} className="flex items-center justify-between gap-2 rounded-lg border border-border/40 bg-card/40 px-2 py-1.5">
                         <span className="min-w-0">
-                          <span className="block text-[11px] text-foreground truncate">{p.summary || p.toolName}</span>
-                          <span className="block text-[10px] text-muted-foreground">{p.toolName}{p.riskLevel ? ` · ${p.riskLevel} risk` : ''}</span>
+                          {/* Show the REAL action target from args — never the maker's
+                              self-authored summary as the thing being authorized. */}
+                          <span className="block text-[11px] text-foreground truncate">{describeActionTarget(p.toolName, p.input)}</span>
+                          <span className="block text-[10px] text-muted-foreground truncate">{p.toolName}{p.riskLevel ? ` · ${p.riskLevel} risk` : ''}{p.summary ? ` · ${p.summary}` : ''}</span>
                         </span>
                         <span className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => void decideAction(p.requestId, true)}
-                            disabled={decidingId === p.requestId}
+                            disabled={decidingIds.has(p.requestId)}
+                            aria-busy={decidingIds.has(p.requestId)}
                             aria-label={`Approve ${p.toolName}`}
                             className="inline-flex items-center gap-0.5 rounded-md bg-[var(--healthy)]/15 text-[var(--healthy)] px-1.5 py-0.5 text-[10px] hover:bg-[var(--healthy)]/25 disabled:opacity-50"
                           >
@@ -448,7 +459,7 @@ const AutomationCenterApp = () => {
                           </button>
                           <button
                             onClick={() => void decideAction(p.requestId, false)}
-                            disabled={decidingId === p.requestId}
+                            disabled={decidingIds.has(p.requestId)}
                             aria-label={`Reject ${p.toolName}`}
                             className="inline-flex items-center gap-0.5 rounded-md bg-[var(--risk)]/15 text-[var(--risk)] px-1.5 py-0.5 text-[10px] hover:bg-[var(--risk)]/25 disabled:opacity-50"
                           >

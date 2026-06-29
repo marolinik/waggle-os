@@ -17,6 +17,7 @@ import {
   describeTrigger,
   workspaceLabel,
   groupAutomationsByWorkspace,
+  describeActionTarget,
 } from './automation-display';
 
 const auto = (id: string, workspaceId: string): Automation => ({
@@ -65,6 +66,17 @@ describe('groupAutomationsByWorkspace', () => {
     const groups = groupAutomationsByWorkspace([auto('1', '')], labelFor);
     expect(groups).toHaveLength(1);
     expect(groups[0].key).toBe('*');
+  });
+});
+
+describe('describeActionTarget (held-action card — shows the REAL args, not the maker summary)', () => {
+  it('shows the email recipient for send_email (bare + connector alias)', () => {
+    expect(describeActionTarget('send_email', { to: 'a@b.c', subject: 'Hi' })).toBe('To: a@b.c — Hi');
+    expect(describeActionTarget('connector_gmail_send_email', { to: 'a@b.c' })).toBe('To: a@b.c');
+  });
+  it('shows the path for file tools, and falls back to keys for connector writes', () => {
+    expect(describeActionTarget('write_file', { path: '/tmp/x', content: '…' })).toBe('/tmp/x');
+    expect(describeActionTarget('connector_x_create_record', { name: 'Acme', stage: 'lead' })).toContain('name: Acme');
   });
 });
 

@@ -92,6 +92,28 @@ export interface AutomationGroup {
 }
 
 /**
+ * Describe the REAL target of a proposed action from its args — never the
+ * maker's self-authored summary (which is untrusted and may not match the
+ * args). This is what a human must see before approving a side-effecting action
+ * (e.g. the actual send_email recipient, not "send a follow-up").
+ */
+export function describeActionTarget(toolName: string, input: Record<string, unknown>): string {
+  const str = (v: unknown) => (v == null ? '' : String(v));
+  if (toolName === 'send_email' || /_send_email$/.test(toolName)) {
+    const to = str(input.to ?? input.recipient ?? input.toEmail);
+    const subject = str(input.subject);
+    if (to) return `To: ${to}${subject ? ` — ${subject}` : ''}`;
+  }
+  const path = input.path ?? input.file_path ?? input.target_workspace_id;
+  if (path) return str(path);
+  if (input.command) return str(input.command).slice(0, 80);
+  if (input.query) return str(input.query).slice(0, 80);
+  const keys = Object.keys(input).slice(0, 3);
+  if (keys.length) return keys.map(k => `${k}: ${str(input[k]).slice(0, 40)}`).join(' · ');
+  return toolName;
+}
+
+/**
  * Partition automations by the workspace they run in, so the Center can show
  * "which workspaces" at a glance. The cross-workspace ('*') group sorts first,
  * the rest alphabetically by label. Empty input → []. Preserves input order

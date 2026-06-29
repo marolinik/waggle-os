@@ -63,7 +63,7 @@ beforeEach(() => {
   mocks.adapter.getCronJobs.mockResolvedValue([]);
   mocks.adapter.getEngineStatus.mockResolvedValue({ running: true, host: 'test-host' });
   mocks.adapter.getPendingApprovals.mockResolvedValue({ pending: [], count: 0 });
-  mocks.adapter.respondApproval.mockResolvedValue(undefined);
+  mocks.adapter.respondApproval.mockResolvedValue({ ok: true });
 });
 afterEach(cleanup);
 
@@ -140,7 +140,8 @@ describe('AutomationCenterApp', () => {
     });
     renderApp();
     expect(await screen.findByTestId('automation-pending-actions')).toBeInTheDocument();
-    expect(screen.getByText('Send a follow-up to x')).toBeInTheDocument();
+    // The card shows the REAL action target (recipient), not the maker's summary.
+    expect(screen.getByText('To: x@y.z')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Approve send_email' }));
     await waitFor(() => expect(mocks.adapter.respondApproval).toHaveBeenCalledWith('pa-1', true));
   });

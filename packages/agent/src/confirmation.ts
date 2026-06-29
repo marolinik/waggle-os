@@ -245,6 +245,9 @@ const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
 export function isCriticalNeverAutopass(toolName: string, args?: Record<string, unknown>): boolean {
   // D4(i): deleting a skill is destructive — always ask, every autonomy level.
   if (toolName === 'delete_skill') return true;
+  // Irreversible connector deletes (delete_record, delete_repository, …) are
+  // terminal — never auto-pass and never a one-click L2 held action.
+  if (toolName.startsWith('connector_') && /_(delete|remove|destroy|purge|drop)(_|$)/.test(toolName)) return true;
   if (toolName === 'bash') {
     const command = String(args?.command ?? '').trim();
     for (const pat of CRITICAL_NEVER_AUTOPASS) {
