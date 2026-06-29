@@ -103,3 +103,29 @@ describe('LauncherApp · A/B toggle', () => {
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
   });
 });
+
+describe('LauncherApp · hook cohort (#3)', () => {
+  it('offers hook actions for every real-hook tool (e.g. codex), not just claude-code', async () => {
+    // The 6 real-hook tools (claude-code, codex, codex-desktop, cursor,
+    // hermes, openclaw) all ship a bin — the dock must expose hook
+    // install for each, mirroring the backend HOOKS_COHORT.
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'darwin',
+      detectedAt: '2026-06-29T00:00:00.000Z',
+      tools: [
+        {
+          id: 'codex',
+          displayName: 'Codex',
+          installed: true,
+          installedPath: '/usr/local/bin/codex',
+          version: '1.0.0',
+          hooksInstalled: false,
+          hookPointerPath: null,
+        },
+      ],
+    });
+    render(<LauncherApp />);
+    expect(await screen.findByText('Codex')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /install hooks/i })).toBeInTheDocument();
+  });
+});

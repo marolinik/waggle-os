@@ -144,6 +144,72 @@ describe('launchTool', () => {
   });
 });
 
+// ── launchTool — self-enabling signal env (#1) ──────────────────────
+// A dock launch should light the SignalBus it was built to feed: the
+// launched tool's hive-mind hook only emits when WAGGLE_SIGNAL_EMIT is
+// truthy, and it posts to WAGGLE_SIDECAR_URL. Without these the whole
+// detect→launch→hook→bus→UI pipeline stays dark.
+
+describe('launchTool — self-enabling signal env', () => {
+  it('injects WAGGLE_SIGNAL_EMIT=1 by default (lights the bus)', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/local/bin/claude',
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env?.WAGGLE_SIGNAL_EMIT).toBe('1');
+  });
+
+  it('omits WAGGLE_SIGNAL_EMIT when signalEmit:false (silent launch opt-out)', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/local/bin/claude',
+      signalEmit: false,
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env?.WAGGLE_SIGNAL_EMIT).toBeUndefined();
+  });
+
+  it('injects WAGGLE_SIDECAR_URL when provided', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/local/bin/claude',
+      sidecarUrl: 'http://127.0.0.1:7777',
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env?.WAGGLE_SIDECAR_URL).toBe('http://127.0.0.1:7777');
+  });
+
+  it('does not inject WAGGLE_SIDECAR_URL when absent', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/local/bin/claude',
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env?.WAGGLE_SIDECAR_URL).toBeUndefined();
+  });
+
+  it('injects signal env alongside WAGGLE_WORKSPACE_ID', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/local/bin/claude',
+      workspaceId: 'ws-1',
+      sidecarUrl: 'http://127.0.0.1:3333',
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env).toMatchObject({
+      WAGGLE_WORKSPACE_ID: 'ws-1',
+      WAGGLE_SIGNAL_EMIT: '1',
+      WAGGLE_SIDECAR_URL: 'http://127.0.0.1:3333',
+    });
+  });
+});
+
 // ── runHookCommand ──────────────────────────────────────────────────
 
 describe('runHookCommand', () => {

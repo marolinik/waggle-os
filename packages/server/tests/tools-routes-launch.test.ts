@@ -45,6 +45,7 @@ vi.mock('@waggle/agent', async (importOriginal) => {
 import { buildLocalServer } from '../src/local/index.js';
 import { injectWithAuth } from './test-utils.js';
 import { launchTool, runHookCommand } from '@waggle/agent';
+import { loopbackSidecarUrl } from '../src/local/routes/tools.js';
 
 function createTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `waggle-launch-${prefix}-`));
@@ -104,6 +105,27 @@ describe('POST /api/tools/launch', () => {
         workspaceId: 'ws-test',
       }),
     );
+  });
+
+  it('passes signalEmit:true so a dock launch lights the bus (#1)', async () => {
+    vi.mocked(launchTool).mockClear();
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: { id: 'claude-code', installedPath: '/usr/local/bin/claude' },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(launchTool).toHaveBeenCalledWith(
+      expect.objectContaining({ signalEmit: true }),
+    );
+    // sidecarUrl is derived from the loopback host fastify.inject used,
+    // so it is either undefined (non-loopback authority) or an
+    // http://<loopback> string — never a non-loopback origin.
+    const callArg = vi.mocked(launchTool).mock.calls[0][0] as { sidecarUrl?: string };
+    if (callArg.sidecarUrl !== undefined) {
+      expect(callArg.sidecarUrl).toMatch(/^http:\/\/(127\.0\.0\.1|localhost|\[::1\]|::1)(:\d+)?$/i);
+    }
   });
 
   it('rejects missing installedPath', async () => {
@@ -408,5 +430,84 @@ describe('POST /api/tools/hooks', () => {
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().stderr).toContain('permission denied');
+  });
+});
+
+// ── loopbackSidecarUrl helper (#1) ──────────────────────────────────
+
+describe('loopbackSidecarUrl', () => {
+  it.each([
+    ['127.0.0.1:3333', 'http://127.0.0.1:3333'],
+    ['localhost', 'http://localhost'],
+    ['localhost:8080', 'http://localhost:8080'],
+    ['[::1]:3000', 'http://[::1]:3000'],
+  ])('maps loopback host %s → %s', (host, expected) => {
+    expect(loopbackSidecarUrl(host)).toBe(expected);
+  });
+
+  it.each([
+    undefined,
+    '',
+    'evil.com',
+    '10.0.0.5:3333',
+    'example.com:80',
+    '169.254.1.1',
+    '::1', // bare (unbracketed) IPv6 → rejected; would be a malformed URL
+  ])('returns undefined for non-loopback / missing host %s', (host) => {
+    expect(loopbackSidecarUrl(host as string | undefined)).toBeUndefined();
+  });
+});
+
+// ── persistence + reconcile across sidecar restart (#2) ─────────────
+
+describe('POST /api/tools/launch — persistence + reconcile', () => {
+  let tmpDir: string;
+
+  beforeAll(() => {
+    tmpDir = createTmpDir('persist');
+    const personalPath = path.join(tmpDir, 'personal.mind');
+    const mind = new MindDB(personalPath);
+    const sessions = new SessionStore(mind);
+    const frames = new FrameStore(mind);
+    const s = sessions.create('persist-test');
+    frames.createIFrame(s.gop_id, 'persist-test seed', 'normal');
+    mind.close();
+  });
+
+  afterAll(() => {
+    if (tmpDir) cleanupDir(tmpDir);
+  });
+
+  it('writes a pidfile on launch and reconciles it after a restart', async () => {
+    // Use this runner's pid (guaranteed alive) so it survives the
+    // reconcile liveness probe on the rebuilt server.
+    vi.mocked(launchTool).mockReturnValueOnce({
+      ok: true,
+      pid: process.pid,
+      executed: { binary: '/x', args: [] },
+    });
+
+    const server1 = await buildLocalServer({ dataDir: tmpDir });
+    await server1.ready();
+    const res = await injectWithAuth(server1, {
+      method: 'POST',
+      url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: { id: 'claude-code', installedPath: '/x', workspaceId: 'ws-persist' },
+    });
+    expect(res.statusCode).toBe(202);
+    const pidfile = path.join(tmpDir, 'launched-processes.json');
+    expect(fs.existsSync(pidfile)).toBe(true);
+    await server1.close();
+
+    // Restart: a fresh server on the same dataDir reconciles the pidfile.
+    const server2 = await buildLocalServer({ dataDir: tmpDir });
+    await server2.ready();
+    const tracked = server2.toolProcessTracker?.list() ?? [];
+    const match = tracked.find((p) => p.pid === process.pid);
+    expect(match).toBeDefined();
+    expect(match?.toolId).toBe('claude-code');
+    expect(match?.workspaceId).toBe('ws-persist');
+    await server2.close();
   });
 });

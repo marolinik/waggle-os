@@ -181,6 +181,22 @@ export interface LaunchOptions {
   cwd?: string;
   /** Extra arguments to pass to the binary. */
   args?: string[];
+  /**
+   * When true (default), inject `WAGGLE_SIGNAL_EMIT='1'` so the launched
+   * tool's hive-mind hook emits discovery signals back to the sidecar
+   * bus. This is what turns the detect→launch→hook→bus→UI pipeline on:
+   * without it a dock-launched tool saves memory but stays silent on the
+   * bus it was built to feed. Set `false` for a silent launch.
+   */
+  signalEmit?: boolean;
+  /**
+   * Sidecar base URL injected as `WAGGLE_SIDECAR_URL` so the launched
+   * tool's hook posts signals to the right loopback port (the emitter's
+   * fallback is `http://127.0.0.1:3333`). Omit to let the hook use that
+   * default. Callers (the /launch route) derive this from the loopback
+   * address the UI itself reached.
+   */
+  sidecarUrl?: string;
   /** Test deps overrides. */
   deps?: ToolLauncherDeps;
 }
@@ -226,6 +242,14 @@ export function launchTool(opts: LaunchOptions): LaunchResult {
   const env: NodeJS.ProcessEnv = {};
   if (opts.workspaceId) {
     env.WAGGLE_WORKSPACE_ID = opts.workspaceId;
+  }
+  // Self-enabling: light the SignalBus this pipeline was built to feed.
+  // Opt out with signalEmit:false for a silent launch.
+  if (opts.signalEmit !== false) {
+    env.WAGGLE_SIGNAL_EMIT = '1';
+  }
+  if (opts.sidecarUrl) {
+    env.WAGGLE_SIDECAR_URL = opts.sidecarUrl;
   }
   const { pid, error } = deps.spawnDetached(opts.installedPath, args, {
     cwd: opts.cwd,

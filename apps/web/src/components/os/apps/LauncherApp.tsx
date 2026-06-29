@@ -2,9 +2,9 @@
  * AI-OS Phase 2B — LauncherApp.
  *
  * Dock surface for the AI-OS tool launcher. Lists every supported
- * AI tool (claude-code / cursor / claude-desktop in the launch
- * cohort; codex / hermes / openclaw stubbed as "Phase 4") with
- * detection status, hook-install status, and per-tool actions:
+ * AI tool — all 7 are launchable; 6 (all but claude-desktop) also
+ * support hook install/verify/uninstall — with detection status,
+ * hook-install status, and per-tool actions:
  *
  *   Launch in workspace X / Install hooks / Verify hooks / Uninstall hooks
  *
@@ -49,12 +49,14 @@ const LAUNCH_COHORT = [
 ];
 
 // Hook install/verify/uninstall is restricted to tools whose hive-mind
-// hook package actually ships a bin. Today that is only claude-code;
-// the other tools' hook packages are Wave 2/3 `export {}` stubs with
-// no bin, so `npx @waggle/hive-mind-hooks-<id>` would always fail.
+// hook package actually ships a bin. Six do — claude-code, codex,
+// codex-desktop, cursor, hermes, openclaw — so the dock offers hook
+// actions for each. Only claude-desktop is still a binless `export {}`
+// stub (deferred MCP-bridge category) and is intentionally excluded.
 // Hook buttons gate on THIS cohort; launching stays on LAUNCH_COHORT.
-// Mirrors @waggle/shared HOOKS_COHORT (kept local for the same reason).
-const HOOKS_COHORT = ['claude-code'];
+// Mirrors the backend HOOKS_COHORT in @waggle/agent's tool-launcher.ts
+// (kept local to avoid a runtime import for one constant).
+const HOOKS_COHORT = ['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'];
 
 interface DetectedTool {
   id: string;

@@ -8,23 +8,33 @@
  * badge or offer a "stop" affordance.
  *
  * Scope:
- *   - In-memory only. PID state does NOT survive a sidecar restart.
- *     That's intentional: the spawned tool runs detached and outlives
- *     the sidecar, but on restart we lose attribution. Surfacing
- *     accurate liveness state for processes whose attribution we
- *     lost is worse than reporting them as "unknown" — so we drop
- *     them.
+ *   - Optionally persisted. When a `persistPath` (or injected
+ *     load/save deps) is supplied, the tracker writes a JSON pidfile
+ *     on every mutation and **reconciles on construction**: it reloads
+ *     the file, probes each pid's liveness, keeps the survivors, and
+ *     prunes the dead. This is how a detached tool that outlives a
+ *     sidecar restart keeps its 'Running' badge / kill affordance.
+ *     With no persistence configured the tracker is pure in-memory
+ *     (the original behavior — used by tests).
  *   - Liveness check via `process.kill(pid, 0)`. POSIX + Windows
  *     both raise on dead PIDs; we catch and return false.
- *   - Hermetic via injected `isAlive` + `now` deps for testing.
+ *   - Hermetic via injected `isAlive` / `now` / `loadPersisted` /
+ *     `savePersisted` deps for testing.
+ *
+ * Known caveat (PID reuse):
+ *   Reconciliation can only ask "is *a* process with this pid alive?"
+ *   — not "is it still *our* tool?". If the OS recycled a dead agent's
+ *   pid for an unrelated process before restart, that row would render
+ *   as running. Acceptable for a desktop sidecar (short restart window,
+ *   loopback-only, kill is gated to tracked pids); revisit with a
+ *   start-time fingerprint if it ever bites.
  *
  * Out of scope (deferred):
- *   - Cross-restart attribution (would require a sidecar-managed
- *     pidfile-per-tool + reconciliation on boot).
- *   - "Stop" affordance (would need POST /api/tools/kill — Phase 5
- *     candidate when the user actually needs it).
+ *   - Per-process start-time fingerprinting to defeat pid reuse.
  */
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { ToolId } from '@waggle/shared';
 
 export interface TrackedProcess {
@@ -51,6 +61,58 @@ export interface ToolProcessTrackerDeps {
    * escalation. Production = setTimeout-backed Promise.
    */
   delay?: (ms: number) => Promise<void>;
+  /**
+   * Path to the JSON pidfile used for cross-restart persistence. When
+   * set (and no explicit load/save override is given), the tracker
+   * reads/writes this file. Omit for pure in-memory.
+   */
+  persistPath?: string;
+  /**
+   * Override the persistence reader. Defaults to reading `persistPath`.
+   * Tests inject an in-memory store. A corrupt/missing file yields [].
+   */
+  loadPersisted?: () => TrackedProcess[];
+  /**
+   * Override the persistence writer. Defaults to writing `persistPath`
+   * (best-effort — never throws into the launch path).
+   */
+  savePersisted?: (records: readonly TrackedProcess[]) => void;
+}
+
+/** True if `x` is a structurally-valid persisted record (guards a corrupt pidfile). */
+function isTrackedProcess(x: unknown): x is TrackedProcess {
+  if (!x || typeof x !== 'object') return false;
+  const r = x as Record<string, unknown>;
+  return (
+    typeof r.pid === 'number' &&
+    Number.isInteger(r.pid) &&
+    r.pid > 0 &&
+    typeof r.toolId === 'string' &&
+    typeof r.startedAt === 'string' &&
+    (r.workspaceId === undefined || typeof r.workspaceId === 'string')
+  );
+}
+
+function defaultLoadPersisted(persistPath: string): TrackedProcess[] {
+  try {
+    const raw = fs.readFileSync(persistPath, 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isTrackedProcess);
+  } catch {
+    // Missing file / parse error → start clean. Persistence is a
+    // convenience, never a hard dependency.
+    return [];
+  }
+}
+
+function defaultSavePersisted(persistPath: string, records: readonly TrackedProcess[]): void {
+  try {
+    fs.mkdirSync(path.dirname(persistPath), { recursive: true });
+    fs.writeFileSync(persistPath, JSON.stringify(records, null, 2), 'utf8');
+  } catch {
+    // Best-effort: a failed write must not break launch/list/kill.
+  }
 }
 
 function defaultIsAlive(pid: number): boolean {
@@ -85,12 +147,43 @@ export class ToolProcessTracker {
   private readonly now: () => Date;
   private readonly sendSignal: (pid: number, signal: NodeJS.Signals | number) => boolean;
   private readonly delay: (ms: number) => Promise<void>;
+  /** Whether persistence is configured (persistPath or injected load/save). */
+  private readonly persists: boolean;
+  private readonly loadPersisted: () => TrackedProcess[];
+  private readonly savePersisted: (records: readonly TrackedProcess[]) => void;
 
   constructor(deps: ToolProcessTrackerDeps = {}) {
     this.isAlive = deps.isAlive ?? defaultIsAlive;
     this.now = deps.now ?? (() => new Date());
     this.sendSignal = deps.sendSignal ?? defaultSendSignal;
     this.delay = deps.delay ?? defaultDelay;
+
+    this.persists = Boolean(deps.persistPath || deps.loadPersisted || deps.savePersisted);
+    const persistPath = deps.persistPath;
+    this.loadPersisted =
+      deps.loadPersisted ?? (persistPath ? () => defaultLoadPersisted(persistPath) : () => []);
+    this.savePersisted =
+      deps.savePersisted ?? (persistPath ? (r) => defaultSavePersisted(persistPath, r) : () => {});
+
+    if (this.persists) this.reconcile();
+  }
+
+  /**
+   * Boot reconciliation: reload persisted pids, keep the ones still
+   * alive, drop the dead, and rewrite the file iff we actually pruned
+   * (so a fresh/empty store never triggers an eager write).
+   */
+  private reconcile(): void {
+    const persisted = this.loadPersisted();
+    for (const rec of persisted) {
+      if (this.isAlive(rec.pid)) this.processes.set(rec.pid, rec);
+    }
+    if (persisted.length !== this.processes.size) this.persist();
+  }
+
+  /** Write the current snapshot to the store when persistence is on. */
+  private persist(): void {
+    if (this.persists) this.savePersisted(Array.from(this.processes.values()));
   }
 
   /**
@@ -110,6 +203,7 @@ export class ToolProcessTracker {
       ...(workspaceId !== undefined ? { workspaceId } : {}),
     };
     this.processes.set(pid, record);
+    this.persist();
     return record;
   }
 
@@ -127,7 +221,9 @@ export class ToolProcessTracker {
 
   /** Drop a pid (e.g. after a successful explicit stop). */
   forget(pid: number): boolean {
-    return this.processes.delete(pid);
+    const deleted = this.processes.delete(pid);
+    if (deleted) this.persist();
+    return deleted;
   }
 
   /**
@@ -159,6 +255,7 @@ export class ToolProcessTracker {
     if (!this.isAlive(pid)) {
       // Already gone — GC the entry and report success.
       this.processes.delete(pid);
+      this.persist();
       return { ok: true, pid, reason: 'already-dead' };
     }
     // Best effort: SIGTERM first so the child can clean up.
@@ -167,6 +264,7 @@ export class ToolProcessTracker {
       await this.delay(gracefulTimeoutMs);
       if (!this.isAlive(pid)) {
         this.processes.delete(pid);
+        this.persist();
         return { ok: true, pid, reason: 'sigterm-ok' };
       }
     }
@@ -174,6 +272,7 @@ export class ToolProcessTracker {
     const killSent = this.sendSignal(pid, 'SIGKILL');
     if (killSent && !this.isAlive(pid)) {
       this.processes.delete(pid);
+      this.persist();
       return { ok: true, pid, reason: 'sigkill-ok' };
     }
     return {
@@ -191,5 +290,6 @@ export class ToolProcessTracker {
   /** Clear all tracked processes. Used in tests. */
   clear(): void {
     this.processes.clear();
+    this.persist();
   }
 }

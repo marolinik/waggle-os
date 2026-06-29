@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ToolProcessTracker } from '../src/tool-process-tracker.js';
+import { ToolProcessTracker, type TrackedProcess } from '../src/tool-process-tracker.js';
 
 describe('ToolProcessTracker', () => {
   it('registers a pid and reports it', () => {
@@ -165,5 +165,99 @@ describe('ToolProcessTracker.kill', () => {
     expect(result.reason).toBe('sigterm-failed-sigkill-failed');
     // Entry retained so the UI can surface the failure + retry.
     expect(tracker.size).toBe(1);
+  });
+});
+
+// ── persistence + boot reconciliation (#2) ──────────────────────────
+// Cross-restart attribution: the spawned tool outlives the sidecar, so
+// on restart we reload a pidfile, probe liveness, keep the survivors,
+// and prune the dead — instead of dropping everything.
+
+describe('ToolProcessTracker — persistence', () => {
+  function memStore(initial: TrackedProcess[] = []) {
+    let saved: TrackedProcess[] = initial.map((r) => ({ ...r }));
+    const saves: TrackedProcess[][] = [];
+    return {
+      loadPersisted: (): TrackedProcess[] => saved.map((r) => ({ ...r })),
+      savePersisted: (recs: readonly TrackedProcess[]): void => {
+        saved = recs.map((r) => ({ ...r }));
+        saves.push(recs.map((r) => ({ ...r })));
+      },
+      get current(): TrackedProcess[] {
+        return saved;
+      },
+      saves,
+    };
+  }
+
+  it('saves to the store on register', () => {
+    const store = memStore();
+    const tracker = new ToolProcessTracker({
+      isAlive: () => true,
+      loadPersisted: store.loadPersisted,
+      savePersisted: store.savePersisted,
+    });
+    tracker.register(100, 'claude-code', 'ws-A');
+    expect(store.current.map((r) => r.pid)).toEqual([100]);
+  });
+
+  it('reconciles on construction: keeps alive pids, drops dead, prunes the store', () => {
+    const store = memStore([
+      { pid: 1, toolId: 'claude-code', startedAt: '2026-06-29T00:00:00.000Z' },
+      { pid: 2, toolId: 'cursor', startedAt: '2026-06-29T00:00:00.000Z' },
+    ]);
+    const tracker = new ToolProcessTracker({
+      isAlive: (pid) => pid === 1,
+      loadPersisted: store.loadPersisted,
+      savePersisted: store.savePersisted,
+    });
+    expect(tracker.list().map((r) => r.pid)).toEqual([1]);
+    expect(store.current.map((r) => r.pid)).toEqual([1]); // dead pid pruned from disk
+  });
+
+  it('persists on forget', () => {
+    const store = memStore();
+    const tracker = new ToolProcessTracker({
+      isAlive: () => true,
+      loadPersisted: store.loadPersisted,
+      savePersisted: store.savePersisted,
+    });
+    tracker.register(5, 'hermes');
+    tracker.forget(5);
+    expect(store.current).toEqual([]);
+  });
+
+  it('persists on kill', async () => {
+    const store = memStore();
+    let alive = true;
+    const tracker = new ToolProcessTracker({
+      isAlive: () => alive,
+      sendSignal: (_p, s) => {
+        if (s === 'SIGTERM') alive = false;
+        return true;
+      },
+      delay: async () => undefined,
+      loadPersisted: store.loadPersisted,
+      savePersisted: store.savePersisted,
+    });
+    tracker.register(9, 'cursor');
+    await tracker.kill(9, 10);
+    expect(store.current).toEqual([]);
+  });
+
+  it('is pure in-memory (no throw) when no persistence is configured', () => {
+    const tracker = new ToolProcessTracker({ isAlive: () => true });
+    expect(() => tracker.register(1, 'claude-code')).not.toThrow();
+  });
+
+  it('reconcile does not write when the store was empty (no eager file create)', () => {
+    const store = memStore([]);
+    // eslint-disable-next-line no-new
+    new ToolProcessTracker({
+      isAlive: () => true,
+      loadPersisted: store.loadPersisted,
+      savePersisted: store.savePersisted,
+    });
+    expect(store.saves).toHaveLength(0);
   });
 });

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { z } from 'zod';
@@ -9,6 +10,26 @@ import {
   type HookAction,
 } from '@waggle/agent';
 import { SUPPORTED_TOOLS, type ToolId } from '@waggle/shared';
+
+/**
+ * Loopback host:port → sidecar base URL; anything else → undefined.
+ * IPv6 loopback must be bracketed (`[::1]`) — a bare `::1` would yield
+ * a malformed `http://::1` URL and a conformant Host header always
+ * brackets IPv6 anyway, so we only accept the bracketed form.
+ */
+const LOOPBACK_HOST = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
+
+/**
+ * Derive the sidecar base URL to hand a launched tool's hook, from the
+ * loopback address the UI itself reached. Returns undefined for any
+ * missing / non-loopback host so a launched hook is never pointed at an
+ * arbitrary external origin — the emitter then falls back to its own
+ * `127.0.0.1:3333` default. Exported for unit testing.
+ */
+export function loopbackSidecarUrl(host: string | undefined): string | undefined {
+  if (!host || !LOOPBACK_HOST.test(host)) return undefined;
+  return `http://${host}`;
+}
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -69,8 +90,19 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
   // Lazy-init the tracker on first registration. fastify-plugin
   // wrapping (below) propagates the decoration to the parent
   // FastifyInstance so other plugins + tests can access it.
+  //
+  // Persisted to a pidfile under the data dir so launched tools that
+  // outlive a sidecar restart keep their 'Running' badge / kill
+  // affordance (the tracker reconciles liveness on construction). Falls
+  // back to pure in-memory if the data dir isn't decorated yet.
   if (!server.toolProcessTracker) {
-    server.decorate('toolProcessTracker', new ToolProcessTracker());
+    const dataDir = server.localConfig?.dataDir;
+    server.decorate(
+      'toolProcessTracker',
+      new ToolProcessTracker(
+        dataDir ? { persistPath: path.join(dataDir, 'launched-processes.json') } : {},
+      ),
+    );
   }
   const tracker = server.toolProcessTracker!;
 
@@ -97,12 +129,17 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
         .send({ error: 'Validation failed', details: parsed.error.flatten() });
     }
     const body = parsed.data;
+    // Self-enabling launch: turn on signal emission and tell the hook
+    // which loopback sidecar to post to, so a dock launch lights the
+    // SignalBus instead of staying dark.
     const result = launchTool({
       id: body.id,
       installedPath: body.installedPath,
       workspaceId: body.workspaceId,
       cwd: body.cwd,
       args: body.args,
+      signalEmit: true,
+      sidecarUrl: loopbackSidecarUrl(request.headers.host),
     });
     if (!result.ok) {
       return reply.code(400).send(result);

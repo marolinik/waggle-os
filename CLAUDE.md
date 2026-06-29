@@ -571,7 +571,7 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 |---|---|---|
 | 1 | Spawn Agent + Dock wiring | P36 already wired in `Dock.tsx`+`Desktop.tsx`; P35 third-tier fallback (LiteLLM → runtime model → provider catalogs) landed `14942be`. Residual: runtime verification on a clean install. |
 | 2 | Light mode finish | P40/P41 + CR-2 — semantic-token migration is done (no hive-950 references except a comment); remaining issues are render-time fine-tuning (BootScreen visual polish + a few header-styling judgments) that need a binary build to validate. |
-| 3 | Wave 2/3 hook implementations | 6 hive-mind-hooks-* packages remain Wave 2/3 stubs (`export {}`): cursor / claude-desktop / codex / codex-desktop / hermes / openclaw. Per-package effort: SessionStart + UserPromptSubmit + Stop + PreCompact handlers + install/uninstall/verify CLI. Defer until claude-code-only ship gets real usage feedback. |
+| 3 | Wave 2/3 hook implementations | **Mostly DONE (corrected 2026-06-29).** 6 of 7 hook packages ship real bins: claude-code + the 2026-06-01 Wave 2/3 port (codex, codex-desktop, cursor, hermes, openclaw). Only `hive-mind-hooks-claude-desktop` remains a binless `export {}` stub (deferred MCP-bridge category). The dock (`LauncherApp.tsx`) now exposes hook install/verify/uninstall for all 6 via the corrected `HOOKS_COHORT` (was hardcoded `['claude-code']`). Residual: claude-desktop MCP-bridge hook only. |
 
 **Closed during May 2026 backlog sweep:**
 - ✅ OW-6 PersonaSwitcher two-tier — shipped via M-01 (`PersonaSwitcher.tsx` + `lib/persona-tier.ts` + `lib/persona-tooltip.ts`); 26/26 tests passing
