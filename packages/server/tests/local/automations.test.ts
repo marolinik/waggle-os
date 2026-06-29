@@ -21,6 +21,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import os from 'node:os';
 import Fastify from 'fastify';
 import { EventEmitter } from 'node:events';
 import { MindDB, CronStore, type CronSchedule } from '@waggle/core';
@@ -80,6 +81,24 @@ describe('Automations alias routes (Phase 3)', () => {
     expect(res.statusCode).toBe(201);
     return res.json().automation;
   }
+
+  it('GET /api/automations/engine returns liveness + sovereignty identity', async () => {
+    const res = await server.inject({ method: 'GET', url: '/api/automations/engine' });
+    expect(res.statusCode).toBe(200);
+    const { engine } = res.json();
+    expect(engine.host).toBe(os.hostname());
+    expect(engine.sovereign).toBe(true);
+    expect(engine.device).toBe('this device');
+    expect(engine.consecutiveFailureCap).toBe(5);
+    expect(engine.running).toBe(false); // scheduler decorated but not started
+  });
+
+  it('engine reports running once the scheduler starts', async () => {
+    scheduler.start(60_000);
+    const res = await server.inject({ method: 'GET', url: '/api/automations/engine' });
+    expect(res.json().engine.running).toBe(true);
+    scheduler.stop();
+  });
 
   const SCHEDULE_BODY = {
     name: 'Nightly digest',

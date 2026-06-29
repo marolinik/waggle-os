@@ -8,6 +8,7 @@
  * Part of Wave 1.1 — Solo Cron Service.
  */
 
+import os from 'node:os';
 import type { CronStore, CronSchedule } from '@waggle/core';
 import { createLogger } from './logger.js';
 
@@ -41,6 +42,29 @@ export function makeRecordExecutionCallback(
 /** Maximum consecutive failures before a job is auto-disabled */
 const MAX_CONSECUTIVE_FAILURES = 5;
 
+/**
+ * Liveness snapshot of the scheduler. Drives the "Loops engine" sovereignty
+ * pill: scheduled automations only fire while THIS process is running on the
+ * user's own machine (or their self-hosted server) — nothing leaves the
+ * perimeter to a cloud cron. `host` is a local syscall (os.hostname), no network.
+ */
+export interface SchedulerStatus {
+  /** Whether the tick timer is currently armed. */
+  running: boolean;
+  /** ISO timestamp of the last tick that actually ran (null if never). */
+  lastTickAt: string | null;
+  /** ISO timestamp the next tick is expected (null when not running). */
+  nextTickDueAt: string | null;
+  /** Tick interval in ms (null until start()). */
+  intervalMs: number | null;
+  /** The machine running the engine (os.hostname). */
+  host: string;
+  /** How many jobs are currently auto-disabled after repeated failures. */
+  disabledJobCount: number;
+  /** Consecutive-failure threshold that auto-disables a job. */
+  consecutiveFailureCap: number;
+}
+
 export class LocalScheduler {
   private store: CronStore;
   private executor: JobExecutor;
@@ -51,6 +75,10 @@ export class LocalScheduler {
   private failCounts = new Map<number, number>();
   /** Set of schedule IDs that have been disabled due to repeated failures */
   private disabledJobs = new Set<number>();
+  /** Liveness tracking (epoch ms) — feeds getStatus()/the engine pill. */
+  private lastTickAt: number | null = null;
+  private startedAt: number | null = null;
+  private intervalMs: number | null = null;
 
   constructor(store: CronStore, executor: JobExecutor, onJobComplete?: JobCompleteCallback) {
     this.store = store;
@@ -77,6 +105,11 @@ export class LocalScheduler {
   /** Start the tick loop. Default interval is 60 seconds. */
   start(intervalMs: number = 60_000): void {
     if (this.timer) return;
+    // Record liveness BEFORE arming the timer so getStatus() is accurate the
+    // instant start() returns (prod calls start() with no arg → 60_000 default
+    // must be captured, else getStatus().intervalMs would read null).
+    this.intervalMs = intervalMs;
+    this.startedAt = Date.now();
     this.timer = setInterval(() => {
       this.tick().catch(() => {});
     }, intervalMs);
@@ -93,6 +126,28 @@ export class LocalScheduler {
   /** Whether the scheduler timer is currently running. */
   isRunning(): boolean {
     return this.timer !== null;
+  }
+
+  /**
+   * Liveness snapshot for the "Loops engine" sovereignty surface. Pure — safe to
+   * call from a route handler on every poll. nextTickDueAt is derived from the
+   * last real tick (or startedAt if none yet) plus the interval.
+   */
+  getStatus(): SchedulerStatus {
+    const running = this.timer !== null;
+    const base = this.lastTickAt ?? this.startedAt;
+    const nextTickDueAt = running && base !== null && this.intervalMs !== null
+      ? new Date(base + this.intervalMs).toISOString()
+      : null;
+    return {
+      running,
+      lastTickAt: this.lastTickAt !== null ? new Date(this.lastTickAt).toISOString() : null,
+      nextTickDueAt,
+      intervalMs: this.intervalMs,
+      host: os.hostname(),
+      disabledJobCount: this.disabledJobs.size,
+      consecutiveFailureCap: MAX_CONSECUTIVE_FAILURES,
+    };
   }
 
   /**
@@ -126,6 +181,9 @@ export class LocalScheduler {
   async tick(): Promise<number> {
     if (this.ticking) return 0;
     this.ticking = true;
+    // Stamp liveness AFTER the single-flight guard so a skipped overlapping tick
+    // doesn't advance it — a stuck tick is then visible as a stale lastTickAt.
+    this.lastTickAt = Date.now();
     let executed = 0;
     try {
       const due = this.store.getDue();

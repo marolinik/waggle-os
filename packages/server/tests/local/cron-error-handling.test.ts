@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import os from 'node:os';
 import { LocalScheduler, MAX_CONSECUTIVE_FAILURES } from '../../src/local/cron.js';
 import type { CronSchedule, CronStore } from '@waggle/core';
 
@@ -26,6 +27,52 @@ function makeSchedule(id: number): CronSchedule {
     created_at: new Date().toISOString(),
   };
 }
+
+describe('LocalScheduler getStatus (engine liveness)', () => {
+  it('reports a fresh, not-yet-started scheduler', () => {
+    const scheduler = new LocalScheduler(mockCronStore([]), vi.fn());
+    const s = scheduler.getStatus();
+    expect(s.running).toBe(false);
+    expect(s.intervalMs).toBeNull();
+    expect(s.lastTickAt).toBeNull();
+    expect(s.nextTickDueAt).toBeNull();
+    expect(s.host).toBe(os.hostname());
+    expect(s.consecutiveFailureCap).toBe(MAX_CONSECUTIVE_FAILURES);
+    expect(s.disabledJobCount).toBe(0);
+  });
+
+  it('reflects running state + interval after start(), and stops cleanly', () => {
+    const scheduler = new LocalScheduler(mockCronStore([]), vi.fn());
+    scheduler.start(60_000);
+    const s = scheduler.getStatus();
+    expect(s.running).toBe(true);
+    expect(s.intervalMs).toBe(60_000);
+    expect(s.nextTickDueAt).not.toBeNull();
+    scheduler.stop(); // clear the real timer so vitest can exit
+    expect(scheduler.getStatus().running).toBe(false);
+  });
+
+  it('advances lastTickAt to a valid ISO timestamp after a tick', async () => {
+    const scheduler = new LocalScheduler(mockCronStore([]), vi.fn());
+    expect(scheduler.getStatus().lastTickAt).toBeNull();
+    await scheduler.tick();
+    const after = scheduler.getStatus().lastTickAt;
+    expect(after).not.toBeNull();
+    expect(Number.isNaN(Date.parse(after!))).toBe(false);
+  });
+
+  it('counts auto-disabled jobs after repeated failures', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const scheduler = new LocalScheduler(
+      mockCronStore([makeSchedule(7)]),
+      vi.fn().mockRejectedValue(new Error('x')),
+    );
+    for (let i = 0; i < MAX_CONSECUTIVE_FAILURES; i++) await scheduler.tick();
+    expect(scheduler.getStatus().disabledJobCount).toBe(1);
+    vi.restoreAllMocks();
+  });
+});
 
 describe('LocalScheduler Error Handling (11B-9)', () => {
   beforeEach(() => {

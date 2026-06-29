@@ -1,3 +1,4 @@
+import os from 'node:os';
 import type { FastifyPluginAsync } from 'fastify';
 import type { Automation, AutomationTriggerType } from '@waggle/shared';
 import type { CronExecutionRow, CronJobType } from '@waggle/core';
@@ -163,6 +164,20 @@ export const automationRoutes: FastifyPluginAsync = async (server) => {
     const automations = (body.schedules ?? []).map(toAutomation);
     return { automations, count: automations.length };
   });
+
+  // GET /api/automations/engine — Loops engine liveness + sovereignty identity.
+  // The scheduler ticks IN THIS PROCESS, so automations only run while the user's
+  // own machine (or their self-hosted server) is live — nothing is offloaded to a
+  // cloud cron, so no data leaves the perimeter on a schedule. Drives the engine
+  // status pill. Authenticated (NOT added to AUTH_EXEMPT_PATHS).
+  server.get('/api/automations/engine', async () => ({
+    engine: {
+      ...server.scheduler.getStatus(),
+      device: 'this device',
+      platform: os.platform(),
+      sovereign: true,
+    },
+  }));
 
   // POST /api/automations — alias over POST /api/cron. trigger/condition/actions
   // persist into job_config; the cron expression into cron_expr (C24 schedule-only).
