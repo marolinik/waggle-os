@@ -7,6 +7,7 @@ import {
   launchTool,
   runHookCommand,
   ToolProcessTracker,
+  ToolOutputBuffer,
   type HookAction,
 } from '@waggle/agent';
 import { SUPPORTED_TOOLS, type ToolId } from '@waggle/shared';
@@ -35,6 +36,8 @@ declare module 'fastify' {
   interface FastifyInstance {
     /** AI-OS Phase 4 — in-memory tracker of processes spawned via /api/tools/launch. */
     toolProcessTracker?: ToolProcessTracker;
+    /** AI-OS #4 — bounded per-pid output buffer for observed (piped) launches. */
+    toolOutputBuffer?: ToolOutputBuffer;
   }
 }
 
@@ -72,6 +75,8 @@ const launchBodySchema = z.object({
   workspaceId: z.string().min(1).max(200).optional(),
   cwd: z.string().min(1).max(1024).optional(),
   args: z.array(z.string()).max(50).optional(),
+  // AI-OS #4 — opt-in observed (piped-stdio) launch for live output.
+  observe: z.boolean().optional(),
 });
 
 const hooksBodySchema = z.object({
@@ -105,6 +110,13 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
     );
   }
   const tracker = server.toolProcessTracker!;
+
+  // AI-OS #4 — in-memory output buffer for observed launches. Shared across
+  // /launch (attach) and /stream (read) via the same fastify decoration.
+  if (!server.toolOutputBuffer) {
+    server.decorate('toolOutputBuffer', new ToolOutputBuffer());
+  }
+  const outputBuffer = server.toolOutputBuffer!;
 
   // ── GET /api/tools/detect (Phase 0) ──────────────────────────────
   server.get('/api/tools/detect', async (_request, reply) => {
@@ -140,14 +152,22 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
       args: body.args,
       signalEmit: true,
       sidecarUrl: loopbackSidecarUrl(request.headers.host),
+      observe: body.observe,
     });
     if (!result.ok) {
       return reply.code(400).send(result);
     }
     // AI-OS Phase 4 polish — register the spawned pid for the
-    // 'Running' badge surface (GET /api/tools/processes).
+    // 'Running' badge surface (GET /api/tools/processes). Observed launches
+    // are tagged so they stay in-memory only (excluded from the pidfile) and
+    // their live output is wired into the buffer the /stream route reads.
     if (result.pid != null) {
-      tracker.register(result.pid, body.id, body.workspaceId);
+      tracker.register(result.pid, body.id, body.workspaceId, {
+        observed: body.observe === true,
+      });
+      if (body.observe && result.output) {
+        outputBuffer.attach(result.pid, result.output);
+      }
     }
     return reply.code(202).send(result);
   });
@@ -177,6 +197,45 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
       return reply.code(status).send(result);
     }
     return reply.code(200).send(result);
+  });
+
+  // ── GET /api/tools/stream?pid= (AI-OS #4) ────────────────────────
+  // Live stdout/stderr for an OBSERVED launch. Validated against the output
+  // buffer (the only place observed pids land — so a non-observed pid 404s
+  // here), then mirrors the chat.ts hijack-SSE pattern: `subscribe` replays
+  // the buffered tail and live-tails, ending on a terminal `exit` event.
+  // Loopback-only; EventSource auth via ?token= (see SSE_QUERY_TOKEN_PATHS).
+  server.get('/api/tools/stream', async (request, reply) => {
+    const rawPid = (request.query as { pid?: string } | undefined)?.pid;
+    const pid = Number(rawPid);
+    if (!Number.isInteger(pid) || pid <= 0) {
+      return reply.code(400).send({ error: 'pid query param required' });
+    }
+    if (!outputBuffer.has(pid)) {
+      return reply.code(404).send({ error: 'no observed output for pid' });
+    }
+    await reply.hijack();
+    const res = reply.raw;
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      // hijack bypasses Fastify plugins; echo the loopback origin for CORS.
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+    });
+    const send = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    const unsubscribe = outputBuffer.subscribe(
+      pid,
+      (line) => send('line', { line }),
+      (code) => {
+        send('exit', { code });
+        res.end();
+      },
+    );
+    res.on('close', () => unsubscribe());
+    return reply;
   });
 
   // ── POST /api/tools/hooks (Phase 2A) ─────────────────────────────

@@ -251,6 +251,7 @@ const SSE_QUERY_TOKEN_PATHS = new Set([
   '/api/events/stream',
   '/api/waggle/stream',
   '/api/harvest/progress',
+  '/api/tools/stream', // AI-OS #4 — observed-launch live output (named line/exit events)
 ]);
 
 /** Extract `?token=` from a raw request URL (query parsing happens later in
