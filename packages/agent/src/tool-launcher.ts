@@ -66,6 +66,14 @@ export const HOOKS_COHORT: readonly ToolId[] = ['claude-code', 'codex', 'codex-d
 
 // ── Injectable deps ─────────────────────────────────────────────────
 
+/** Minimal, test-injectable view of a live observed process. */
+export interface ObservedHandle {
+  /** Subscribe to decoded stdout+stderr text chunks. */
+  onData(cb: (chunk: string) => void): void;
+  /** Fired once when the process exits. `code` is null on signal-kill. */
+  onExit(cb: (code: number | null) => void): void;
+}
+
 export interface ToolLauncherDeps {
   /** Override platform (defaults to process.platform). */
   platform?: NodeJS.Platform;
@@ -80,6 +88,18 @@ export interface ToolLauncherDeps {
     args: string[],
     options: { cwd?: string; env?: NodeJS.ProcessEnv },
   ) => { pid: number | null; error?: string };
+  /**
+   * Piped-stdio spawn for OBSERVED launches. Production uses
+   * `child_process.spawn` with `stdio:['ignore','pipe','pipe']` and NO
+   * `unref` — the sidecar holds the pipes so output can stream, which
+   * means the child is tethered to the sidecar (dies on restart). Returns
+   * the pid + an abstract ObservedHandle (or { error }).
+   */
+  spawnObserved?: (
+    binary: string,
+    args: string[],
+    options: { cwd?: string; env?: NodeJS.ProcessEnv },
+  ) => { pid: number | null; error?: string; handle?: ObservedHandle };
   /**
    * Synchronous-style exec with captured stdout/stderr. Production
    * uses promisified execFile with a timeout. Returns null on error.
@@ -107,6 +127,40 @@ function defaultSpawnDetached(
     });
     if (child.pid) child.unref();
     return { pid: child.pid ?? null };
+  } catch (err) {
+    return {
+      pid: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+function defaultSpawnObserved(
+  binary: string,
+  args: string[],
+  options: { cwd?: string; env?: NodeJS.ProcessEnv },
+): { pid: number | null; error?: string; handle?: ObservedHandle } {
+  try {
+    const child = spawn(binary, args, {
+      cwd: options.cwd,
+      env: { ...process.env, ...(options.env ?? {}) },
+      // NOT detached, NOT unref'd: observation requires holding the pipes,
+      // so the child is tethered to the sidecar lifecycle.
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (child.pid == null) {
+      return { pid: null, error: 'spawn returned no pid' };
+    }
+    const handle: ObservedHandle = {
+      onData(cb) {
+        child.stdout?.on('data', (d: Buffer) => cb(d.toString('utf8')));
+        child.stderr?.on('data', (d: Buffer) => cb(d.toString('utf8')));
+      },
+      onExit(cb) {
+        child.on('exit', (code) => cb(code));
+      },
+    };
+    return { pid: child.pid, handle };
   } catch (err) {
     return {
       pid: null,
@@ -146,6 +200,7 @@ async function defaultExecCapture(
 interface ResolvedDeps {
   platform: NodeJS.Platform;
   spawnDetached: NonNullable<ToolLauncherDeps['spawnDetached']>;
+  spawnObserved: NonNullable<ToolLauncherDeps['spawnObserved']>;
   execCapture: NonNullable<ToolLauncherDeps['execCapture']>;
 }
 
@@ -153,6 +208,7 @@ function resolveDeps(opts: ToolLauncherDeps): ResolvedDeps {
   return {
     platform: opts.platform ?? process.platform,
     spawnDetached: opts.spawnDetached ?? defaultSpawnDetached,
+    spawnObserved: opts.spawnObserved ?? defaultSpawnObserved,
     execCapture: opts.execCapture ?? defaultExecCapture,
   };
 }
@@ -197,6 +253,13 @@ export interface LaunchOptions {
    * address the UI itself reached.
    */
   sidecarUrl?: string;
+  /**
+   * When true, launch in OBSERVED mode (piped stdio) so stdout/stderr can be
+   * streamed to the dock. The process is tethered to the sidecar (dies on
+   * restart) and is tracked in-memory only. Default (false/absent) is the
+   * detached, survives-restart launch.
+   */
+  observe?: boolean;
   /** Test deps overrides. */
   deps?: ToolLauncherDeps;
 }
@@ -207,6 +270,11 @@ export interface LaunchResult {
   /** What we actually executed (for diagnostics). */
   executed: { binary: string; args: string[]; cwd?: string };
   error?: string;
+  /**
+   * Present only for observed launches (`observe:true`) — the live output
+   * handle the caller (the /launch route) wires into the output buffer.
+   */
+  output?: ObservedHandle;
 }
 
 /**
@@ -250,6 +318,21 @@ export function launchTool(opts: LaunchOptions): LaunchResult {
   }
   if (opts.sidecarUrl) {
     env.WAGGLE_SIDECAR_URL = opts.sidecarUrl;
+  }
+  // Observed mode: piped-stdio spawn that surfaces a live output handle.
+  // Tethered to the sidecar (not unref'd) and tracked in-memory only.
+  if (opts.observe) {
+    const { pid, error, handle } = deps.spawnObserved(opts.installedPath, args, {
+      cwd: opts.cwd,
+      env,
+    });
+    return {
+      ok: pid != null && !error,
+      pid,
+      executed: { binary: opts.installedPath, args, cwd: opts.cwd },
+      error,
+      ...(handle ? { output: handle } : {}),
+    };
   }
   const { pid, error } = deps.spawnDetached(opts.installedPath, args, {
     cwd: opts.cwd,

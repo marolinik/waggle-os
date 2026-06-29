@@ -11,6 +11,7 @@ import {
   runHookCommand,
   hookPackageFor,
   type ToolLauncherDeps,
+  type ObservedHandle,
 } from '../src/tool-launcher.js';
 import type { ToolId } from '@waggle/shared';
 
@@ -365,4 +366,48 @@ describe('hookPackageFor', () => {
       expect(hookPackageFor(id)).toBe(`@waggle/hive-mind-hooks-${id}`);
     },
   );
+});
+
+describe('launchTool observe mode', () => {
+  it('uses spawnObserved and returns its handle when observe:true', () => {
+    const handle: ObservedHandle = { onData: () => {}, onExit: () => {} };
+    const spawnObserved = vi.fn(() => ({ pid: 4242, handle }));
+    const spawnDetached = vi.fn(() => ({ pid: 1 }));
+    const res = launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/bin/claude',
+      observe: true,
+      deps: { spawnObserved, spawnDetached },
+    });
+    expect(spawnObserved).toHaveBeenCalledTimes(1);
+    expect(spawnDetached).not.toHaveBeenCalled();
+    expect(res.ok).toBe(true);
+    expect(res.pid).toBe(4242);
+    expect(res.output).toBe(handle);
+  });
+
+  it('uses spawnDetached and omits output when observe is absent', () => {
+    const spawnObserved = vi.fn(() => ({ pid: 9, handle: { onData() {}, onExit() {} } }));
+    const spawnDetached = vi.fn(() => ({ pid: 7 }));
+    const res = launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/bin/claude',
+      deps: { spawnObserved, spawnDetached },
+    });
+    expect(spawnDetached).toHaveBeenCalledTimes(1);
+    expect(spawnObserved).not.toHaveBeenCalled();
+    expect(res.output).toBeUndefined();
+  });
+
+  it('reports observe spawn failure as ok:false', () => {
+    const res = launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/bin/claude',
+      observe: true,
+      deps: { spawnObserved: () => ({ pid: null, error: 'boom' }) },
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('boom');
+    expect(res.output).toBeUndefined();
+  });
 });
