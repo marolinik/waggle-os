@@ -2579,6 +2579,12 @@ class LocalAdapter {
     args?: string[];
     /** Optional cwd override; defaults to the binary's directory. */
     cwd?: string;
+    /**
+     * AI-OS #4 — opt-in observed (piped-stdio) launch so the agent's live
+     * output can be streamed via streamToolOutput. Default (omitted) is the
+     * detached, survives-restart launch.
+     */
+    observe?: boolean;
   }): Promise<{ ok: boolean; pid: number | null; error?: string }> {
     // P1b D3: fetchRaw — non-2xx body maps into the { ok:false, error } envelope.
     const res = await this.fetchRaw('/api/tools/launch', {
@@ -2599,6 +2605,8 @@ class LocalAdapter {
       toolId: string;
       startedAt: string;
       workspaceId?: string;
+      /** AI-OS #4 — true for observed (piped) launches with live output. */
+      observed?: boolean;
     }>;
     total: number;
   }> {
@@ -2610,6 +2618,35 @@ class LocalAdapter {
       console.error('[adapter] getToolProcesses failed:', err);
       return { processes: [], total: 0 };
     }
+  }
+
+  /**
+   * AI-OS #4 — subscribe to an observed launch's live output. Opens a dedicated
+   * EventSource on /api/tools/stream?pid= (two named events: `line` and `exit`)
+   * via the shared, token-attached, reconnecting openSSE lifecycle. Returns an
+   * unsubscribe handle. No-ops in jsdom (no EventSource) — unit tests drive the
+   * pane through the callbacks directly.
+   */
+  streamToolOutput(
+    pid: number,
+    handlers: { onLine: (line: string) => void; onExit: (code: number | null) => void },
+  ): () => void {
+    return this.openSSE(`/api/tools/stream?pid=${pid}`, (es) => {
+      es.addEventListener('line', (e) => {
+        try {
+          handlers.onLine(JSON.parse((e as MessageEvent).data).line);
+        } catch {
+          /* skip malformed frame */
+        }
+      });
+      es.addEventListener('exit', (e) => {
+        try {
+          handlers.onExit(JSON.parse((e as MessageEvent).data).code ?? null);
+        } catch {
+          /* skip malformed frame */
+        }
+      });
+    });
   }
 
   async killTool(pid: number): Promise<{
