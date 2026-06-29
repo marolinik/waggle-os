@@ -1,4 +1,15 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { executeHeldAction } from '../held-action-executor.js';
+
+/** Parse a held action's args JSON defensively (never throw into the route). */
+function safeParseArgs(json: string): Record<string, unknown> {
+  try {
+    const v = JSON.parse(json) as unknown;
+    return v && typeof v === 'object' ? v as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
 
 export const approvalRoutes: FastifyPluginAsync = async (server) => {
   // POST /api/approval/:requestId — approve or deny a pending tool execution.
@@ -12,33 +23,66 @@ export const approvalRoutes: FastifyPluginAsync = async (server) => {
     const { approved, always, sourceWorkspaceId } = request.body ?? {};
 
     const pending = server.agentState.pendingApprovals.get(requestId);
-    if (!pending) {
+    if (pending) {
+      // ── Live (interactive) approval path — unchanged ──
+      // If user chose "Always allow", persist the grant BEFORE resolving so a
+      // subsequent identical request in the same tick would also see the grant.
+      if (approved && always) {
+        try {
+          server.agentState.approvalGrantStore.grant(
+            pending.toolName,
+            pending.input,
+            sourceWorkspaceId ?? null,
+          );
+        } catch { /* non-fatal: in-memory grant still works */ }
+      }
+
+      pending.resolve(approved);
+      server.agentState.pendingApprovals.delete(requestId);
+
+      return reply.send({ ok: true, requestId, approved, always: !!always });
+    }
+
+    // ── Durable held-action path (L2) ──
+    // Not a live request → look for a held action with this id. Approve runs the
+    // real tool via the deferred executor (idempotent + re-validated); deny
+    // atomically claims it as 'denied'.
+    const held = server.cronStore.getPendingAction(requestId);
+    if (!held || held.status !== 'held') {
       return reply.status(404).send({ error: 'No pending approval with that ID' });
     }
-
-    // If user chose "Always allow", persist the grant BEFORE resolving so a
-    // subsequent identical request in the same tick would also see the grant.
-    if (approved && always) {
-      try {
-        server.agentState.approvalGrantStore.grant(
-          pending.toolName,
-          pending.input,
-          sourceWorkspaceId ?? null,
-        );
-      } catch { /* non-fatal: in-memory grant still works */ }
+    if (approved) {
+      const result = await executeHeldAction(server, held);
+      return reply.send({ ok: result.ok, requestId, approved: true, status: result.status, ...(result.error ? { error: result.error } : {}) });
     }
-
-    pending.resolve(approved);
-    server.agentState.pendingApprovals.delete(requestId);
-
-    return reply.send({ ok: true, requestId, approved, always: !!always });
+    server.cronStore.claimPendingAction(requestId, 'denied', new Date().toISOString());
+    return reply.send({ ok: true, requestId, approved: false, status: 'denied' });
   });
 
-  // GET /api/approval/pending — list pending approvals (for reconnection)
+  // GET /api/approval/pending — list pending approvals (for reconnection).
+  // Union of (a) live interactive approvals waiting on an open request, and
+  // (b) durable held actions (L2) drafted by headless runs and awaiting a
+  // human's one-click approval. Held rows carry source/risk/summary so the UI
+  // can badge them; the wire shape stays a superset (additive, optional fields).
   server.get('/api/approval/pending', async () => {
-    const pending: Array<{ requestId: string; toolName: string; input: Record<string, unknown>; timestamp: number }> = [];
+    const pending: Array<{
+      requestId: string; toolName: string; input: Record<string, unknown>; timestamp: number;
+      source?: 'live' | 'held'; riskLevel?: string; approvalClass?: string; summary?: string | null;
+    }> = [];
     for (const [id, p] of server.agentState.pendingApprovals) {
-      pending.push({ requestId: id, toolName: p.toolName, input: p.input, timestamp: p.timestamp });
+      pending.push({ requestId: id, toolName: p.toolName, input: p.input, timestamp: p.timestamp, source: 'live' });
+    }
+    for (const a of server.cronStore.listPendingActions('held')) {
+      pending.push({
+        requestId: a.id,
+        toolName: a.tool_name,
+        input: safeParseArgs(a.args_json),
+        timestamp: Date.parse(a.created_at),
+        source: 'held',
+        riskLevel: a.risk_level,
+        approvalClass: a.approval_class,
+        summary: a.summary,
+      });
     }
     return { pending, count: pending.length };
   });
