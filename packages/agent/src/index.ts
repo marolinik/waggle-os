@@ -513,3 +513,4 @@ export {
   type OutputTail,
   type ToolOutputBufferDeps,
 } from './tool-output-buffer.js';
+export { renderGoalAncestry } from './goal-ancestry.js';
