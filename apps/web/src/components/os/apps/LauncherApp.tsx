@@ -35,29 +35,15 @@ import {
   toolAcceptsInlinePrompt,
 } from '@/lib/launcher-prompt-args';
 import { ToolOutputPane } from './launcher/ToolOutputPane';
+import { BUILTIN_TOOL_MANIFESTS } from '@waggle/shared';
 
-// Phase 4 — full 7-tool cohort. Mirrors @waggle/shared LAUNCH_COHORT.
-// Kept local (rather than imported) to avoid a runtime dependency on
-// the shared module's named export for one constant.
-const LAUNCH_COHORT = [
-  'claude-code',
-  'cursor',
-  'claude-desktop',
-  'codex',
-  'codex-desktop',
-  'hermes',
-  'openclaw',
-];
-
-// Hook install/verify/uninstall is restricted to tools whose hive-mind
-// hook package actually ships a bin. Six do — claude-code, codex,
-// codex-desktop, cursor, hermes, openclaw — so the dock offers hook
-// actions for each. Only claude-desktop is still a binless `export {}`
-// stub (deferred MCP-bridge category) and is intentionally excluded.
-// Hook buttons gate on THIS cohort; launching stays on LAUNCH_COHORT.
-// Mirrors the backend HOOKS_COHORT in @waggle/agent's tool-launcher.ts
-// (kept local to avoid a runtime import for one constant).
-const HOOKS_COHORT = ['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'];
+// #5 — derived from the shared manifest registry (single source of truth),
+// replacing the hand-maintained local copies. LAUNCH_COHORT = launchable tools;
+// HOOKS_COHORT = tools whose hive-mind hook package ships a bin (hookCapable —
+// claude-desktop is the only one excluded). Mirrors the backend cohorts, which
+// derive from the same BUILTIN_TOOL_MANIFESTS.
+const LAUNCH_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id);
+const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id);
 
 interface DetectedTool {
   id: string;
