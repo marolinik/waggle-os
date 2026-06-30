@@ -1,0 +1,71 @@
+{
+  "config": {
+    "N": 50,
+    "K": 1,
+    "USER_LLM": "openai/gpt-5.2",
+    "USER_EFFORT": "low",
+    "MAX_STEPS": 40,
+    "CONC": 3,
+    "SEED": 42,
+    "mindHash": "3fb2f0d45ebde4aba570c8a0aae43f0565bcb8f324dcf3da1edc4e227f381618",
+    "mindFrames": 10
+  },
+  "arms": [
+    {
+      "arm": "B-",
+      "model": "qwen3.6-35b-a3b",
+      "memory": "off",
+      "exit": 0,
+      "sims": 50,
+      "pass": 39,
+      "passRate": 0.78,
+      "infraErrors": 0,
+      "agentInputTokens": 4443898,
+      "agentOutputTokens": 262064,
+      "agentTurns": 631,
+      "agentCostUsd": 1.0984
+    },
+    {
+      "arm": "B",
+      "model": "qwen3.6-35b-a3b",
+      "memory": "on",
+      "exit": 0,
+      "sims": 50,
+      "pass": 44,
+      "passRate": 0.88,
+      "infraErrors": 0,
+      "agentInputTokens": 4572764,
+      "agentOutputTokens": 230412,
+      "agentTurns": 580,
+      "agentCostUsd": 1.0989
+    },
+    {
+      "arm": "A-",
+      "model": "claude-opus-4-8",
+      "memory": "off",
+      "exit": 0,
+      "sims": 49,
+      "pass": 40,
+      "passRate": 0.8163265306122449,
+      "infraErrors": 1,
+      "agentInputTokens": 5036863,
+      "agentOutputTokens": 97766,
+      "agentTurns": 577,
+      "agentCostUsd": 27.6285
+    },
+    {
+      "arm": "A",
+      "model": "claude-opus-4-8",
+      "memory": "on",
+      "exit": 0,
+      "sims": 50,
+      "pass": 36,
+      "passRate": 0.72,
+      "infraErrors": 0,
+      "agentInputTokens": 5239539,
+      "agentOutputTokens": 95522,
+      "agentTurns": 539,
+      "agentCostUsd": 28.5857
+    }
+  ]
+}
