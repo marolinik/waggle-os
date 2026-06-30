@@ -123,6 +123,10 @@ benchmarks/results/*
 # Also catch nested mis-CWD writes (e.g. ran from benchmarks/harness/).
 # Use a trailing `*` (not `/`) so the `!` exceptions above still apply.
 **/benchmarks/results/*
+# Canonical LoCoMo SOTA evidence — intentionally committed (see in-dir README). Do NOT remove:
+# this exact swallow hid the 87.66 result from the repo (docs/analysis/locomo-sota-evidence-drift-2026-06-30.md).
+!**/benchmarks/results/locomo-sota-2026-06/
+!**/benchmarks/results/locomo-sota-2026-06/**
 **/benchmarks/data/*
 !**/benchmarks/data/preflight-locomo-50.json
 !**/benchmarks/data/failure-mode-calibration-10.jsonl
