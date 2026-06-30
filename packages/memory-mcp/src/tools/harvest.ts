@@ -15,7 +15,7 @@ import {
   getPersonalDb,
   getAdapter,
 } from '../core/setup.js';
-import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames } from '@waggle/core';
+import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive } from '@waggle/core';
 
 export function registerHarvestTools(server: McpServer): void {
 
@@ -103,6 +103,10 @@ export function registerHarvestTools(server: McpServer): void {
       const maxBefore =
         (rawDb.prepare('SELECT COALESCE(MAX(id), 0) AS m FROM memory_frames').get() as { m: number }).m;
 
+      // #7: verbatim provenance archive — full immutable source per item, linked
+      // from the summary frame via metadata.archiveUid. Append-only; idempotent.
+      const rawArchive = new RawArchive(getPersonalDb());
+
       for (const item of items) {
         // Build a summary from the conversation
         const content = item.title
@@ -117,6 +121,25 @@ export function registerHarvestTools(server: McpServer): void {
         const resolved = resolveRelativeDate(content, item.timestamp);
         const createdAt = resolved ? `${resolved.iso}T00:00:00Z` : (item.timestamp || undefined);
 
+        // #7: archive the FULL untruncated verbatim source BEFORE the frame's
+        // capped preview is built. Best-effort — a failure must not abort the
+        // item (degraded provenance beats a lost import); never silent.
+        let archiveUid: string | undefined;
+        try {
+          archiveUid = rawArchive.append({
+            source: item.source,
+            sourceRef: item.id,
+            title: item.title,
+            content: item.content,
+            sourceTimestamp: item.timestamp,
+          }).archiveUid;
+        } catch (err) {
+          console.error(
+            `[harvest] raw_archive append failed for ${item.source}/${item.id} — frame persists without provenance link:`,
+            err instanceof Error ? err.message : 'unknown',
+          );
+        }
+
         // createIFrame handles dedup internally — returns existing frame if content matches
         const frame = frameStore.createIFrame(
           session.gop_id,
@@ -125,6 +148,27 @@ export function registerHarvestTools(server: McpServer): void {
           'import',
           createdAt,
         );
+
+        // #7: stamp provenance metadata. On a fresh frame (default '{}' metadata)
+        // record sourceId + the archive link; on an already-stamped/dedup'd frame,
+        // backfill only the archiveUid without clobbering existing metadata.
+        // Limitation (by design, v0): two DIFFERENT sources with byte-identical content
+        // dedup to ONE frame, so it links to the FIRST source's archive row only — both
+        // archive rows still persist immutably (RawArchive.list/getByUid); no verbatim is
+        // lost, only the 2nd frame→source link. (Server harvest route shares this.)
+        if (!frame.metadata || frame.metadata === '{}') {
+          frameStore.setMetadata(frame.id, JSON.stringify({
+            sourceId: item.id,
+            ...(archiveUid ? { archiveUid } : {}),
+          }));
+        } else if (archiveUid) {
+          try {
+            const meta = JSON.parse(frame.metadata) as Record<string, unknown>;
+            if (!meta.archiveUid) {
+              frameStore.setMetadata(frame.id, JSON.stringify({ ...meta, archiveUid }));
+            }
+          } catch { /* malformed metadata — leave as-is */ }
+        }
 
         // Frames created during this batch have id > maxBefore.
         // Dedup hits return the original frame whose id is older.
