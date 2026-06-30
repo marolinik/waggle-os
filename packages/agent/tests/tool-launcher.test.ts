@@ -10,10 +10,11 @@ import {
   launchTool,
   runHookCommand,
   hookPackageFor,
+  HOOKS_COHORT,
   type ToolLauncherDeps,
   type ObservedHandle,
 } from '../src/tool-launcher.js';
-import type { ToolId } from '@waggle/shared';
+import { BUILTIN_TOOL_MANIFESTS, type ToolId } from '@waggle/shared';
 
 function captureSpawn() {
   const calls: Array<{
@@ -356,6 +357,14 @@ describe('runHookCommand', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('not supported');
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('HOOKS_COHORT derivation (#5)', () => {
+  it('equals the hook-capable manifests (claude-desktop excluded)', () => {
+    const expected = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id).sort();
+    expect([...HOOKS_COHORT].sort()).toEqual(expected);
+    expect(HOOKS_COHORT).not.toContain('claude-desktop');
   });
 });
 

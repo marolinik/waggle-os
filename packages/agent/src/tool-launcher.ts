@@ -46,7 +46,7 @@
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolId } from '@waggle/shared';
-import { LAUNCH_COHORT } from '@waggle/shared';
+import { LAUNCH_COHORT, BUILTIN_TOOL_MANIFESTS } from '@waggle/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -62,7 +62,8 @@ const execFileAsync = promisify(execFile);
  * paths gate on THIS cohort, not LAUNCH_COHORT, so the UI never offers a hook
  * action that npx cannot fulfil.
  */
-export const HOOKS_COHORT: readonly ToolId[] = ['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'] as const;
+export const HOOKS_COHORT: readonly ToolId[] =
+  BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id as ToolId);
 
 // ── Injectable deps ─────────────────────────────────────────────────
 
