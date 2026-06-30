@@ -23,6 +23,8 @@ import urllib.request
 import uuid
 from typing import Any, List, Optional
 
+from tau2.agent.base_agent import HalfDuplexAgent
+
 
 BRIDGE_URL = os.environ.get("WAGGLE_TAU2_BRIDGE_URL", "http://127.0.0.1:8088")
 
@@ -70,13 +72,16 @@ def _tool_schema(t: Any) -> dict:
     }
 
 
-class WaggleBridgeAgent:
-    """HalfDuplexAgent[str] — state is the bridge session id."""
+class WaggleBridgeAgent(HalfDuplexAgent[str]):
+    """HalfDuplexAgent[str] — state is the bridge session id.
+
+    Inherits the base so τ²'s runner gets set_seed() + is_stop() for free
+    (both are concrete on the base); we override only get_init_state +
+    generate_next_message, which forward each turn to the Node bridge."""
 
     def __init__(self, tools: List[Any], domain_policy: str, llm: str,
                  llm_args: Optional[dict] = None) -> None:
-        self.tools = tools
-        self.domain_policy = domain_policy
+        super().__init__(tools=tools, domain_policy=domain_policy)
         self.llm = llm
         self.llm_args = llm_args or {}
 
