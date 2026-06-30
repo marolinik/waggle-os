@@ -1,3 +1,4 @@
+import { Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { EvidenceChip } from './evidence-chip';
 
@@ -12,10 +13,17 @@ interface EvidencePanelProps {
   sourceId?: string | null;
   sourceUrl?: string | null;
   evidence?: string[];
+  /** #7 "View original source": when supplied (and a sourceId exists), renders an
+   *  Eye button that opens the verbatim source view in the detail drawer. */
+  onViewOriginalSource?: () => void;
+  /** Whether the source view is currently open (drives aria-expanded). */
+  expanded?: boolean;
+  /** Whether the source fetch is in flight (drives aria-busy + disables the button). */
+  busy?: boolean;
   className?: string;
 }
 
-export function EvidencePanel({ source, sourceId, sourceUrl, evidence, className }: EvidencePanelProps) {
+export function EvidencePanel({ source, sourceId, sourceUrl, evidence, onViewOriginalSource, expanded, busy, className }: EvidencePanelProps) {
   const hasEvidence = Array.isArray(evidence) && evidence.length > 0;
   if (!source && !sourceId && !sourceUrl && !hasEvidence) return null;
 
@@ -29,6 +37,20 @@ export function EvidencePanel({ source, sourceId, sourceUrl, evidence, className
       <div className="flex flex-wrap gap-1.5">
         {source && <EvidenceChip label={`source: ${source}`} />}
         {sourceId && <EvidenceChip label={`id: ${sourceId}`} />}
+        {sourceId && onViewOriginalSource && (
+          <button
+            type="button"
+            onClick={onViewOriginalSource}
+            aria-label={expanded ? 'Hide original source' : 'View original source'}
+            aria-expanded={!!expanded}
+            aria-busy={busy || undefined}
+            disabled={busy}
+            title="View original source"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Eye className="w-3 h-3" /> View original
+          </button>
+        )}
         {sourceUrl && <EvidenceChip label={sourceUrl} title={sourceUrl} onClick={openSource} />}
       </div>
       {hasEvidence && (

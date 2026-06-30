@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Importance, MemoryFrame } from '@waggle/core';
-import { FrameStore, SessionStore } from '@waggle/core';
+import { FrameStore, RawArchive, SessionStore } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -500,6 +500,47 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       };
     }
     return reply.status(404).send({ error: 'Memory not found' });
+  });
+
+  // GET /api/memory/:id/source — #7 Verbatim Provenance: resolve the immutable
+  // raw_archive row that holds the FULL verbatim source of a harvested/distilled
+  // frame, via the metadata.archiveUid backlink (RawArchive.reconstructSource).
+  // 404 when the frame has no archive link (manual / user-stated / pre-archive
+  // frames) — an honest "no original source", not a synthesized one. Mirrors the
+  // /trace handler's param-parse + mind-strict candidateStores resolution; the
+  // per-candidate MindDB is resolved the same way the /merge route resolves its
+  // target (FrameStore exposes no public db getter).
+  server.get<{
+    Params: { id: string };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
+  }>('/api/memory/:id/source', async (request, reply) => {
+    const frameId = parseInt(request.params.id, 10);
+    if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
+    const workspace = request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+
+    for (const c of candidateStores(workspace, parsed.mind)) {
+      const db =
+        c.mind === 'workspace' && workspace
+          ? server.agentState.getWorkspaceMindDb(workspace)
+          : server.multiMind.personal;
+      if (!db) continue;
+      const archive = new RawArchive(db);
+      const row = archive.reconstructSource(frameId);
+      if (row) {
+        return reply.send({
+          archiveRow: {
+            content: row.content,
+            source: row.source,
+            sourceRef: row.source_ref,
+            injectionFlagged: row.injection_flagged === 1,
+            injectionFlags: row.injection_flags,
+          },
+        });
+      }
+    }
+    return reply.status(404).send({ error: 'Memory source not found' });
   });
 
   // DELETE /api/memory/:id — hard delete (A8 — no tombstone). Alias of the

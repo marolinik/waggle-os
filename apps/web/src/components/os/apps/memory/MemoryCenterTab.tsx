@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save } from 'lucide-react';
+import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
@@ -80,6 +80,19 @@ export default function MemoryCenterTab({
   const [busy, setBusy] = useState(false);
   const [draftContent, setDraftContent] = useState('');
   const [draftKind, setDraftKind] = useState<MemoryKind>('fact');
+
+  // #7 "View original source": inline expandable verbatim-source view in the
+  // detail drawer (not a nested modal). archiveRow is null when the frame has no
+  // linked verbatim source → friendly empty state.
+  type ArchiveRow = { content: string; source: string; sourceRef: string | null; injectionFlagged: boolean; injectionFlags: string };
+  const [sourceExpanded, setSourceExpanded] = useState(false);
+  const [sourceData, setSourceData] = useState<ArchiveRow | null>(null);
+  const [sourceLoading, setSourceLoading] = useState(false);
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  // Latest source-fetch token: the id whose fetch is allowed to write state. A
+  // selection change (reset effect → undefined) or a newer fetch invalidates any
+  // in-flight request so a stale result can't land on the wrong memory.
+  const sourceReqIdRef = useRef<string | undefined>(undefined);
 
   // J08: Home's "N memories need review" banner deep-links here with
   // {appId:'memory', filter:'unreviewed'}. Two paths (AutomationCenterApp
@@ -175,6 +188,37 @@ export default function MemoryCenterTab({
     setSelected(m);
     setDraftContent(m.content);
     setDraftKind(m.kind);
+  };
+
+  // Reset the verbatim-source view whenever the selected memory changes (incl.
+  // closing the drawer) so a previously-opened source can't leak into another row.
+  useEffect(() => {
+    setSourceExpanded(false);
+    setSourceData(null);
+    setSourceError(null);
+    setSourceLoading(false);
+    sourceReqIdRef.current = undefined;   // invalidate any in-flight fetch for the prior memory
+  }, [selected?.id]);
+
+  // Toggle the inline source view; lazy-fetch the verbatim row on first open.
+  const viewOriginalSource = async () => {
+    if (!selected) return;
+    if (sourceExpanded) { setSourceExpanded(false); return; }
+    const reqId = selected.id;
+    sourceReqIdRef.current = reqId;
+    setSourceExpanded(true);
+    setSourceLoading(true);
+    setSourceError(null);
+    try {
+      const res = await adapter.getMemoryOriginalSource(reqId, wsParam, mind);
+      if (sourceReqIdRef.current !== reqId) return;   // selection changed mid-flight — drop stale result
+      setSourceData(res.archiveRow);
+    } catch (e) {
+      if (sourceReqIdRef.current !== reqId) return;
+      setSourceError(e instanceof Error ? e.message : 'Failed to load original source');
+    } finally {
+      if (sourceReqIdRef.current === reqId) setSourceLoading(false);
+    }
   };
 
   const toggleChecked = (id: string, on: boolean) => {
@@ -403,7 +447,41 @@ export default function MemoryCenterTab({
               <div className="mt-2 text-xs text-muted-foreground/80 max-h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: renderChatMarkdown(draftContent) }} />
             </div>
 
-            <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} />
+            <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} onViewOriginalSource={viewOriginalSource} expanded={sourceExpanded} busy={sourceLoading} />
+
+            {sourceExpanded && (
+              <div className="rounded-md border border-border bg-muted/30 p-2 space-y-2">
+                {sourceLoading ? (
+                  <div role="status" aria-live="polite" className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading original source…
+                  </div>
+                ) : sourceError ? (
+                  <div role="alert" className="text-xs text-destructive">{sourceError}</div>
+                ) : sourceData ? (
+                  <>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Original source</span>
+                      {sourceData.injectionFlagged && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+                          title={`Advisory: a prompt-injection pattern was detected in a 4KB probe of this source${sourceData.injectionFlags ? ` (${sourceData.injectionFlags})` : ''}. This is a probe, not a full-content guarantee.`}
+                        >
+                          <AlertTriangle className="w-3 h-3" /> Injection flagged
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {sourceData.source}{sourceData.sourceRef ? ` · ${sourceData.sourceRef}` : ''}
+                    </p>
+                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 text-[11px] font-mono leading-relaxed text-foreground">
+                      {sourceData.content}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No original source recorded for this memory.</p>
+                )}
+              </div>
+            )}
 
             <p className="text-[11px] text-muted-foreground">
               Created {new Date(selected.createdAt).toLocaleString()}
