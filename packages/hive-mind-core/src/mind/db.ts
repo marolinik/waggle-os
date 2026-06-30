@@ -298,6 +298,33 @@ export class MindDB {
       "CREATE TRIGGER IF NOT EXISTS ai_interactions_no_update BEFORE UPDATE ON ai_interactions BEGIN SELECT RAISE(ABORT, 'ai_interactions is append-only (EU AI Act Art. 12 audit log)'); END"
     );
 
+    // #7 (2026-06-30): verbatim provenance archive — append-only, immutable.
+    // Idempotent; SCHEMA_SQL carries the same DDL for fresh DBs. Not in the
+    // retrieval corpus (no FTS/vec). Append-only triggers mirror ai_interactions.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS raw_archive (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        archive_uid TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        source_ref TEXT,
+        title TEXT,
+        content TEXT NOT NULL,
+        content_sha256 TEXT NOT NULL,
+        injection_flagged INTEGER NOT NULL DEFAULT 0,
+        injection_flags TEXT NOT NULL DEFAULT '',
+        source_timestamp TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_raw_archive_source_ref ON raw_archive (source, source_ref);
+      CREATE INDEX IF NOT EXISTS idx_raw_archive_created ON raw_archive (created_at DESC);
+    `);
+    this.db.exec(
+      "CREATE TRIGGER IF NOT EXISTS raw_archive_no_update BEFORE UPDATE ON raw_archive BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END"
+    );
+    this.db.exec(
+      "CREATE TRIGGER IF NOT EXISTS raw_archive_no_delete BEFORE DELETE ON raw_archive BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END"
+    );
+
     // W4.1: one-time backfill of the kg_entity_frames bridge over pre-existing
     // frames (new writes populate it live via cognify/harvest). Sentinel-guarded.
     this.backfillKgEntityFrames();
