@@ -26,6 +26,8 @@ import {
 } from '@waggle/core';
 import { createMindTools, type ToolDefinition } from './tools.js';
 import { buildSelfAwareness, type AgentCapabilities } from './self-awareness.js';
+import { renderGoalAncestry } from './goal-ancestry.js';
+import type { GoalAncestry } from '@waggle/shared';
 import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } from './improvement-detector.js';
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
@@ -82,6 +84,8 @@ export interface OrchestratorConfig {
    * creation failure soft-fails to RRF-only ordering.
    */
   reranker?: Reranker;
+  /** AI-OS #6 — durable "why" breadcrumb injected into buildSystemPrompt. */
+  goalAncestry?: GoalAncestry;
 }
 
 /**
@@ -127,6 +131,8 @@ export class Orchestrator {
   private version: string;
   private skills: string[];
   private improvementSignals: ImprovementSignalStore;
+  /** AI-OS #6 — durable "why" breadcrumb; null = no section rendered. */
+  private goalAncestry: GoalAncestry | null = null;
 
   /** M8: deferred signal marking — collected during buildSystemPrompt, committed after model call */
   private _pendingSurfacedAwareness: AwarenessSummary | null = null;
@@ -152,6 +158,7 @@ export class Orchestrator {
     this.mode = config.mode ?? 'local';
     this.version = config.version ?? '0.0.0';
     this.skills = config.skills ?? [];
+    this.goalAncestry = config.goalAncestry ?? null;
     this.identity = new IdentityLayer(config.db);
     this.awareness = new AwarenessLayer(config.db);
     this.frames = new FrameStore(config.db);
@@ -207,6 +214,15 @@ export class Orchestrator {
     });
 
     this.workspaceLayers = { db: workspaceDb, frames, sessions, search, knowledge, cognify };
+  }
+
+  /**
+   * AI-OS #6 — set/replace the goal-ancestry breadcrumb rendered by the next
+   * buildSystemPrompt(). Pass null to clear it. Mutable like setWorkspaceMind
+   * so the per-session caller can populate it once context is resolved.
+   */
+  setGoalAncestry(ancestry: GoalAncestry | null): void {
+    this.goalAncestry = ancestry;
   }
 
   /**
@@ -309,6 +325,13 @@ export class Orchestrator {
       () => this.identity.exists() ? '# Identity\n' + this.identity.toContext() : '',
     );
 
+    // ── GOAL ANCESTRY (the durable "why"; changes only when re-set) ──
+    const goalAncestrySection = this.cachedSection(
+      'goal_ancestry',
+      JSON.stringify(this.goalAncestry) || 'empty',
+      () => renderGoalAncestry(this.goalAncestry),
+    );
+
     // ── SELF-AWARENESS (runtime context, changes every call) ──
     const awarenessSection = this.uncachedSection('self_awareness', () => {
       const awareness = buildAwarenessSummary(this.improvementSignals);
@@ -336,7 +359,7 @@ export class Orchestrator {
         : '';
     });
 
-    const parts = [identitySection, awarenessSection, contextSection].filter(Boolean);
+    const parts = [identitySection, goalAncestrySection, awarenessSection, contextSection].filter(Boolean);
     return parts.join('\n\n');
   }
 
