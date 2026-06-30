@@ -4,13 +4,28 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { parseTier } from '@waggle/shared';
+import { parseTier, type GoalAncestry } from '@waggle/shared';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { runAgentLoop, isEnabled, detectTaskShape, listPersonas } from '@waggle/agent';
 import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
+
+/**
+ * AI-OS #6 fast-follow — durable "why" for an agent spawn: project ← workspace
+ * name, goal ← the agent's declared goal. Empty levels are omitted so the
+ * prompt section self-suppresses when there is nothing to say.
+ */
+export function buildSpawnAncestry(
+  workspaceName: string | undefined,
+  goal: string | undefined,
+): GoalAncestry {
+  return {
+    ...(workspaceName ? { project: workspaceName } : {}),
+    ...(goal ? { goal } : {}),
+  };
+}
 
 const log = createLogger('fleet');
 
@@ -64,9 +79,9 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // actually executes the task; this Phase A delivers the visible-state
   // halves of PM acceptance: live session count + Waggle Dance signal.
   fastify.post<{
-    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string };
+    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string };
   }>('/api/fleet/spawn', async (request, reply) => {
-    const { task, persona, model, parentWorkspaceId } = request.body;
+    const { task, persona, model, parentWorkspaceId, goal } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
 
     const wsId = parentWorkspaceId || fastify.workspaceManager.getDefault() || fastify.workspaceManager.list()[0]?.id || 'default-workspace';
@@ -157,6 +172,11 @@ export async function fleetRoutes(fastify: FastifyInstance) {
         // path so spawn benefits from the same task-shape scaffolding +
         // tier-adaptive section trimming chat does. Falls back gracefully
         // to the bare orchestrator prompt if the assembler errors.
+        // AI-OS #6 fast-follow — supply the durable "why" (project ← workspace,
+        // goal ← agent goal) before the orchestrator renders its system prompt.
+        session.orchestrator.setGoalAncestry(
+          buildSpawnAncestry(fastify.workspaceManager?.get(wsId)?.name, goal),
+        );
         let systemPrompt: string;
         if (isEnabled('PROMPT_ASSEMBLER')) {
           try {

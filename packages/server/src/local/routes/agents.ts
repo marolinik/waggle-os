@@ -395,6 +395,8 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
           ...(agent.personaId ? { persona: agent.personaId } : {}),
           model: agent.model,
           ...(workspaceId ? { parentWorkspaceId: workspaceId } : {}),
+          // #6 fast-follow — carry the agent's durable goal as the ancestry "why".
+          ...(agent.goal ? { goal: agent.goal } : {}),
         },
       });
       const body = res.json() as Record<string, unknown>;
