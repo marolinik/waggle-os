@@ -53,3 +53,11 @@ export {
   type ReDerivabilityResult,
   type OffSolveFn,
 } from './overlap-audit.js';
+
+export {
+  buildRetailTaskPool,
+  primaryFamily,
+  extractRecurringUser,
+  synthesizeGold,
+  type RetailPoolOptions,
+} from './retail-pool-builder.js';
