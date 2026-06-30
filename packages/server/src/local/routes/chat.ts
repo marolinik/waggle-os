@@ -42,6 +42,7 @@ import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
+import type { GoalAncestry } from '@waggle/shared';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -96,6 +97,20 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'list_workspace_files',
   'read_other_workspace_file',
 ]);
+
+/**
+ * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
+ * active workspace name; `goal` is omitted in chat (personas carry no goal — it
+ * lights up for agent runs that carry an AgentDef.goal). Returns {} when there
+ * is no workspace, so the prompt section self-suppresses.
+ */
+export function resolveChatAncestry(
+  server: { workspaceManager?: { get?: (id: string) => { name?: string } | null | undefined } },
+  workspaceId: string | undefined,
+): GoalAncestry {
+  const name = workspaceId ? server.workspaceManager?.get?.(workspaceId)?.name : undefined;
+  return name ? { project: name } : {};
+}
 
 export function isExplicitGatedToolRequest(message: string): boolean {
   return /\b(write|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|cross-workspace|other workspace)\b/i.test(message)
@@ -298,6 +313,9 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // sixth-layer assembler. The remaining wrapper layers (profile, skills,
     // workspaceNow, behavioralSpec, persona-via-composePersonaPrompt) still
     // run below because the assembler does not include those.
+    // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
+    // orchestrator renders its system prompt. Empty ancestry self-suppresses.
+    orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
     prompt += assembled?.system ?? orch.buildSystemPrompt();
 
     // Inject user profile context (review Major #4: cached by mtime, no sync I/O per turn)
