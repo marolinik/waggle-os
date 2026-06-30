@@ -514,3 +514,5 @@ export {
   type ToolOutputBufferDeps,
 } from './tool-output-buffer.js';
 export { renderGoalAncestry } from './goal-ancestry.js';
+export { getToolRegistry } from './tool-registry.js';
+export { loadThirdPartyManifests, type ManifestLoaderDeps } from './tool-manifest-loader.js';
