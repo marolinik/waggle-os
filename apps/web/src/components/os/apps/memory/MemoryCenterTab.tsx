@@ -82,11 +82,12 @@ export default function MemoryCenterTab({
   const [draftKind, setDraftKind] = useState<MemoryKind>('fact');
 
   // #7 "View original source": inline expandable verbatim-source view in the
-  // detail drawer (not a nested modal). archiveRow is null when the frame has no
-  // linked verbatim source → friendly empty state.
+  // detail drawer (not a nested modal). A frame can link MULTIPLE verbatim
+  // sources (metadata.archiveUids) → render each in its own escaped block;
+  // sourceRows is empty when the frame has no linked source → friendly empty state.
   type ArchiveRow = { content: string; source: string; sourceRef: string | null; injectionFlagged: boolean; injectionFlags: string };
   const [sourceExpanded, setSourceExpanded] = useState(false);
-  const [sourceData, setSourceData] = useState<ArchiveRow | null>(null);
+  const [sourceRows, setSourceRows] = useState<ArchiveRow[]>([]);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
   // Latest source-fetch token: the id whose fetch is allowed to write state. A
@@ -194,7 +195,7 @@ export default function MemoryCenterTab({
   // closing the drawer) so a previously-opened source can't leak into another row.
   useEffect(() => {
     setSourceExpanded(false);
-    setSourceData(null);
+    setSourceRows([]);
     setSourceError(null);
     setSourceLoading(false);
     sourceReqIdRef.current = undefined;   // invalidate any in-flight fetch for the prior memory
@@ -212,7 +213,7 @@ export default function MemoryCenterTab({
     try {
       const res = await adapter.getMemoryOriginalSource(reqId, wsParam, mind);
       if (sourceReqIdRef.current !== reqId) return;   // selection changed mid-flight — drop stale result
-      setSourceData(res.archiveRow);
+      setSourceRows(res.archiveRows);
     } catch (e) {
       if (sourceReqIdRef.current !== reqId) return;
       setSourceError(e instanceof Error ? e.message : 'Failed to load original source');
@@ -457,26 +458,34 @@ export default function MemoryCenterTab({
                   </div>
                 ) : sourceError ? (
                   <div role="alert" className="text-xs text-destructive">{sourceError}</div>
-                ) : sourceData ? (
-                  <>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Original source</span>
-                      {sourceData.injectionFlagged && (
-                        <span
-                          className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
-                          title={`Advisory: a prompt-injection pattern was detected in a 4KB probe of this source${sourceData.injectionFlags ? ` (${sourceData.injectionFlags})` : ''}. This is a probe, not a full-content guarantee.`}
-                        >
-                          <AlertTriangle className="w-3 h-3" /> Injection flagged
+                ) : sourceRows.length > 0 ? (
+                  /* One frame can be distilled from MULTIPLE verbatim sources — render
+                     each in its own React-escaped <pre> (NEVER dangerouslySetInnerHTML:
+                     the archive is hostile-by-assumption) with its own provenance label
+                     and advisory injection badge. */
+                  sourceRows.map((row, i) => (
+                    <div key={i} className={cn('space-y-2', i > 0 && 'border-t border-border/60 pt-2')}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">
+                          Original source{sourceRows.length > 1 ? ` ${i + 1} of ${sourceRows.length}` : ''}
                         </span>
-                      )}
+                        {row.injectionFlagged && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
+                            title={`Advisory: a prompt-injection pattern was detected in a 4KB probe of this source${row.injectionFlags ? ` (${row.injectionFlags})` : ''}. This is a probe, not a full-content guarantee.`}
+                          >
+                            <AlertTriangle className="w-3 h-3" /> Injection flagged
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {row.source}{row.sourceRef ? ` · ${row.sourceRef}` : ''}
+                      </p>
+                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 text-[11px] font-mono leading-relaxed text-foreground">
+                        {row.content}
+                      </pre>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      {sourceData.source}{sourceData.sourceRef ? ` · ${sourceData.sourceRef}` : ''}
-                    </p>
-                    <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 text-[11px] font-mono leading-relaxed text-foreground">
-                      {sourceData.content}
-                    </pre>
-                  </>
+                  ))
                 ) : (
                   <p className="text-xs text-muted-foreground">No original source recorded for this memory.</p>
                 )}

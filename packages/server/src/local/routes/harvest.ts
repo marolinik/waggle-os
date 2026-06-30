@@ -405,7 +405,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     // Frames have a FK to sessions(gop_id) — ensure the stable `harvest`
     // session row exists before creating any frames, otherwise the insert
     // hits SQLITE_CONSTRAINT_FOREIGNKEY and nothing persists.
-    const { FrameStore, SessionStore, RawArchive } = await import('@waggle/core');
+    const { FrameStore, SessionStore, RawArchive, readArchiveUids, withArchiveUid } = await import('@waggle/core');
     const sessionStore = new SessionStore(personalDb);
     sessionStore.ensure('harvest', 'harvest', 'Imported memory from external sources');
 
@@ -491,16 +491,18 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             confidence: harvestConfidence(item),
             status: 'unreviewed',
             sourceId: item.id,
-            ...(archiveUid ? { archiveUid } : {}),
+            ...(archiveUid ? { archiveUids: [archiveUid] } : {}),
           }));
         } else if (archiveUid) {
           // Frame already classified (a re-imported dedup'd frame, or an earlier
           // run where the archive append had failed). Backfill the provenance link
-          // without clobbering the user's review state.
+          // without clobbering the user's review state. withArchiveUid migrates a
+          // legacy scalar archiveUid → the canonical archiveUids array; only write
+          // when the uid set actually grows (idempotent — avoids needless writes).
           try {
             const meta = JSON.parse(frame.metadata) as Record<string, unknown>;
-            if (!meta.archiveUid) {
-              frameStore.setMetadata(frame.id, JSON.stringify({ ...meta, archiveUid }));
+            if (!readArchiveUids(meta).includes(archiveUid)) {
+              frameStore.setMetadata(frame.id, JSON.stringify(withArchiveUid(meta, archiveUid)));
             }
           } catch { /* malformed metadata — leave as-is */ }
         }

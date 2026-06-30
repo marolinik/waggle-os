@@ -527,17 +527,16 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
           : server.multiMind.personal;
       if (!db) continue;
       const archive = new RawArchive(db);
-      const row = archive.reconstructSource(frameId);
-      if (row) {
-        return reply.send({
-          archiveRow: {
-            content: row.content,
-            source: row.source,
-            sourceRef: row.source_ref,
-            injectionFlagged: row.injection_flagged === 1,
-            injectionFlags: row.injection_flags,
-          },
-        });
+      const rows = archive.reconstructSource(frameId);
+      if (rows.length > 0) {
+        const archiveRows = rows.map((row) => ({
+          content: row.content,
+          source: row.source,
+          sourceRef: row.source_ref,
+          injectionFlagged: row.injection_flagged === 1,
+          injectionFlags: row.injection_flags,
+        }));
+        return reply.send({ archiveRows, archiveRow: archiveRows[0] ?? null });
       }
     }
     return reply.status(404).send({ error: 'Memory source not found' });

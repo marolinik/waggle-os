@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { MindDB } from '../../src/mind/db.js';
-import { RawArchive, hashRaw } from '../../src/mind/raw-archive.js';
+import { RawArchive, hashRaw, readArchiveUids, withArchiveUid } from '../../src/mind/raw-archive.js';
 import { FrameStore } from '../../src/mind/frames.js';
 import { SessionStore } from '../../src/mind/sessions.js';
 
@@ -130,33 +130,84 @@ describe('RawArchive store', () => {
     expect(archive.getByUid(r.archiveUid)!.content.length).toBe(25_000);
   });
 
-  it('reconstructSource round-trips frame.metadata.archiveUid → row with the right source', () => {
+  it('reconstructSource round-trips frame.metadata.archiveUids → row with the right source', () => {
     new SessionStore(db).ensure('harvest', 'harvest', 'test');
     const frames = new FrameStore(db);
     const r = archive.append({ source: 'claude', sourceRef: 'c1', content: 'the source text' });
     const f = frames.createIFrame('harvest', 'distilled summary', 'normal', 'import');
-    frames.setMetadata(f.id, JSON.stringify({ sourceId: 'c1', archiveUid: r.archiveUid }));
-    const src = archive.reconstructSource(f.id);
-    expect(src?.content).toBe('the source text');
-    expect(src?.source_ref).toBe('c1');
+    frames.setMetadata(f.id, JSON.stringify({ sourceId: 'c1', archiveUids: [r.archiveUid] }));
+    const rows = archive.reconstructSource(f.id);
+    expect(rows.length).toBe(1);
+    expect(rows[0].content).toBe('the source text');
+    expect(rows[0].source_ref).toBe('c1');
   });
 
-  it('reconstructSource returns undefined for unlinked, malformed, and dangling metadata', () => {
+  it('reconstructSource resolves MULTIPLE uids on one frame (same source, different sourceRef) → both rows', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    // Same source value, DIFFERENT sourceRef → two distinct per-source archive_uids.
+    const a = archive.append({ source: 'claude', sourceRef: 'part-1', content: 'shared body' });
+    const b = archive.append({ source: 'claude', sourceRef: 'part-2', content: 'shared body' });
+    expect(a.archiveUid).not.toBe(b.archiveUid);                            // distinct uids
+
+    const f = frames.createIFrame('harvest', 'merged summary', 'normal', 'import');
+    // Link both via the immutable helper, starting from a bare metadata object.
+    const meta = withArchiveUid(withArchiveUid({ sourceId: 'merged' }, a.archiveUid), b.archiveUid);
+    frames.setMetadata(f.id, JSON.stringify(meta));
+
+    const rows = archive.reconstructSource(f.id);
+    expect(rows.length).toBe(2);                                           // BOTH resolved
+    expect(rows.map(r => r.source_ref).sort()).toEqual(['part-1', 'part-2']);
+  });
+
+  it('reconstructSource is back-compat: a frame carrying ONLY the legacy scalar archiveUid still resolves', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    const r = archive.append({ source: 'gemini', sourceRef: 'legacy-1', content: 'legacy source text' });
+    const f = frames.createIFrame('harvest', 'legacy summary', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUid: r.archiveUid }));  // legacy singular only
+    const rows = archive.reconstructSource(f.id);
+    expect(rows.length).toBe(1);
+    expect(rows[0].content).toBe('legacy source text');
+  });
+
+  it('reconstructSource returns [] for unlinked, malformed, and dangling metadata', () => {
     new SessionStore(db).ensure('harvest', 'harvest', 'test');
     const frames = new FrameStore(db);
 
     const unlinked = frames.createIFrame('harvest', 'no link here', 'normal', 'import');
-    expect(archive.reconstructSource(unlinked.id)).toBeUndefined();          // metadata '{}'
+    expect(archive.reconstructSource(unlinked.id)).toEqual([]);             // metadata '{}'
 
     const malformed = frames.createIFrame('harvest', 'bad metadata', 'normal', 'import');
     frames.setMetadata(malformed.id, '{not valid json');
-    expect(archive.reconstructSource(malformed.id)).toBeUndefined();         // JSON.parse throws → undefined
+    expect(archive.reconstructSource(malformed.id)).toEqual([]);            // JSON.parse throws → []
 
     const dangling = frames.createIFrame('harvest', 'dangling link', 'normal', 'import');
-    frames.setMetadata(dangling.id, JSON.stringify({ archiveUid: 'deadbeef'.repeat(8) }));
-    expect(archive.reconstructSource(dangling.id)).toBeUndefined();          // uid points to no row
+    frames.setMetadata(dangling.id, JSON.stringify({ archiveUids: ['deadbeef'.repeat(8)] }));
+    expect(archive.reconstructSource(dangling.id)).toEqual([]);             // uid points to no row
 
-    expect(archive.reconstructSource(999_999)).toBeUndefined();              // unknown frame id
+    expect(archive.reconstructSource(999_999)).toEqual([]);                 // unknown frame id
+  });
+
+  it('readArchiveUids unions array + legacy scalar; withArchiveUid is idempotent + immutable', () => {
+    // readArchiveUids: empty, array-only, scalar-only, both (deduped).
+    expect(readArchiveUids({})).toEqual([]);
+    expect(readArchiveUids({ archiveUids: ['x', 'y'] })).toEqual(['x', 'y']);
+    expect(readArchiveUids({ archiveUid: 'z' })).toEqual(['z']);
+    expect(readArchiveUids({ archiveUids: ['a'], archiveUid: 'a' })).toEqual(['a']);  // dedup
+
+    // withArchiveUid migrates the legacy scalar into the array and drops it.
+    const legacy = { sourceId: 's', archiveUid: 'old' };
+    const next = withArchiveUid(legacy, 'new');
+    expect(next).toEqual({ sourceId: 's', archiveUids: ['old', 'new'] });
+    expect('archiveUid' in next).toBe(false);                              // scalar dropped
+    expect(legacy).toEqual({ sourceId: 's', archiveUid: 'old' });          // input UNCHANGED (immutable)
+
+    // Idempotent: adding an existing uid is a set-wise no-op.
+    const base = { archiveUids: ['u1', 'u2'] };
+    const same = withArchiveUid(base, 'u1');
+    expect(same.archiveUids).toEqual(['u1', 'u2']);
+    expect(base).toEqual({ archiveUids: ['u1', 'u2'] });                   // input UNCHANGED
   });
 
   it('list filters by source and pages', () => {
@@ -165,5 +216,65 @@ describe('RawArchive store', () => {
     archive.append({ source: 'claude', content: 'c' });
     expect(archive.list({ source: 'claude' }).length).toBe(2);
     expect(archive.list({ limit: 1 }).length).toBe(1);
+  });
+
+  // (a) pins the `!meta || typeof meta !== 'object'` guard — distinct from the
+  // JSON.parse-throw path already covered by the existing malformed-metadata test.
+  it('reconstructSource returns [] for valid-JSON non-object metadata (null, string, number)', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+
+    const nullFrame = frames.createIFrame('harvest', 'null meta', 'normal', 'import');
+    frames.setMetadata(nullFrame.id, JSON.stringify(null));           // stored as 'null'
+    expect(archive.reconstructSource(nullFrame.id)).toEqual([]);      // !meta → []
+
+    const strFrame = frames.createIFrame('harvest', 'string meta', 'normal', 'import');
+    frames.setMetadata(strFrame.id, JSON.stringify('a bare string')); // stored as '"a bare string"'
+    expect(archive.reconstructSource(strFrame.id)).toEqual([]);       // typeof !== 'object' → []
+
+    const numFrame = frames.createIFrame('harvest', 'number meta', 'normal', 'import');
+    frames.setMetadata(numFrame.id, JSON.stringify(42));              // stored as '42'
+    expect(archive.reconstructSource(numFrame.id)).toEqual([]);       // typeof !== 'object' → []
+  });
+
+  // (b) partial resolution: one real uid + one dangling uid → only the real row returned.
+  it('reconstructSource silently drops dangling uids and returns only resolved rows', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    const r = archive.append({ source: 'claude', sourceRef: 'real-1', content: 'real content' });
+    const f = frames.createIFrame('harvest', 'partial frame', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({
+      archiveUids: [r.archiveUid, 'deadbeef'.repeat(8)],  // second uid has no matching row
+    }));
+    const rows = archive.reconstructSource(f.id);
+    expect(rows).toHaveLength(1);                    // dangling uid is silently dropped
+    expect(rows[0].source_ref).toBe('real-1');       // real row is returned
+    expect(rows[0].content).toBe('real content');
+  });
+
+  // (c) pins the `!row?.metadata` early return — distinct from the '{}' fall-through
+  // (which reaches readArchiveUids and gets []) and the JSON.parse-throw path.
+  it('reconstructSource returns [] for a frame whose metadata is an empty string', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    const f = frames.createIFrame('harvest', 'empty meta frame', 'normal', 'import');
+    frames.setMetadata(f.id, '');  // empty string is falsy → early return before JSON.parse
+    expect(archive.reconstructSource(f.id)).toEqual([]);
+  });
+
+  // (d) order is preserved by reconstructSource — the existing multi-uid test sorts before
+  // comparing, leaving array order unpinned; this test asserts the exact insertion order.
+  it('reconstructSource preserves archiveUids array order without sorting', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    const a = archive.append({ source: 'claude', sourceRef: 'part-1', content: 'body one' });
+    const b = archive.append({ source: 'claude', sourceRef: 'part-2', content: 'body two' });
+    const f = frames.createIFrame('harvest', 'ordered summary', 'normal', 'import');
+    // Build metadata with part-1 first, part-2 second via the immutable helper.
+    const meta = withArchiveUid(withArchiveUid({ sourceId: 'merged' }, a.archiveUid), b.archiveUid);
+    frames.setMetadata(f.id, JSON.stringify(meta));
+    const rows = archive.reconstructSource(f.id);
+    // Must match archiveUids order exactly — no implicit sort applied.
+    expect(rows.map(r => r.source_ref)).toEqual(['part-1', 'part-2']);
   });
 });

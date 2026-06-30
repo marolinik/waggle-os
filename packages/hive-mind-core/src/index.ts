@@ -18,7 +18,7 @@ export {
 export { IdentityLayer, type Identity } from './mind/identity.js';
 export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mind/awareness.js';
 export { FrameStore, stripHmPrefix, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
-export { RawArchive, hashRaw, type RawArchiveRow, type ArchiveInput } from './mind/raw-archive.js';
+export { RawArchive, hashRaw, readArchiveUids, withArchiveUid, type RawArchiveRow, type ArchiveInput } from './mind/raw-archive.js';
 export { hashFrameContent } from './mind/content-hash.js';
 export { SessionStore, type Session } from './mind/sessions.js';
 export {

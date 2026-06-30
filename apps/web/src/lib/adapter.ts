@@ -951,20 +951,21 @@ class LocalAdapter {
     return res.json();
   }
 
-  /** #7 "View original source": resolve the immutable verbatim raw_archive row a
-   *  memory was distilled from (via metadata.archiveUid). 404 = no linked source
-   *  (manual / pre-archive frames) → { archiveRow: null } for a friendly empty
-   *  state, mirroring getMemory's documented 404→null contract rather than the
-   *  throwing fetch. */
+  /** #7 "View original source": resolve the immutable verbatim raw_archive row(s)
+   *  a memory was distilled from (via metadata.archiveUids — one frame can link
+   *  several sources). 404 = no linked source (manual / pre-archive frames) →
+   *  { archiveRows: [] } for a friendly empty state, mirroring getMemory's
+   *  documented 404→null contract rather than the throwing fetch. */
   async getMemoryOriginalSource(
     id: string,
     workspaceId?: string,
     mind?: 'personal' | 'workspace',
-  ): Promise<{ archiveRow: { content: string; source: string; sourceRef: string | null; injectionFlagged: boolean; injectionFlags: string } | null }> {
+  ): Promise<{ archiveRows: Array<{ content: string; source: string; sourceRef: string | null; injectionFlagged: boolean; injectionFlags: string }> }> {
     const res = await this.fetchRaw(`/api/memory/${encodeURIComponent(id)}/source${this.memoryScopeQs(workspaceId, mind)}`);
-    if (res.status === 404) return { archiveRow: null };
+    if (res.status === 404) return { archiveRows: [] };
     if (!res.ok) throw new AdapterHttpError(res.status, res.statusText, await res.clone().json().catch(() => undefined));
-    return res.json();
+    const body = await res.json();
+    return { archiveRows: Array.isArray(body?.archiveRows) ? body.archiveRows : [] };
   }
 
   async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string; mind?: 'personal' | 'workspace' } = {}): Promise<Memory> {

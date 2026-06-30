@@ -6,7 +6,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import fs from 'node:fs';
-import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive } from '@waggle/hive-mind-core';
+import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive, readArchiveUids, withArchiveUid } from '@waggle/hive-mind-core';
 import {
   getFrameStore,
   getSessions,
@@ -153,21 +153,25 @@ export function registerHarvestTools(server: McpServer): void {
 
         // #7: stamp provenance metadata. On a fresh frame (default '{}' metadata)
         // record sourceId + the archive link; on an already-stamped/dedup'd frame,
-        // backfill only the archiveUid without clobbering existing metadata.
-        // Limitation (by design, v0): two DIFFERENT sources with byte-identical content
-        // dedup to ONE frame, so it links to the FIRST source's archive row only — both
-        // archive rows still persist immutably (RawArchive.list/getByUid); no verbatim is
-        // lost, only the 2nd frame→source link. (Server harvest route shares this.)
+        // accumulate the archiveUid into the canonical archiveUids[] without clobbering
+        // existing metadata.
+        // Multi-source accumulation (resolved): two DIFFERENT sources with byte-identical
+        // content dedup to ONE frame, and that frame now links to EVERY source's archive
+        // row via metadata.archiveUids[] (withArchiveUid migrates any legacy scalar and
+        // set-unions). reconstructSource resolves them all; no frame→source link is lost.
+        // (Server harvest route shares this.)
         if (!frame.metadata || frame.metadata === '{}') {
           frameStore.setMetadata(frame.id, JSON.stringify({
             sourceId: item.id,
-            ...(archiveUid ? { archiveUid } : {}),
+            ...(archiveUid ? { archiveUids: [archiveUid] } : {}),
           }));
         } else if (archiveUid) {
           try {
             const meta = JSON.parse(frame.metadata) as Record<string, unknown>;
-            if (!meta.archiveUid) {
-              frameStore.setMetadata(frame.id, JSON.stringify({ ...meta, archiveUid }));
+            // Only write when the uid set actually grows (avoids needless setMetadata
+            // churn on re-imports). withArchiveUid migrates any legacy scalar → array.
+            if (!readArchiveUids(meta).includes(archiveUid)) {
+              frameStore.setMetadata(frame.id, JSON.stringify(withArchiveUid(meta, archiveUid)));
             }
           } catch { /* malformed metadata — leave as-is */ }
         }
