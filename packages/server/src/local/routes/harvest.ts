@@ -493,6 +493,16 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             sourceId: item.id,
             ...(archiveUid ? { archiveUid } : {}),
           }));
+        } else if (archiveUid) {
+          // Frame already classified (a re-imported dedup'd frame, or an earlier
+          // run where the archive append had failed). Backfill the provenance link
+          // without clobbering the user's review state.
+          try {
+            const meta = JSON.parse(frame.metadata) as Record<string, unknown>;
+            if (!meta.archiveUid) {
+              frameStore.setMetadata(frame.id, JSON.stringify({ ...meta, archiveUid }));
+            }
+          } catch { /* malformed metadata — leave as-is */ }
         }
         summaryFrameIds.push(frame.id);
         // W4.6: per-turn verbatim dialogue storage — source material for the
