@@ -405,11 +405,14 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     // Frames have a FK to sessions(gop_id) — ensure the stable `harvest`
     // session row exists before creating any frames, otherwise the insert
     // hits SQLITE_CONSTRAINT_FOREIGNKEY and nothing persists.
-    const { FrameStore, SessionStore } = await import('@waggle/core');
+    const { FrameStore, SessionStore, RawArchive } = await import('@waggle/core');
     const sessionStore = new SessionStore(personalDb);
     sessionStore.ensure('harvest', 'harvest', 'Imported memory from external sources');
 
     const frameStore = new FrameStore(personalDb);
+    // #7: verbatim provenance archive — full immutable source per item, linked
+    // from the summary frame via metadata.archiveUid. Append-only; idempotent.
+    const rawArchive = new RawArchive(personalDb);
     let saved = 0;
     let timestampFallbacks = 0;
     let rawTurnsWritten = 0;
@@ -452,6 +455,24 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             '[harvest] missing timestamp — falling back to NOW()',
           );
         }
+        // #7: archive the FULL untruncated verbatim source BEFORE the frame's
+        // 10K-char preview is built. Best-effort — a failure must not abort the
+        // item (degraded provenance beats a lost import); never silent.
+        let archiveUid: string | undefined;
+        try {
+          archiveUid = rawArchive.append({
+            source: item.source,
+            sourceRef: item.id,
+            title: item.title,
+            content: item.content,
+            sourceTimestamp: providedTimestamp,
+          }).archiveUid;
+        } catch (err) {
+          request.log.warn(
+            { source: item.source, itemId: item.id, err: err instanceof Error ? err.message : 'unknown' },
+            '[harvest] raw_archive append failed — frame persists without provenance link',
+          );
+        }
         const frame = frameStore.createIFrame(
           'harvest',
           `${label}\n\n${content}`,
@@ -470,6 +491,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
             confidence: harvestConfidence(item),
             status: 'unreviewed',
             sourceId: item.id,
+            ...(archiveUid ? { archiveUid } : {}),
           }));
         }
         summaryFrameIds.push(frame.id);

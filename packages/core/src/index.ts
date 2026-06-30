@@ -23,6 +23,7 @@ export {
   IdentityLayer, type Identity,
   AwarenessLayer, type AwarenessItem, type AwarenessCategory,
   FrameStore, stripHmPrefix, hashFrameContent,
+  RawArchive, hashRaw, type RawArchiveRow, type ArchiveInput,
   type MemoryFrame, type FrameType, type Importance, type FrameSource,
   SessionStore, type Session,
   HybridSearch, type SearchResult,
