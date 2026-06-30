@@ -45,6 +45,12 @@ const MAX_STEPS = Number(process.env.MAX_STEPS ?? '40') // 40: opus's chattier s
 const CONC = Number(process.env.MAX_CONCURRENCY ?? '3');
 const SEED = Number(process.env.SEED ?? '42');
 const ARMS_FILTER = process.env.ARMS; // optional CSV subset, e.g. "B-,B"
+// Optional explicit task ids (space/comma-separated) — overrides --num-tasks so a
+// SECOND batch can extend N without re-running (re-paying for) the first batch.
+const TASK_ID_LIST = (process.env.TASK_IDS ?? '').trim()
+  ? (process.env.TASK_IDS as string).trim().split(/[\s,]+/).filter(Boolean)
+  : null;
+const RUN_TAG = TASK_ID_LIST ? `ids${TASK_ID_LIST.length}b2` : `n${N}`;
 
 /** Agent-model price per million tokens [input, output] (litellm-config /
  *  models.json working estimates; opus 4.8 = $5/$25, qwen3.6 dashscope ~ $0.2/$0.8). */
@@ -95,7 +101,7 @@ async function runArm(arm: Arm, embedder: Embedder): Promise<ArmResult> {
     embedder: arm.memory === 'on' ? embedder : undefined,
     recallLimit: 10,
   });
-  const saveTo = `retail_pilot_${arm.id.replace('-', 'm')}_n${N}k${K}`;
+  const saveTo = `retail_pilot_${arm.id.replace('-', 'm')}_${RUN_TAG}k${K}`;
   // Clear any prior run for this arm so τ² doesn't block on an interactive
   // "resume the run?" prompt (no stdin under spawn → EOFError).
   fs.rmSync(path.join(upstreamDir, 'data', 'simulations', saveTo), { recursive: true, force: true });
@@ -104,7 +110,8 @@ async function runArm(arm: Arm, embedder: Embedder): Promise<ArmResult> {
     '--domain', 'retail', '--agent', 'waggle',
     '--agent-llm', arm.model,
     '--user-llm', USER_LLM, '--user-llm-args', `{"reasoning_effort":"${USER_EFFORT}"}`,
-    '--num-tasks', String(N), '--num-trials', String(K),
+    ...(TASK_ID_LIST ? ['--task-ids', ...TASK_ID_LIST] : ['--num-tasks', String(N)]),
+    '--num-trials', String(K),
     '--max-concurrency', String(CONC), '--max-steps', String(MAX_STEPS),
     '--max-errors', '10', '--seed', String(SEED), '--save-to', saveTo,
   ];
@@ -158,7 +165,7 @@ async function main(): Promise<void> {
     config: { N, K, USER_LLM, USER_EFFORT, MAX_STEPS, CONC, SEED, mindHash: mind.mindHash, mindFrames: mind.frameCount },
     arms: results,
   };
-  const outPath = path.join(OUT_DIR, `summary_n${N}k${K}.json`);
+  const outPath = path.join(OUT_DIR, `summary_${RUN_TAG}k${K}.json`);
   fs.writeFileSync(outPath, JSON.stringify(summary, null, 2));
   console.log(`\n[pilot] ===== SUMMARY (N=${N} k=${K}, user-sim=${USER_LLM}/${USER_EFFORT}) =====`);
   for (const r of results) {
