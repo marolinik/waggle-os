@@ -33,6 +33,55 @@ export const SUPPORTED_TOOLS = [
 export type ToolId = typeof SUPPORTED_TOOLS[number];
 
 /**
+ * AI-OS #5 — how a tool is detected. `path` = PATH lookup by binary name (CLI
+ * tools; the only kind a third-party JSON adapter may declare). `candidates` =
+ * platform-branching candidate-path probe, resolved by built-in agent code
+ * (GUI/desktop apps) — not expressible declaratively, so built-in only.
+ */
+export type ToolDetectSpec =
+  | { kind: 'path'; binaryName: string }
+  | { kind: 'candidates' };
+
+/**
+ * AI-OS #5 — declarative descriptor for one external tool. The single source of
+ * truth for the per-tool facts that used to be duplicated across SUPPORTED_TOOLS
+ * / LAUNCH_COHORT / TOOL_DISPLAY_NAMES / HOOK_POINTER_BY_TOOL / HOOKS_COHORT /
+ * the per-tool detectors. Built-ins live in BUILTIN_TOOL_MANIFESTS; third-party
+ * adapters are loaded (data-only) from ~/.waggle/adapters/*.json.
+ */
+export interface ToolManifest {
+  id: string;
+  displayName: string;
+  launchable: boolean;
+  hookCapable: boolean;
+  hookPointer: string;
+  detect: ToolDetectSpec;
+  /**
+   * Declarative inline-prompt arg template for THIRD-PARTY path adapters
+   * (e.g. ['--print', '{prompt}']). Built-ins keep their logic in
+   * launcher-prompt-args.ts. Captured in v1; application is a fast-follow.
+   */
+  promptArgTemplate?: string[];
+  /** true = first-party (the 7); false/absent = loaded third-party. */
+  builtin?: boolean;
+}
+
+/**
+ * The canonical 7 built-in tools — the source of truth for their per-tool data.
+ * SUPPORTED_TOOLS (above) stays the `as const` type anchor; the cohort/name/
+ * pointer consts derive from these manifests.
+ */
+export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
+  { id: 'claude-code', displayName: 'Claude Code', launchable: true, hookCapable: true, hookPointer: '.claude/hive-mind-install.json', detect: { kind: 'path', binaryName: 'claude' }, builtin: true },
+  { id: 'claude-desktop', displayName: 'Claude Desktop', launchable: true, hookCapable: false, hookPointer: '.config/Claude/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true },
+  { id: 'cursor', displayName: 'Cursor', launchable: true, hookCapable: true, hookPointer: '.cursor/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true },
+  { id: 'codex', displayName: 'Codex CLI', launchable: true, hookCapable: true, hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'path', binaryName: 'codex' }, builtin: true },
+  { id: 'codex-desktop', displayName: 'Codex Desktop', launchable: true, hookCapable: true, hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true },
+  { id: 'hermes', displayName: 'Hermes Agent', launchable: true, hookCapable: true, hookPointer: '.hermes/hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true },
+  { id: 'openclaw', displayName: 'OpenClaw', launchable: true, hookCapable: true, hookPointer: '.openclaw/hive-mind-install.json', detect: { kind: 'path', binaryName: 'openclaw' }, builtin: true },
+] as const;
+
+/**
  * Tools the launcher dock + hook installer support end-to-end.
  *
  * Phase 1 shipped with 3 entries (Claude Code, Cursor, Claude
@@ -41,29 +90,16 @@ export type ToolId = typeof SUPPORTED_TOOLS[number];
  * (@waggle/hive-mind-hooks-<id>), and (b) the marginal cost per
  * additional detector is one PATH lookup or candidate-path entry.
  */
-export const LAUNCH_COHORT: readonly ToolId[] = [
-  'claude-code',
-  'cursor',
-  'claude-desktop',
-  'codex',
-  'codex-desktop',
-  'hermes',
-  'openclaw',
-] as const;
+export const LAUNCH_COHORT: readonly ToolId[] =
+  BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id as ToolId);
 
 /**
  * Per-tool human-readable display name. Centralized so the launcher
  * UI, sidecar logs, and KVARK governance reports all agree.
  */
-export const TOOL_DISPLAY_NAMES: Record<ToolId, string> = {
-  'claude-code': 'Claude Code',
-  'claude-desktop': 'Claude Desktop',
-  'cursor': 'Cursor',
-  'codex': 'Codex CLI',
-  'codex-desktop': 'Codex Desktop',
-  'hermes': 'Hermes Agent',
-  'openclaw': 'OpenClaw',
-};
+export const TOOL_DISPLAY_NAMES = Object.fromEntries(
+  BUILTIN_TOOL_MANIFESTS.map((m) => [m.id, m.displayName]),
+) as Record<ToolId, string>;
 
 /**
  * Result of detecting a single tool on the user's machine.
