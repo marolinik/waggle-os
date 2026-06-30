@@ -48,12 +48,12 @@ function joinForPlatform(platform: NodeJS.Platform, ...parts: string[]): string 
     : pathPosix.join(...parts);
 }
 import {
-  SUPPORTED_TOOLS,
-  TOOL_DISPLAY_NAMES,
   type DetectedTool,
   type ToolDetectionResult,
-  type ToolId,
+  type ToolManifest,
 } from '@waggle/shared';
+import { getToolRegistry } from './tool-registry.js';
+import type { ManifestLoaderDeps } from './tool-manifest-loader.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -177,38 +177,18 @@ function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
 
 // ── Hook status (shared across all tools) ───────────────────────────
 
-/**
- * Map from tool id to the config-dir (relative to $HOME) where its
- * hive-mind hook pointer file lives. Mirrors the conventions in the
- * `packages/hive-mind-hooks-*` installers.
- *
- * Linux config-dir for Cursor and Claude Desktop is the standard XDG
- * location — `~/.config/<tool>`. Claude Code uses `~/.claude` on every
- * platform (per the existing shim).
- */
-const HOOK_POINTER_BY_TOOL: Record<ToolId, string> = {
-  'claude-code': '.claude/hive-mind-install.json',
-  // TODO(claude-desktop): '.config/Claude/...' is NOT a real Claude Desktop
-  // config dir on any platform (mac ~/Library/Application Support/Claude/,
-  // win %APPDATA%\Claude\). claude-desktop has no lifecycle-hook surface — it
-  // is the deferred MCP-bridge port (Wave 2/3 spec §6.3); fix this pointer when
-  // that work lands.
-  'claude-desktop': '.config/Claude/hive-mind-install.json',
-  'cursor': '.cursor/hive-mind-install.json',
-  'codex': '.codex/hive-mind-install.json',
-  // codex-desktop shares ~/.codex/ with the Codex CLI — same pointer file.
-  'codex-desktop': '.codex/hive-mind-install.json',
-  'hermes': '.hermes/hive-mind-install.json',
-  'openclaw': '.openclaw/hive-mind-install.json',
-};
+// Hook-pointer paths + display names now come from each tool's ToolManifest
+// (the registry — #5). probeHooks takes the resolved relative pointer directly,
+// so third-party adapters work with no per-tool map. (The claude-desktop pointer
+// '.config/Claude/...' is still a known-approximate placeholder — see its
+// manifest in @waggle/shared; it has no lifecycle-hook surface yet.)
 
 interface HookProbe {
   hooksInstalled: boolean;
   hookPointerPath: string | null;
 }
 
-async function probeHooks(toolId: ToolId, deps: ResolvedDeps): Promise<HookProbe> {
-  const rel = HOOK_POINTER_BY_TOOL[toolId];
+async function probeHooks(rel: string, deps: ResolvedDeps): Promise<HookProbe> {
   if (!rel) return { hooksInstalled: false, hookPointerPath: null };
   const pointerPath = joinForPlatform(deps.platform, deps.home, rel);
   if (!(await deps.exists(pointerPath))) {
@@ -228,48 +208,6 @@ async function probeHooks(toolId: ToolId, deps: ResolvedDeps): Promise<HookProbe
 
 // ── Per-tool detectors ──────────────────────────────────────────────
 
-async function detectClaudeCode(deps: ResolvedDeps): Promise<DetectedTool> {
-  const id: ToolId = 'claude-code';
-  const base: DetectedTool = {
-    id,
-    displayName: TOOL_DISPLAY_NAMES[id],
-    installed: false,
-    installedPath: null,
-    version: null,
-    hooksInstalled: false,
-    hookPointerPath: null,
-  };
-  // PATH lookup is the canonical install signal for the CLI.
-  const resolved = await deps.pathFromEnv('claude');
-  if (!resolved) return { ...base, ...(await probeHooks(id, deps)) };
-  // Defense-in-depth: confirm the resolved path actually exists.
-  if (!(await deps.exists(resolved))) {
-    return { ...base, ...(await probeHooks(id, deps)) };
-  }
-  const versionRaw = await deps.execVersion(resolved, ['--version']);
-  const hookProbe = await probeHooks(id, deps);
-  return {
-    ...base,
-    installed: true,
-    installedPath: resolved,
-    version: versionRaw,
-    diagnostic: versionRaw ? undefined : '--version exec failed',
-    ...hookProbe,
-  };
-}
-
-async function detectCursor(deps: ResolvedDeps): Promise<DetectedTool> {
-  const id: ToolId = 'cursor';
-  const candidates = cursorCandidatePaths(deps);
-  return await detectByCandidates(id, candidates, deps, /* withVersion */ false);
-}
-
-async function detectClaudeDesktop(deps: ResolvedDeps): Promise<DetectedTool> {
-  const id: ToolId = 'claude-desktop';
-  const candidates = claudeDesktopCandidatePaths(deps);
-  return await detectByCandidates(id, candidates, deps, /* withVersion */ false);
-}
-
 /**
  * Generic PATH-lookup detector for CLI-shaped tools. Mirrors the
  * claude-code detector but parameterised by binary name. Used by
@@ -280,13 +218,15 @@ async function detectClaudeDesktop(deps: ResolvedDeps): Promise<DetectedTool> {
  * with `diagnostic` set (some CLIs don't accept --version).
  */
 async function detectByPath(
-  id: ToolId,
+  id: string,
   binaryName: string,
   deps: ResolvedDeps,
+  hookPointer: string,
+  displayName: string,
 ): Promise<DetectedTool> {
   const base: DetectedTool = {
     id,
-    displayName: TOOL_DISPLAY_NAMES[id],
+    displayName,
     installed: false,
     installedPath: null,
     version: null,
@@ -294,12 +234,12 @@ async function detectByPath(
     hookPointerPath: null,
   };
   const resolved = await deps.pathFromEnv(binaryName);
-  if (!resolved) return { ...base, ...(await probeHooks(id, deps)) };
+  if (!resolved) return { ...base, ...(await probeHooks(hookPointer, deps)) };
   if (!(await deps.exists(resolved))) {
-    return { ...base, ...(await probeHooks(id, deps)) };
+    return { ...base, ...(await probeHooks(hookPointer, deps)) };
   }
   const versionRaw = await deps.execVersion(resolved, ['--version']);
-  const hookProbe = await probeHooks(id, deps);
+  const hookProbe = await probeHooks(hookPointer, deps);
   return {
     ...base,
     installed: true,
@@ -308,24 +248,6 @@ async function detectByPath(
     diagnostic: versionRaw ? undefined : '--version exec failed',
     ...hookProbe,
   };
-}
-
-async function detectCodex(deps: ResolvedDeps): Promise<DetectedTool> {
-  return detectByPath('codex', 'codex', deps);
-}
-
-async function detectHermes(deps: ResolvedDeps): Promise<DetectedTool> {
-  return detectByPath('hermes', 'hermes', deps);
-}
-
-async function detectOpenClaw(deps: ResolvedDeps): Promise<DetectedTool> {
-  return detectByPath('openclaw', 'openclaw', deps);
-}
-
-async function detectCodexDesktop(deps: ResolvedDeps): Promise<DetectedTool> {
-  const id: ToolId = 'codex-desktop';
-  const candidates = codexDesktopCandidatePaths(deps);
-  return await detectByCandidates(id, candidates, deps, /* withVersion */ false);
 }
 
 // ── Candidate-path helpers (per platform) ───────────────────────────
@@ -392,14 +314,16 @@ function codexDesktopCandidatePaths(deps: ResolvedDeps): string[] {
  * (i.e. desktop apps that are NOT on the user's PATH).
  */
 async function detectByCandidates(
-  id: ToolId,
+  id: string,
   candidates: string[],
   deps: ResolvedDeps,
   withVersion: boolean,
+  hookPointer: string,
+  displayName: string,
 ): Promise<DetectedTool> {
   const base: DetectedTool = {
     id,
-    displayName: TOOL_DISPLAY_NAMES[id],
+    displayName,
     installed: false,
     installedPath: null,
     version: null,
@@ -411,7 +335,7 @@ async function detectByCandidates(
       const versionRaw = withVersion
         ? await deps.execVersion(candidate, ['--version'])
         : null;
-      const hookProbe = await probeHooks(id, deps);
+      const hookProbe = await probeHooks(hookPointer, deps);
       return {
         ...base,
         installed: true,
@@ -423,33 +347,44 @@ async function detectByCandidates(
       };
     }
   }
-  return { ...base, ...(await probeHooks(id, deps)) };
+  return { ...base, ...(await probeHooks(hookPointer, deps)) };
 }
 
-// ── Orchestrator ────────────────────────────────────────────────────
+// ── Registry-driven detection ───────────────────────────────────────
 
 /**
- * Run every supported tool's detector in parallel and assemble the
- * envelope. Deterministic order (matches SUPPORTED_TOOLS) so the UI
- * doesn't shuffle between calls.
+ * Built-in candidate-path resolvers (the escape hatch — GUI/desktop tools
+ * whose paths are platform-branching code, not declarative data). Keyed by
+ * built-in id; third-party adapters are PATH-only so never need an entry.
+ */
+const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[]> = {
+  'cursor': cursorCandidatePaths,
+  'claude-desktop': claudeDesktopCandidatePaths,
+  'codex-desktop': codexDesktopCandidatePaths,
+};
+
+/** Detect one tool from its manifest: PATH lookup, or the candidate resolver. */
+async function detectFromManifest(m: ToolManifest, deps: ResolvedDeps): Promise<DetectedTool> {
+  if (m.detect.kind === 'path') {
+    return detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName);
+  }
+  const resolver = CANDIDATE_RESOLVERS[m.id];
+  const candidates = resolver ? resolver(deps) : [];
+  return detectByCandidates(m.id, candidates, deps, /* withVersion */ false, m.hookPointer, m.displayName);
+}
+
+/**
+ * Run every registered tool's detector in parallel and assemble the envelope.
+ * The registry = built-in manifests (source of truth in @waggle/shared) +
+ * validated third-party adapters from ~/.waggle/adapters/*.json (#5). Order is
+ * deterministic (registry order) so the UI doesn't shuffle between calls.
  */
 export async function detectInstalledTools(
-  opts: ToolDetectionDeps = {},
+  opts: ToolDetectionDeps & { manifestLoader?: ManifestLoaderDeps } = {},
 ): Promise<ToolDetectionResult> {
   const deps = resolveDeps(opts);
-  const detectorsById: Record<ToolId, () => Promise<DetectedTool>> = {
-    'claude-code': () => detectClaudeCode(deps),
-    'cursor': () => detectCursor(deps),
-    'claude-desktop': () => detectClaudeDesktop(deps),
-    'codex': () => detectCodex(deps),
-    'codex-desktop': () => detectCodexDesktop(deps),
-    'hermes': () => detectHermes(deps),
-    'openclaw': () => detectOpenClaw(deps),
-  };
-  // Preserve SUPPORTED_TOOLS order in the output envelope.
-  const tools = await Promise.all(
-    SUPPORTED_TOOLS.map((id) => detectorsById[id]()),
-  );
+  const registry = getToolRegistry(opts.manifestLoader);
+  const tools = await Promise.all(registry.map((m) => detectFromManifest(m, deps)));
   return {
     platform: deps.platform,
     detectedAt: new Date().toISOString(),

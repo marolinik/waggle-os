@@ -118,7 +118,8 @@ export const TOOL_DISPLAY_NAMES = Object.fromEntries(
  *     returned non-zero").
  */
 export interface DetectedTool {
-  id: ToolId;
+  /** Tool id — a built-in ToolId or a loaded third-party adapter id (#5). */
+  id: string;
   displayName: string;
   installed: boolean;
   installedPath: string | null;

@@ -11,13 +11,16 @@ import {
   detectInstalledTools,
   type ToolDetectionDeps,
 } from '../src/tool-detection.js';
+import type { ManifestLoaderDeps } from '../src/tool-manifest-loader.js';
+
+type DetectOpts = ToolDetectionDeps & { manifestLoader?: ManifestLoaderDeps };
 
 /**
  * Build a deps object that defaults to "nothing exists anywhere".
  * Tests selectively override `exists` / `execVersion` / `readJson` to
  * simulate specific tools being installed.
  */
-function makeDeps(overrides: Partial<ToolDetectionDeps> = {}): ToolDetectionDeps {
+function makeDeps(overrides: Partial<DetectOpts> = {}): DetectOpts {
   return {
     platform: 'win32',
     home: 'C:\\Users\\test',
@@ -26,6 +29,8 @@ function makeDeps(overrides: Partial<ToolDetectionDeps> = {}): ToolDetectionDeps
     execVersion: async () => null,
     readJson: async () => null,
     pathFromEnv: () => null,
+    // Hermetic: no third-party adapters unless a test injects them.
+    manifestLoader: { readDir: () => [] },
     ...overrides,
   };
 }
@@ -38,6 +43,24 @@ describe('detectInstalledTools', () => {
       expect(ids).toContain(id);
     }
     expect(result.tools).toHaveLength(SUPPORTED_TOOLS.length);
+  });
+
+  it('detects a third-party PATH adapter from the registry (#5)', async () => {
+    const result = await detectInstalledTools(makeDeps({
+      platform: 'linux',
+      pathFromEnv: (bin: string) => (bin === 'foo' ? '/usr/bin/foo' : null),
+      exists: async (p: string) => p === '/usr/bin/foo',
+      execVersion: async () => '1.0.0',
+      manifestLoader: {
+        dir: '/fake',
+        readDir: () => ['foo.json'],
+        readFile: () => JSON.stringify({ id: 'foo-cli', displayName: 'Foo', launchable: true, hookCapable: false, hookPointer: '.foo/hm.json', detect: { kind: 'path', binaryName: 'foo' } }),
+      },
+    }));
+    const foo = result.tools.find((t) => t.id === 'foo-cli');
+    expect(foo?.installed).toBe(true);
+    expect(foo?.installedPath).toBe('/usr/bin/foo');
+    expect(result.tools).toHaveLength(SUPPORTED_TOOLS.length + 1);
   });
 
   it('reports platform and ISO detectedAt', async () => {
