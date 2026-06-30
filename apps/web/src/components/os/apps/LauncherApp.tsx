@@ -301,7 +301,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
         setActiveAction(null);
       }
     },
-    [activeWorkspaceId, refresh],
+    [activeWorkspaceId, refresh, watchMode],
   );
 
   const tools = useMemo<DetectedTool[]>(() => detection?.tools ?? [], [detection]);
