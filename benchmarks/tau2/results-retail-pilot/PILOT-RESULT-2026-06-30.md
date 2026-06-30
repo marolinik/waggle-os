@@ -25,9 +25,11 @@ $58.41 (+ uncaptured gpt-5.2 user-sim, identical across arms). A⁻ had 1 infra 
    The conforming claim "Qwen + Waggle harness + Hive memory ≈ frontier" is **met and exceeded**
    on this domain: the local 35B-active protagonist is the best arm, not merely a tie.
 2. **B vs A (the headline parity test):** qwen+mem 88% vs opus+mem 72% = **+16pp for qwen**.
-   Unpaired z ≈ 2.05 (p ≈ 0.04) — borderline-significant even at N=50; paired McNemar should be
-   tighter. Memory-OFF the two are close (78.0 vs 81.6, opus +3.6pp), consistent with "qwen-raw ≈
-   opus-raw on retail" (a less capability-bound domain than GAIA2's −19.3pp).
+   **Paired McNemar (exact, the rigorous test): qwen+mem won 12 of the 16 head-to-head discordant
+   tasks (opus won 4), p = 0.077 — directionally strong but NOT significant at N=50** (this corrects
+   an earlier looser unpaired estimate of p≈0.04). Memory-OFF the two are essentially tied
+   (78.0 vs 81.6; paired net −2, p = 0.75), consistent with "qwen-raw ≈ opus-raw on retail" (a less
+   capability-bound domain than GAIA2's −19.3pp).
 3. **Cost:** opus agent cost is **25.6× qwen's**. Qwen+stack delivers the best accuracy at a
    fraction of the cost, fully local / zero-egress.
 
@@ -43,6 +45,25 @@ delta is z ≈ 1.1, p ≈ 0.25 — not significant). Candidate explanations to t
 A paired per-task McNemar (which tasks flipped on/off) + larger N would resolve it. **Do not
 headline "memory helps everyone" or "memory hurts opus" from this pilot** — only "memory
 clearly helps the qwen protagonist; its effect on opus is inconclusive here."
+
+## Paired McNemar (per-task, exact two-sided binomial on discordant pairs)
+
+Paired on the same task ids (A⁻ dropped 1 task to an infra error → 49 for its pairings):
+
+| comparison | N | both | win | lose | neither | net | exact p |
+|---|---|---|---|---|---|---|---|
+| **B vs A** (qwen+mem vs opus+mem) | 50 | 32 | **12** | 4 | 2 | **+8** | **0.077** (n.s.) |
+| B vs B⁻ (qwen mem ON vs OFF) | 50 | 37 | 7 | 2 | 4 | +5 | 0.18 (n.s.) |
+| A vs A⁻ (opus mem ON vs OFF) | 49 | 30 | 5 | 10 | 4 | −5 | 0.30 (n.s.) |
+| B⁻ vs A⁻ (qwen-off vs opus-off) | 49 | 34 | 4 | 6 | 5 | −2 | 0.75 (n.s.) |
+| B vs A⁻ (qwen+mem vs best opus) | 49 | 37 | 6 | 3 | 3 | +3 | 0.51 (n.s.) |
+
+**Honest read:** NOTHING reaches p<0.05 at N=50 — exactly what a pilot is for (clear direction + sized N,
+not significance). Strongest signal = **B vs A: qwen+mem won 12 of 16 head-to-head tasks (75%), p=0.077** —
+just under threshold; the full study should confirm. The **"memory hurts opus" surprise is NOT significant
+(p=0.30, net −5/49)** — treat as noise until the larger study says otherwise. **Raw qwen ≈ raw opus is a near
+tie** (B⁻ vs A⁻ net −2, p=0.75). The cost win (~1/26) is deterministic, not statistical. Reproduce:
+`python benchmarks/tau2/results-retail-pilot/mcnemar.py` over the four `results.json`.
 
 ## Honest scope / caveats
 - **N=50, k=1, single seed** — first signal, NOT the pre-registered study. Wide CIs; no TOST,
