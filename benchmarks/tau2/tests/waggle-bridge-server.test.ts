@@ -92,6 +92,20 @@ describe('Waggle↔τ² bridge — memory recall injection', () => {
     } finally { await bridge.close(); }
   });
 
+  it('stats() accumulates agent token usage + turn count (per-arm efficiency)', async () => {
+    const { fn } = capturingRunFn(); // returns usage {inputTokens:1, outputTokens:1} per turn
+    const bridge = await startWaggleBridge({ port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', runAgentLoopFn: fn });
+    try {
+      for (const sid of ['s1', 's2', 's2']) { // 3 turns across 2 sessions
+        await postTurn(bridge.url, { session_id: sid, model: 'm', domain_policy: 'P', message: { role: 'user', content: 'hi' }, tools: [] });
+      }
+    } finally { await bridge.close(); }
+    const s = bridge.stats(); // closure totals persist after close
+    expect(s.turns).toBe(3);
+    expect(s.inputTokens).toBe(3);
+    expect(s.outputTokens).toBe(3);
+  });
+
   it('memory-ON (mindPath): recalls the frozen fact into the agent systemPrompt', async () => {
     await buildTinyRetailMind();
     const { fn, calls } = capturingRunFn();

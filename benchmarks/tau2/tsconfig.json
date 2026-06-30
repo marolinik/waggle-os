@@ -12,6 +12,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["bridge/**/*.ts", "run-waggle-smoke.ts", "run-waggle-smoke-memon.ts"],
+  "include": ["bridge/**/*.ts", "run-waggle-smoke.ts", "run-waggle-smoke-memon.ts", "run-retail-pilot.ts"],
   "exclude": ["node_modules", "upstream", "dist", "tests"]
 }

@@ -53,9 +53,20 @@ export interface WaggleBridgeOptions {
   recallLimit?: number;
 }
 
+/** Cumulative agent-side usage across all sessions this bridge served — the
+ *  authoritative per-arm efficiency source for the pilot (one bridge per arm). */
+export interface BridgeStats {
+  inputTokens: number;
+  outputTokens: number;
+  /** Number of agent turns (runAgentLoop calls) served. */
+  turns: number;
+}
+
 export interface WaggleBridgeHandle {
   url: string;
   port: number;
+  /** Cumulative agent token usage + turn count (read after an arm completes). */
+  stats(): BridgeStats;
   close(): Promise<void>;
 }
 
@@ -109,6 +120,12 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
     search = new HybridSearch(mind, opts.embedder ?? createOllamaEmbedder());
   }
 
+  // Cumulative agent usage (efficiency signal). One bridge per arm ⇒ these
+  // totals are that arm's agent token spend + turn count.
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let turnCount = 0;
+
   const server = http.createServer((req, res) => {
     void (async () => {
       try {
@@ -160,6 +177,9 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
             maxTurns: 1,
           };
           const resp = await runFn(cfg);
+          totalInputTokens += resp.usage?.inputTokens ?? 0;
+          totalOutputTokens += resp.usage?.outputTokens ?? 0;
+          turnCount += 1;
           state.messages.push({ role: 'assistant', content: resp.content });
           sessions.set(body.session_id, state);
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -191,6 +211,7 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
       resolve({
         url: `http://127.0.0.1:${addr.port}`,
         port: addr.port,
+        stats: () => ({ inputTokens: totalInputTokens, outputTokens: totalOutputTokens, turns: turnCount }),
         close: () => new Promise<void>((res) => server.close(() => { mind?.close(); res(); })),
       });
     });
