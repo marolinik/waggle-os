@@ -93,8 +93,10 @@ export interface ArmTaskResult {
 }
 
 /** Render recalled frames into the production "# Recalled Memories" shape
- *  (cells.ts formatRecalledMemories). */
-function formatRecalled(results: readonly SearchResult[]): string {
+ *  (cells.ts formatRecalledMemories). Exported so the agentic τ² bridge
+ *  (benchmarks/tau2/bridge) injects the byte-identical block on its memory-ON
+ *  path — the recall block shape is the conforming-claim contract, defined once. */
+export function formatRecalled(results: readonly SearchResult[]): string {
   if (results.length === 0) return '# Recalled Memories\n(none)';
   const lines = results.map(r => {
     const score = r.finalScore.toFixed(3);

@@ -25,6 +25,8 @@
 
 import http from 'node:http';
 import { runAgentLoop as realRunAgentLoop, type AgentLoopConfig, type AgentResponse, type ToolDefinition } from '@waggle/agent';
+import { HybridSearch, MindDB, createOllamaEmbedder, type Embedder } from '@waggle/core';
+import { formatRecalled } from '../../harness/src/continual/arm-runner.js';
 
 export type BridgeRunAgentLoopFn = (cfg: AgentLoopConfig) => Promise<AgentResponse>;
 
@@ -36,6 +38,19 @@ export interface WaggleBridgeOptions {
   litellmApiKey: string;
   /** Injected for tests; defaults to the real runAgentLoop. */
   runAgentLoopFn?: BridgeRunAgentLoopFn;
+  /**
+   * Memory-ON: path to a FROZEN mind file. When set, each session recalls the
+   * mind ONCE (query = first user message, freeze-per-task) and the recalled
+   * "# Recalled Memories" block is appended to the domain policy in the agent's
+   * systemPrompt — the agentic equivalent of the QA arm-runner recall path.
+   * OMITTED = memory-OFF (the proven B⁻ path): systemPrompt = domain policy.
+   */
+  mindPath?: string;
+  /** Embedder for recall; must match the frozen mind's dimension. Defaults to
+   *  createOllamaEmbedder() (nomic, 1024-d) when `mindPath` is set. */
+  embedder?: Embedder;
+  /** Recall top-K. Default 10 (matches the orchestrator recallMemory default). */
+  recallLimit?: number;
 }
 
 export interface WaggleBridgeHandle {
@@ -55,6 +70,9 @@ interface TurnRequest {
 interface SessionState {
   messages: Array<{ role: string; content: string }>;
   userTurns: number;
+  /** Recalled block, frozen at the first user turn (memory-ON). `undefined`
+   *  until recall has run; memory-OFF leaves it `undefined` forever. */
+  recalledBlock?: string;
 }
 
 function toToolDefinitions(
@@ -81,6 +99,16 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
   const runFn = opts.runAgentLoopFn ?? realRunAgentLoop;
   const sessions = new Map<string, SessionState>();
 
+  // Memory-ON: open the frozen mind read-only for recall. memory-OFF leaves
+  // `search` undefined and the bridge runs the proven memory-off (B⁻) path.
+  const recallLimit = opts.recallLimit ?? 10;
+  let mind: MindDB | undefined;
+  let search: HybridSearch | undefined;
+  if (opts.mindPath) {
+    mind = new MindDB(opts.mindPath);
+    search = new HybridSearch(mind, opts.embedder ?? createOllamaEmbedder());
+  }
+
   const server = http.createServer((req, res) => {
     void (async () => {
       try {
@@ -101,11 +129,31 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
             state.messages.push({ role: body.message.role, content: body.message.content });
             if (body.message.role === 'user') state.userTurns += 1;
           }
+
+          // Memory-ON recall (freeze-per-task): recall ONCE on the first user
+          // turn — the kickoff message is the closest analog to the task goal —
+          // and reuse the block for every subsequent turn so the mind is frozen
+          // across the task (matches arm-runner's once-per-task recall + pass^k
+          // freeze). Recall errors are NOT swallowed: a 500 here surfaces a
+          // broken memory arm rather than silently degrading it to memory-OFF.
+          if (search && state.recalledBlock === undefined && body.message?.role === 'user') {
+            const results = await search.search(body.message.content, { limit: recallLimit, profile: 'balanced' });
+            state.recalledBlock = formatRecalled(results);
+            console.error(
+              `[bridge] memory-ON recall: session=${body.session_id} frames=${results.length} ` +
+              `q=${JSON.stringify(body.message.content.slice(0, 80))}`,
+            );
+          }
+          const domainPolicy = body.domain_policy ?? '';
+          const systemPrompt = state.recalledBlock
+            ? `${domainPolicy}\n\n${state.recalledBlock}`
+            : domainPolicy;
+
           const cfg: AgentLoopConfig = {
             litellmUrl: opts.litellmUrl,
             litellmApiKey: opts.litellmApiKey,
             model: body.model,
-            systemPrompt: body.domain_policy ?? '',
+            systemPrompt,
             tools: toToolDefinitions(body.tools ?? []),
             messages: state.messages,
             // One assistant turn per τ² turn — τ² owns tool execution.
@@ -143,7 +191,7 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
       resolve({
         url: `http://127.0.0.1:${addr.port}`,
         port: addr.port,
-        close: () => new Promise<void>((res) => server.close(() => res())),
+        close: () => new Promise<void>((res) => server.close(() => { mind?.close(); res(); })),
       });
     });
   });
