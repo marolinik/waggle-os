@@ -7,20 +7,23 @@
  * hermetically: a REAL frozen mind on disk + REAL HybridSearch recall, with
  * only the embedder (no ollama) and the LLM (no network) faked.
  *
- *   - memory-OFF (no mindPath): systemPrompt is the domain policy alone (the
- *     proven B⁻ path),
+ *   - memory-OFF (no mindPath/recallFn): systemPrompt is the AGENT_INSTRUCTION-
+ *     wrapped domain policy alone (the proven B⁻ path),
  *   - memory-ON (mindPath): the recalled "# Recalled Memories" block is appended
- *     to the domain policy in the cfg handed to runAgentLoop,
+ *     to the system prompt the bridge sends to litellm,
  *   - freeze-per-task: recall runs once per session (query = first user message)
  *     and the SAME block is reused across the task's turns.
+ *
+ * Ported to the A+ direct-call seams: the bridge no longer takes a
+ * `runAgentLoopFn`; it issues a direct chat-completion. We inject `llmFetch` and
+ * read the assembled system prompt off the wire (body.messages[0].content).
  */
 import { afterAll, describe, expect, it } from 'vitest';
 import os from 'node:os';
 import path from 'node:path';
 import { unlinkSync } from 'node:fs';
-import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import type { Embedder } from '@waggle/core';
-import { startWaggleBridge, type BridgeRunAgentLoopFn } from '../bridge/waggle-bridge-server.js';
+import { startWaggleBridge } from '../bridge/waggle-bridge-server.js';
 import { buildAndFreezeMind } from '../../harness/src/continual/mind-build.js';
 
 const VEC_DIMS = 1024;
@@ -37,16 +40,18 @@ function fakeEmbedder(dims = VEC_DIMS): Embedder {
   return { dimensions: dims, async embed(t) { return one(t); }, async embedBatch(ts) { return ts.map(one); } };
 }
 
-/** A runAgentLoop fake that records each cfg it is handed (for systemPrompt
- *  assertions) and returns a trivial response. */
-function capturingRunFn(): { fn: BridgeRunAgentLoopFn; calls: AgentLoopConfig[] } {
-  const calls: AgentLoopConfig[] = [];
-  const fn: BridgeRunAgentLoopFn = async (cfg) => {
-    calls.push(cfg);
-    const r: AgentResponse = { content: 'ok', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
-    return r;
-  };
-  return { fn, calls };
+/** A fake litellm fetch that records the assembled system prompt off each wire
+ *  (body.messages[0].content) and returns a trivial text response with
+ *  usage {inputTokens:1, outputTokens:1} per turn. */
+function capturingLlm(): { fetch: typeof fetch; systemPrompts: string[] } {
+  const systemPrompts: string[] = [];
+  const fn = (async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const body = JSON.parse(String(init?.body ?? '{}'));
+    systemPrompts.push(body.messages?.[0]?.content ?? '');
+    const payload = { choices: [{ message: { content: 'ok' } }], usage: { prompt_tokens: 1, completion_tokens: 1 } };
+    return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }) as unknown as typeof fetch;
+  return { fetch: fn, systemPrompts };
 }
 
 const MIND_PATH = path.join(os.tmpdir(), 'waggle-bridge-memon.test.mind');
@@ -77,24 +82,24 @@ async function postTurn(url: string, body: Record<string, unknown>): Promise<{ s
 describe('Waggle↔τ² bridge — memory recall injection', () => {
   afterAll(() => { for (const s of ['', '-wal', '-shm']) { try { unlinkSync(MIND_PATH + s); } catch { /* absent */ } } });
 
-  it('memory-OFF (no mindPath): systemPrompt is the domain policy alone', async () => {
-    const { fn, calls } = capturingRunFn();
-    const bridge = await startWaggleBridge({ port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', runAgentLoopFn: fn });
+  it('memory-OFF (no mindPath): systemPrompt is the (wrapped) domain policy alone', async () => {
+    const llm = capturingLlm();
+    const bridge = await startWaggleBridge({ port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', llmFetch: llm.fetch });
     try {
       const r = await postTurn(bridge.url, {
         session_id: 's-off', model: 'm', domain_policy: 'You are a retail agent.',
         message: { role: 'user', content: 'What is the restocking fee?' }, tools: [],
       });
       expect(r.status).toBe(200);
-      expect(calls).toHaveLength(1);
-      expect(calls[0].systemPrompt).toBe('You are a retail agent.');
-      expect(calls[0].systemPrompt).not.toContain('# Recalled Memories');
+      expect(llm.systemPrompts).toHaveLength(1);
+      expect(llm.systemPrompts[0]).toContain('You are a retail agent.');
+      expect(llm.systemPrompts[0]).not.toContain('# Recalled Memories');
     } finally { await bridge.close(); }
   });
 
   it('stats() accumulates agent token usage + turn count (per-arm efficiency)', async () => {
-    const { fn } = capturingRunFn(); // returns usage {inputTokens:1, outputTokens:1} per turn
-    const bridge = await startWaggleBridge({ port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', runAgentLoopFn: fn });
+    const llm = capturingLlm(); // returns usage {inputTokens:1, outputTokens:1} per turn
+    const bridge = await startWaggleBridge({ port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', llmFetch: llm.fetch });
     try {
       for (const sid of ['s1', 's2', 's2']) { // 3 turns across 2 sessions
         await postTurn(bridge.url, { session_id: sid, model: 'm', domain_policy: 'P', message: { role: 'user', content: 'hi' }, tools: [] });
@@ -108,9 +113,9 @@ describe('Waggle↔τ² bridge — memory recall injection', () => {
 
   it('memory-ON (mindPath): recalls the frozen fact into the agent systemPrompt', async () => {
     await buildTinyRetailMind();
-    const { fn, calls } = capturingRunFn();
+    const llm = capturingLlm();
     const bridge = await startWaggleBridge({
-      port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', runAgentLoopFn: fn,
+      port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', llmFetch: llm.fetch,
       mindPath: MIND_PATH, embedder: fakeEmbedder(), recallLimit: 5,
     });
     try {
@@ -118,8 +123,8 @@ describe('Waggle↔τ² bridge — memory recall injection', () => {
         session_id: 's-on', model: 'm', domain_policy: 'You are a retail agent.',
         message: { role: 'user', content: 'What is the restocking fee on opened electronics?' }, tools: [],
       });
-      expect(calls).toHaveLength(1);
-      const sp = calls[0].systemPrompt;
+      expect(llm.systemPrompts).toHaveLength(1);
+      const sp = llm.systemPrompts[0];
       expect(sp).toContain('You are a retail agent.');
       expect(sp).toContain('# Recalled Memories');
       expect(sp).toContain('restocking fee');
@@ -128,9 +133,9 @@ describe('Waggle↔τ² bridge — memory recall injection', () => {
 
   it('freeze-per-task: recall runs once per session and is reused across turns', async () => {
     await buildTinyRetailMind();
-    const { fn, calls } = capturingRunFn();
+    const llm = capturingLlm();
     const bridge = await startWaggleBridge({
-      port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', runAgentLoopFn: fn,
+      port: 0, litellmUrl: 'http://unused', litellmApiKey: 'k', llmFetch: llm.fetch,
       mindPath: MIND_PATH, embedder: fakeEmbedder(), recallLimit: 5,
     });
     try {
@@ -145,10 +150,10 @@ describe('Waggle↔τ² bridge — memory recall injection', () => {
         session_id: 's-frozen', model: 'm', domain_policy: 'POLICY',
         message: { role: 'user', content: 'thanks — what colors does it come in?' }, tools: [],
       });
-      expect(calls).toHaveLength(2);
-      expect(calls[0].systemPrompt).toContain('restocking fee');
-      expect(calls[1].systemPrompt).toContain('restocking fee');
-      expect(calls[1].systemPrompt).toBe(calls[0].systemPrompt);
+      expect(llm.systemPrompts).toHaveLength(2);
+      expect(llm.systemPrompts[0]).toContain('restocking fee');
+      expect(llm.systemPrompts[1]).toContain('restocking fee');
+      expect(llm.systemPrompts[1]).toBe(llm.systemPrompts[0]);
     } finally { await bridge.close(); }
   });
 });

@@ -2,8 +2,11 @@
 Waggle τ² custom agent — forwards every turn to the Node bridge server.
 
 Implements τ²'s HalfDuplexAgent contract (get_init_state / generate_next_message).
-All agent logic lives in the Node bridge (runAgentLoop); this class is a thin
-HTTP forwarder so --agent-llm flows straight into runAgentLoop's `model`.
+The agent turn is produced in the Node bridge (direct litellm /chat/completions +
+system-prompt assembly + memory injection); this class is a thin HTTP forwarder.
+It discriminates the τ² input (UserMessage vs Tool/MultiToolMessage), forwards the
+model's tool_calls back to τ² for execution, and threads tool results into the next
+turn. --agent-llm flows straight into the bridge /turn `model` field.
 
 Bridge URL comes from $WAGGLE_TAU2_BRIDGE_URL (default http://127.0.0.1:8088).
 Register via register.py: registry.register_agent_factory(create_waggle_agent, "waggle").
@@ -95,30 +98,95 @@ class WaggleBridgeAgent(HalfDuplexAgent[str]):
             # Seed prior history WITHOUT running the agent (append-only) — matches
             # the stock agent: get_init_state records history, only
             # generate_next_message calls the LLM. (Posting /turn here would run
-            # the agent on a seeded assistant greeting → Anthropic 400.)
+            # the agent on a seeded assistant greeting → Anthropic 400.) Forward
+            # tool history too (assistant.tool_calls / tool.id) so an initial_state
+            # tool round-trip is preserved.
             for m in message_history:
-                role = getattr(m, "role", None) or (m.get("role") if isinstance(m, dict) else "user")
-                content = getattr(m, "content", "") or (m.get("content", "") if isinstance(m, dict) else "")
-                _post("/seed", {
-                    "session_id": session_id,
-                    "message": {"role": role, "content": content or ""},
-                })
+                seed_msg = self._seed_message(m)
+                if seed_msg is not None:
+                    _post("/seed", {"session_id": session_id, "message": seed_msg})
         return session_id
 
+    @staticmethod
+    def _seed_message(m: Any) -> Optional[dict]:
+        """Render a τ² history message into the bridge /seed wire shape, keeping
+        tool history. Returns None for shapes the bridge can't seed."""
+        role = getattr(m, "role", None) or (m.get("role") if isinstance(m, dict) else "user")
+        content = getattr(m, "content", None)
+        if content is None and isinstance(m, dict):
+            content = m.get("content")
+        tool_calls = getattr(m, "tool_calls", None)
+        if tool_calls is None and isinstance(m, dict):
+            tool_calls = m.get("tool_calls")
+        if role == "assistant" and tool_calls:
+            return {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": getattr(tc, "id", "") or (tc.get("id", "") if isinstance(tc, dict) else ""),
+                        "type": "function",
+                        "function": {
+                            "name": getattr(tc, "name", "") or (tc.get("name", "") if isinstance(tc, dict) else ""),
+                            "arguments": json.dumps(
+                                getattr(tc, "arguments", None)
+                                or (tc.get("arguments") if isinstance(tc, dict) else None)
+                                or {}
+                            ),
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            }
+        if role == "tool":
+            tool_id = getattr(m, "id", None) or (m.get("id") if isinstance(m, dict) else None)
+            return {"role": "tool", "content": content or "", "tool_call_id": tool_id}
+        return {"role": role, "content": content or ""}
+
     def generate_next_message(self, message: Any, state: str):
-        role = getattr(message, "role", None) or (message.get("role") if isinstance(message, dict) else "user")
-        content = getattr(message, "content", "") or (message.get("content", "") if isinstance(message, dict) else "")
-        out = _post("/turn", {
-            "session_id": state, "model": self.llm,
+        # τ² hands the agent one of: UserMessage (user-sim turn), ToolMessage or
+        # MultiToolMessage (environment turn after the agent's tool_calls ran).
+        # Import lazily to keep this file importable for a registration-only smoke.
+        from tau2.data_model.message import (  # type: ignore
+            AssistantMessage,
+            MultiToolMessage,
+            ToolCall,
+            ToolMessage,
+        )
+
+        payload: dict = {
+            "session_id": state,
+            "model": self.llm,
             "domain_policy": self.domain_policy,
-            "message": {"role": role, "content": content or ""},
             "tools": self._tool_schemas(),
-        })
-        # τ² expects an AssistantMessage; import lazily to avoid a hard dep at
-        # module import time (keeps this file importable for a smoke that only
-        # checks registration).
-        from tau2.data_model.message import AssistantMessage  # type: ignore
-        return AssistantMessage(role="assistant", content=out.get("content", "")), state
+        }
+        if isinstance(message, MultiToolMessage):
+            payload["tool_results"] = [
+                {"id": tm.id, "content": tm.content or "", "error": bool(getattr(tm, "error", False))}
+                for tm in message.tool_messages
+            ]
+        elif isinstance(message, ToolMessage):
+            payload["tool_results"] = [
+                {"id": message.id, "content": message.content or "", "error": bool(getattr(message, "error", False))}
+            ]
+        else:  # UserMessage (or dict fallback)
+            role = getattr(message, "role", None) or (message.get("role") if isinstance(message, dict) else "user")
+            content = getattr(message, "content", "") or (message.get("content", "") if isinstance(message, dict) else "")
+            payload["message"] = {"role": role, "content": content or ""}
+
+        out = _post("/turn", payload)
+
+        tcs = out.get("tool_calls")
+        if tcs:
+            tool_calls = [
+                ToolCall(id=tc["id"], name=tc["name"], arguments=tc.get("arguments") or {})
+                for tc in tcs
+            ]
+            return AssistantMessage(role="assistant", content=None, tool_calls=tool_calls), state
+        return AssistantMessage(
+            role="assistant",
+            content=out.get("content") or "I'm sorry, could you clarify?",
+        ), state
 
 
 def create_waggle_agent(tools, domain_policy, **kwargs):

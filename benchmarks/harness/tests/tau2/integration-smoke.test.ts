@@ -2,12 +2,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { startWaggleBridge, type BridgeRunAgentLoopFn } from '../../../tau2/bridge/waggle-bridge-server.js';
+import { startWaggleBridge } from '../../../tau2/bridge/waggle-bridge-server.js';
 import { runTau2, resolveTau2ResultsDir, type Tau2RunSpec } from '../../src/tau2/tau2-cli.js';
 import { loadTau2ResultsFile, computeTaskOutcomes } from '../../src/tau2/tau2-results.js';
 import { writeTau2Jsonl, type Tau2EmitContext } from '../../src/tau2/tau2-emit.js';
 import { resolveUpstreamDir } from '../../src/tau2/vendor-pin.js';
-import type { AgentResponse } from '@waggle/agent';
 import url from 'node:url';
 
 const HERE = url.fileURLToPath(import.meta.url);
@@ -18,14 +17,16 @@ const LIVE = process.env.WAGGLE_TAU2_LIVE === '1';
 const LAUNCHER = (process.env.WAGGLE_TAU2_LAUNCHER ?? 'tau2').split(' ');
 const USER_LLM = process.env.WAGGLE_TAU2_USER_LLM ?? 'gpt-4.1';
 
-// Deterministic stub: always emits a benign final message. The mock domain's
-// oracle will likely score 0 — that's fine; the smoke proves the PLUMBING
-// (run → results.json → parse → emit), not task success.
-const stubAgent: BridgeRunAgentLoopFn = async (_cfg): Promise<AgentResponse> => ({
-  content: 'I have completed the requested action.',
-  toolsUsed: [],
-  usage: { inputTokens: 5, outputTokens: 5 },
-});
+// Deterministic stub LLM (A+ direct-call seam): always emits a benign final
+// message. The mock domain's oracle will likely score 0 — that's fine; the smoke
+// proves the PLUMBING (run → results.json → parse → emit), not task success.
+const stubLlm = (async (): Promise<Response> => new Response(
+  JSON.stringify({
+    choices: [{ message: { content: 'I have completed the requested action.' } }],
+    usage: { prompt_tokens: 5, completion_tokens: 5 },
+  }),
+  { status: 200, headers: { 'Content-Type': 'application/json' } },
+)) as unknown as typeof fetch;
 
 describe('τ² integration smoke (mock domain)', () => {
   it('runs end-to-end: bridge → tau2 run → parse → emit', async () => {
@@ -36,7 +37,7 @@ describe('τ² integration smoke (mock domain)', () => {
     }
 
     const bridge = await startWaggleBridge({
-      port: 8088, runAgentLoopFn: stubAgent,
+      port: 8088, llmFetch: stubLlm,
       litellmUrl: process.env.LITELLM_URL ?? 'http://localhost:4000',
       litellmApiKey: process.env.LITELLM_API_KEY ?? 'sk-waggle-dev',
     });
