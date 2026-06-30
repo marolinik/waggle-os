@@ -8,9 +8,27 @@ import {
   runHookCommand,
   ToolProcessTracker,
   ToolOutputBuffer,
+  getToolRegistry,
   type HookAction,
 } from '@waggle/agent';
-import { SUPPORTED_TOOLS, type ToolId } from '@waggle/shared';
+import { SUPPORTED_TOOLS, applyPromptArgTemplate, type ToolId, type ToolManifest } from '@waggle/shared';
+
+/**
+ * AI-OS #5 — resolve the CLI args for a launch. Explicit `args` (the built-in
+ * web path computes them) win. Otherwise, if the tool is a third-party adapter
+ * with a declarative promptArgTemplate and a prompt was given, apply the
+ * template server-side. Built-ins carry no template, so they are unaffected.
+ */
+export function resolveLaunchArgs(
+  manifest: ToolManifest | undefined,
+  body: { args?: string[]; prompt?: string },
+): string[] | undefined {
+  if (body.args) return body.args;
+  if (body.prompt && manifest?.promptArgTemplate) {
+    return applyPromptArgTemplate(manifest.promptArgTemplate, body.prompt);
+  }
+  return undefined;
+}
 
 /**
  * Loopback host:port → sidecar base URL; anything else → undefined.
@@ -77,6 +95,9 @@ const launchBodySchema = z.object({
   args: z.array(z.string()).max(50).optional(),
   // AI-OS #4 — opt-in observed (piped-stdio) launch for live output.
   observe: z.boolean().optional(),
+  // AI-OS #5 — raw prompt; for a third-party adapter with a promptArgTemplate
+  // (and no explicit args) the server turns it into CLI args.
+  prompt: z.string().max(8000).optional(),
 });
 
 const hooksBodySchema = z.object({
@@ -149,7 +170,7 @@ const toolsRoutesImpl: FastifyPluginAsync = async (server) => {
       installedPath: body.installedPath,
       workspaceId: body.workspaceId,
       cwd: body.cwd,
-      args: body.args,
+      args: resolveLaunchArgs(getToolRegistry().find((m) => m.id === body.id), body),
       signalEmit: true,
       sidecarUrl: loopbackSidecarUrl(request.headers.host),
       observe: body.observe,

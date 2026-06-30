@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BUILTIN_TOOL_MANIFESTS, SUPPORTED_TOOLS, LAUNCH_COHORT, TOOL_DISPLAY_NAMES,
+  applyPromptArgTemplate,
 } from '../src/tool-detection.js';
 
 describe('BUILTIN_TOOL_MANIFESTS', () => {
@@ -25,5 +26,17 @@ describe('BUILTIN_TOOL_MANIFESTS', () => {
   it('claude-code detects by PATH binary "claude" (not its id)', () => {
     const cc = BUILTIN_TOOL_MANIFESTS.find((m) => m.id === 'claude-code')!;
     expect(cc.detect).toEqual({ kind: 'path', binaryName: 'claude' });
+  });
+});
+
+describe('applyPromptArgTemplate (#5 fast-follow)', () => {
+  it('substitutes {prompt} in each template entry', () => {
+    expect(applyPromptArgTemplate(['--print', '{prompt}'], 'hello')).toEqual(['--print', 'hello']);
+  });
+  it('substitutes within an entry and across multiple entries', () => {
+    expect(applyPromptArgTemplate(['-m', 'msg={prompt}', '{prompt}'], 'hi')).toEqual(['-m', 'msg=hi', 'hi']);
+  });
+  it('leaves entries without the placeholder untouched', () => {
+    expect(applyPromptArgTemplate(['--yes', '--fast'], 'hi')).toEqual(['--yes', '--fast']);
   });
 });

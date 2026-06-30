@@ -243,7 +243,9 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
             id: tool.id,
             installedPath: tool.installedPath,
             workspaceId: activeWorkspaceId,
-            ...(args ? { args } : {}),
+            // Built-in tools send pre-computed args; a third-party adapter gets
+            // the raw prompt so the server can apply its promptArgTemplate (#5).
+            ...(args ? { args } : (prompt.trim() ? { prompt } : {})),
             ...(watchMode ? { observe: true } : {}),
           });
           const promptNote = args ? ' with prompt' : '';

@@ -94,6 +94,15 @@ export const LAUNCH_COHORT: readonly ToolId[] =
   BUILTIN_TOOL_MANIFESTS.filter((m) => m.launchable).map((m) => m.id as ToolId);
 
 /**
+ * AI-OS #5 — apply a third-party adapter's `promptArgTemplate` to a prompt by
+ * substituting every `{prompt}` placeholder in each entry. Built-ins use their
+ * own promptArgsForTool (web); this is the declarative form for loaded adapters.
+ */
+export function applyPromptArgTemplate(template: readonly string[], prompt: string): string[] {
+  return template.map((a) => a.split('{prompt}').join(prompt));
+}
+
+/**
  * Per-tool human-readable display name. Centralized so the launcher
  * UI, sidecar logs, and KVARK governance reports all agree.
  */

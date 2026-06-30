@@ -2585,6 +2585,12 @@ class LocalAdapter {
      * detached, survives-restart launch.
      */
     observe?: boolean;
+    /**
+     * AI-OS #5 — raw prompt for a third-party adapter with a declarative
+     * promptArgTemplate (the server turns it into CLI args). Built-in tools
+     * send pre-computed `args` instead; this is the third-party fallback.
+     */
+    prompt?: string;
   }): Promise<{ ok: boolean; pid: number | null; error?: string }> {
     // P1b D3: fetchRaw — non-2xx body maps into the { ok:false, error } envelope.
     const res = await this.fetchRaw('/api/tools/launch', {
