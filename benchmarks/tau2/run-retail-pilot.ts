@@ -96,6 +96,9 @@ async function runArm(arm: Arm, embedder: Embedder): Promise<ArmResult> {
     recallLimit: 10,
   });
   const saveTo = `retail_pilot_${arm.id.replace('-', 'm')}_n${N}k${K}`;
+  // Clear any prior run for this arm so τ² doesn't block on an interactive
+  // "resume the run?" prompt (no stdin under spawn → EOFError).
+  fs.rmSync(path.join(upstreamDir, 'data', 'simulations', saveTo), { recursive: true, force: true });
   const argv = [
     'run', 'python', wrapper, 'run',
     '--domain', 'retail', '--agent', 'waggle',

@@ -92,14 +92,16 @@ class WaggleBridgeAgent(HalfDuplexAgent[str]):
         # A fresh bridge session per task. message_history (if any) is replayed.
         session_id = uuid.uuid4().hex
         if message_history:
+            # Seed prior history WITHOUT running the agent (append-only) — matches
+            # the stock agent: get_init_state records history, only
+            # generate_next_message calls the LLM. (Posting /turn here would run
+            # the agent on a seeded assistant greeting → Anthropic 400.)
             for m in message_history:
                 role = getattr(m, "role", None) or (m.get("role") if isinstance(m, dict) else "user")
                 content = getattr(m, "content", "") or (m.get("content", "") if isinstance(m, dict) else "")
-                _post("/turn", {
-                    "session_id": session_id, "model": self.llm,
-                    "domain_policy": self.domain_policy,
+                _post("/seed", {
+                    "session_id": session_id,
                     "message": {"role": role, "content": content or ""},
-                    "tools": self._tool_schemas(),
                 })
         return session_id
 

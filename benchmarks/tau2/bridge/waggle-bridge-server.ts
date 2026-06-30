@@ -134,6 +134,28 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
           res.end(JSON.stringify({ ok: true }));
           return;
         }
+        if (req.method === 'POST' && req.url === '/seed') {
+          // Append a history message to a session WITHOUT running the agent —
+          // replicates the stock agent's get_init_state (history is recorded,
+          // the LLM is only called by generate_next_message). Running the agent
+          // on a seeded assistant greeting yields [system, assistant], which
+          // Anthropic rejects ("must end with a user message").
+          const body = JSON.parse(await readBody(req)) as Partial<TurnRequest>;
+          if (!body.session_id) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'session_id is required' }));
+            return;
+          }
+          const state = sessions.get(body.session_id) ?? { messages: [], userTurns: 0 };
+          if (body.message) {
+            state.messages.push({ role: body.message.role, content: body.message.content });
+            if (body.message.role === 'user') state.userTurns += 1;
+          }
+          sessions.set(body.session_id, state);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+          return;
+        }
         if (req.method === 'POST' && req.url === '/turn') {
           const body = JSON.parse(await readBody(req)) as Partial<TurnRequest>;
           if (!body.session_id || typeof body.model !== 'string' || body.model.length === 0) {
@@ -166,6 +188,14 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
             ? `${domainPolicy}\n\n${state.recalledBlock}`
             : domainPolicy;
 
+          if (process.env.WAGGLE_BRIDGE_DEBUG) {
+            const last = state.messages.at(-1);
+            console.error(
+              `[bridge] turn model=${body.model} incoming=${body.message?.role} ` +
+              `roles=[${state.messages.map(m => m.role).join(',')}] ` +
+              `lastLen=${(last?.content ?? '').length}`,
+            );
+          }
           const cfg: AgentLoopConfig = {
             litellmUrl: opts.litellmUrl,
             litellmApiKey: opts.litellmApiKey,
@@ -194,6 +224,9 @@ export function startWaggleBridge(opts: WaggleBridgeOptions): Promise<WaggleBrid
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'not found' }));
       } catch (err) {
+        // Surface the cause: τ²'s urllib raises HTTPError without the body, so
+        // a bare "HTTP 500" in the τ² log is otherwise undiagnosable.
+        console.error(`[bridge] /turn 500: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
       }
