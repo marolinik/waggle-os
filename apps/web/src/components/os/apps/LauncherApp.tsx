@@ -34,6 +34,7 @@ import {
   promptArgsForTool,
   toolAcceptsInlinePrompt,
 } from '@/lib/launcher-prompt-args';
+import { ToolOutputPane } from './launcher/ToolOutputPane';
 
 // Phase 4 — full 7-tool cohort. Mirrors @waggle/shared LAUNCH_COHORT.
 // Kept local (rather than imported) to avoid a runtime dependency on
@@ -117,6 +118,22 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
    * runningTools by the same 5s poll.
    */
   const [pidsByTool, setPidsByTool] = useState<Map<string, number[]>>(new Map());
+  /**
+   * AI-OS #4 — pids launched in OBSERVED mode (live output available) and the
+   * tool whose output pane is currently expanded. The pane is progressive
+   * disclosure: hidden until the user clicks a Running badge.
+   */
+  const [observedPids, setObservedPids] = useState<Set<number>>(new Set());
+  const [openPaneToolId, setOpenPaneToolId] = useState<string | null>(null);
+  /**
+   * Watch mode (entered via the ⌘K "Watch a coding agent live" deep-link,
+   * /launcher?watch=1): the per-tool Launch sends observe:true and auto-opens
+   * the output pane. Keeps the dock's default Launch detached/basic.
+   */
+  const watchMode = useMemo(
+    () => new URLSearchParams(window.location.search).get('watch') === '1',
+    [],
+  );
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -151,6 +168,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
       const result = await adapter.getToolProcesses();
       if (cancelled) return;
       setRunningTools(new Set(result.processes.map((p) => p.toolId)));
+      setObservedPids(new Set(result.processes.filter((p) => p.observed).map((p) => p.pid)));
       const next = new Map<string, number[]>();
       for (const p of result.processes) {
         const arr = next.get(p.toolId) ?? [];
@@ -193,6 +211,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
         // for the 5-second timer.
         const result = await adapter.getToolProcesses();
         setRunningTools(new Set(result.processes.map((p) => p.toolId)));
+        setObservedPids(new Set(result.processes.filter((p) => p.observed).map((p) => p.pid)));
         const next = new Map<string, number[]>();
         for (const p of result.processes) {
           const arr = next.get(p.toolId) ?? [];
@@ -239,6 +258,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
             installedPath: tool.installedPath,
             workspaceId: activeWorkspaceId,
             ...(args ? { args } : {}),
+            ...(watchMode ? { observe: true } : {}),
           });
           const promptNote = args ? ' with prompt' : '';
           setLastResult({
@@ -252,6 +272,8 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
           // Clear the prompt after a successful launch — avoid sending
           // the same text twice by accident.
           if (r.ok && args) setPrompt('');
+          // Watch mode (⌘K deep-link): auto-open the live output pane.
+          if (r.ok && watchMode) setOpenPaneToolId(tool.id);
         } else {
           const r = await adapter.manageHooks({ id: tool.id, action });
           setLastResult({
@@ -438,10 +460,17 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                         </Badge>
                       )}
                       {runningTools.has(tool.id) && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4" style={{ background: 'var(--work-wash)', color: 'var(--work)' }}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenPaneToolId((cur) => (cur === tool.id ? null : tool.id))}
+                          aria-expanded={openPaneToolId === tool.id}
+                          title="Show live output"
+                          className="text-[10px] px-1.5 py-0 h-4 inline-flex items-center rounded transition-opacity hover:opacity-80"
+                          style={{ background: 'var(--work-wash)', color: 'var(--work)' }}
+                        >
                           <span className="w-1.5 h-1.5 rounded-full inline-block mr-1 animate-pulse" style={{ background: 'var(--work)' }} />
                           Running
-                        </Badge>
+                        </button>
                       )}
                       {!inCohort && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
@@ -555,6 +584,15 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                     Detection ready · launch and hook management arrive in Phase 4.
                   </div>
                 )}
+
+                {/* AI-OS #4 — progressive-disclosure live output pane. */}
+                {openPaneToolId === tool.id && (() => {
+                  const pid = (pidsByTool.get(tool.id) ?? [])[0];
+                  if (pid == null) return null;
+                  return (
+                    <ToolOutputPane pid={pid} toolId={tool.id} observed={observedPids.has(pid)} />
+                  );
+                })()}
               </div>
             );
           })}

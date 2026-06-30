@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     launchTool: vi.fn(),
     manageHooks: vi.fn(),
     killTool: vi.fn(),
+    streamToolOutput: vi.fn(() => () => {}),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -101,6 +102,21 @@ describe('LauncherApp · A/B toggle', () => {
     expect(screen.getByRole('tab', { name: /^launch$/i })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(screen.getByText(/optional prompt/i)).toBeInTheDocument());
     expect(screen.getByText('Claude Code')).toBeInTheDocument();
+  });
+});
+
+describe('LauncherApp · live output (#4)', () => {
+  it('reveals the output pane when a running observed tool badge is clicked', async () => {
+    mocks.adapter.getToolProcesses.mockResolvedValue({
+      processes: [
+        { pid: 4242, toolId: 'claude-code', startedAt: '2026-06-30T00:00:00Z', observed: true },
+      ],
+    });
+    render(<LauncherApp activeWorkspaceId="ws1" />);
+    const badge = await screen.findByRole('button', { name: /running/i });
+    fireEvent.click(badge);
+    expect(await screen.findByText(/Waiting for output/i)).toBeInTheDocument();
+    expect(mocks.adapter.streamToolOutput).toHaveBeenCalledWith(4242, expect.any(Object));
   });
 });
 
