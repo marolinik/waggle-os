@@ -105,6 +105,20 @@ export interface Task {
   updatedAt: Date;
 }
 
+/**
+ * AI-OS #6 — durable "why" injected into the agent system prompt each run
+ * (the purpose above the current turn; complements recall + live awareness).
+ * All levels optional. Today `project` (workspace) and `goal` (agent goal) are
+ * populated; `mission` (no workspace-charter field yet) and `task` (already in
+ * the self-awareness section) are reserved/omitted.
+ */
+export interface GoalAncestry {
+  mission?: string;
+  project?: string;
+  goal?: string;
+  task?: string;
+}
+
 // === Waggle Dance Messages ===
 export type MessageType = 'broadcast' | 'request' | 'response';
 export type MessageSubtype =
