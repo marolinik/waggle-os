@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle } from 'lucide-react';
+import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle, ShieldOff } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
@@ -90,6 +90,10 @@ export default function MemoryCenterTab({
   const [sourceRows, setSourceRows] = useState<ArchiveRow[]>([]);
   const [sourceLoading, setSourceLoading] = useState(false);
   const [sourceError, setSourceError] = useState<string | null>(null);
+  // #7 P1 GDPR erasure receipt — a transient, dismissible confirmation of what
+  // the last Art.17 erase actually purged (compliance-grade transparency; the
+  // drawer closes on success, so the receipt lives at the list level).
+  const [eraseNotice, setEraseNotice] = useState<string | null>(null);
   // Latest source-fetch token: the id whose fetch is allowed to write state. A
   // selection change (reset effect → undefined) or a newer fetch invalidates any
   // in-flight request so a stale result can't land on the wrong memory.
@@ -183,6 +187,7 @@ export default function MemoryCenterTab({
     setChecked(new Set());
     setMemories([]);
     setLoading(true);
+    setEraseNotice(null);   // a receipt for the prior mind must not persist across the switch
   }, [mind, wsParam]);
 
   const openDetail = (m: Memory) => {
@@ -231,6 +236,7 @@ export default function MemoryCenterTab({
   };
 
   const mutate = async (fn: () => Promise<unknown>, closeDrawer = false) => {
+    setEraseNotice(null);   // drop any stale receipt; erase()'s own fn re-sets it on success
     setBusy(true);
     try {
       await fn();
@@ -260,6 +266,31 @@ export default function MemoryCenterTab({
   const remove = (m: Memory) => {
     if (!window.confirm(`Delete this memory permanently?\n\n"${m.title}"\n\nThis cannot be undone. To keep it but hide it, use Archive instead.`)) return;
     void mutate(() => adapter.deleteMemoryById(m.id, wsParam, mind), true);
+  };
+  // #7 P1 GDPR Art.17 "right to erasure" — the FULL sweep (this memory + its
+  // original source text + every search-index entry + knowledge-graph facts
+  // derived solely from it + the verbatim conversation turns behind it). Runs
+  // server-side in one atomic transaction. Distinct from Delete (removes just
+  // this one record) and Archive (hides it). Irreversible → strong confirm +
+  // a receipt of exactly what was purged.
+  const erase = (m: Memory) => {
+    if (!window.confirm(
+      `Erase this memory and ALL data derived from it?\n\n"${m.title}"\n\n` +
+      `This is a GDPR "right to erasure" action. It permanently removes the memory, ` +
+      `its original source text, every search index entry, the verbatim conversation ` +
+      `turns behind it, and any knowledge-graph facts derived solely from it. ` +
+      `It cannot be undone.\n\n` +
+      `(To simply hide it, use Archive. To remove only this one record, use Delete.)`,
+    )) return;
+    void mutate(async () => {
+      const { result } = await adapter.eraseMemory({ frameId: m.id }, { workspaceId: wsParam, mind });
+      const parts = [
+        `${result.framesDeleted} ${result.framesDeleted === 1 ? 'memory' : 'memories'} erased`,
+        result.archiveRedacted > 0 ? `${result.archiveRedacted} source ${result.archiveRedacted === 1 ? 'record' : 'records'} redacted` : null,
+        result.entitiesErased > 0 ? `${result.entitiesErased} knowledge ${result.entitiesErased === 1 ? 'entity' : 'entities'} removed` : null,
+      ].filter(Boolean);
+      setEraseNotice(`Erased "${m.title}": ${parts.join(' · ')}.`);
+    }, true);
   };
   const mergeSelected = () => {
     const ids = [...checked];
@@ -341,6 +372,15 @@ export default function MemoryCenterTab({
         )}
       </div>
 
+      {/* #7 P1 GDPR erasure receipt — dismissible confirmation of what was purged. */}
+      {eraseNotice && (
+        <div role="status" aria-live="polite" className="mx-2.5 mt-2 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-foreground">
+          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+          <span className="flex-1">{eraseNotice}</span>
+          <button onClick={() => setEraseNotice(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">×</button>
+        </div>
+      )}
+
       {/* List */}
       <div className="flex-1 overflow-auto p-2.5">
         {loading && memories.length === 0 ? (
@@ -386,7 +426,7 @@ export default function MemoryCenterTab({
         subtitle={selected ? `${memoryKindLabel(selected.kind)} · ${selected.scope}` : undefined}
         headerExtra={selected ? <ConfidenceBadge value={selected.confidence} compact /> : undefined}
         footer={selected ? (
-          <div className="flex items-center gap-2 w-full">
+          <div className="flex flex-wrap items-center gap-2 gap-y-1.5 w-full [&>button]:shrink-0 [&>button]:whitespace-nowrap">
             <button onClick={saveEdits} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
               <Save className="w-3 h-3" /> Save
             </button>
@@ -406,6 +446,14 @@ export default function MemoryCenterTab({
             )}
             <button onClick={() => remove(selected)} disabled={busy} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-destructive hover:bg-destructive/10">
               <Trash2 className="w-3 h-3" /> Delete
+            </button>
+            <button
+              onClick={() => erase(selected)}
+              disabled={busy}
+              title="GDPR erasure: permanently removes this memory, its original source, the conversation turns behind it, and everything derived from it. Cannot be undone."
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-destructive/40 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+            >
+              <ShieldOff className="w-3 h-3" /> Erase
             </button>
           </div>
         ) : undefined}

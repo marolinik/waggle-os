@@ -968,6 +968,27 @@ class LocalAdapter {
     return { archiveRows: Array.isArray(body?.archiveRows) ? body.archiveRows : [] };
   }
 
+  /** #7 P1 GDPR Art.17 per-subject erasure — runs the FULL sweep (raw_archive
+   *  provenance redaction + frame delete from every retrieval store + orphaned-KG
+   *  hard-delete +, in subject mode, verbatim raw-turn / B-frame reach). Distinct
+   *  from the A8 frame-only deleteMemoryById AND from eraseData (whole-datadir
+   *  account wipe). Frame mode by default; pass {source, sourceRef} to sweep an
+   *  entire harvested source. Returns the erasure breakdown for the UI receipt. */
+  async eraseMemory(
+    target: { frameId: string } | { source: string; sourceRef: string },
+    opts: { reason?: string; workspaceId?: string; mind?: 'personal' | 'workspace' } = {},
+  ): Promise<{
+    erased: boolean;
+    mind: string;
+    result: { framesDeleted: number; archiveRedacted: number; chunkVectorsPurged: number; entitiesErased: number; relationsErased: number };
+  }> {
+    const res = await this.fetch(`/api/memory/erase${this.memoryScopeQs(opts.workspaceId, opts.mind)}`, {
+      method: 'POST',
+      body: JSON.stringify({ ...target, reason: opts.reason }),
+    });
+    return res.json();
+  }
+
   async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string; mind?: 'personal' | 'workspace' } = {}): Promise<Memory> {
     const res = await this.fetch('/api/memory/merge', {
       method: 'POST',
