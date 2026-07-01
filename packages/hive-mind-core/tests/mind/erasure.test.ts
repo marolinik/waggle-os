@@ -348,6 +348,22 @@ describe('MindErasure.eraseFrameComplete (shared route + MCP primitive)', () => 
   it('returns all-zero for an unknown frame id (no throw)', () => {
     expect(erasure.eraseFrameComplete(999999, 'x')).toEqual(ZERO);
   });
+
+  // A single-frame memory (connector / ingest_source style: no archiveUids, no
+  // metadata.sourceId, no raw-turns) that a synthesized B-frame references.
+  // eraseFrameComplete's documented intent is to reach "referencing B-frames";
+  // for a SUBJECT-LESS frame it resolved no subject → never ran the B-frame sweep,
+  // so the B-frame (which can quote the erased frame's PII) survived. Must sweep it.
+  it('sweeps a B-frame referencing the erased frame even when the frame has NO subject link', () => {
+    const f = frames.createIFrame('harvest', '[Harvest:connector:crm] Jane Doe record\n\nverbatim PII', 'normal', 'import');
+    const b = frames.createBFrame('harvest', 'Synthesized: Jane Doe is a CRM contact', f.id, [f.id]);
+
+    const res = erasure.eraseFrameComplete(f.id, 'dsar');
+
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(frames.getById(b.id)).toBeUndefined();   // B-frame swept (no residual synthesized PII)
+    expect(res.framesDeleted).toBe(2);              // the frame + its referencing B-frame
+  });
 });
 
 // ── FrameStore.compact — no vector/index leak (review MEDIUM #3) ─────────────

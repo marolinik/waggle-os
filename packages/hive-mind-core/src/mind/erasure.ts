@@ -120,7 +120,13 @@ export class MindErasure {
         const src = frame.content?.match(/^\[(?:Harvest:)?([^\]]+)\]/)?.[1];
         if (src && sourceRef) sweep(src, sourceRef);
       }
-      add(this.eraseFrame(frameId, reason));   // idempotent if already swept
+      const frameRes = this.eraseFrame(frameId, reason);   // idempotent if already swept
+      add(frameRes);
+      // A subject-less frame (connector / ingest_source single frame) resolved no
+      // subject above, so the eraseBySourceRef B-frame sweep never ran for it.
+      // Strip any B-frame that references it directly so synthesized PII cannot
+      // survive. (For a subject frame this is a no-op — step 4 already swept them.)
+      if (frameRes.framesDeleted > 0) add(this.sweepReferencingBFrames(new Set([frameId]), reason));
       return total;
     })();
   }
@@ -168,6 +174,48 @@ export class MindErasure {
     }
 
     return { framesDeleted, archiveRedacted, chunkVectorsPurged, entitiesErased, relationsErased };
+  }
+
+  /**
+   * Fixpoint sweep of every B-frame that (transitively) references an already-
+   * erased frame. A synthesized B-frame stores {references:[…]} in its content
+   * JSON and carries no archiveUids, so the summary/raw-turn sweeps cannot reach
+   * it. Shared by the subject sweep (eraseBySourceRef step 4) and the single-frame
+   * erase (eraseFrameComplete) — the latter for SUBJECT-LESS frames (connector /
+   * ingest_source single frames) that resolve no subject and so would otherwise
+   * leave a referencing B-frame (which can quote the erased PII) behind. Fixpoint:
+   * a B-frame may reference another B-frame; erased ones vanish from the next query
+   * so it terminates. Mutates `erasedIds` with the swept B-frame ids.
+   * Non-transactional — call inside an ambient transaction only.
+   */
+  private sweepReferencingBFrames(erasedIds: Set<number>, reason: string): EraseResult {
+    const raw = this.db.getDatabase();
+    const total = zeroResult();
+    const add = (r: EraseResult): void => {
+      total.framesDeleted += r.framesDeleted;
+      total.archiveRedacted += r.archiveRedacted;
+      total.chunkVectorsPurged += r.chunkVectorsPurged;
+      total.entitiesErased += r.entitiesErased;
+      total.relationsErased += r.relationsErased;
+    };
+    let grew = true;
+    while (grew) {
+      grew = false;
+      const bframes = raw
+        .prepare("SELECT id, content FROM memory_frames WHERE frame_type = 'B'")
+        .all() as Array<{ id: number; content: string }>;
+      for (const bf of bframes) {
+        if (erasedIds.has(bf.id)) continue;
+        let refs: unknown;
+        try { refs = (JSON.parse(bf.content) as { references?: unknown }).references; } catch { continue; }
+        if (!Array.isArray(refs)) continue;
+        if (refs.some((id) => typeof id === 'number' && erasedIds.has(id))) {
+          const r = this.eraseFrameInternal(bf.id, reason);
+          if (r.framesDeleted > 0) { erasedIds.add(bf.id); grew = true; add(r); }
+        }
+      }
+    }
+    return total;
   }
 
   /**
@@ -270,28 +318,10 @@ export class MindErasure {
         add(r);
       }
 
-      // 4. B-frame reference sweep — a synthesized B-frame stores {references:[…]}
-      //    in its content JSON and carries no archiveUids, so 2a/2b cannot reach it.
-      //    Delete any B-frame that references an erased frame. Fixpoint loop: a
-      //    B-frame may reference another B-frame. Erased B-frames are physically
-      //    gone from the next query, so this terminates.
-      let grew = true;
-      while (grew) {
-        grew = false;
-        const bframes = raw
-          .prepare("SELECT id, content FROM memory_frames WHERE frame_type = 'B'")
-          .all() as Array<{ id: number; content: string }>;
-        for (const bf of bframes) {
-          if (erasedIds.has(bf.id)) continue;
-          let refs: unknown;
-          try { refs = (JSON.parse(bf.content) as { references?: unknown }).references; } catch { continue; }
-          if (!Array.isArray(refs)) continue;
-          if (refs.some((id) => typeof id === 'number' && erasedIds.has(id))) {
-            const r = this.eraseFrameInternal(bf.id, reason);
-            if (r.framesDeleted > 0) { erasedIds.add(bf.id); grew = true; add(r); }
-          }
-        }
-      }
+      // 4. B-frame reference sweep — a synthesized B-frame references erased
+      //    frames in its content JSON and carries no archiveUids, so 2a/2b cannot
+      //    reach it. Shared with the single-frame path (see sweepReferencingBFrames).
+      add(this.sweepReferencingBFrames(erasedIds, reason));
 
       // 5. Redact any subject archive row not reached via a frame (orphan
       //    provenance). Already-redacted rows are idempotent no-ops (return false),
