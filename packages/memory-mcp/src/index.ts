@@ -21,6 +21,7 @@ import { registerAwarenessTools } from './tools/awareness.js';
 import { registerWorkspaceTools } from './tools/workspace.js';
 import { registerHarvestTools } from './tools/harvest.js';
 import { registerCleanupTools } from './tools/cleanup.js';
+import { registerEraseTools } from './tools/erase.js';
 import { registerIngestTools } from './tools/ingest.js';
 import { registerWikiTools } from './tools/wiki.js';
 import { registerResources } from './resources/memory.js';
@@ -76,6 +77,7 @@ registerAwarenessTools(target);
 registerWorkspaceTools(target);
 registerHarvestTools(target);
 registerCleanupTools(target);
+registerEraseTools(target);
 registerIngestTools(target);
 registerWikiTools(target);
 

@@ -31,6 +31,7 @@ export const WRITE_TOOLS: ReadonlySet<string> = new Set<string>([
   'harvest_import',
   'cleanup_frames',
   'cleanup_entities',
+  'erase_memory',
   'ingest_source',
   'compile_wiki',
 ]);

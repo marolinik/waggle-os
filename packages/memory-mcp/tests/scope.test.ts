@@ -17,6 +17,7 @@ import { registerAwarenessTools } from '../src/tools/awareness.js';
 import { registerWorkspaceTools } from '../src/tools/workspace.js';
 import { registerHarvestTools } from '../src/tools/harvest.js';
 import { registerCleanupTools } from '../src/tools/cleanup.js';
+import { registerEraseTools } from '../src/tools/erase.js';
 import { registerIngestTools } from '../src/tools/ingest.js';
 import { registerWikiTools } from '../src/tools/wiki.js';
 
@@ -37,6 +38,7 @@ function registerAll(server: McpServer): void {
   registerWorkspaceTools(server);
   registerHarvestTools(server);
   registerCleanupTools(server);
+  registerEraseTools(server);
   registerIngestTools(server);
   registerWikiTools(server);
 }
@@ -114,23 +116,25 @@ describe('scopeGatedServer registration gating', () => {
     expect(names()).not.toContain('cleanup_frames');
     expect(names()).not.toContain('cleanup_entities');
     expect(names()).not.toContain('ingest_source');
+    expect(names()).not.toContain('erase_memory');   // destructive Art.17 tool is write-only
     expect(names()).toHaveLength(9);
   });
 
-  it('write scope (implies read) registers all 21 tools', () => {
+  it('write scope (implies read) registers all 22 tools incl. erase_memory', () => {
     const { server, names } = makeStub();
     const gated = scopeGatedServer(server, parseScopes('memory:write'));
     registerAll(gated);
-    expect(names()).toHaveLength(21);
+    expect(names()).toContain('erase_memory');
+    expect(names()).toHaveLength(22);
   });
 
-  it('default (unset) is unchanged — proxy skipped, all 21 tools register directly', () => {
+  it('default (unset) is unchanged — proxy skipped, all 22 tools register directly', () => {
     const { server, names } = makeStub();
     const scopes = parseScopes(undefined);
     // mirror index.ts: full access skips the proxy entirely
     const targetServer = isFullAccess(scopes) ? server : scopeGatedServer(server, scopes);
     expect(targetServer).toBe(server);
     registerAll(targetServer);
-    expect(names()).toHaveLength(21);
+    expect(names()).toHaveLength(22);
   });
 });
