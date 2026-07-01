@@ -350,6 +350,34 @@ export class KnowledgeGraph {
     return distances;
   }
 
+  /**
+   * Create entities extracted from a frame AND link each to that frame
+   * (kg_entity_frames), returning the count created+linked. The link is the
+   * provenance anchor that makes an entity reachable by frame-scoped operations —
+   * notably GDPR Art.17 erasure's orphan sweep. Harvest routes previously called
+   * createEntity WITHOUT linkEntityToFrame, so imported entity names (often PII)
+   * were born orphaned and survived erasure; route imports through here instead.
+   * Per-entity failures are swallowed (non-fatal import — mirrors the harvest loop).
+   */
+  importEntitiesForFrame(
+    frameId: number,
+    entities: Array<{ name: string; type?: string }>,
+    provenance: { source: string; importedFrom?: string },
+  ): number {
+    let created = 0;
+    for (const ent of entities) {
+      try {
+        const e = this.createEntity(ent.type || 'concept', ent.name, {
+          source: provenance.source,
+          imported_from: provenance.importedFrom,
+        });
+        this.linkEntityToFrame(e.id, frameId);
+        created++;
+      } catch { /* non-fatal per-entity (schema-rejected / bad name) — as in the harvest routes */ }
+    }
+    return created;
+  }
+
   /** Link an entity to a frame it was extracted from (kg_entity_frames bridge).
    *  Powers the 'contextual' scoring signal. Idempotent per (entity, frame). */
   linkEntityToFrame(entityId: number, frameId: number): void {

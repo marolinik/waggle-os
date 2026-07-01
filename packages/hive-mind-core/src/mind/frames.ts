@@ -327,11 +327,23 @@ export class FrameStore {
     raw.prepare('UPDATE memory_frames SET base_frame_id = NULL WHERE base_frame_id = ?').run(id);
     // Delete from vector index if exists
     try { raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run(id); } catch { /* vec table may not exist */ }
+    // Delete chunk vectors. memory_frame_chunks_vec is a vec0 virtual table with
+    // NO foreign key, so the ON DELETE CASCADE that clears memory_frame_chunks
+    // when the frame goes would ORPHAN these embedding rows (keyed by chunk id) —
+    // and search() reads memory_frame_chunks_vec first, so a stale row stays
+    // recall-able. Collect the chunk ids WHILE memory_frame_chunks still holds
+    // them, then purge their vec rows (rowid must be a SQL literal for vec0).
+    try {
+      const chunkIds = raw.prepare('SELECT id FROM memory_frame_chunks WHERE frame_id = ?').all(id) as Array<{ id: number }>;
+      for (const c of chunkIds) {
+        raw.prepare(`DELETE FROM memory_frame_chunks_vec WHERE rowid = ${Math.trunc(c.id)}`).run();
+      }
+    } catch { /* chunk tables may not exist on a pre-D1 DB */ }
     // Delete from FTS index
     raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(id);
     // Delete from KG entity-frame links if KG tables exist
     try { raw.prepare('DELETE FROM kg_entity_frames WHERE frame_id = ?').run(id); } catch { /* KG tables may not exist */ }
-    // Delete from main table
+    // Delete from main table (FK cascade clears memory_frame_chunks + kg_entity_frames)
     const result = raw.prepare('DELETE FROM memory_frames WHERE id = ?').run(id);
     return result.changes > 0;
   }
@@ -376,21 +388,28 @@ export class FrameStore {
     let deprecatedPruned = 0;
     let pframesMerged = 0;
 
+    // Prune via delete(id), NOT a bare `DELETE FROM memory_frames`. A bare delete
+    // relies on the FK cascade, which reaches memory_frame_chunks + kg_entity_frames
+    // but NOT the vec0 virtual tables (memory_frames_vec, memory_frame_chunks_vec)
+    // or the FTS index — those have no FK, so a bare delete orphans their rows and
+    // they linger in the search index. delete() purges all of them (and nullifies
+    // referencing base_frame_id, which a bare delete would trip on under FK-ON).
+
     // 1. Delete old temporary frames
-    const tempResult = raw.prepare(`
-      DELETE FROM memory_frames
+    const tempIds = raw.prepare(`
+      SELECT id FROM memory_frames
       WHERE importance = 'temporary'
         AND created_at < datetime('now', '-' || ? || ' days')
-    `).run(maxTempAgeDays);
-    temporaryPruned = tempResult.changes;
+    `).all(maxTempAgeDays) as Array<{ id: number }>;
+    for (const { id } of tempIds) if (this.delete(id)) temporaryPruned++;
 
     // 2. Delete old deprecated frames
-    const depResult = raw.prepare(`
-      DELETE FROM memory_frames
+    const depIds = raw.prepare(`
+      SELECT id FROM memory_frames
       WHERE importance = 'deprecated'
         AND created_at < datetime('now', '-' || ? || ' days')
-    `).run(maxDeprecatedAgeDays);
-    deprecatedPruned = depResult.changes;
+    `).all(maxDeprecatedAgeDays) as Array<{ id: number }>;
+    for (const { id } of depIds) if (this.delete(id)) deprecatedPruned++;
 
     // 3. Merge P-frames into I-frames when there are more than 10 P-frames
     //    for a single GOP. The merged content becomes a new I-frame and the
@@ -425,12 +444,10 @@ export class FrameStore {
       raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(latestI.id);
       raw.prepare('INSERT INTO memory_frames_fts (rowid, content) VALUES (?, ?)').run(latestI.id, mergedContent);
 
-      // Delete merged P-frames
+      // Delete merged P-frames — through delete() so the chunk vec index is
+      // purged too (the old inline delete omitted memory_frame_chunks_vec).
       for (const pf of toMerge) {
-        raw.prepare('DELETE FROM memory_frames_fts WHERE rowid = ?').run(pf.id);
-        try { raw.prepare('DELETE FROM memory_frames_vec WHERE rowid = ?').run(pf.id); } catch { /* ok */ }
-        raw.prepare('DELETE FROM memory_frames WHERE id = ?').run(pf.id);
-        pframesMerged++;
+        if (this.delete(pf.id)) pframesMerged++;
       }
     }
 

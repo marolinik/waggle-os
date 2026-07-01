@@ -1,0 +1,281 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { MindDB } from '../../src/mind/db.js';
+import { FrameStore } from '../../src/mind/frames.js';
+import { RawArchive, RAW_ARCHIVE_REDACTION_MARKER } from '../../src/mind/raw-archive.js';
+import { KnowledgeGraph } from '../../src/mind/knowledge.js';
+import { SessionStore } from '../../src/mind/sessions.js';
+import { MindErasure, type EraseResult } from '../../src/mind/erasure.js';
+import { rawTurnHeader, rawTurnConvKey } from '../../src/harvest/raw-turns.js';
+
+// ── Test helpers ───────────────────────────────────────────────────────────
+const DIM = 1024;
+/** A syntactically-valid vec0 float[1024] blob — content irrelevant, we only
+ *  ever assert on presence/absence, never on similarity. No embedder needed. */
+function fakeVecBlob(): Uint8Array {
+  return new Uint8Array(new Float32Array(DIM).fill(0.1).buffer);
+}
+
+function cnt(db: MindDB, sql: string, ...params: unknown[]): number {
+  return (db.getDatabase().prepare(sql).get(...params) as { c: number }).c;
+}
+
+/** Simulate a chunk-indexed frame WITHOUT an embedder: insert a chunk row +
+ *  its chunk-vec row (rowid = chunk id, exactly as HybridSearch does). */
+function addChunk(db: MindDB, frameId: number, idx: number, text: string): number {
+  const raw = db.getDatabase();
+  const res = raw.prepare(
+    'INSERT INTO memory_frame_chunks (frame_id, chunk_idx, content, char_start, char_end) VALUES (?,?,?,?,?)'
+  ).run(frameId, idx, text, 0, text.length);
+  const chunkId = Number(res.lastInsertRowid);
+  raw.prepare(`INSERT INTO memory_frame_chunks_vec (rowid, embedding) VALUES (${chunkId}, ?)`).run(fakeVecBlob());
+  return chunkId;
+}
+
+/** Insert a whole-frame vector row (rowid = frame id, as HybridSearch does). */
+function addFrameVec(db: MindDB, frameId: number): void {
+  db.getDatabase().prepare(`INSERT INTO memory_frames_vec (rowid, embedding) VALUES (${frameId}, ?)`).run(fakeVecBlob());
+}
+
+const ZERO: EraseResult = {
+  framesDeleted: 0, archiveRedacted: 0, chunkVectorsPurged: 0, entitiesErased: 0, relationsErased: 0,
+};
+
+// ── FrameStore.delete() chunk-vec leak fix ──────────────────────────────────
+describe('FrameStore.delete — chunk-vec leak fix', () => {
+  let db: MindDB;
+  let frames: FrameStore;
+  beforeEach(() => {
+    db = new MindDB(':memory:');
+    new SessionStore(db).ensure('g', 'g', 'test');
+    frames = new FrameStore(db);
+  });
+  afterEach(() => db.close());
+
+  it('purges memory_frame_chunks_vec rows for the frame (the vec0 leak)', () => {
+    const f = frames.createIFrame('g', 'frame body', 'normal', 'import');
+    const chunkId = addChunk(db, f.id, 0, 'chunk body');
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks_vec WHERE rowid = ?', chunkId)).toBe(1);
+
+    expect(frames.delete(f.id)).toBe(true);
+
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks_vec WHERE rowid = ?', chunkId)).toBe(0);   // vec purged
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks WHERE frame_id = ?', f.id)).toBe(0);       // rows cascaded
+  });
+});
+
+// ── MindErasure.eraseFrame ──────────────────────────────────────────────────
+describe('MindErasure.eraseFrame', () => {
+  let db: MindDB;
+  let frames: FrameStore;
+  let archive: RawArchive;
+  let kg: KnowledgeGraph;
+  let erasure: MindErasure;
+  beforeEach(() => {
+    db = new MindDB(':memory:');
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    frames = new FrameStore(db);
+    archive = new RawArchive(db);
+    kg = new KnowledgeGraph(db);
+    erasure = new MindErasure(db);
+  });
+  afterEach(() => db.close());
+
+  it('deletes the frame from every retrieval store and redacts its provenance', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'c1', content: 'SENSITIVE PII' });
+    const f = frames.createIFrame('harvest', 'summary quoting PII', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
+    addFrameVec(db, f.id);
+    const chunkId = addChunk(db, f.id, 0, 'chunk quoting PII');
+
+    const res = erasure.eraseFrame(f.id, 'dsar#1');
+
+    expect(res.framesDeleted).toBe(1);
+    expect(res.archiveRedacted).toBe(1);
+    expect(res.chunkVectorsPurged).toBe(1);
+
+    // Frame gone from EVERY recall path:
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frames_fts WHERE rowid = ?', f.id)).toBe(0);
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frames_vec WHERE rowid = ?', f.id)).toBe(0);
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks WHERE frame_id = ?', f.id)).toBe(0);
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks_vec WHERE rowid = ?', chunkId)).toBe(0);
+
+    // Provenance skeleton kept but content redacted (the audit record survives):
+    const row = archive.getByUid(r.archiveUid)!;
+    expect(row.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(row.erased_at).not.toBeNull();
+    expect(row.source_ref).toBe('c1');   // skeleton frozen
+  });
+
+  it('hard-deletes an orphaned entity + its relations but preserves a shared entity', () => {
+    const f1 = frames.createIFrame('harvest', 'frame one', 'normal', 'import');
+    const f2 = frames.createIFrame('harvest', 'frame two', 'normal', 'import');
+    const entA = kg.createEntity('person', 'Alice Orphan', {});   // linked ONLY to f1
+    const entB = kg.createEntity('person', 'Bob Shared', {});     // linked to f1 AND f2
+    kg.linkEntityToFrame(entA.id, f1.id);
+    kg.linkEntityToFrame(entB.id, f1.id);
+    kg.linkEntityToFrame(entB.id, f2.id);
+    kg.createRelation(entA.id, entB.id, 'knows');                 // A -> B
+
+    const res = erasure.eraseFrame(f1.id, 'dsar');
+
+    expect(res.entitiesErased).toBe(1);                           // only the orphan A
+    expect(res.relationsErased).toBe(1);                          // the A->B relation
+    expect(kg.getEntity(entA.id)).toBeUndefined();               // A physically gone
+    expect(kg.getEntity(entB.id)).toBeDefined();                 // B survives (shared)
+    expect(cnt(db, 'SELECT COUNT(*) c FROM kg_entity_frames WHERE entity_id = ?', entB.id)).toBe(1); // still linked to f2
+    expect(cnt(db, 'SELECT COUNT(*) c FROM knowledge_relations WHERE source_id = ? OR target_id = ?', entA.id, entA.id)).toBe(0);
+  });
+
+  it('returns an all-zero result for an unknown frame id (no throw)', () => {
+    expect(erasure.eraseFrame(999_999, 'x')).toEqual(ZERO);
+  });
+
+  // #7 review HIGH: harvest created entities with NO frame link, so the orphan
+  // sweep could never reach them. importEntitiesForFrame anchors them so erasure
+  // (and any provenance op) can. This test pins the write-path→erasure chain.
+  it('reaches entities imported via importEntitiesForFrame (harvest write-path linkage)', () => {
+    const f = frames.createIFrame('harvest', 'note about Jane Doe', 'normal', 'import');
+    const n = kg.importEntitiesForFrame(
+      f.id,
+      [{ name: 'Jane Doe', type: 'person' }],
+      { source: 'claude', importedFrom: 'note.md' },
+    );
+    expect(n).toBe(1);
+    const ent = kg.findEntityByName('Jane Doe')!;
+    expect(ent).toBeDefined();
+    // The entity is LINKED to its frame (the fix — was unlinked before):
+    expect(cnt(db, 'SELECT COUNT(*) c FROM kg_entity_frames WHERE entity_id = ? AND frame_id = ?', ent.id, f.id)).toBe(1);
+
+    const res = erasure.eraseFrame(f.id, 'dsar');
+    expect(res.entitiesErased).toBe(1);                        // erasure now reaches it
+    expect(kg.findEntityByName('Jane Doe')).toBeUndefined();   // name PII physically gone
+  });
+});
+
+// ── MindErasure.eraseBySourceRef (subject-level sweep) ───────────────────────
+describe('MindErasure.eraseBySourceRef', () => {
+  let db: MindDB;
+  let frames: FrameStore;
+  let archive: RawArchive;
+  let erasure: MindErasure;
+  beforeEach(() => {
+    db = new MindDB(':memory:');
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    frames = new FrameStore(db);
+    archive = new RawArchive(db);
+    erasure = new MindErasure(db);
+  });
+  afterEach(() => db.close());
+
+  it('sweeps every frame + archive row for a (source, source_ref) subject', () => {
+    // Two archive rows, SAME (source, source_ref), different content → two uids.
+    const a = archive.append({ source: 'claude', sourceRef: 'thread-42', content: 'msg one about the subject' });
+    const b = archive.append({ source: 'claude', sourceRef: 'thread-42', content: 'msg two about the subject' });
+    const f = frames.createIFrame('harvest', 'thread-42 summary', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUids: [a.archiveUid, b.archiveUid] }));
+
+    const res = erasure.eraseBySourceRef('claude', 'thread-42', 'dsar#7');
+
+    expect(res.framesDeleted).toBe(1);
+    expect(res.archiveRedacted).toBe(2);
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(archive.getByUid(a.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.getByUid(b.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+  });
+
+  it('redacts an orphan archive row with no linking frame in the subject set', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'lonely', content: 'orphan pii' });
+
+    const res = erasure.eraseBySourceRef('claude', 'lonely', 'dsar');
+
+    expect(res.framesDeleted).toBe(0);
+    expect(res.archiveRedacted).toBe(1);
+    expect(archive.getByUid(r.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+  });
+
+  it('is a no-op (all-zero) when no archive rows match the subject', () => {
+    expect(erasure.eraseBySourceRef('claude', 'no-such-ref', 'x')).toEqual(ZERO);
+  });
+
+  // #7 review CRITICAL: verbatim [mind-rawturn …] frames carry NO archiveUids, so a
+  // link-only sweep leaves the subject's full dialogue recall-able. They must be
+  // swept by their content-prefix conversation key (= sanitize(source∥sourceRef)).
+  it('purges the conversation raw-turn frames (content-prefix keyed, no archive link)', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'item-9', content: 'summary source' });
+    const f = frames.createIFrame('harvest', 'summary of item-9', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
+    const convKey = rawTurnConvKey({ source: 'claude', id: 'item-9' });
+    const t1 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 0, 'user')}\nverbatim PII turn one`, 'normal', 'import');
+    const t2 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 1, 'assistant')}\nverbatim PII turn two`, 'normal', 'import');
+    // A DIFFERENT subject's raw-turn (same source) MUST survive.
+    const otherKey = rawTurnConvKey({ source: 'claude', id: 'other-item' });
+    const o = frames.createIFrame('harvest', `${rawTurnHeader(otherKey, 0, 'user')}\nunrelated dialogue`, 'normal', 'import');
+
+    const res = erasure.eraseBySourceRef('claude', 'item-9', 'dsar');
+
+    expect(frames.getById(f.id)).toBeUndefined();    // summary
+    expect(frames.getById(t1.id)).toBeUndefined();   // verbatim turn 1
+    expect(frames.getById(t2.id)).toBeUndefined();   // verbatim turn 2
+    expect(frames.getById(o.id)).toBeDefined();      // other subject untouched
+    expect(res.framesDeleted).toBe(3);
+    expect(res.archiveRedacted).toBe(1);
+    // FTS purged for a swept verbatim turn (no longer recall-able):
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frames_fts WHERE rowid = ?', t1.id)).toBe(0);
+  });
+
+  it('does NOT over-erase when one subject key is a prefix of another', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'item', content: 's' });
+    const f = frames.createIFrame('harvest', 'summary item', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
+    // Raw-turn belonging to 'item-9' must NOT be caught by a sweep of 'item'.
+    const longerKey = rawTurnConvKey({ source: 'claude', id: 'item-9' });
+    const survivor = frames.createIFrame('harvest', `${rawTurnHeader(longerKey, 0, 'user')}\nkeep me`, 'normal', 'import');
+
+    erasure.eraseBySourceRef('claude', 'item', 'dsar');
+
+    expect(frames.getById(survivor.id)).toBeDefined();   // 'item-9' turn not swept by 'item'
+  });
+
+  // #7 review LOW: synthesized B-frames reference the erased frames in content JSON
+  // and carry no archiveUids — sweep them via the reference intersection.
+  it('purges a B-frame that references an erased frame', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'b1', content: 'src' });
+    const f = frames.createIFrame('harvest', 'summary', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
+    const b = frames.createBFrame('harvest', 'Shared entity: Jane Doe', f.id, [f.id]);
+
+    const res = erasure.eraseBySourceRef('claude', 'b1', 'dsar');
+
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(frames.getById(b.id)).toBeUndefined();    // B-frame swept
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frames_fts WHERE rowid = ?', b.id)).toBe(0);
+    expect(res.framesDeleted).toBe(2);               // summary + B-frame
+  });
+});
+
+// ── FrameStore.compact — no vector/index leak (review MEDIUM #3) ─────────────
+describe('FrameStore.compact — no orphaned vector/index rows', () => {
+  let db: MindDB;
+  let frames: FrameStore;
+  beforeEach(() => {
+    db = new MindDB(':memory:');
+    new SessionStore(db).ensure('g', 'g', 'test');
+    frames = new FrameStore(db);
+  });
+  afterEach(() => db.close());
+
+  it('pruning a temporary frame leaves no orphan in _vec / _fts / _chunks_vec', () => {
+    // A temporary frame older than the 30-day prune threshold, fully indexed.
+    const f = frames.createIFrame('g', 'ephemeral note', 'temporary', 'import', '2020-01-01T00:00:00Z');
+    addFrameVec(db, f.id);
+    const chunkId = addChunk(db, f.id, 0, 'ephemeral chunk');
+
+    frames.compact(30, 90);
+
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frames_vec WHERE rowid = ?', f.id)).toBe(0);
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frames_fts WHERE rowid = ?', f.id)).toBe(0);
+    expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks_vec WHERE rowid = ?', chunkId)).toBe(0);
+  });
+});
