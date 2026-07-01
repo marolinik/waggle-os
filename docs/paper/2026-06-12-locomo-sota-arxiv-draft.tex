@@ -35,15 +35,24 @@ State-of-the-Art Long-Term Conversational Memory on LoCoMo}
 \maketitle
 
 \begin{abstract}
+\noindent\textbf{Erratum (2026-07-01).} The headline figure in this draft (87.66\%) did not
+reproduce on a fresh judge pass and is \emph{superseded by 86.49\%} (7-lane W4, $+4.54$pp over
+Memori, one-sample $z{=}4.64$, $p{<}10^{-5}$); the original was inflated by a stale-verdict-replay
+bug in the judge harness (fresh runs: 85.19\% on the original archived substrate, 86.49\% on the
+current one). Read every headline figure below as 86.49\%\,/\,$+4.54$pp\,/\,$z{=}4.64$. The detailed
+intervention ladder and per-step comparison statistics reflect the original measurement and are
+being re-verified before submission. Fresh, reproducible evidence (answers, judgments, offline
+recount): \texttt{benchmarks/results/locomo-sota-2026-06/}.\\[6pt]
+
 We present \system, a fully local long-term memory substrate for
 conversational agents: SQLite-backed frame storage with hybrid
 vector+lexical retrieval, write-time memory distillation, and a
 multi-lane context assembler --- no cloud services on the memory path.
 On the LoCoMo benchmark under the exact published protocol of Memori
 (GPT-4.1-mini answerer and judge, $N{=}1{,}540$ questions), \system{}
-scores \best{87.66\%} overall --- \best{+5.71pp} above the best
+scores \best{86.49\%} overall --- \best{+4.54pp} above the best
 previously published memory system (Memori, 81.95\%; one-sample
-$z{=}4.42$, $p{<}10^{-5}$) --- and leads or ties every question
+$z{=}4.64$, $p{<}10^{-5}$) --- and leads or ties every question
 category among memory systems, with open-domain accuracy statistically
 indistinguishable from the full-context ceiling. We reproduce Memori's
 own pipeline to within 0.03pp before comparing, making this a
@@ -59,7 +68,7 @@ captions) with a raw-detail escalation lane. We also document a
 column-scrambling error in the baseline table of the Memori paper that
 has propagated through recent literature, and re-derive the corrected
 field; and we re-run Mem0 under our own judge, where we lead every
-category (overall $+13.7$pp, temporal $+32.7$pp). The substrate,
+category (overall $+12.5$pp, temporal $+30.8$pp). The substrate,
 including the benchmark harness, is open source. On token cost
 (3{,}747 vs.\ Memori's 1{,}294), context packing yields a 28\%
 reduction at near-iso accuracy (85.3\%), but matching the prior budget
@@ -83,8 +92,8 @@ This paper makes four contributions:
 
 \begin{enumerate}[leftmargin=1.4em]
 \item \textbf{A SOTA result under a reproduced protocol.} We score
-  \best{87.66\%} overall on LoCoMo under Memori's own published
-  protocol and judge, $+5.71$pp over Memori's 81.95\% ($z{=}4.42$,
+  \best{86.49\%} overall on LoCoMo under Memori's own published
+  protocol and judge, $+4.54$pp over Memori's 81.95\% ($z{=}4.64$,
   $p{<}10^{-5}$), leading every category among memory systems
   (Table~\ref{tab:field}). Before comparing, we reproduced Memori's
   own released pipeline to 81.98\% vs.\ their published 81.95\% ---
@@ -381,7 +390,7 @@ bold.}
 \toprule
 Method & single & multi & temporal & open & \textbf{overall}\\
 \midrule
-\textbf{\system{} (ours, W3.3)} & \best{92.75} & \best{82.98} & \best{83.49} & \best{70.83} & \best{87.66}\\
+\textbf{\system{} (ours, W4)} & \best{92.27} & \best{80.50} & \best{81.62} & \best{69.79} & \best{86.49}\\
 Memori \cite{memori} (same-judge) & 87.87 & 72.70 & 80.37 & 63.54 & 81.95\\
 Mem0$^\ddagger$ (same-judge, ours) & 83.59 & 74.82 & 50.78 & 64.58 & 73.96\\
 Zep$^\dagger$ \cite{zep} & 83.49 & 72.34 & 77.26 & 64.58 & ---\\
@@ -408,7 +417,7 @@ Against the corrected field, \system{} leads every category among
 memory systems, exceeds the agentic MemR3 pipeline on single-hop and
 multi-hop, and sits at the full-context ceiling on open-domain. The
 headline statistical claim remains the same-judge comparison:
-\textbf{87.66 vs.\ 81.95, $+5.71$pp, $z{=}4.42$, $p{<}10^{-5}$}. Our
+\textbf{86.49 vs.\ 81.95, $+4.54$pp, $z{=}4.64$, $p{<}10^{-5}$}. Our
 result also exceeds Hindsight's 85.67\% \cite{hindsight}, reported
 with a local answering model under a related protocol.
 
@@ -454,7 +463,7 @@ with a local answering model under a related protocol.
 A layered, fully local memory substrate --- profiles for synthesis,
 write-time-dated episodic timelines for temporal anchoring, hybrid
 retrieval with reranking for relevance, and a verbatim raw-detail
-escalation lane for fine-grained recall --- achieves 87.66\% on LoCoMo
+escalation lane for fine-grained recall --- achieves 86.49\% on LoCoMo
 under the strictest comparison standard available: the prior SOTA
 system's own protocol, reproduced and re-judged in-harness. The
 category structure of the result supports the central design thesis:
