@@ -1,0 +1,29 @@
+{
+  "config": {
+    "N": 1,
+    "K": 1,
+    "USER_LLM": "openai/gpt-5.2",
+    "USER_EFFORT": "low",
+    "MAX_STEPS": 40,
+    "CONC": 1,
+    "SEED": 42,
+    "mindHash": "3fb2f0d45ebde4aba570c8a0aae43f0565bcb8f324dcf3da1edc4e227f381618",
+    "mindFrames": 10
+  },
+  "arms": [
+    {
+      "arm": "A-",
+      "model": "claude-opus-4-8",
+      "memory": "off",
+      "exit": 0,
+      "sims": 1,
+      "pass": 1,
+      "passRate": 1,
+      "infraErrors": 0,
+      "agentInputTokens": 71110,
+      "agentOutputTokens": 1838,
+      "agentTurns": 8,
+      "agentCostUsd": 0.4015
+    }
+  ]
+}
