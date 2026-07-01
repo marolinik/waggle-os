@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { Importance, MemoryFrame } from '@waggle/core';
-import { FrameStore, RawArchive, SessionStore } from '@waggle/core';
+import type { Importance, MemoryFrame, EraseResult } from '@waggle/core';
+import { FrameStore, MindErasure, RawArchive, SessionStore } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -565,6 +565,149 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       }
     }
     return reply.status(404).send({ error: 'Memory not found' });
+  });
+
+  // POST /api/memory/erase — #7 P1 GDPR Art.17 data-subject erasure. UNLIKE the
+  // A8 DELETE /api/memory/:id (a frame-only UI convenience), this runs the FULL
+  // Art.17 sweep via MindErasure: raw_archive provenance redaction + frame delete
+  // from every retrieval store (FTS/vec/chunk/chunk-vec) + orphaned-KG hard-delete
+  // +, in subject mode, the verbatim raw-turn + referencing B-frame reach a
+  // single-frame primitive cannot cover. Two mutually-exclusive request modes:
+  //   • frame   — { frameId } → MindErasure.eraseFrame (one distilled frame)
+  //   • subject — { source, sourceRef } → eraseBySourceRef (full subject sweep;
+  //               the correct mode for "forget everything from this source")
+  // Per-mind MindDB resolution mirrors the /source route (frame ids collide
+  // across the per-mind SQLite DBs → mind-strict when declared). Emits the
+  // reserved `data_erase_requested` audit event with the erasure breakdown.
+  server.post<{
+    Body: {
+      frameId?: number | string; source?: string; sourceRef?: string;
+      reason?: string; workspace?: string; workspaceId?: string; mind?: string;
+    };
+    Querystring: { workspace?: string; workspaceId?: string; mind?: string };
+  }>('/api/memory/erase', async (request, reply) => {
+    const b = request.body ?? {};
+    const hasFrame = b.frameId !== undefined && b.frameId !== null && b.frameId !== '';
+    const hasSubject = b.source !== undefined || b.sourceRef !== undefined;
+    if (!hasFrame && !hasSubject) {
+      return reply.status(400).send({ error: 'provide either frameId or {source, sourceRef}' });
+    }
+    if (hasFrame && hasSubject) {
+      return reply.status(400).send({ error: 'provide frameId OR {source, sourceRef}, not both' });
+    }
+    // workspace/mind accepted in body OR query — the GET siblings (/source,
+    // /trace) key off query, the POST siblings (/, /merge) off the body; erase
+    // can be reached either way, so read body-first then fall back to query.
+    const workspace = b.workspace ?? b.workspaceId ?? request.query.workspace ?? request.query.workspaceId;
+    const parsed = parseMind(b.mind ?? request.query.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+    const reason = clampStr(b.reason ?? 'gdpr_art17_erasure', 200);
+
+    // Resolve a MindDB the same way /source does (FrameStore exposes no public db
+    // getter): the workspace mind when declared+present, else the personal mind.
+    const mindDbFor = (mind: string) =>
+      mind === 'workspace' && workspace
+        ? server.agentState.getWorkspaceMindDb(workspace)
+        : server.multiMind.personal;
+
+    if (hasFrame) {
+      const frameId = parseInt(String(b.frameId), 10);
+      if (isNaN(frameId)) return reply.status(400).send({ error: 'Invalid memory id' });
+      // Find the mind that actually holds the frame (mind-strict when declared)
+      // before erasing — an unresolved id must 404, never silently no-op.
+      for (const c of candidateStores(workspace, parsed.mind)) {
+        const frame = c.store.getById(frameId);
+        if (!frame) continue;
+        const db = mindDbFor(c.mind);
+        if (!db) continue;
+        // Art.17-COMPLETE erase of the memory the user selected. A single-frame
+        // erase would leave the harvested conversation's verbatim [mind-rawturn]
+        // frames (a separate, differently-keyed frame class) + referencing
+        // B-frames + orphaned KG recall-able — the exact leak the substrate arc
+        // closed. So resolve the frame's provenance subjects (reconstructSource)
+        // and sweep each via eraseBySourceRef, then erase the frame itself
+        // (covers a manual frame with no provenance, or a summary that outlived
+        // its archive rows). ONE outer transaction → the multi-subject erase is
+        // atomic (better-sqlite3 nests via savepoints); a partial erase is a
+        // compliance failure.
+        const raw = db.getDatabase();
+        const archive = new RawArchive(db);
+        const erasure = new MindErasure(db);
+        const result = raw.transaction((): EraseResult => {
+          const acc: EraseResult = { framesDeleted: 0, archiveRedacted: 0, chunkVectorsPurged: 0, entitiesErased: 0, relationsErased: 0 };
+          const add = (r: EraseResult): void => {
+            acc.framesDeleted += r.framesDeleted;
+            acc.archiveRedacted += r.archiveRedacted;
+            acc.chunkVectorsPurged += r.chunkVectorsPurged;
+            acc.entitiesErased += r.entitiesErased;
+            acc.relationsErased += r.relationsErased;
+          };
+          // Dedup subjects with a JSON-array key (collision-proof: distinct
+          // (source, sourceRef) pairs never serialize equal, unlike a space-joined
+          // key where "a"+"b c" would collide with "a b"+"c" and skip a sweep).
+          const seen = new Set<string>();
+          const sweep = (source: string, sourceRef: string): void => {
+            const key = JSON.stringify([source, sourceRef]);
+            if (seen.has(key)) return;
+            seen.add(key);
+            add(erasure.eraseBySourceRef(source, sourceRef, reason));
+          };
+          // Primary: subjects linked via the frame's archive provenance. Read
+          // BEFORE any sweep deletes the frame (which holds the archiveUids link).
+          for (const row of archive.reconstructSource(frameId)) {
+            if (row.source_ref) sweep(row.source, row.source_ref);
+          }
+          // Fallback (reference-bug-class guard): a harvested summary with NO
+          // archive link (a legacy pre-#7 frame, or a raw_archive.append that
+          // failed while the verbatim [mind-rawturn] frames still wrote) would
+          // otherwise erase only the summary and leave the raw dialogue
+          // recall-able. Recover the subject from metadata.sourceId (the
+          // sourceRef, stamped by BOTH harvest paths) + the platform token in the
+          // content prefix ('[Harvest:<src>] ...' server path / '[<src>] ...' MCP
+          // path) so eraseBySourceRef reaches the raw-turns. Safe on non-harvest
+          // frames: a wrong guess matches nothing (a no-op sweep).
+          if (seen.size === 0) {
+            const meta = parseFrameMetadata(frame.metadata);
+            const sourceRef = typeof meta.sourceId === 'string' ? meta.sourceId : undefined;
+            const src = frame.content?.match(/^\[(?:Harvest:)?([^\]]+)\]/)?.[1];
+            if (src && sourceRef) sweep(src, sourceRef);
+          }
+          add(erasure.eraseFrame(frameId, reason));   // idempotent if already swept
+          return acc;
+        })();
+        emitAuditEvent(server, {
+          workspaceId: c.mind === 'workspace' && workspace ? workspace : 'personal',
+          eventType: 'data_erase_requested',
+          input: JSON.stringify({ mode: 'frame', frameId, reason, mind: c.mind }),
+          output: JSON.stringify(result),
+        });
+        return reply.send({ erased: true, mind: c.mind, result });
+      }
+      return reply.status(404).send({ error: 'Memory not found' });
+    }
+
+    // Subject mode. A harvested subject lives in ONE mind (harvest writes to the
+    // personal mind by default; target a workspace subject explicitly via
+    // mind=workspace). eraseBySourceRef returns an all-zero breakdown for an
+    // unknown subject → idempotent 200 (a valid Art.17 outcome), never a 404.
+    // Require string types, not just truthiness: a JSON body like
+    // {source:{},sourceRef:{}} passes a bare truthiness check, then throws deep
+    // in better-sqlite3's bind (non-string) → an uncaught 500 leaking the raw DB
+    // error. A boundary type-check turns it into a clean 400.
+    if (typeof b.source !== 'string' || typeof b.sourceRef !== 'string' || !b.source || !b.sourceRef) {
+      return reply.status(400).send({ error: 'subject erasure requires both source and sourceRef' });
+    }
+    const mind = parsed.mind === 'workspace' ? 'workspace' : 'personal';
+    const db = mindDbFor(mind);
+    if (!db) return reply.status(500).send({ error: 'Target mind unavailable' });
+    const result = new MindErasure(db).eraseBySourceRef(b.source, b.sourceRef, reason);
+    emitAuditEvent(server, {
+      workspaceId: mind === 'workspace' && workspace ? workspace : 'personal',
+      eventType: 'data_erase_requested',
+      input: JSON.stringify({ mode: 'subject', source: b.source, sourceRef: b.sourceRef, reason, mind }),
+      output: JSON.stringify(result),
+    });
+    return reply.send({ erased: true, mind, result });
   });
 
   // POST /api/memory/merge — merge >= 2 memories into one (C11: concatenate v1,
