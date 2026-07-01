@@ -144,7 +144,13 @@ export class MindErasure {
       const uids = (raw
         .prepare('SELECT archive_uid FROM raw_archive WHERE source = ? AND source_ref = ?')
         .all(source, sourceRef) as Array<{ archive_uid: string }>).map(r => r.archive_uid);
-      if (uids.length === 0) return total;
+      // NB: do NOT early-return on an empty uid set. A subject can have verbatim
+      // [mind-rawturn] frames (2b) + referencing B-frames (4) with NO raw_archive
+      // row — a legacy pre-#7 conversation, or one whose raw_archive.append failed
+      // while the raw-turns still wrote. Bailing here left that raw PII dialogue
+      // recall-able (the reference-class leak). Steps 2b/4 key off the conv-prefix
+      // and content references, independent of raw_archive, so they must still run;
+      // 2a and step 5 iterate `uids`, so they are natural no-ops when it is empty.
       const uidSet = new Set(uids);
 
       const frameIds = new Set<number>();

@@ -198,6 +198,25 @@ describe('MindErasure.eraseBySourceRef', () => {
     expect(erasure.eraseBySourceRef('claude', 'no-such-ref', 'x')).toEqual(ZERO);
   });
 
+  // Reference-class leak (recovered in the erase-surface review): a subject can
+  // have verbatim [mind-rawturn] frames with NO raw_archive row at all — a
+  // raw_archive.append that failed while the raw-turns still wrote, or a legacy
+  // pre-#7 conversation. eraseBySourceRef must NOT early-return on the empty uid
+  // set; the 2b sweep is conv-prefix-keyed, independent of raw_archive.
+  it('sweeps verbatim raw-turns for a subject with NO raw_archive row (append-failed / legacy)', () => {
+    const convKey = rawTurnConvKey({ source: 'gemini', id: 'no-archive' });
+    const t1 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 0, 'user')}\nverbatim PII`, 'normal', 'import');
+    const t2 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 1, 'assistant')}\nmore PII`, 'normal', 'import');
+    expect(cnt(db, 'SELECT COUNT(*) c FROM raw_archive WHERE source = ? AND source_ref = ?', 'gemini', 'no-archive')).toBe(0);
+
+    const res = erasure.eraseBySourceRef('gemini', 'no-archive', 'dsar');
+
+    expect(frames.getById(t1.id)).toBeUndefined();
+    expect(frames.getById(t2.id)).toBeUndefined();
+    expect(res.framesDeleted).toBe(2);
+    expect(res.archiveRedacted).toBe(0);   // no provenance rows to redact
+  });
+
   // #7 review CRITICAL: verbatim [mind-rawturn …] frames carry NO archiveUids, so a
   // link-only sweep leaves the subject's full dialogue recall-able. They must be
   // swept by their content-prefix conversation key (= sanitize(source∥sourceRef)).
