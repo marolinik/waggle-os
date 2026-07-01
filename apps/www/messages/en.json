@@ -97,8 +97,8 @@
     "proof": {
       "eyebrow": "Validated",
       "headline": "The layer does the work.",
-      "subhead": "It remembers what you told it — verified, not vibes. On LoCoMo, the standard test for long-term conversational memory, Waggle's open-source memory layer scores 87.66% — a new state of the art, measured under the previous leader's own protocol and judge. Run the test yourself, offline.",
-      "methodology": "The test is LoCoMo (N=1,540), scored with GPT-4.1-mini as both answerer and judge — the previous SOTA's exact published protocol, which we first reproduced in-harness to within 0.03 points before comparing. Waggle scores 87.66% vs the prior best 81.95% (+5.71 points; z=4.42, p<10⁻⁵), leading or tying every question category. The intelligence lives in the memory layer, not the model — so it travels onto a small local model too. Honest caveat: higher token use per question than the leanest systems; efficiency work underway. Reproducible offline: github.com/marolinik/hive-mind.",
+      "subhead": "It remembers what you told it — verified, not vibes. On LoCoMo, the standard test for long-term conversational memory, Waggle's open-source memory layer scores 86.49% — a new state of the art, measured under the previous leader's own protocol and judge. Run the test yourself, offline.",
+      "methodology": "The test is LoCoMo (N=1,540), scored with GPT-4.1-mini as both answerer and judge — the previous SOTA's exact published protocol, which we first reproduced in-harness to within 0.03 points before comparing. Waggle scores 86.49% vs the prior best 81.95% (+4.54 points; z=4.64, p<10⁻⁵), leading or tying every question category. The intelligence lives in the memory layer, not the model — so it travels onto a small local model too. Honest caveat: higher token use per question than the leanest systems; efficiency work underway. Reproducible offline: github.com/marolinik/hive-mind.",
       "human_quote": ""
     },
     "pillars": {

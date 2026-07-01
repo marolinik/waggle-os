@@ -31,7 +31,7 @@ export const dynamic = 'force-static';
 export const metadata: Metadata = {
   title: 'Methodology — Waggle',
   description:
-    "How Waggle's memory is evaluated: LoCoMo (N=1,540) under the prior leader's own protocol and judge (GPT-4.1-mini answerer+judge) — 87.66%, a new state of the art (+5.71pp over the prior best), reproducible offline.",
+    "How Waggle's memory is evaluated: LoCoMo (N=1,540) under the prior leader's own protocol and judge (GPT-4.1-mini answerer+judge) — 86.49%, a new state of the art (+4.54pp over the prior best), reproducible offline.",
   alternates: { canonical: 'https://waggle-os.ai/docs/methodology' },
   robots: { index: true, follow: true },
 };
