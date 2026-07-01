@@ -1,5 +1,11 @@
 # LoCoMo SOTA evidence drift — root cause + consolidation (2026-06-30)
 
+> **UPDATE 2026-07-01:** consolidating the evidence surfaced a deeper defect — the **87.66% number
+> itself does not reproduce** (fresh 7-lane W4 = 86.49% current / 85.19% archived substrate; stale-
+> verdict-replay inflation). Canonical headline is now **86.49%**. This doc's gitignore/side-repo
+> root cause still stands; the number correction is in
+> [`locomo-87.66-vs-85.26-integrity-2026-06-30.md`](./locomo-87.66-vs-85.26-integrity-2026-06-30.md).
+
 **Symptom (founder):** "old benchmark results show, and the SOTA claim is not within waggle-os
 or hive-mind." The 87.66% LoCoMo memory-SOTA is real and verified, but looking at the canonical
 repos you see *old* numbers — the reproducible evidence isn't there.
