@@ -5,7 +5,7 @@
 > - **Pricing:** now **$19/mo (PRO) / $49/seat (TEAMS)** — *not* the $15/$79 "Basic/Teams" funnel described below. Canonical source: `packages/shared/src/tiers.ts` (TRIAL → FREE → PRO → TEAMS → ENTERPRISE).
 > - **Window manager retired** (`a6dc2e4`, 2026-06): the draggable-windows/dock desktop shell flipped to the AppShell + URL-navigation model. All "window manager" / "desktop OS" descriptions below are historical.
 > - **Repositioning:** the product framing is now a **"personal AI workspace"**, not a "desktop-native OS".
-> - **Memory SOTA:** the canonical figure is **87.66% on LoCoMo** (W3.3, Memori same-judge, +5.71pp over Memori, p<10⁻⁵ — see `docs/paper/` and `memory/project_sota_results_index.md`), *not* the earlier ~91.6% Mem0-parity target used as a goal in older planning material.
+> - **Memory SOTA:** the canonical figure is **86.49% on LoCoMo** (7-lane W4, Memori same-judge, +4.54pp over Memori, z=4.64, p<10⁻⁵ — see `benchmarks/results/locomo-sota-2026-06/` with offline `recount.mjs`, and `docs/paper/`), *not* the earlier 87.66% (withdrawn 2026-07-01 — did not reproduce; stale-verdict inflation) or the ~91.6% Mem0-parity target from older planning material.
 
 **Date:** 2026-04-11
 **Status:** LIVING DOCUMENT — the single source of truth for what Waggle OS is today and what we're building next.

@@ -52,14 +52,14 @@ describe('BenchmarkApp', () => {
 
     // SOTA headline + the four LoCoMo bar values.
     expect(screen.getByText(/best long-term memory/i)).toBeInTheDocument();
-    expect(screen.getByText('87.66')).toBeInTheDocument();
+    expect(screen.getByText('86.49')).toBeInTheDocument();
     expect(screen.getByText('81.95')).toBeInTheDocument();
     expect(screen.getByText('78.05')).toBeInTheDocument();
     expect(screen.getByText('62.47')).toBeInTheDocument();
 
     // Stat chips.
-    expect(screen.getByText('+5.71')).toBeInTheDocument();
-    expect(screen.getByText('92.75%')).toBeInTheDocument();
+    expect(screen.getByText('+4.54')).toBeInTheDocument();
+    expect(screen.getByText('92.27%')).toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
 
     // Method/caveat line.

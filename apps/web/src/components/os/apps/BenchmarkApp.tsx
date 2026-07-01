@@ -48,7 +48,7 @@ const CAPABILITY_MATRIX: ReadonlyArray<{ capability: string; marks: readonly Mar
 
 /** LoCoMo memory bars — value drives both the label and the bar width. */
 const MEMORY_BARS: ReadonlyArray<{ name: string; note: string; value: number; us?: boolean }> = [
-  { name: 'Waggle · Hive Mind', note: 'ours · local', value: 87.66, us: true },
+  { name: 'Waggle · Hive Mind', note: 'ours · local', value: 86.49, us: true },
   { name: 'Memori', note: 'prev. SOTA', value: 81.95 },
   { name: 'LangMem', note: 'corrected', value: 78.05 },
   { name: 'Mem0', note: 'baseline', value: 62.47 },
@@ -56,8 +56,8 @@ const MEMORY_BARS: ReadonlyArray<{ name: string; note: string; value: number; us
 
 /** Stat chips beneath the bars. */
 const MEMORY_STATS: ReadonlyArray<{ value: string; label: React.ReactNode }> = [
-  { value: '+5.71', label: <>points over the prior best · <b className="text-foreground font-semibold">z = 4.42, p &lt; 10⁻⁵</b></> },
-  { value: '92.75%', label: <>single-hop recall — <b className="text-foreground font-semibold">~1pt off the full-context ceiling</b></> },
+  { value: '+4.54', label: <>points over the prior best · <b className="text-foreground font-semibold">z = 4.64, p &lt; 10⁻⁵</b></> },
+  { value: '92.27%', label: <>single-hop recall — <b className="text-foreground font-semibold">~1pt off the full-context ceiling</b></> },
   { value: '100%', label: <>local — warm recalls in <b className="text-foreground font-semibold">58–83 ms</b>, on-device</> },
 ];
 
@@ -334,7 +334,7 @@ function MemorySotaView() {
         </h1>
         <p className="text-[15px] text-muted-foreground leading-relaxed m-0 max-w-[64ch]">
           On <b className="text-foreground font-medium">LoCoMo</b> — the standard test for long-term conversational memory —
-          Waggle&apos;s open-source substrate scores <b className="text-foreground font-medium">87.66%</b>, a new state of the
+          Waggle&apos;s open-source substrate scores <b className="text-foreground font-medium">86.49%</b>, a new state of the
           art, measured under the prior leader&apos;s own protocol and judge.
         </p>
       </header>

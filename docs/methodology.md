@@ -3,36 +3,37 @@
 **Date:** 2026-06-29 (v3)
 **Subject of this document:** how Waggle's published LoCoMo memory-substrate numbers are produced, what they mean, and how to reproduce them offline.
 
-> **v3 update — new canonical headline.** The current state-of-the-art result is **87.66% on LoCoMo**, measured under the previous leader's (Memori's) own same-judge protocol — see **§0** below, which now leads this document. Sections 1–8 document the earlier **v5 / N=320** conservative-protocol arc (trio-strict 67.8%, self-judge 73.1%); those numbers remain valid and honestly reported *for that arc*, but **§0 is the headline.** The full W3.3 methodology, run record, and artifacts live in the hive-mind research repo and `docs/paper/` (pointers in §0).
+> **v4 update (2026-07-01) — headline corrected 87.66% → 86.49%.** The 87.66% figure did not reproduce on a fresh judge pass (stale-verdict-replay inflation; it re-scores 85.19% on its own archived substrate and 86.49% on the current one). The reproducible 7-lane W4 number is **86.49%** — pinned + offline-verifiable at `benchmarks/results/locomo-sota-2026-06/` (`node recount.mjs`); full record in `docs/analysis/locomo-87.66-vs-85.26-integrity-2026-06-30.md`.
+> **v3 update — canonical headline.** The current state-of-the-art result is **86.49% on LoCoMo**, measured under the previous leader's (Memori's) own same-judge protocol — see **§0** below, which now leads this document. Sections 1–8 document the earlier **v5 / N=320** conservative-protocol arc (trio-strict 67.8%, self-judge 73.1%); those numbers remain valid and honestly reported *for that arc*, but **§0 is the headline.** The full W3.3 methodology, run record, and artifacts live in the hive-mind research repo and `docs/paper/` (pointers in §0).
 > **v2 honesty note (retained).** v2 aligned the page to the canonical v5 run record (`benchmarks/locomo/RESULTS.md`, run v5, 2026-05-11, trio re-judge 2026-05-21) and removed a withdrawn oracle-ceiling headline, a "clean Mem0 win", and a "+27.35-point methodology gap" brand. Those corrections still stand.
 
 ---
 
-## 0. Current canonical headline — 87.66% (W3.3, same-judge, N=1,540)
+## 0. Current canonical headline — 86.49% (7-lane W4, same-judge, N=1,540)
 
-**On LoCoMo under the previous SOTA's own protocol — GPT-4.1-mini as both answerer and judge, N=1,540 — Waggle's memory substrate (config W3.3) scores 87.66% overall, a new state of the art: +5.71 points over the prior best (Memori, 81.95%), z = 4.42, p < 10⁻⁵.** We first reproduced Memori's own pipeline in-harness (our reproduction 81.98% vs their published 81.95%, within 0.03 points) before running the comparison on the identical ruler. Waggle leads or ties every question category:
+**On LoCoMo under the previous SOTA's own protocol — GPT-4.1-mini as both answerer and judge, N=1,540 — Waggle's memory substrate (7-lane W4) scores 86.49% overall, a new state of the art: +4.54 points over the prior best (Memori, 81.95%), z = 4.64, p < 10⁻⁵.** We first reproduced Memori's own pipeline in-harness (our reproduction 81.98% vs their published 81.95%, within 0.03 points) before running the comparison on the identical ruler. Waggle leads or ties every question category:
 
-| Category | Waggle (W3.3) | Memori (pub) | Δ |
+| Category | Waggle (7-lane W4) | Memori (pub) | Δ |
 |---|---:|---:|---:|
-| single-hop | 92.75 | 87.87 | +4.88 |
-| multi-hop | 82.98 | 72.70 | +10.28 |
-| temporal | 83.49 | 80.37 | +3.12 |
-| open-ended | 70.83 | 63.54 | +7.29 |
-| **overall** | **87.66** | **81.95** | **+5.71** |
+| single-hop | 92.27 | 87.87 | +4.40 |
+| multi-hop | 80.50 | 72.70 | +7.80 |
+| temporal | 81.62 | 80.37 | +1.25 |
+| open-ended | 69.79 | 63.54 | +6.25 |
+| **overall** | **86.49** | **81.95** | **+4.54** |
 
-**Competitor re-run on the identical ruler (Mem0, same answerer + judge).** Waggle 87.66% vs Mem0 73.96% overall (+13.70), leading every category — the largest gap is temporal, **83.49% vs 50.78% (+32.71pp)**, attributable to write-time event dating versus Mem0's ingestion-time stamping.
+**Competitor re-run on the identical ruler (Mem0, same answerer + judge).** Waggle 86.49% vs Mem0 73.96% overall (+12.53), leading every category — the largest gap is temporal, **81.62% vs 50.78% (+30.84pp)**, attributable to write-time event dating versus Mem0's ingestion-time stamping.
 
-**Token cost (honest caveat).** This headline runs at ~3,747 tokens/question versus Memori's ~1,294 — Waggle trades tokens for accuracy. A measured token-efficiency Pareto exists: a leaner "Config D" packing runs at ~2,694 tok/q (−28%) for 85.32% (−2.3pp), still +3.37 over Memori. Matching Memori's token budget exactly costs ~11pp — the retrieval lanes are load-bearing.
+**Token cost (honest caveat).** This headline runs at ~3,100 tokens/question versus Memori's ~1,294 — Waggle trades tokens for accuracy. A token-efficiency Pareto was measured on an earlier answer set (a leaner "Config D" packing traded ~−28% tokens for ~−1–2pp accuracy); those exact figures were anchored to the withdrawn 87.66 run and should be **re-measured on the current substrate** before re-citing. The retrieval lanes are load-bearing.
 
-**Protocol note.** 87.66% is a **same-judge** number (one judge, GPT-4.1-mini, which is also the answerer) — chosen because it exactly matches the protocol the prior SOTA published, making it an apples-to-apples ruler. It is a different, more permissive protocol than the cross-vendor **trio-strict** bar used in §1–§4 (which was run on the earlier v5 / N=320 answer set and scores 67.8%). When comparing across papers, always match the judge methodology.
+**Protocol note.** 86.49% is a **same-judge** number (one judge, GPT-4.1-mini, which is also the answerer) — chosen because it exactly matches the protocol the prior SOTA published, making it an apples-to-apples ruler. It is a different, more permissive protocol than the cross-vendor **trio-strict** bar used in §1–§4 (which was run on the earlier v5 / N=320 answer set and scores 67.8%). When comparing across papers, always match the judge methodology.
 
-**Evidence & reproduction.** Full numbers, the phase ladder (P1→W3.3), and both head-to-head tables: `memory/project_sota_results_index.md` and `benchmarks/results/memori-phase22-RESULT.md`. Paper + arXiv draft + team briefing: `docs/paper/`. Harness, answers, and judgments: the hive-mind research repo (`D:/Projects/hive-mind-test`, master @ `05f2146`). The winning stack is open source at github.com/marolinik/hive-mind (PR #14, @ `bc4eba1`), Apache 2.0.
+**Evidence & reproduction.** Pinned, reproducible, in-repo: `benchmarks/results/locomo-sota-2026-06/` — the report, `INDEX.md`, committed answers + judgments, and `recount.mjs` (offline, zero-API: recounts 1,332/1,540 = 86.49%). Investigation record: `docs/analysis/locomo-87.66-vs-85.26-integrity-2026-06-30.md`. Paper + arXiv draft: `docs/paper/`. The winning stack is open source at github.com/marolinik/hive-mind (PR #14, @ `bc4eba1`), Apache 2.0.
 
 ---
 
 ## Summary
 
-We measured Waggle's memory substrate on the LoCoMo long-term conversational memory benchmark (N=320 stratified) under multiple evaluation protocols. *(This section documents the earlier v5 / N=320 arc; the current overall headline is **§0** above — 87.66%, W3.3, same-judge, N=1,540.)* Within that arc, the defensible, reproducible result is the **trio-strict** number: under a 3-vendor judge ensemble (Anthropic Opus 4.7 + OpenAI GPT-5.5 + MiniMax M2.7, scored as a logical AND of all three), the substrate scores **67.8% (217/320)**. This number is cross-vendor, conservative by design, and re-derivable offline from committed judgments with zero API calls.
+We measured Waggle's memory substrate on the LoCoMo long-term conversational memory benchmark (N=320 stratified) under multiple evaluation protocols. *(This section documents the earlier v5 / N=320 arc; the current overall headline is **§0** above — 86.49%, 7-lane W4, same-judge, N=1,540.)* Within that arc, the defensible, reproducible result is the **trio-strict** number: under a 3-vendor judge ensemble (Anthropic Opus 4.7 + OpenAI GPT-5.5 + MiniMax M2.7, scored as a logical AND of all three), the substrate scores **67.8% (217/320)**. This number is cross-vendor, conservative by design, and re-derivable offline from committed judgments with zero API calls.
 
 The load-bearing scientific finding is **substrate ≈ subject**: two very different SOTA subject models — Anthropic Opus 4.7 and a ~35B open-weights local model (Qwen3.6-35B-A3B) — converge to within **0.3 percentage points** on the *same* retrieval substrate under self-judge (73.1% vs 73.4%). The binding constraint on accuracy is the memory layer, not the model. *The layer, not the model.*
 
@@ -58,7 +59,7 @@ The headline subject model is `claude-opus-4-7` (Anthropic Messages API). The re
 
 ### 1.4 Headline result
 
-**Under the trio-strict 3-vendor judge ensemble, Waggle's substrate scores 67.8% (217/320) on LoCoMo (N=320 stratified).** This is the conservative, cross-vendor, offline-reproducible number and the headline *for this v5 / N=320 arc* (the current overall SOTA headline is **§0**, 87.66%). The same answers under a less strict majority rule (≥2 of 3 judges) score 70.0% (224/320). The self-judge reference (Opus judging Opus) is 73.1% (234/320) and is disclosed as inflated — never the headline.
+**Under the trio-strict 3-vendor judge ensemble, Waggle's substrate scores 67.8% (217/320) on LoCoMo (N=320 stratified).** This is the conservative, cross-vendor, offline-reproducible number and the headline *for this v5 / N=320 arc* (the current overall SOTA headline is **§0**, 86.49%). The same answers under a less strict majority rule (≥2 of 3 judges) score 70.0% (224/320). The self-judge reference (Opus judging Opus) is 73.1% (234/320) and is disclosed as inflated — never the headline.
 
 | Metric | Value |
 |---|---:|
