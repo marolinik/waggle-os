@@ -82,6 +82,7 @@ describe('MindErasure.eraseFrame', () => {
 
   it('deletes the frame from every retrieval store and redacts its provenance', () => {
     const r = archive.append({ source: 'claude', sourceRef: 'c1', content: 'SENSITIVE PII' });
+    const archiveId = archive.getByUid(r.archiveUid)!.id;   // frozen handle (uid rotates on erase)
     const f = frames.createIFrame('harvest', 'summary quoting PII', 'normal', 'import');
     frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
     addFrameVec(db, f.id);
@@ -100,8 +101,9 @@ describe('MindErasure.eraseFrame', () => {
     expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks WHERE frame_id = ?', f.id)).toBe(0);
     expect(cnt(db, 'SELECT COUNT(*) c FROM memory_frame_chunks_vec WHERE rowid = ?', chunkId)).toBe(0);
 
-    // Provenance skeleton kept but content redacted (the audit record survives):
-    const row = archive.getByUid(r.archiveUid)!;
+    // Provenance skeleton kept but content redacted (the audit record survives);
+    // the uid rotated on erase, so resolve by the frozen id.
+    const row = archive.getById(archiveId)!;
     expect(row.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
     expect(row.erased_at).not.toBeNull();
     expect(row.source_ref).toBe('c1');   // skeleton frozen
@@ -172,6 +174,8 @@ describe('MindErasure.eraseBySourceRef', () => {
     // Two archive rows, SAME (source, source_ref), different content → two uids.
     const a = archive.append({ source: 'claude', sourceRef: 'thread-42', content: 'msg one about the subject' });
     const b = archive.append({ source: 'claude', sourceRef: 'thread-42', content: 'msg two about the subject' });
+    const aId = archive.getByUid(a.archiveUid)!.id;   // frozen handles (uids rotate on erase)
+    const bId = archive.getByUid(b.archiveUid)!.id;
     const f = frames.createIFrame('harvest', 'thread-42 summary', 'normal', 'import');
     frames.setMetadata(f.id, JSON.stringify({ archiveUids: [a.archiveUid, b.archiveUid] }));
 
@@ -180,18 +184,19 @@ describe('MindErasure.eraseBySourceRef', () => {
     expect(res.framesDeleted).toBe(1);
     expect(res.archiveRedacted).toBe(2);
     expect(frames.getById(f.id)).toBeUndefined();
-    expect(archive.getByUid(a.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
-    expect(archive.getByUid(b.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.getById(aId)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.getById(bId)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
   });
 
   it('redacts an orphan archive row with no linking frame in the subject set', () => {
     const r = archive.append({ source: 'claude', sourceRef: 'lonely', content: 'orphan pii' });
+    const rId = archive.getByUid(r.archiveUid)!.id;   // frozen handle (uid rotates on erase)
 
     const res = erasure.eraseBySourceRef('claude', 'lonely', 'dsar');
 
     expect(res.framesDeleted).toBe(0);
     expect(res.archiveRedacted).toBe(1);
-    expect(archive.getByUid(r.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.getById(rId)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
   });
 
   it('is a no-op (all-zero) when no archive rows match the subject', () => {

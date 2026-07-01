@@ -69,6 +69,44 @@ describe('raw_archive schema', () => {
       try { rmSync(file); } catch { /* temp file cleanup best-effort */ }
     }
   });
+
+  it('migration: an existing DB with the OLD frozen-uid trigger is upgraded to the rotation trigger on reopen', () => {
+    const file = join(tmpdir(), `raw-archive-rot-${process.pid}-${Date.now()}.db`);
+    try {
+      const db1 = new MindDB(file);
+      // Install the OLD (pre-rotation) trigger that FROZE archive_uid — the exact DDL
+      // shipped before the opaque-id rotation.
+      db1.getDatabase().exec(
+        'DROP TRIGGER IF EXISTS raw_archive_no_update;' +
+        "CREATE TRIGGER raw_archive_no_update BEFORE UPDATE ON raw_archive " +
+        "WHEN NOT (OLD.erased_at IS NULL AND NEW.erased_at IS NOT NULL AND NEW.erased_at <> '' " +
+        "AND NEW.content = '[REDACTED — GDPR Art.17 erasure]' AND NEW.content_sha256 = '' AND NEW.title IS NULL " +
+        "AND NEW.id IS OLD.id AND NEW.archive_uid IS OLD.archive_uid " +
+        "AND NEW.source IS OLD.source AND NEW.source_ref IS OLD.source_ref " +
+        "AND NEW.created_at IS OLD.created_at AND NEW.source_timestamp IS OLD.source_timestamp " +
+        "AND NEW.injection_flagged IS OLD.injection_flagged AND NEW.injection_flags IS OLD.injection_flags) " +
+        "BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only; only a one-time canonical GDPR Art.17 redaction is permitted'); END"
+      );
+      const r = new RawArchive(db1).append({ source: 'claude', sourceRef: 'm1', content: 'pii' });
+      db1.close();
+
+      // Reopen → runMigrations() detects the frozen-uid trigger (sentinel) and upgrades it.
+      const db2 = new MindDB(file);
+      const trigSql = (db2.getDatabase().prepare(
+        "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='raw_archive_no_update'"
+      ).get() as { sql: string }).sql;
+      expect(trigSql).toContain('NEW.archive_uid <> OLD.archive_uid');   // upgraded
+      // The rotating erase() now succeeds under the upgraded trigger (would have been
+      // rejected by the old frozen-uid trigger).
+      const a2 = new RawArchive(db2);
+      const id = a2.getByUid(r.archiveUid)!.id;
+      expect(a2.erase(r.archiveUid, 'dsar')).toBe(true);
+      expect(a2.getById(id)!.archive_uid).toMatch(/^erased:/);
+      db2.close();
+    } finally {
+      try { rmSync(file); } catch { /* temp file cleanup best-effort */ }
+    }
+  });
 });
 
 describe('RawArchive store', () => {
@@ -286,33 +324,53 @@ describe('RawArchive GDPR Art.17 erasure', () => {
   beforeEach(() => { db = new MindDB(':memory:'); archive = new RawArchive(db); });
   afterEach(() => { db.close(); });
 
-  it('erase() redacts content in place, stamps erased_at/erased_reason, freezes the identity skeleton', () => {
+  it('erase() redacts content, ROTATES archive_uid to an opaque id, freezes the audit skeleton', () => {
     const r = archive.append({ source: 'claude', sourceRef: 'e1', title: 'My PII note', content: 'sensitive personal data' });
     const before = archive.getByUid(r.archiveUid)!;
 
     expect(archive.erase(r.archiveUid, 'data-subject request #42')).toBe(true);
 
-    const after = archive.getByUid(r.archiveUid)!;
+    // The original content-derived uid no longer resolves — the re-identification
+    // linkage is severed. The row is found by its frozen id instead.
+    expect(archive.getByUid(r.archiveUid)).toBeUndefined();
+    const after = archive.getById(before.id)!;
     expect(after.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);   // PII gone from the row
     expect(after.content_sha256).toBe('');
     expect(after.title).toBeNull();
     expect(after.erased_at).not.toBeNull();
     expect(after.erased_reason).toBe('data-subject request #42');
-    // identity skeleton frozen — the audit record that an item existed survives:
-    expect(after.archive_uid).toBe(before.archive_uid);
+    // archive_uid rotated to an opaque, non-content-derived value (was the content
+    // hash — a low-entropy re-identification vector):
+    expect(after.archive_uid).not.toBe(before.archive_uid);
+    expect(after.archive_uid).toMatch(/^erased:[0-9a-f]{64}$/);
+    // audit skeleton frozen — the record that an item existed + was erased survives:
+    expect(after.id).toBe(before.id);
     expect(after.source).toBe('claude');
     expect(after.source_ref).toBe('e1');
     expect(after.created_at).toBe(before.created_at);
   });
 
-  it('erase() is idempotent — a second call is a no-op and returns false', () => {
+  it('erase() is idempotent — a second call on the original uid is a no-op and returns false', () => {
     const r = archive.append({ source: 'claude', content: 'erase me once' });
+    const id = archive.getByUid(r.archiveUid)!.id;
     expect(archive.erase(r.archiveUid, 'first')).toBe(true);
-    const firstErasedAt = archive.getByUid(r.archiveUid)!.erased_at;
-    expect(archive.erase(r.archiveUid, 'second')).toBe(false);      // no-op
-    const row = archive.getByUid(r.archiveUid)!;
+    const firstErasedAt = archive.getById(id)!.erased_at;
+    expect(archive.erase(r.archiveUid, 'second')).toBe(false);      // uid rotated away → no match
+    const row = archive.getById(id)!;
     expect(row.erased_at).toBe(firstErasedAt);                      // erased_at unchanged
     expect(row.erased_reason).toBe('first');                        // original reason preserved
+  });
+
+  it('the trigger REJECTS a canonical redaction that does NOT rotate archive_uid (re-id vector guard)', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', sourceRef: 'x', content: 'body' });
+    // Canonical outcome in every way EXCEPT archive_uid is left unchanged → rejected,
+    // so the content-derived uid can never survive an erasure.
+    expect(() => raw.prepare(
+      `UPDATE raw_archive SET content = ?, content_sha256 = '', title = NULL,
+         erased_at = datetime('now'), erased_reason = 'x' WHERE archive_uid = ?`
+    ).run(RAW_ARCHIVE_REDACTION_MARKER, r.archiveUid)).toThrow(/append-only/);
+    expect(archive.getByUid(r.archiveUid)!.erased_at).toBeNull();   // untouched, not erased
   });
 
   it('erase() on an unknown uid returns false', () => {
@@ -340,11 +398,13 @@ describe('RawArchive GDPR Art.17 erasure', () => {
   it('the refined trigger BLOCKS re-erasure via direct UPDATE (row already erased)', () => {
     const raw = db.getDatabase();
     const r = archive.append({ source: 'claude', content: 'body' });
+    const id = archive.getByUid(r.archiveUid)!.id;
     archive.erase(r.archiveUid, 'first');
+    const newUid = archive.getById(id)!.archive_uid;   // rotated on erase — target by it
     // OLD.erased_at is already set → the erase-once guard rejects a second transition.
     expect(() => raw.prepare(
       "UPDATE raw_archive SET content='again', erased_at=datetime('now') WHERE archive_uid=?"
-    ).run(r.archiveUid)).toThrow(/append-only/);
+    ).run(newUid)).toThrow(/append-only/);
   });
 
   it('DELETE is still absolutely blocked after the trigger refinement', () => {
@@ -383,17 +443,21 @@ describe('RawArchive GDPR Art.17 erasure', () => {
     ).run(RAW_ARCHIVE_REDACTION_MARKER, r.archiveUid)).toThrow(/append-only/);
   });
 
-  it('reconstructSource returns the redacted row (marker + erased_at) after erasure', () => {
+  it('reconstructSource returns [] after erasure — the uid rotation severs the frame→archive link', () => {
     new SessionStore(db).ensure('harvest', 'harvest', 'test');
     const frames = new FrameStore(db);
     const r = archive.append({ source: 'claude', sourceRef: 'c1', content: 'to be erased' });
+    const id = archive.getByUid(r.archiveUid)!.id;
     const f = frames.createIFrame('harvest', 'summary', 'normal', 'import');
     frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
     archive.erase(r.archiveUid, 'gdpr');
-    const rows = archive.reconstructSource(f.id);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
-    expect(rows[0].erased_at).not.toBeNull();
+    // The frame still links the OLD content-derived uid, which no longer resolves →
+    // the link is intentionally severed (a real DSAR also deletes the frame). The
+    // redacted row stays directly auditable by its frozen id.
+    expect(archive.reconstructSource(f.id)).toHaveLength(0);
+    const row = archive.getById(id)!;
+    expect(row.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(row.erased_at).not.toBeNull();
   });
 
   it('eraseByFrame erases every archive row a frame links to and returns the count (idempotent)', () => {
@@ -401,14 +465,16 @@ describe('RawArchive GDPR Art.17 erasure', () => {
     const frames = new FrameStore(db);
     const a = archive.append({ source: 'claude', sourceRef: 'p1', content: 'body' });
     const b = archive.append({ source: 'claude', sourceRef: 'p2', content: 'body' });
+    const aId = archive.getByUid(a.archiveUid)!.id;   // frozen handles (uids rotate on erase)
+    const bId = archive.getByUid(b.archiveUid)!.id;
     const f = frames.createIFrame('harvest', 'merged', 'normal', 'import');
     const meta = withArchiveUid(withArchiveUid({}, a.archiveUid), b.archiveUid);
     frames.setMetadata(f.id, JSON.stringify(meta));
 
     expect(archive.eraseByFrame(f.id, 'subject erasure')).toBe(2);   // both newly redacted
-    expect(archive.getByUid(a.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
-    expect(archive.getByUid(b.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
-    expect(archive.eraseByFrame(f.id, 'again')).toBe(0);             // already erased → 0
+    expect(archive.getById(aId)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.getById(bId)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.eraseByFrame(f.id, 'again')).toBe(0);             // already erased (uids rotated) → 0
   });
 });
 
@@ -448,8 +514,9 @@ describe('raw_archive erasure migration', () => {
       const cols = (db2.getDatabase().prepare("PRAGMA table_info('raw_archive')").all() as { name: string }[]).map(c => c.name);
       expect(cols).toEqual(expect.arrayContaining(['erased_at', 'erased_reason']));
       // Erasure now works on the pre-existing row — the OLD absolute trigger would have blocked it.
+      const legacyId = archive.getByUid('legacyuid')!.id;
       expect(archive.erase('legacyuid', 'gdpr backfill')).toBe(true);
-      expect(archive.getByUid('legacyuid')!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+      expect(archive.getById(legacyId)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);   // uid rotated → resolve by id
       db2.close();
     } finally {
       try { rmSync(file); } catch { /* temp file cleanup best-effort */ }

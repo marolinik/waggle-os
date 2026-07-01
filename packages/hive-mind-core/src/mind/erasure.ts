@@ -14,10 +14,10 @@
  * Every multi-table erasure runs in ONE better-sqlite3 transaction — a partial
  * erasure is a compliance failure (all-or-nothing).
  *
- * NOT complete for every residual: archive_uid = sha256(source∥sourceRef∥content)
- * stays frozen post-erasure (re-identification vector for low-entropy content);
- * opaque-id rotation is a documented follow-up (it interacts with frame→archive
- * link stability).
+ * archive_uid = sha256(source∥sourceRef∥content) is ROTATED to an opaque id on erase
+ * (raw-archive.ts erase()), so the retained audit skeleton carries no content-derived
+ * value — the low-entropy re-identification residual is closed. (source_ref, preserved
+ * verbatim, is the one remaining retained-skeleton residual and MAY carry PII.)
  */
 
 import type { MindDB } from './db.js';

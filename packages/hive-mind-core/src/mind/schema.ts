@@ -320,8 +320,9 @@ CREATE TABLE IF NOT EXISTS raw_archive (
   source_timestamp TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   -- GDPR Art.17 erasure: NULL until a data-subject erasure request. When set, the
-  -- identity skeleton (uid/source/refs/timestamps) is frozen as the audit record
-  -- while content/content_sha256/title are overwritten with a redaction marker.
+  -- audit skeleton (id/source/refs/timestamps) is frozen as the audit record while
+  -- content/content_sha256/title are redacted AND archive_uid is ROTATED to an opaque
+  -- id (the old content-derived uid was a re-identification vector — see the trigger).
   erased_at TEXT,
   erased_reason TEXT
 );
@@ -330,10 +331,13 @@ CREATE INDEX IF NOT EXISTS idx_raw_archive_created ON raw_archive (created_at DE
 -- Append-only EXCEPT a single, one-directional GDPR Art.17 redaction. The trigger
 -- pins the EXACT permitted outcome — not just the transition — so raw SQL cannot
 -- abuse the erasure path to forge audit content: it is allowed ONLY when erased_at
--- goes NULL -> a non-empty value, every identity column is unchanged, AND the row
+-- goes NULL -> a non-empty value, every AUDIT column (id/source/refs/timestamps/
+-- injection) is unchanged, the archive_uid is ROTATED to a new non-empty value
+-- (content-derived uid must not survive — re-identification vector), AND the row
 -- lands on the canonical redaction (content = marker, content_sha256 = '', title
 -- NULL). erased_reason is the only free field. The content literal below MUST stay
--- byte-identical to RAW_ARCHIVE_REDACTION_MARKER in raw-archive.ts.
+-- byte-identical to RAW_ARCHIVE_REDACTION_MARKER in raw-archive.ts, and this whole
+-- WHEN clause byte-identical to the db.ts runMigrations() recreation.
 CREATE TRIGGER IF NOT EXISTS raw_archive_no_update
 BEFORE UPDATE ON raw_archive
 WHEN NOT (
@@ -342,7 +346,8 @@ WHEN NOT (
   AND NEW.content_sha256 = ''
   AND NEW.title IS NULL
   AND NEW.id IS OLD.id
-  AND NEW.archive_uid IS OLD.archive_uid
+  AND NEW.archive_uid <> OLD.archive_uid
+  AND NEW.archive_uid <> ''
   AND NEW.source IS OLD.source
   AND NEW.source_ref IS OLD.source_ref
   AND NEW.created_at IS OLD.created_at

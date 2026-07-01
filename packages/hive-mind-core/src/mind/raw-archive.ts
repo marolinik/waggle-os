@@ -12,7 +12,7 @@
  * would DELETE+INSERT and trip the no-delete trigger).
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import type { MindDB } from './db.js';
 import { scanForInjection } from '../injection-scanner.js';
 
@@ -123,6 +123,15 @@ export class RawArchive {
       .get(archiveUid) as RawArchiveRow | undefined;
   }
 
+  /** Look up a row by its stable numeric id — the audit handle that survives an
+   *  Art.17 erasure's archive_uid rotation (unlike getByUid, which can no longer
+   *  find an erased row by its original content-derived uid). Undefined if absent. */
+  getById(id: number): RawArchiveRow | undefined {
+    return this.db.getDatabase()
+      .prepare('SELECT * FROM raw_archive WHERE id = ?')
+      .get(id) as RawArchiveRow | undefined;
+  }
+
   /**
    * Resolve every archive-uid link on a frame → its archive rows. Accepts both
    * the canonical `archiveUids: string[]` and the legacy scalar `archiveUid`
@@ -164,30 +173,45 @@ export class RawArchive {
 
   /**
    * GDPR Art.17 right-to-erasure. Redacts ONE archive row in place: content ->
-   * marker, content_sha256 -> '', title -> NULL, and stamps erased_at/erased_reason.
-   * The identity skeleton (archive_uid/source/source_ref/timestamps/injection flags)
-   * is frozen — the audit record that an item existed and was erased survives. The
+   * marker, content_sha256 -> '', title -> NULL, ROTATES archive_uid to an opaque
+   * random id, and stamps erased_at/erased_reason. The audit skeleton (id/source/
+   * source_ref/timestamps/injection flags) is frozen — the record that an item
+   * existed and was erased survives — but every CONTENT-DERIVED value is gone. The
    * refined raw_archive_no_update trigger permits exactly this one canonical outcome
-   * (content=marker, content_sha256='', title NULL) — raw SQL cannot use the erase
-   * path to forge audit content. Idempotent: a second call is a no-op, returns false.
+   * (content=marker, content_sha256='', title NULL, archive_uid rotated ≠ OLD) — raw
+   * SQL cannot use the erase path to forge audit content. Idempotent: the uid is
+   * rotated, so a second call on the ORIGINAL uid matches nothing and returns false.
    *
-   * RETAINED-SKELETON RESIDUALS (founder-ratified — keep skeleton over max erasure):
+   * WHY ROTATE archive_uid: it was sha256(source ∥ sourceRef ∥ content), so freezing
+   * it left a re-identification vector — for low-entropy content an auditor holding
+   * the "erased" DB could brute-force the original by hashing candidates. A fresh
+   * 256-bit RANDOM uid (not derived from OLD) severs that linkage; the row stays
+   * findable by its frozen id (getById), not by the original uid.
+   *
+   * RETAINED-SKELETON RESIDUAL (founder-ratified — keep skeleton over max erasure):
    *   - source_ref is preserved verbatim and MAY carry PII (thread-id/filename/URL);
    *     harvest adapters should avoid placing raw identifiers there.
-   *   - archive_uid = sha256(source ∥ sourceRef ∥ content) is itself a content-derived
-   *     hash and stays frozen, so for low-entropy content it remains a re-identification
-   *     vector even though content_sha256 is blanked. Making it opaque is a follow-up.
+   * CONSEQUENCE — re-harvest is no longer suppressed: rotating the uid frees append()'s
+   * content→uid dedup key, so re-importing an already-erased source re-materializes its
+   * archive row (its searchable summary/raw-turns/KG already re-materialize on re-import
+   * today, independent of this — a pre-existing gap). "Sticky" erasure across re-import is
+   * a separate cross-path compliance feature (an erased-subject suppression list); a
+   * content-keyed tombstone is NOT the fix — it would reintroduce the very content-derived
+   * re-identification vector this rotation removes.
    * THREAT MODEL: append-only + erase-once are trigger-enforced — tamper-EVIDENT
    * against ordinary INSERT/UPDATE/DELETE, NOT tamper-proof against a caller with DDL
    * rights (DROP TRIGGER/TABLE bypasses it).
    */
   erase(archiveUid: string, reason: string): boolean {
+    // Opaque, RANDOM replacement uid (not derived from OLD/content). 256-bit random
+    // → collision-safe under UNIQUE and guaranteed ≠ OLD, which the trigger requires.
+    const opaqueUid = `erased:${randomBytes(32).toString('hex')}`;
     const res = this.db.getDatabase().prepare(
       `UPDATE raw_archive
-         SET content = ?, content_sha256 = '', title = NULL,
+         SET archive_uid = ?, content = ?, content_sha256 = '', title = NULL,
              erased_at = datetime('now'), erased_reason = ?
        WHERE archive_uid = ? AND erased_at IS NULL`
-    ).run(RAW_ARCHIVE_REDACTION_MARKER, reason, archiveUid);
+    ).run(opaqueUid, RAW_ARCHIVE_REDACTION_MARKER, reason, archiveUid);
     return res.changes > 0;
   }
 

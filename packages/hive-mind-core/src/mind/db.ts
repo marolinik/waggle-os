@@ -337,21 +337,27 @@ export class MindDB {
     // CREATE TRIGGER IF NOT EXISTS will NOT swap an existing trigger, so we DROP +
     // CREATE — but ATOMICALLY (one transaction), else a crash or a concurrent WAL
     // writer between the two statements would see raw_archive with NO update guard.
-    // Sentinel: skip once the live trigger already carries the Art.17 clause (both a
-    // perf win and it stops re-opening the swap window on every process start). The
-    // WHEN clause is kept BYTE-IDENTICAL to the SCHEMA_SQL version in schema.ts, and
-    // the content literal to RAW_ARCHIVE_REDACTION_MARKER in raw-archive.ts.
+    // Sentinel: skip once the live trigger already carries the archive_uid-ROTATION
+    // clause (both a perf win and it stops re-opening the swap window on every process
+    // start). An OLD trigger that still froze archive_uid ('IS OLD.archive_uid') lacks
+    // this substring, so it is upgraded on reopen — required, else the rotating erase()
+    // would be rejected on an existing DB. The WHEN clause is kept BYTE-IDENTICAL to the
+    // SCHEMA_SQL version in schema.ts, and the content literal to
+    // RAW_ARCHIVE_REDACTION_MARKER in raw-archive.ts. (Forward-only: this does NOT
+    // rotate the uid of rows erased under the old trigger — erase() shipped 2026-07-01,
+    // so real DBs have ~zero such rows; the trigger only permits rotation during the
+    // one-time erased_at NULL->set transition, not on an already-erased row.)
     const liveNoUpdate = this.db.prepare(
       "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='raw_archive_no_update'"
     ).get() as { sql?: string } | undefined;
-    if (!liveNoUpdate?.sql || !liveNoUpdate.sql.includes('Art.17')) {
+    if (!liveNoUpdate?.sql || !liveNoUpdate.sql.includes('NEW.archive_uid <> OLD.archive_uid')) {
       this.db.transaction(() => {
         this.db.exec('DROP TRIGGER IF EXISTS raw_archive_no_update');
         this.db.exec(
           "CREATE TRIGGER raw_archive_no_update BEFORE UPDATE ON raw_archive " +
           "WHEN NOT (OLD.erased_at IS NULL AND NEW.erased_at IS NOT NULL AND NEW.erased_at <> '' " +
           "AND NEW.content = '[REDACTED — GDPR Art.17 erasure]' AND NEW.content_sha256 = '' AND NEW.title IS NULL " +
-          "AND NEW.id IS OLD.id AND NEW.archive_uid IS OLD.archive_uid " +
+          "AND NEW.id IS OLD.id AND NEW.archive_uid <> OLD.archive_uid AND NEW.archive_uid <> '' " +
           "AND NEW.source IS OLD.source AND NEW.source_ref IS OLD.source_ref " +
           "AND NEW.created_at IS OLD.created_at AND NEW.source_timestamp IS OLD.source_timestamp " +
           "AND NEW.injection_flagged IS OLD.injection_flagged AND NEW.injection_flags IS OLD.injection_flags) " +
