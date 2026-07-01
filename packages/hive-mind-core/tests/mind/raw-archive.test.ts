@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { MindDB } from '../../src/mind/db.js';
-import { RawArchive, hashRaw, readArchiveUids, withArchiveUid } from '../../src/mind/raw-archive.js';
+import { RawArchive, hashRaw, readArchiveUids, withArchiveUid, RAW_ARCHIVE_REDACTION_MARKER } from '../../src/mind/raw-archive.js';
 import { FrameStore } from '../../src/mind/frames.js';
 import { SessionStore } from '../../src/mind/sessions.js';
 
@@ -19,6 +19,7 @@ describe('raw_archive schema', () => {
     expect(cols).toEqual(expect.arrayContaining([
       'id', 'archive_uid', 'source', 'source_ref', 'title', 'content',
       'content_sha256', 'injection_flagged', 'injection_flags', 'source_timestamp', 'created_at',
+      'erased_at', 'erased_reason',
     ]));
   });
 
@@ -276,5 +277,182 @@ describe('RawArchive store', () => {
     const rows = archive.reconstructSource(f.id);
     // Must match archiveUids order exactly — no implicit sort applied.
     expect(rows.map(r => r.source_ref)).toEqual(['part-1', 'part-2']);
+  });
+});
+
+describe('RawArchive GDPR Art.17 erasure', () => {
+  let db: MindDB;
+  let archive: RawArchive;
+  beforeEach(() => { db = new MindDB(':memory:'); archive = new RawArchive(db); });
+  afterEach(() => { db.close(); });
+
+  it('erase() redacts content in place, stamps erased_at/erased_reason, freezes the identity skeleton', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'e1', title: 'My PII note', content: 'sensitive personal data' });
+    const before = archive.getByUid(r.archiveUid)!;
+
+    expect(archive.erase(r.archiveUid, 'data-subject request #42')).toBe(true);
+
+    const after = archive.getByUid(r.archiveUid)!;
+    expect(after.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);   // PII gone from the row
+    expect(after.content_sha256).toBe('');
+    expect(after.title).toBeNull();
+    expect(after.erased_at).not.toBeNull();
+    expect(after.erased_reason).toBe('data-subject request #42');
+    // identity skeleton frozen — the audit record that an item existed survives:
+    expect(after.archive_uid).toBe(before.archive_uid);
+    expect(after.source).toBe('claude');
+    expect(after.source_ref).toBe('e1');
+    expect(after.created_at).toBe(before.created_at);
+  });
+
+  it('erase() is idempotent — a second call is a no-op and returns false', () => {
+    const r = archive.append({ source: 'claude', content: 'erase me once' });
+    expect(archive.erase(r.archiveUid, 'first')).toBe(true);
+    const firstErasedAt = archive.getByUid(r.archiveUid)!.erased_at;
+    expect(archive.erase(r.archiveUid, 'second')).toBe(false);      // no-op
+    const row = archive.getByUid(r.archiveUid)!;
+    expect(row.erased_at).toBe(firstErasedAt);                      // erased_at unchanged
+    expect(row.erased_reason).toBe('first');                        // original reason preserved
+  });
+
+  it('erase() on an unknown uid returns false', () => {
+    expect(archive.erase('nope'.repeat(16), 'x')).toBe(false);
+  });
+
+  it('the refined trigger BLOCKS a direct UPDATE that mutates an identity column even while erasing', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', sourceRef: 'id1', content: 'body' });
+    // Attempt to redact BUT also change source (identity) — must be rejected wholesale.
+    expect(() => raw.prepare(
+      "UPDATE raw_archive SET content='x', source='evil', erased_at=datetime('now') WHERE archive_uid=?"
+    ).run(r.archiveUid)).toThrow(/append-only/);
+    expect(archive.getByUid(r.archiveUid)!.source).toBe('claude'); // untouched
+  });
+
+  it('the refined trigger BLOCKS a non-erasure UPDATE (content change without setting erased_at)', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', content: 'body' });
+    expect(() => raw.prepare(
+      "UPDATE raw_archive SET content='tampered' WHERE archive_uid=?"
+    ).run(r.archiveUid)).toThrow(/append-only/);
+  });
+
+  it('the refined trigger BLOCKS re-erasure via direct UPDATE (row already erased)', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', content: 'body' });
+    archive.erase(r.archiveUid, 'first');
+    // OLD.erased_at is already set → the erase-once guard rejects a second transition.
+    expect(() => raw.prepare(
+      "UPDATE raw_archive SET content='again', erased_at=datetime('now') WHERE archive_uid=?"
+    ).run(r.archiveUid)).toThrow(/append-only/);
+  });
+
+  it('DELETE is still absolutely blocked after the trigger refinement', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', content: 'body' });
+    expect(() => raw.prepare('DELETE FROM raw_archive WHERE archive_uid=?').run(r.archiveUid))
+      .toThrow(/append-only/);
+  });
+
+  it('the trigger BLOCKS a forged "erasure" that writes arbitrary content (not the marker)', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', content: 'ORIGINAL TRUTH' });
+    // Attacker stamps erased_at + freezes identity but writes fabricated content with
+    // a self-consistent hash — must be rejected; only the canonical marker is legal.
+    expect(() => raw.prepare(
+      "UPDATE raw_archive SET content='FABRICATED', content_sha256='deadbeef', erased_at=datetime('now') WHERE archive_uid=?"
+    ).run(r.archiveUid)).toThrow(/append-only/);
+    expect(archive.getByUid(r.archiveUid)!.content).toBe('ORIGINAL TRUTH');  // untouched
+  });
+
+  it('the trigger BLOCKS the marker with a NON-empty content_sha256 (no forged integrity hash)', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', content: 'body' });
+    expect(() => raw.prepare(
+      "UPDATE raw_archive SET content=?, content_sha256='deadbeef', erased_at=datetime('now') WHERE archive_uid=?"
+    ).run(RAW_ARCHIVE_REDACTION_MARKER, r.archiveUid)).toThrow(/append-only/);
+  });
+
+  it('the trigger BLOCKS a degenerate erased_at = empty string', () => {
+    const raw = db.getDatabase();
+    const r = archive.append({ source: 'claude', content: 'body' });
+    // erased_at='' is IS NOT NULL but must be rejected — JS truthiness would read it
+    // as "not erased" while the content was already overwritten.
+    expect(() => raw.prepare(
+      "UPDATE raw_archive SET content=?, content_sha256='', title=NULL, erased_at='' WHERE archive_uid=?"
+    ).run(RAW_ARCHIVE_REDACTION_MARKER, r.archiveUid)).toThrow(/append-only/);
+  });
+
+  it('reconstructSource returns the redacted row (marker + erased_at) after erasure', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    const r = archive.append({ source: 'claude', sourceRef: 'c1', content: 'to be erased' });
+    const f = frames.createIFrame('harvest', 'summary', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ archiveUids: [r.archiveUid] }));
+    archive.erase(r.archiveUid, 'gdpr');
+    const rows = archive.reconstructSource(f.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(rows[0].erased_at).not.toBeNull();
+  });
+
+  it('eraseByFrame erases every archive row a frame links to and returns the count (idempotent)', () => {
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    const frames = new FrameStore(db);
+    const a = archive.append({ source: 'claude', sourceRef: 'p1', content: 'body' });
+    const b = archive.append({ source: 'claude', sourceRef: 'p2', content: 'body' });
+    const f = frames.createIFrame('harvest', 'merged', 'normal', 'import');
+    const meta = withArchiveUid(withArchiveUid({}, a.archiveUid), b.archiveUid);
+    frames.setMetadata(f.id, JSON.stringify(meta));
+
+    expect(archive.eraseByFrame(f.id, 'subject erasure')).toBe(2);   // both newly redacted
+    expect(archive.getByUid(a.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.getByUid(b.archiveUid)!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+    expect(archive.eraseByFrame(f.id, 'again')).toBe(0);             // already erased → 0
+  });
+});
+
+describe('raw_archive erasure migration', () => {
+  it('a pre-erasure DB (old absolute trigger, no erased_* cols) is upgraded to the redaction-aware trigger on reopen', () => {
+    const file = join(tmpdir(), `raw-archive-erase-mig-${process.pid}-${Date.now()}.db`);
+    try {
+      // Simulate a pre-erasure install: raw_archive WITHOUT erased_* columns and with
+      // the OLD absolute no-update trigger, carrying a pre-existing row.
+      const db1 = new MindDB(file);
+      db1.getDatabase().exec(
+        'DROP TRIGGER IF EXISTS raw_archive_no_update;' +
+        'DROP TRIGGER IF EXISTS raw_archive_no_delete;' +
+        'DROP TABLE IF EXISTS raw_archive;' +
+        `CREATE TABLE raw_archive (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           archive_uid TEXT NOT NULL UNIQUE, source TEXT NOT NULL, source_ref TEXT,
+           title TEXT, content TEXT NOT NULL, content_sha256 TEXT NOT NULL,
+           injection_flagged INTEGER NOT NULL DEFAULT 0, injection_flags TEXT NOT NULL DEFAULT '',
+           source_timestamp TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')));` +
+        `CREATE TRIGGER raw_archive_no_update BEFORE UPDATE ON raw_archive ` +
+        `BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END;` +
+        `INSERT INTO raw_archive (archive_uid, source, content, content_sha256) ` +
+        `VALUES ('legacyuid', 'claude', 'old pii', 'legacyuid');`
+      );
+      // Negative pre-condition: the OLD absolute trigger rejects ANY update (the
+      // simulated legacy table has no erased_* columns yet), so the post-reopen erase()
+      // success proves the swap end-to-end, not a masked regression.
+      expect(() => db1.getDatabase().prepare(
+        "UPDATE raw_archive SET content='x' WHERE archive_uid='legacyuid'"
+      ).run()).toThrow(/append-only/);
+      db1.close();
+
+      // Reopen → runMigrations() adds erased_* columns + swaps the trigger in place.
+      const db2 = new MindDB(file);
+      const archive = new RawArchive(db2);
+      const cols = (db2.getDatabase().prepare("PRAGMA table_info('raw_archive')").all() as { name: string }[]).map(c => c.name);
+      expect(cols).toEqual(expect.arrayContaining(['erased_at', 'erased_reason']));
+      // Erasure now works on the pre-existing row — the OLD absolute trigger would have blocked it.
+      expect(archive.erase('legacyuid', 'gdpr backfill')).toBe(true);
+      expect(archive.getByUid('legacyuid')!.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+      db2.close();
+    } finally {
+      try { rmSync(file); } catch { /* temp file cleanup best-effort */ }
+    }
   });
 });

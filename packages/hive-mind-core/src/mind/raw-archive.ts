@@ -36,7 +36,13 @@ export interface RawArchiveRow {
   injection_flags: string;
   source_timestamp: string | null;
   created_at: string;
+  /** GDPR Art.17: set once when this row's content has been redacted; NULL otherwise. */
+  erased_at: string | null;
+  erased_reason: string | null;
 }
+
+/** Placed in `content` when a row is erased under GDPR Art.17 (right to erasure). */
+export const RAW_ARCHIVE_REDACTION_MARKER = '[REDACTED — GDPR Art.17 erasure]';
 
 /** sha256 hex over the raw, untouched content (NOT hashFrameContent — that strips/trims). */
 export function hashRaw(content: string): string {
@@ -154,5 +160,63 @@ export class RawArchive {
 
   count(): number {
     return (this.db.getDatabase().prepare('SELECT COUNT(*) as c FROM raw_archive').get() as { c: number }).c;
+  }
+
+  /**
+   * GDPR Art.17 right-to-erasure. Redacts ONE archive row in place: content ->
+   * marker, content_sha256 -> '', title -> NULL, and stamps erased_at/erased_reason.
+   * The identity skeleton (archive_uid/source/source_ref/timestamps/injection flags)
+   * is frozen — the audit record that an item existed and was erased survives. The
+   * refined raw_archive_no_update trigger permits exactly this one canonical outcome
+   * (content=marker, content_sha256='', title NULL) — raw SQL cannot use the erase
+   * path to forge audit content. Idempotent: a second call is a no-op, returns false.
+   *
+   * RETAINED-SKELETON RESIDUALS (founder-ratified — keep skeleton over max erasure):
+   *   - source_ref is preserved verbatim and MAY carry PII (thread-id/filename/URL);
+   *     harvest adapters should avoid placing raw identifiers there.
+   *   - archive_uid = sha256(source ∥ sourceRef ∥ content) is itself a content-derived
+   *     hash and stays frozen, so for low-entropy content it remains a re-identification
+   *     vector even though content_sha256 is blanked. Making it opaque is a follow-up.
+   * THREAT MODEL: append-only + erase-once are trigger-enforced — tamper-EVIDENT
+   * against ordinary INSERT/UPDATE/DELETE, NOT tamper-proof against a caller with DDL
+   * rights (DROP TRIGGER/TABLE bypasses it).
+   */
+  erase(archiveUid: string, reason: string): boolean {
+    const res = this.db.getDatabase().prepare(
+      `UPDATE raw_archive
+         SET content = ?, content_sha256 = '', title = NULL,
+             erased_at = datetime('now'), erased_reason = ?
+       WHERE archive_uid = ? AND erased_at IS NULL`
+    ).run(RAW_ARCHIVE_REDACTION_MARKER, reason, archiveUid);
+    return res.changes > 0;
+  }
+
+  /**
+   * Redact every archive row a frame links to (via its metadata.archiveUids, incl.
+   * the legacy scalar). Returns the count of rows newly redacted (already-erased
+   * rows are skipped).
+   *
+   * SCOPE — provenance rows ONLY. This is NOT a complete GDPR Art.17 data-subject
+   * erasure: the DERIVED memory_frames (whose summaries quote the source) and their
+   * FTS / vector / KnowledgeGraph projections still hold the PII and remain
+   * searchable and recall-able. A full DSAR flow MUST pair this with a frame + index
+   * + KG erasure. It also reaches only rows linked from THIS frame — orphan rows,
+   * other frames, and same-source_ref rows are not swept (a subject-level sweep by
+   * source_ref is a follow-up).
+   */
+  eraseByFrame(frameId: number, reason: string): number {
+    const row = this.db.getDatabase()
+      .prepare('SELECT metadata FROM memory_frames WHERE id = ?')
+      .get(frameId) as { metadata?: string } | undefined;
+    if (!row?.metadata) return 0;
+    let meta: Record<string, unknown>;
+    try { meta = JSON.parse(row.metadata) as Record<string, unknown>; }
+    catch { return 0; }
+    if (!meta || typeof meta !== 'object') return 0;
+    let erased = 0;
+    for (const uid of readArchiveUids(meta)) {
+      if (this.erase(uid, reason)) erased++;
+    }
+    return erased;
   }
 }

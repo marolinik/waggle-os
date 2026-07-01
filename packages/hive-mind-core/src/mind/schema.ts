@@ -305,7 +305,8 @@ CREATE INDEX IF NOT EXISTS idx_chunks_frame ON memory_frame_chunks (frame_id);
 -- Verbatim Provenance Archive (#7, 2026-06-30): append-only, immutable, full-fidelity
 -- copy of each harvested source item. Distilled/imported frames link back via
 -- memory_frames.metadata.archiveUid. NOT part of the retrieval corpus (no FTS/vec) —
--- audit/reconstruction only. Append-only triggers mirror ai_interactions (Layer 7).
+-- audit/reconstruction only. Append-only triggers mirror ai_interactions (Layer 7),
+-- with ONE exception: a one-time GDPR Art.17 redaction (see raw_archive_no_update).
 CREATE TABLE IF NOT EXISTS raw_archive (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   archive_uid TEXT NOT NULL UNIQUE,
@@ -317,13 +318,39 @@ CREATE TABLE IF NOT EXISTS raw_archive (
   injection_flagged INTEGER NOT NULL DEFAULT 0,
   injection_flags TEXT NOT NULL DEFAULT '',
   source_timestamp TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- GDPR Art.17 erasure: NULL until a data-subject erasure request. When set, the
+  -- identity skeleton (uid/source/refs/timestamps) is frozen as the audit record
+  -- while content/content_sha256/title are overwritten with a redaction marker.
+  erased_at TEXT,
+  erased_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_raw_archive_source_ref ON raw_archive (source, source_ref);
 CREATE INDEX IF NOT EXISTS idx_raw_archive_created ON raw_archive (created_at DESC);
+-- Append-only EXCEPT a single, one-directional GDPR Art.17 redaction. The trigger
+-- pins the EXACT permitted outcome — not just the transition — so raw SQL cannot
+-- abuse the erasure path to forge audit content: it is allowed ONLY when erased_at
+-- goes NULL -> a non-empty value, every identity column is unchanged, AND the row
+-- lands on the canonical redaction (content = marker, content_sha256 = '', title
+-- NULL). erased_reason is the only free field. The content literal below MUST stay
+-- byte-identical to RAW_ARCHIVE_REDACTION_MARKER in raw-archive.ts.
 CREATE TRIGGER IF NOT EXISTS raw_archive_no_update
 BEFORE UPDATE ON raw_archive
-BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END;
+WHEN NOT (
+  OLD.erased_at IS NULL AND NEW.erased_at IS NOT NULL AND NEW.erased_at <> ''
+  AND NEW.content = '[REDACTED — GDPR Art.17 erasure]'
+  AND NEW.content_sha256 = ''
+  AND NEW.title IS NULL
+  AND NEW.id IS OLD.id
+  AND NEW.archive_uid IS OLD.archive_uid
+  AND NEW.source IS OLD.source
+  AND NEW.source_ref IS OLD.source_ref
+  AND NEW.created_at IS OLD.created_at
+  AND NEW.source_timestamp IS OLD.source_timestamp
+  AND NEW.injection_flagged IS OLD.injection_flagged
+  AND NEW.injection_flags IS OLD.injection_flags
+)
+BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only; only a one-time canonical GDPR Art.17 redaction is permitted'); END;
 CREATE TRIGGER IF NOT EXISTS raw_archive_no_delete
 BEFORE DELETE ON raw_archive
 BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END;

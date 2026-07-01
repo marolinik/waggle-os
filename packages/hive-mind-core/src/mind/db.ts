@@ -300,7 +300,8 @@ export class MindDB {
 
     // #7 (2026-06-30): verbatim provenance archive — append-only, immutable.
     // Idempotent; SCHEMA_SQL carries the same DDL for fresh DBs. Not in the
-    // retrieval corpus (no FTS/vec). Append-only triggers mirror ai_interactions.
+    // retrieval corpus (no FTS/vec). Append-only triggers mirror ai_interactions,
+    // EXCEPT a one-time GDPR Art.17 redaction (see raw_archive_no_update WHEN clause).
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS raw_archive (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -313,14 +314,51 @@ export class MindDB {
         injection_flagged INTEGER NOT NULL DEFAULT 0,
         injection_flags TEXT NOT NULL DEFAULT '',
         source_timestamp TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        erased_at TEXT,
+        erased_reason TEXT
       );
       CREATE INDEX IF NOT EXISTS idx_raw_archive_source_ref ON raw_archive (source, source_ref);
       CREATE INDEX IF NOT EXISTS idx_raw_archive_created ON raw_archive (created_at DESC);
     `);
-    this.db.exec(
-      "CREATE TRIGGER IF NOT EXISTS raw_archive_no_update BEFORE UPDATE ON raw_archive BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END"
-    );
+    // GDPR Art.17 columns for pre-erasure DBs (idempotent ADD COLUMN, same pattern
+    // as memory_frames.source/metadata above). MUST precede the trigger below, which
+    // references NEW.erased_at / OLD.erased_at. ALTER is DDL — it does NOT fire the
+    // BEFORE UPDATE trigger.
+    for (const col of ['erased_at', 'erased_reason'] as const) {
+      const has = this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM pragma_table_info('raw_archive') WHERE name=?"
+      ).get(col) as { cnt: number };
+      if (has.cnt === 0) {
+        this.db.exec(`ALTER TABLE raw_archive ADD COLUMN ${col} TEXT`);
+      }
+    }
+    // Upgrade the legacy ABSOLUTE no-update trigger to the redaction-aware one.
+    // CREATE TRIGGER IF NOT EXISTS will NOT swap an existing trigger, so we DROP +
+    // CREATE — but ATOMICALLY (one transaction), else a crash or a concurrent WAL
+    // writer between the two statements would see raw_archive with NO update guard.
+    // Sentinel: skip once the live trigger already carries the Art.17 clause (both a
+    // perf win and it stops re-opening the swap window on every process start). The
+    // WHEN clause is kept BYTE-IDENTICAL to the SCHEMA_SQL version in schema.ts, and
+    // the content literal to RAW_ARCHIVE_REDACTION_MARKER in raw-archive.ts.
+    const liveNoUpdate = this.db.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='trigger' AND name='raw_archive_no_update'"
+    ).get() as { sql?: string } | undefined;
+    if (!liveNoUpdate?.sql || !liveNoUpdate.sql.includes('Art.17')) {
+      this.db.transaction(() => {
+        this.db.exec('DROP TRIGGER IF EXISTS raw_archive_no_update');
+        this.db.exec(
+          "CREATE TRIGGER raw_archive_no_update BEFORE UPDATE ON raw_archive " +
+          "WHEN NOT (OLD.erased_at IS NULL AND NEW.erased_at IS NOT NULL AND NEW.erased_at <> '' " +
+          "AND NEW.content = '[REDACTED — GDPR Art.17 erasure]' AND NEW.content_sha256 = '' AND NEW.title IS NULL " +
+          "AND NEW.id IS OLD.id AND NEW.archive_uid IS OLD.archive_uid " +
+          "AND NEW.source IS OLD.source AND NEW.source_ref IS OLD.source_ref " +
+          "AND NEW.created_at IS OLD.created_at AND NEW.source_timestamp IS OLD.source_timestamp " +
+          "AND NEW.injection_flagged IS OLD.injection_flagged AND NEW.injection_flags IS OLD.injection_flags) " +
+          "BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only; only a one-time canonical GDPR Art.17 redaction is permitted'); END"
+        );
+      })();
+    }
     this.db.exec(
       "CREATE TRIGGER IF NOT EXISTS raw_archive_no_delete BEFORE DELETE ON raw_archive BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END"
     );
