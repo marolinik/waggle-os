@@ -540,6 +540,11 @@ export interface Memory {
   source: string;
   sourceId?: string | null;
   sourceUrl?: string | null;
+  /** #7: whether a verbatim raw_archive row is linked (metadata.archiveUids), i.e.
+   *  whether "View original source" can actually load. Distinct from sourceId — an
+   *  auto-synced harvest summary carries a sourceId but no archive link, so the
+   *  affordance gates on THIS, not on sourceId presence. */
+  hasOriginalSource?: boolean;
   /** 0-100; B2 heuristic at import (source-trust × adapter × dedup). */
   confidence?: Confidence;
   /** Reuses the substrate `Importance` union (`frames.ts`). */

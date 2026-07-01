@@ -65,6 +65,7 @@ import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '
 import { parseTier, assertTierCapability, TierError } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { runConnectorFetch } from './connector-harvest.js';
+import { writeAutoSyncSummaryFrame } from './harvest-autosync-frame.js';
 import { runLoopTick } from './loop-executor.js';
 import { enqueueHeldAction } from './held-action-executor.js';
 import { workspaceRoutes } from './routes/workspaces.js';
@@ -1260,9 +1261,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
           let saved = 0;
           for (const item of items) {
-            const label = `[Harvest:${item.source}] ${item.title}`;
-            const content = item.content.slice(0, 4000);
-            personalFrameStore.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
+            // #7 Art.17: stamp the subject key (metadata.sourceId) so a subject-mode
+            // DSAR can reach this auto-synced summary — shared with the cron path.
+            writeAutoSyncSummaryFrame(personalFrameStore, item);
             saved++;
           }
           // R3-004: store the content digest so the manual harvest route can
@@ -1492,9 +1493,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 const items = adapter.scan(src.sourcePath);
                 let saved = 0;
                 for (const item of items) {
-                  const label = `[Harvest:${item.source}] ${item.title}`;
-                  const content = item.content.slice(0, 4000);
-                  personalFrames.createIFrame('harvest', `${label}\n\n${content}`, 'normal', 'import');
+                  // #7 Art.17: stamp the subject key (metadata.sourceId) so a
+                  // subject-mode DSAR reaches this cron-synced summary — shared helper.
+                  writeAutoSyncSummaryFrame(personalFrames, item);
                   saved++;
                 }
                 // R3-004: store the content digest for next-sync skip.

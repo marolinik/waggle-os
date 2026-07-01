@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Importance, MemoryFrame } from '@waggle/core';
-import { FrameStore, MindErasure, RawArchive, SessionStore } from '@waggle/core';
+import { FrameStore, MindErasure, RawArchive, SessionStore, readArchiveUids } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -109,6 +109,10 @@ export function normalizeToMemory(frame: MemoryFrame, mind: string, workspaceId?
     source: frame.source ?? 'user_stated',
     sourceId: typeof meta.sourceId === 'string' ? meta.sourceId : null,
     sourceUrl: typeof meta.sourceUrl === 'string' ? meta.sourceUrl : null,
+    // #7: "View original source" is offered only when a raw_archive row is actually
+    // linked — the SAME predicate reconstructSource uses. A sourceId-only frame
+    // (auto-synced summary) exposes its id but not a dead View-original button.
+    hasOriginalSource: readArchiveUids(meta).length > 0,
     confidence: typeof meta.confidence === 'number' ? meta.confidence : undefined,
     importance,
     evidence: stringArray(meta.evidence),

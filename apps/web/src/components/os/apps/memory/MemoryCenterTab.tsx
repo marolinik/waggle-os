@@ -496,7 +496,7 @@ export default function MemoryCenterTab({
               <div className="mt-2 text-xs text-muted-foreground/80 max-h-32 overflow-auto" dangerouslySetInnerHTML={{ __html: renderChatMarkdown(draftContent) }} />
             </div>
 
-            <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} onViewOriginalSource={viewOriginalSource} expanded={sourceExpanded} busy={sourceLoading} />
+            <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} onViewOriginalSource={viewOriginalSource} hasOriginalSource={selected.hasOriginalSource} expanded={sourceExpanded} busy={sourceLoading} />
 
             {sourceExpanded && (
               <div className="rounded-md border border-border bg-muted/30 p-2 space-y-2">

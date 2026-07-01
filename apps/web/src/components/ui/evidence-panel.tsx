@@ -13,9 +13,14 @@ interface EvidencePanelProps {
   sourceId?: string | null;
   sourceUrl?: string | null;
   evidence?: string[];
-  /** #7 "View original source": when supplied (and a sourceId exists), renders an
-   *  Eye button that opens the verbatim source view in the detail drawer. */
+  /** #7 "View original source": when supplied (and a linked archive exists, i.e.
+   *  hasOriginalSource), renders an Eye button that opens the verbatim source view
+   *  in the detail drawer. */
   onViewOriginalSource?: () => void;
+  /** Whether a verbatim raw_archive row is actually linked. Gates the Eye button so
+   *  a sourceId-only frame (e.g. an auto-synced summary) never shows a View-original
+   *  affordance that would 404 — see Memory.hasOriginalSource. */
+  hasOriginalSource?: boolean;
   /** Whether the source view is currently open (drives aria-expanded). */
   expanded?: boolean;
   /** Whether the source fetch is in flight (drives aria-busy + disables the button). */
@@ -23,7 +28,7 @@ interface EvidencePanelProps {
   className?: string;
 }
 
-export function EvidencePanel({ source, sourceId, sourceUrl, evidence, onViewOriginalSource, expanded, busy, className }: EvidencePanelProps) {
+export function EvidencePanel({ source, sourceId, sourceUrl, evidence, onViewOriginalSource, hasOriginalSource, expanded, busy, className }: EvidencePanelProps) {
   const hasEvidence = Array.isArray(evidence) && evidence.length > 0;
   if (!source && !sourceId && !sourceUrl && !hasEvidence) return null;
 
@@ -37,7 +42,7 @@ export function EvidencePanel({ source, sourceId, sourceUrl, evidence, onViewOri
       <div className="flex flex-wrap gap-1.5">
         {source && <EvidenceChip label={`source: ${source}`} />}
         {sourceId && <EvidenceChip label={`id: ${sourceId}`} />}
-        {sourceId && onViewOriginalSource && (
+        {hasOriginalSource && onViewOriginalSource && (
           <button
             type="button"
             onClick={onViewOriginalSource}
