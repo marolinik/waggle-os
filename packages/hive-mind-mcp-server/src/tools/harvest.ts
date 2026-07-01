@@ -188,17 +188,16 @@ export function registerHarvestTools(server: McpServer): void {
             await search.indexFrame(frame.id, content);
           } catch { /* vector indexing failure is non-fatal */ }
 
-          // Extract basic entities from metadata if present
+          // Extract basic entities from metadata if present. Route through
+          // importEntitiesForFrame so each entity is LINKED to its frame — the
+          // provenance anchor GDPR Art.17 erasure's orphan sweep needs (an
+          // unlinked entity name, often PII, would otherwise survive erasure).
           if (item.metadata?.entities && Array.isArray(item.metadata.entities)) {
-            for (const ent of item.metadata.entities as { name: string; type: string }[]) {
-              try {
-                kg.createEntity(ent.type || 'concept', ent.name, {
-                  source: item.source,
-                  imported_from: item.title,
-                });
-                entitiesCreated++;
-              } catch { /* entity creation failure is non-fatal */ }
-            }
+            entitiesCreated += kg.importEntitiesForFrame(
+              frame.id,
+              item.metadata.entities as { name: string; type: string }[],
+              { source: item.source, importedFrom: item.title },
+            );
           }
         } else {
           duplicatesSkipped++;
