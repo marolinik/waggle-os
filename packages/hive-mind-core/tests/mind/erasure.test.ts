@@ -217,6 +217,33 @@ describe('MindErasure.eraseBySourceRef', () => {
     expect(res.archiveRedacted).toBe(0);   // no provenance rows to redact
   });
 
+  // #7 P1 (S4 residual): subject-mode must ALSO erase the distilled SUMMARY frame
+  // when it has NO archive link (raw_archive.append failed / legacy pre-#7). 2a is
+  // archiveUid-keyed so it misses it; recover symmetric to eraseFrameComplete's
+  // fallback via metadata.sourceId (= sourceRef) + the content platform-prefix.
+  // Frame-mode already handled this; subject-mode (route {source,sourceRef} + MCP
+  // source+source_ref) left the summary recall-able — an Art.17 completeness hole.
+  it('erases an archive-less summary frame for the subject (metadata.sourceId + prefix fallback)', () => {
+    // Harvest summary with NO archiveUids — exactly what harvest.ts writes when
+    // rawArchive.append throws: content platform-prefix + metadata.sourceId.
+    const f = frames.createIFrame('harvest', '[Harvest:gemini] Trip planning\n\nsummary quoting PII', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ sourceId: 'g-trip', status: 'unreviewed' }));
+    // Its verbatim raw-turns (swept by 2b — pinned so we don't regress them).
+    const convKey = rawTurnConvKey({ source: 'gemini', id: 'g-trip' });
+    const t1 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 0, 'user')}\nverbatim PII`, 'normal', 'import');
+    // A DIFFERENT subject's summary (same source) MUST survive.
+    const other = frames.createIFrame('harvest', '[Harvest:gemini] Other trip\n\nkeep me', 'normal', 'import');
+    frames.setMetadata(other.id, JSON.stringify({ sourceId: 'g-other' }));
+    expect(cnt(db, 'SELECT COUNT(*) c FROM raw_archive WHERE source = ? AND source_ref = ?', 'gemini', 'g-trip')).toBe(0);
+
+    const res = erasure.eraseBySourceRef('gemini', 'g-trip', 'dsar');
+
+    expect(frames.getById(f.id)).toBeUndefined();     // archive-less summary erased (the fix)
+    expect(frames.getById(t1.id)).toBeUndefined();    // raw-turn still swept
+    expect(frames.getById(other.id)).toBeDefined();   // other subject untouched
+    expect(res.framesDeleted).toBe(2);                // summary + raw-turn
+  });
+
   // #7 review CRITICAL: verbatim [mind-rawturn …] frames carry NO archiveUids, so a
   // link-only sweep leaves the subject's full dialogue recall-able. They must be
   // swept by their content-prefix conversation key (= sanitize(source∥sourceRef)).

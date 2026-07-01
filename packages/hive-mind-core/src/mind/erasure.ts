@@ -239,6 +239,28 @@ export class MindErasure {
         frameIds.add(row.id);
       }
 
+      // 2c. Archive-less SUMMARY frames for this subject. 2a is archiveUid-keyed,
+      //     so a harvested summary whose raw_archive.append failed (or a legacy
+      //     pre-#7 frame) — carrying metadata.sourceId but NO archiveUids — slips
+      //     through, leaving the distilled PII recall-able after a subject-level
+      //     DSAR. Recover it symmetric to eraseFrameComplete's fallback: match
+      //     metadata.sourceId === source_ref AND the content platform-prefix
+      //     ('[Harvest:<src>] …' server / '[<src>] …' MCP) === source. The LIKE is
+      //     a prefilter only; the two EXACT code checks are the subject identity,
+      //     so 'item' never over-erases 'item-9' and a sibling subject is safe.
+      //     Escape LIKE metacharacters in source_ref (mirroring 2b) to keep the
+      //     prefilter narrow — the exact meta.sourceId check backstops either way.
+      const srLike = sourceRef.replace(/[\\%_]/g, ch => `\\${ch}`);
+      const metaLike = raw.prepare("SELECT id, content, metadata FROM memory_frames WHERE metadata LIKE ? ESCAPE '\\'");
+      for (const row of metaLike.all(`%${srLike}%`) as Array<{ id: number; content?: string; metadata?: string }>) {
+        if (!row.metadata) continue;
+        let meta: Record<string, unknown>;
+        try { meta = JSON.parse(row.metadata) as Record<string, unknown>; } catch { continue; }
+        if (!meta || typeof meta !== 'object' || meta.sourceId !== sourceRef) continue;
+        const tok = row.content?.match(/^\[(?:Harvest:)?([^\]]+)\]/)?.[1];
+        if (tok === source) frameIds.add(row.id);
+      }
+
       // 3. Erase the direct frame set; track what was actually deleted for the
       //    B-frame reference sweep below.
       const erasedIds = new Set<number>();
