@@ -273,6 +273,56 @@ describe('MindErasure.eraseBySourceRef', () => {
   });
 });
 
+describe('MindErasure.eraseFrameComplete (shared route + MCP primitive)', () => {
+  let db: MindDB;
+  let frames: FrameStore;
+  let archive: RawArchive;
+  let erasure: MindErasure;
+  beforeEach(() => {
+    db = new MindDB(':memory:');
+    new SessionStore(db).ensure('harvest', 'harvest', 'test');
+    frames = new FrameStore(db);
+    archive = new RawArchive(db);
+    erasure = new MindErasure(db);
+  });
+  afterEach(() => db.close());
+
+  it('sweeps a linked harvested summary + its raw-turns (archive-linked path)', () => {
+    const r = archive.append({ source: 'claude', sourceRef: 'c1', content: 'summary source' });
+    const f = frames.createIFrame('harvest', 'summary of c1', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ sourceId: 'c1', archiveUids: [r.archiveUid] }));
+    const convKey = rawTurnConvKey({ source: 'claude', id: 'c1' });
+    const t1 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 0, 'user')}\nPII a`, 'normal', 'import');
+    const t2 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 1, 'assistant')}\nPII b`, 'normal', 'import');
+
+    const res = erasure.eraseFrameComplete(f.id, 'dsar');
+
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(frames.getById(t1.id)).toBeUndefined();
+    expect(frames.getById(t2.id)).toBeUndefined();
+    expect(res.framesDeleted).toBe(3);
+    expect(res.archiveRedacted).toBe(1);
+  });
+
+  it('reaches raw-turns via the metadata.sourceId + content-prefix FALLBACK when the summary has no archive link', () => {
+    // No archive row / no archiveUids — content carries the server harvest prefix.
+    const f = frames.createIFrame('harvest', '[Harvest:gemini] Trip\n\nsummary', 'normal', 'import');
+    frames.setMetadata(f.id, JSON.stringify({ sourceId: 'g1' }));
+    const convKey = rawTurnConvKey({ source: 'gemini', id: 'g1' });
+    const t1 = frames.createIFrame('harvest', `${rawTurnHeader(convKey, 0, 'user')}\nPII`, 'normal', 'import');
+
+    const res = erasure.eraseFrameComplete(f.id, 'dsar');
+
+    expect(frames.getById(f.id)).toBeUndefined();
+    expect(frames.getById(t1.id)).toBeUndefined();   // reached via fallback
+    expect(res.framesDeleted).toBe(2);
+  });
+
+  it('returns all-zero for an unknown frame id (no throw)', () => {
+    expect(erasure.eraseFrameComplete(999999, 'x')).toEqual(ZERO);
+  });
+});
+
 // ── FrameStore.compact — no vector/index leak (review MEDIUM #3) ─────────────
 describe('FrameStore.compact — no orphaned vector/index rows', () => {
   let db: MindDB;

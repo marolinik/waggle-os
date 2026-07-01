@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import type { Importance, MemoryFrame, EraseResult } from '@waggle/core';
+import type { Importance, MemoryFrame } from '@waggle/core';
 import { FrameStore, MindErasure, RawArchive, SessionStore } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
@@ -616,65 +616,15 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       // Find the mind that actually holds the frame (mind-strict when declared)
       // before erasing — an unresolved id must 404, never silently no-op.
       for (const c of candidateStores(workspace, parsed.mind)) {
-        const frame = c.store.getById(frameId);
-        if (!frame) continue;
+        if (!c.store.getById(frameId)) continue;
         const db = mindDbFor(c.mind);
         if (!db) continue;
-        // Art.17-COMPLETE erase of the memory the user selected. A single-frame
-        // erase would leave the harvested conversation's verbatim [mind-rawturn]
-        // frames (a separate, differently-keyed frame class) + referencing
-        // B-frames + orphaned KG recall-able — the exact leak the substrate arc
-        // closed. So resolve the frame's provenance subjects (reconstructSource)
-        // and sweep each via eraseBySourceRef, then erase the frame itself
-        // (covers a manual frame with no provenance, or a summary that outlived
-        // its archive rows). ONE outer transaction → the multi-subject erase is
-        // atomic (better-sqlite3 nests via savepoints); a partial erase is a
-        // compliance failure.
-        const raw = db.getDatabase();
-        const archive = new RawArchive(db);
-        const erasure = new MindErasure(db);
-        const result = raw.transaction((): EraseResult => {
-          const acc: EraseResult = { framesDeleted: 0, archiveRedacted: 0, chunkVectorsPurged: 0, entitiesErased: 0, relationsErased: 0 };
-          const add = (r: EraseResult): void => {
-            acc.framesDeleted += r.framesDeleted;
-            acc.archiveRedacted += r.archiveRedacted;
-            acc.chunkVectorsPurged += r.chunkVectorsPurged;
-            acc.entitiesErased += r.entitiesErased;
-            acc.relationsErased += r.relationsErased;
-          };
-          // Dedup subjects with a JSON-array key (collision-proof: distinct
-          // (source, sourceRef) pairs never serialize equal, unlike a space-joined
-          // key where "a"+"b c" would collide with "a b"+"c" and skip a sweep).
-          const seen = new Set<string>();
-          const sweep = (source: string, sourceRef: string): void => {
-            const key = JSON.stringify([source, sourceRef]);
-            if (seen.has(key)) return;
-            seen.add(key);
-            add(erasure.eraseBySourceRef(source, sourceRef, reason));
-          };
-          // Primary: subjects linked via the frame's archive provenance. Read
-          // BEFORE any sweep deletes the frame (which holds the archiveUids link).
-          for (const row of archive.reconstructSource(frameId)) {
-            if (row.source_ref) sweep(row.source, row.source_ref);
-          }
-          // Fallback (reference-bug-class guard): a harvested summary with NO
-          // archive link (a legacy pre-#7 frame, or a raw_archive.append that
-          // failed while the verbatim [mind-rawturn] frames still wrote) would
-          // otherwise erase only the summary and leave the raw dialogue
-          // recall-able. Recover the subject from metadata.sourceId (the
-          // sourceRef, stamped by BOTH harvest paths) + the platform token in the
-          // content prefix ('[Harvest:<src>] ...' server path / '[<src>] ...' MCP
-          // path) so eraseBySourceRef reaches the raw-turns. Safe on non-harvest
-          // frames: a wrong guess matches nothing (a no-op sweep).
-          if (seen.size === 0) {
-            const meta = parseFrameMetadata(frame.metadata);
-            const sourceRef = typeof meta.sourceId === 'string' ? meta.sourceId : undefined;
-            const src = frame.content?.match(/^\[(?:Harvest:)?([^\]]+)\]/)?.[1];
-            if (src && sourceRef) sweep(src, sourceRef);
-          }
-          add(erasure.eraseFrame(frameId, reason));   // idempotent if already swept
-          return acc;
-        })();
+        // Art.17-COMPLETE erase of the memory the user selected — the FULL
+        // subject footprint (verbatim raw-turns + B-frames + orphaned KG that a
+        // single-frame erase would leave recall-able), atomic. eraseFrameComplete
+        // is the shared primitive the erase_memory MCP tool also calls, so the two
+        // entry points cannot drift.
+        const result = new MindErasure(db).eraseFrameComplete(frameId, reason);
         emitAuditEvent(server, {
           workspaceId: c.mind === 'workspace' && workspace ? workspace : 'personal',
           eventType: 'data_erase_requested',

@@ -67,6 +67,64 @@ export class MindErasure {
     return this.db.getDatabase().transaction((): EraseResult => this.eraseFrameInternal(frameId, reason))();
   }
 
+  /**
+   * Art.17-COMPLETE erase of ONE frame the user pointed at. Unlike eraseFrame
+   * (single frame), this reaches the WHOLE subject footprint behind a harvested
+   * summary — the verbatim [mind-rawturn] dialogue + referencing B-frames + KG —
+   * which a frame-only delete would leave recall-able. It resolves the frame's
+   * provenance subjects (the archive link; else a metadata.sourceId + content
+   * platform-prefix fallback for a legacy / append-failed frame with no link),
+   * sweeps each via eraseBySourceRef, then erases the frame itself. Atomic
+   * (better-sqlite3 nests the inner erasures as savepoints). All-zero for an
+   * unknown frame. This is the single primitive both the /api/memory/erase route
+   * and the erase_memory MCP tool call, so the two entry points cannot drift.
+   */
+  eraseFrameComplete(frameId: number, reason: string): EraseResult {
+    return this.db.getDatabase().transaction((): EraseResult => {
+      const total = zeroResult();
+      const add = (r: EraseResult): void => {
+        total.framesDeleted += r.framesDeleted;
+        total.archiveRedacted += r.archiveRedacted;
+        total.chunkVectorsPurged += r.chunkVectorsPurged;
+        total.entitiesErased += r.entitiesErased;
+        total.relationsErased += r.relationsErased;
+      };
+      const frame = this.frames.getById(frameId);
+      if (!frame) return total;
+
+      // Dedup subjects with a JSON-array key (collision-proof: distinct
+      // (source, sourceRef) pairs never serialize equal).
+      const seen = new Set<string>();
+      const sweep = (source: string, sourceRef: string): void => {
+        const key = JSON.stringify([source, sourceRef]);
+        if (seen.has(key)) return;
+        seen.add(key);
+        add(this.eraseBySourceRef(source, sourceRef, reason));
+      };
+      // Primary: subjects linked via the frame's archive provenance.
+      for (const row of this.archive.reconstructSource(frameId)) {
+        if (row.source_ref) sweep(row.source, row.source_ref);
+      }
+      // Fallback: a harvested summary with NO archive link (legacy pre-#7 frame,
+      // or a raw_archive.append that failed while the raw-turns still wrote).
+      // Recover the subject from metadata.sourceId + the platform token in the
+      // content prefix ('[Harvest:<src>] ...' server harvest / '[<src>] ...' MCP
+      // harvest) so eraseBySourceRef reaches the raw-turns. A wrong guess on a
+      // non-harvest frame matches nothing (a no-op sweep).
+      if (seen.size === 0) {
+        let sourceRef: string | undefined;
+        try {
+          const meta = JSON.parse(frame.metadata ?? '{}') as Record<string, unknown>;
+          if (meta && typeof meta.sourceId === 'string') sourceRef = meta.sourceId;
+        } catch { /* malformed metadata — no fallback subject */ }
+        const src = frame.content?.match(/^\[(?:Harvest:)?([^\]]+)\]/)?.[1];
+        if (src && sourceRef) sweep(src, sourceRef);
+      }
+      add(this.eraseFrame(frameId, reason));   // idempotent if already swept
+      return total;
+    })();
+  }
+
   /** Non-transactional core — call inside an ambient transaction only. */
   private eraseFrameInternal(frameId: number, reason: string): EraseResult {
     const raw = this.db.getDatabase();
