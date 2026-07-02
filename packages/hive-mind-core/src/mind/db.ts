@@ -443,11 +443,18 @@ export class MindDB {
 
   /** One-time backfill of the erased-subject suppression list (#7 Art.17 "sticky
    *  erasure") from raw_archive rows that were ALREADY erased before this feature
-   *  shipped — so PAST erasures become sticky across re-import too. Keyed on
-   *  (source, source_ref); rows with a NULL source_ref carry no subject key and are
-   *  skipped (they also can't be re-imported to a stable subject). Idempotent
-   *  (INSERT OR IGNORE) and guarded by a meta sentinel unless `force`. Returns the
-   *  number of new suppression rows created. */
+   *  shipped. Keyed on (source, source_ref); rows with a NULL source_ref carry no
+   *  subject key and are skipped. Idempotent (INSERT OR IGNORE), meta-sentinel-guarded
+   *  unless `force`. Returns the number of new suppression rows created.
+   *
+   *  LIMITATION (id-domain mismatch): a subject harvested+erased BEFORE the stable-id
+   *  arc has source_ref = a random UUID (adapters minted randomUUID() pre-arc). A fresh
+   *  re-export now mints a DETERMINISTIC stableHarvestId ≠ that UUID, so the backfilled
+   *  row won't match the new re-import and can't suppress it. The backfill is thus an
+   *  accurate LEDGER of historical erasures but only re-suppresses a re-feed of the
+   *  identical old-id data; a fresh re-export of pre-arc data re-establishes stickiness
+   *  only on its next re-erase (which records the stable id). Post-arc erasures are fully
+   *  sticky (eraseBySourceRef records the resolved stable source_ref). */
   backfillErasedSubjects(force = false): number {
     if (!force) {
       const done = this.db.prepare("SELECT value FROM meta WHERE key = 'erased_subjects_backfilled'").get();

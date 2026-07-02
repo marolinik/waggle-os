@@ -122,7 +122,9 @@ export class ClaudeCodeAdapter implements FilesystemAdapter {
       const relPath = path.relative(dirPath, filePath);
       items.push({
         // #7 sticky erasure: file path is the stable id (survives content growth).
-        id: stableHarvestId('claude-code', relPath),
+        // Normalize the OS separator so the SAME tree scanned on win32 vs POSIX
+        // yields the SAME id (stableHarvestId's cross-process determinism contract).
+        id: stableHarvestId('claude-code', relPath.split(path.sep).join('/')),
         source: 'claude-code',
         type: 'rule',
         title: `Rule: ${path.basename(filePath, '.md')}`,

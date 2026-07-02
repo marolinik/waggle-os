@@ -705,6 +705,16 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
     // R3-004 set-hash skip would otherwise short-circuit an unchanged re-import
     // before the per-item loop re-adds it, so clear the source's skip hash.
     if (removed) new HarvestSourceStore(db).clearContentHash(b.source as Parameters<HarvestSourceStore['clearContentHash']>[0]);
+    // Audit the reversal of an exercised right-to-erasure (distinct from the erase
+    // event, so the timeline shows WHO lifted suppression and WHEN — GDPR symmetry).
+    if (removed) {
+      emitAuditEvent(server, {
+        workspaceId: mind === 'workspace' && workspace ? workspace : 'personal',
+        eventType: 'data_reimport_reconsented',
+        input: JSON.stringify({ source: b.source, sourceRef: b.sourceRef, mind }),
+        output: JSON.stringify({ removed }),
+      });
+    }
     return reply.send({ removed, mind });
   });
 

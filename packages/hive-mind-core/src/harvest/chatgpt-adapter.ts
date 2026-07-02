@@ -120,7 +120,9 @@ export class ChatGPTAdapter implements SourceAdapter {
     // Also extract custom instructions / memory as separate items
     if (root?.user_custom_instructions) {
       items.push({
-        id: stableHarvestId('chatgpt', 'custom_instructions'), // singleton per export
+        // 'singleton' discriminator (2 parts) so this can't collide with a
+        // conversation whose conv.id is literally the string 'custom_instructions'.
+        id: stableHarvestId('chatgpt', 'singleton', 'custom_instructions'),
         source: 'chatgpt',
         type: 'instruction',
         title: 'ChatGPT Custom Instructions',
@@ -140,7 +142,10 @@ export class ChatGPTAdapter implements SourceAdapter {
           ? rawMem
           : (mem && (getString(mem, 'content') ?? getString(mem, 'text'))) ?? JSON.stringify(rawMem);
         items.push({
-          // memory rows are immutable snapshots → keying on created_at+content is safe.
+          // No stable per-memory id exists in the export, so key on created_at+content
+          // (the best available surrogate). Caveat: ChatGPT memories are user-editable,
+          // so an EDIT changes the id → erasure isn't sticky across an edit (bounded,
+          // documented tradeoff — same class as the universal-text content-keyed path).
           id: stableHarvestId('chatgpt', 'memory', (mem && getString(mem, 'created_at')) ?? '', content),
           source: 'chatgpt',
           type: 'memory',

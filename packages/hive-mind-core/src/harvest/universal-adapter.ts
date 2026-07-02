@@ -128,16 +128,23 @@ export class UniversalAdapter implements SourceAdapter {
 
         if (messages.length === 0) continue;
 
+        const convContent = messages.map(m => `${m.role}: ${m.text}`).join('\n\n');
+        const convId = getString(conv, 'id');
         items.push({
-          // JSON conv id when present, else source+title+own-created-at (growth-stable).
-          id: stableHarvestId('universal-json', getString(conv, 'id') ?? `${source}\x00${title}\x00${firstString(conv, 'created_at', 'createTime', 'timestamp') ?? ''}`),
+          // Stable per-conversation id when the export gives one (growth-stable). Else
+          // fall back to source+title+created_at PLUS content: a bare message-array paste
+          // has no id/timestamp and a CONSTANT synthetic title ('Imported Conversation'),
+          // so without content every such paste collapses to ONE (source, source_ref)
+          // subject key → cross-subject over-suppression / co-erasure. Content makes them
+          // distinct (id-less → not growth-stable, the documented universal-text tradeoff).
+          id: stableHarvestId('universal-json', convId ?? `${source}\x00${title}\x00${firstString(conv, 'created_at', 'createTime', 'timestamp') ?? ''}\x00${convContent}`),
           source,
           type: 'conversation',
           title,
-          content: messages.map(m => `${m.role}: ${m.text}`).join('\n\n'),
+          content: convContent,
           messages,
           timestamp: firstString(conv, 'created_at', 'createTime', 'timestamp') ?? new Date().toISOString(),
-          metadata: { parseMethod: 'universal-json', detectedSource: source, conversationId: getString(conv, 'id') },
+          metadata: { parseMethod: 'universal-json', detectedSource: source, conversationId: convId },
         });
       }
     }
