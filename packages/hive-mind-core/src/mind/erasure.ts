@@ -23,6 +23,7 @@
 import type { MindDB } from './db.js';
 import { FrameStore } from './frames.js';
 import { RawArchive, readArchiveUids } from './raw-archive.js';
+import { SuppressionStore } from './suppression.js';
 import { MIND_RAWTURN_PREFIX, rawTurnConvKey } from '../harvest/raw-turns.js';
 
 export interface EraseResult {
@@ -46,11 +47,13 @@ export class MindErasure {
   private db: MindDB;
   private frames: FrameStore;
   private archive: RawArchive;
+  private suppression: SuppressionStore;
 
   constructor(db: MindDB) {
     this.db = db;
     this.frames = new FrameStore(db);
     this.archive = new RawArchive(db);
+    this.suppression = new SuppressionStore(db);
   }
 
   /**
@@ -329,6 +332,16 @@ export class MindErasure {
       for (const uid of uids) {
         if (this.archive.erase(uid, reason)) total.archiveRedacted += 1;
       }
+
+      // 6. Record the subject on the erased-subject suppression list (#7 "sticky
+      //    erasure"). Unconditional — even when nothing currently matched, the
+      //    subject was requested erased, so a LATER re-export/re-sync of it must not
+      //    re-materialize. Inside the txn: a rolled-back erase records nothing. This
+      //    is the SINGLE capture point — subject mode calls here directly; frame mode
+      //    reaches here via eraseFrameComplete's sweep() → both surfaces (route + MCP
+      //    erase_memory) feed the list with no drift; subject-less frames correctly
+      //    bypass it (no durable subject to suppress).
+      this.suppression.record(source, sourceRef, reason);
 
       return total;
     })();

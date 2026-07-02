@@ -25,6 +25,7 @@ export {
   FrameStore, stripHmPrefix, hashFrameContent,
   RawArchive, hashRaw, readArchiveUids, withArchiveUid, type RawArchiveRow, type ArchiveInput,
   MindErasure, type EraseResult,
+  SuppressionStore, type SuppressedSubject,
   type MemoryFrame, type FrameType, type Importance, type FrameSource,
   SessionStore, type Session,
   HybridSearch, type SearchResult,

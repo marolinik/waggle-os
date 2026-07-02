@@ -369,6 +369,25 @@ export class MindDB {
       "CREATE TRIGGER IF NOT EXISTS raw_archive_no_delete BEFORE DELETE ON raw_archive BEGIN SELECT RAISE(ABORT, 'raw_archive is append-only (verbatim provenance archive)'); END"
     );
 
+    // #7 (2026-07-02): erased-subject suppression list — makes Art.17 erasure
+    // "sticky" across re-import. Idempotent; SCHEMA_SQL carries the same DDL for
+    // fresh DBs. Keyed on (source, source_ref) only (no content/hash — that would
+    // reintroduce the re-id vector). Rows are deletable (re-consent path), so NO
+    // immutability trigger. Then one-time backfill from the already-erased
+    // raw_archive rows so PAST erasures become sticky too (see backfillErasedSubjects).
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS erased_subjects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT NOT NULL,
+        source_ref TEXT NOT NULL,
+        erased_at TEXT NOT NULL DEFAULT (datetime('now')),
+        reason TEXT,
+        UNIQUE(source, source_ref)
+      );
+      CREATE INDEX IF NOT EXISTS idx_erased_subjects_lookup ON erased_subjects (source, source_ref);
+    `);
+    this.backfillErasedSubjects();
+
     // W4.1: one-time backfill of the kg_entity_frames bridge over pre-existing
     // frames (new writes populate it live via cognify/harvest). Sentinel-guarded.
     this.backfillKgEntityFrames();
@@ -416,6 +435,33 @@ export class MindDB {
       }
       this.db
         .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('kg_bridge_backfilled', '1')")
+        .run();
+    });
+    run();
+    return created;
+  }
+
+  /** One-time backfill of the erased-subject suppression list (#7 Art.17 "sticky
+   *  erasure") from raw_archive rows that were ALREADY erased before this feature
+   *  shipped — so PAST erasures become sticky across re-import too. Keyed on
+   *  (source, source_ref); rows with a NULL source_ref carry no subject key and are
+   *  skipped (they also can't be re-imported to a stable subject). Idempotent
+   *  (INSERT OR IGNORE) and guarded by a meta sentinel unless `force`. Returns the
+   *  number of new suppression rows created. */
+  backfillErasedSubjects(force = false): number {
+    if (!force) {
+      const done = this.db.prepare("SELECT value FROM meta WHERE key = 'erased_subjects_backfilled'").get();
+      if (done) return 0;
+    }
+    let created = 0;
+    const run = this.db.transaction(() => {
+      created = this.db.prepare(
+        `INSERT OR IGNORE INTO erased_subjects (source, source_ref, erased_at, reason)
+         SELECT source, source_ref, erased_at, erased_reason
+         FROM raw_archive WHERE erased_at IS NOT NULL AND source_ref IS NOT NULL`
+      ).run().changes;
+      this.db
+        .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('erased_subjects_backfilled', '1')")
         .run();
     });
     run();

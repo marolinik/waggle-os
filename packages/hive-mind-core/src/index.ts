@@ -20,6 +20,7 @@ export { AwarenessLayer, type AwarenessItem, type AwarenessCategory } from './mi
 export { FrameStore, stripHmPrefix, type MemoryFrame, type FrameType, type Importance, type FrameSource } from './mind/frames.js';
 export { RawArchive, hashRaw, readArchiveUids, withArchiveUid, type RawArchiveRow, type ArchiveInput } from './mind/raw-archive.js';
 export { MindErasure, type EraseResult } from './mind/erasure.js';
+export { SuppressionStore, type SuppressedSubject } from './mind/suppression.js';
 export { hashFrameContent } from './mind/content-hash.js';
 export { SessionStore, type Session } from './mind/sessions.js';
 export {
