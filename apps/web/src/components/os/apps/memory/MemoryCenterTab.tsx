@@ -94,6 +94,13 @@ export default function MemoryCenterTab({
   // the last Art.17 erase actually purged (compliance-grade transparency; the
   // drawer closes on success, so the receipt lives at the list level).
   const [eraseNotice, setEraseNotice] = useState<string | null>(null);
+  // #7 sticky erasure — the re-consent surface. A collapsible panel listing the
+  // (source, sourceRef) subjects a prior Art.17 erasure recorded; a re-import of any
+  // of them is skipped. "Allow re-import" lifts the suppression (deliberate re-consent).
+  type SuppressedRow = { source: string; sourceRef: string; erasedAt: string; reason: string | null };
+  const [suppressionOpen, setSuppressionOpen] = useState(false);
+  const [suppressed, setSuppressed] = useState<SuppressedRow[]>([]);
+  const [suppressionLoading, setSuppressionLoading] = useState(false);
   // Latest source-fetch token: the id whose fetch is allowed to write state. A
   // selection change (reset effect → undefined) or a newer fetch invalidates any
   // in-flight request so a stale result can't land on the wrong memory.
@@ -188,6 +195,8 @@ export default function MemoryCenterTab({
     setMemories([]);
     setLoading(true);
     setEraseNotice(null);   // a receipt for the prior mind must not persist across the switch
+    setSuppressionOpen(false); // the erased-source list is per-mind — collapse + drop stale rows
+    setSuppressed([]);
   }, [mind, wsParam]);
 
   const openDetail = (m: Memory) => {
@@ -301,6 +310,42 @@ export default function MemoryCenterTab({
     });
   };
 
+  // #7 sticky erasure re-consent surface — lazy-loaded when the panel opens.
+  const loadSuppression = useCallback(async () => {
+    setSuppressionLoading(true);
+    try {
+      const res = await adapter.listSuppression({ workspaceId: wsParam, mind });
+      setSuppressed(res.suppressed);
+    } catch {
+      setSuppressed([]);
+    } finally {
+      setSuppressionLoading(false);
+    }
+  }, [wsParam, mind]);
+  const toggleSuppression = () => {
+    const next = !suppressionOpen;
+    setSuppressionOpen(next);
+    if (next) void loadSuppression();
+  };
+  const allowReimport = (row: SuppressedRow) => {
+    if (!window.confirm(
+      `Allow this source to be re-imported again?\n\n"${row.source}" / "${row.sourceRef}"\n\n` +
+      `This lifts the GDPR Art.17 erasure suppression: a future import of this source ` +
+      `will re-materialize it. Use this only when the data subject has re-consented.`,
+    )) return;
+    void (async () => {
+      setSuppressionLoading(true);
+      try {
+        await adapter.allowReimport({ source: row.source, sourceRef: row.sourceRef }, { workspaceId: wsParam, mind });
+        await loadSuppression();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Action failed');
+      } finally {
+        setSuppressionLoading(false);
+      }
+    })();
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Filter bar */}
@@ -380,6 +425,42 @@ export default function MemoryCenterTab({
           <button onClick={() => setEraseNotice(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">×</button>
         </div>
       )}
+
+      {/* #7 sticky erasure — re-consent surface: erased sources kept from re-importing. */}
+      <div className="border-b border-border/50 bg-background/40">
+        <button
+          onClick={toggleSuppression}
+          aria-expanded={suppressionOpen}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <span className="text-[10px] w-2">{suppressionOpen ? '▾' : '▸'}</span>
+          <span>Erased sources{suppressionOpen && suppressed.length > 0 ? ` (${suppressed.length})` : ''}</span>
+          <span className="ml-auto text-[10px] opacity-70">GDPR Art.17 — kept from re-import</span>
+        </button>
+        {suppressionOpen && (
+          <div className="px-2.5 pb-2 space-y-1">
+            {suppressionLoading ? (
+              <div className="text-xs text-muted-foreground py-1">Loading…</div>
+            ) : suppressed.length === 0 ? (
+              <div className="text-xs text-muted-foreground py-1">
+                No erased sources are suppressed. Erasing a source keeps it from re-materializing if it's re-imported later.
+              </div>
+            ) : (
+              suppressed.map((row) => (
+                <div key={`${row.source} ${row.sourceRef}`} className="flex items-center gap-2 text-xs bg-muted/40 rounded px-2 py-1">
+                  <span className="font-medium shrink-0">{row.source}</span>
+                  <span className="text-muted-foreground truncate flex-1 min-w-0" title={row.sourceRef}>{row.sourceRef}</span>
+                  <button
+                    onClick={() => allowReimport(row)}
+                    disabled={suppressionLoading}
+                    className="shrink-0 text-[11px] px-1.5 py-0.5 rounded border border-border/60 hover:bg-muted disabled:opacity-50"
+                  >Allow re-import</button>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* List */}
       <div className="flex-1 overflow-auto p-2.5">

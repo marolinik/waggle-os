@@ -989,6 +989,31 @@ class LocalAdapter {
     return res.json();
   }
 
+  /** #7 sticky erasure — list the (source, sourceRef) subjects on the erased-subject
+   *  suppression list. A re-import of any of these is skipped, so an Art.17 erasure
+   *  survives a later re-export/re-sync. The re-consent UI lists + clears them. */
+  async listSuppression(
+    opts: { workspaceId?: string; mind?: 'personal' | 'workspace' } = {},
+  ): Promise<{ mind: string; suppressed: Array<{ source: string; sourceRef: string; erasedAt: string; reason: string | null }> }> {
+    const res = await this.fetchRaw(`/api/memory/suppression${this.memoryScopeQs(opts.workspaceId, opts.mind)}`);
+    if (!res.ok) return { mind: opts.mind ?? 'personal', suppressed: [] };
+    const body = await res.json();
+    return { mind: body?.mind ?? 'personal', suppressed: Array.isArray(body?.suppressed) ? body.suppressed : [] };
+  }
+
+  /** #7 sticky erasure — re-consent: lift the suppression on a subject so it may be
+   *  re-imported again. Idempotent (removed:false if it wasn't suppressed). */
+  async allowReimport(
+    subject: { source: string; sourceRef: string },
+    opts: { workspaceId?: string; mind?: 'personal' | 'workspace' } = {},
+  ): Promise<{ removed: boolean; mind: string }> {
+    const res = await this.fetch(`/api/memory/suppression/allow${this.memoryScopeQs(opts.workspaceId, opts.mind)}`, {
+      method: 'POST',
+      body: JSON.stringify(subject),
+    });
+    return res.json();
+  }
+
   async mergeMemories(ids: string[], opts: { workspaceId?: string; title?: string; mind?: 'personal' | 'workspace' } = {}): Promise<Memory> {
     const res = await this.fetch('/api/memory/merge', {
       method: 'POST',
