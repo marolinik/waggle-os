@@ -10,7 +10,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
+import { MindDB, MultiMind, MultiMindCache, WorkspaceManager, WaggleConfig, createEmbeddingProvider, type EmbeddingProviderConfig, type EmbeddingProviderInstance, FrameStore, SessionStore, SuppressionStore, InstallAuditStore, CronStore, AwarenessLayer, VaultStore, SkillHashStore, OptimizationLogStore, ImprovementSignalStore, HarvestSourceStore, ClaudeCodeAdapter, reconcileIndexes, TeamSync, TelemetryStore, TELEMETRY_EVENTS, ExecutionTraceStore, EvolutionRunStore, ComplianceTemplateStore, harvestSetHash, type WorkspaceConfig } from '@waggle/core';
 import { corsOriginAllowed } from './cors-config.js';
 import { getStorageProvider } from './storage/index.js';
 import { resolveBindHost } from './net-config.js';
@@ -1248,6 +1248,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
       const personalSessionStore = new SessionStore(multiMind.personal);
       personalSessionStore.ensure('harvest', 'harvest', 'Imported memory from external sources');
       const personalFrameStore = new FrameStore(multiMind.personal);
+      // #7 sticky erasure: don't re-materialize an erased subject on auto-sync.
+      const suppression = new SuppressionStore(multiMind.personal);
 
       for (const src of stale) {
         try {
@@ -1261,6 +1263,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
           let saved = 0;
           for (const item of items) {
+            if (suppression.isSuppressed(item.source, item.id)) continue; // #7 Art.17 erased
             // #7 Art.17: stamp the subject key (metadata.sourceId) so a subject-mode
             // DSAR can reach this auto-synced summary — shared with the cron path.
             writeAutoSyncSummaryFrame(personalFrameStore, item);
@@ -1482,6 +1485,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             new SessionStore(multiMind.personal).ensure('harvest', 'harvest', 'Imported memory from external sources');
             const harvestStore = new HarvestSourceStore(multiMind.personal);
             const personalFrames = new FrameStore(multiMind.personal);
+            // #7 sticky erasure: don't re-materialize an erased subject on cron sync.
+            const suppression = new SuppressionStore(multiMind.personal);
             const stale = harvestStore.getStale();
             let totalItems = 0;
             let totalFrames = 0;
@@ -1493,6 +1498,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 const items = adapter.scan(src.sourcePath);
                 let saved = 0;
                 for (const item of items) {
+                  if (suppression.isSuppressed(item.source, item.id)) continue; // #7 Art.17 erased
                   // #7 Art.17: stamp the subject key (metadata.sourceId) so a
                   // subject-mode DSAR reaches this cron-synced summary — shared helper.
                   writeAutoSyncSummaryFrame(personalFrames, item);

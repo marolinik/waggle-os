@@ -18,7 +18,7 @@
  * "[Shared file: name]".
  */
 
-import { randomUUID } from 'node:crypto';
+import { stableHarvestId } from './stable-id.js';
 import type { SourceAdapter, UniversalImportItem, ConversationMessage } from './types.js';
 import { asRecord, firstString, getArray, getString, type RawRecord } from './raw-types.js';
 
@@ -130,7 +130,8 @@ export class ClaudeAdapter implements SourceAdapter {
     if (messages.length === 0) return [];
 
     return [{
-      id: randomUUID(),
+      // #7 sticky erasure: stable per-conversation id (conv uuid, not content).
+      id: stableHarvestId('claude', firstString(conv, 'uuid', 'id') ?? `conv\x00${title}\x00${firstString(conv, 'created_at', 'create_time') ?? ''}`),
       source: 'claude',
       type: 'conversation',
       title,
@@ -156,7 +157,7 @@ export class ClaudeAdapter implements SourceAdapter {
       const content = getString(doc, 'content') ?? '';
       if (content.length === 0) continue;
       out.push({
-        id: randomUUID(),
+        id: stableHarvestId('claude', 'projdoc', getString(project, 'uuid') ?? '', getString(doc, 'uuid') ?? firstString(doc, 'filename', 'title') ?? ''),
         source: 'claude',
         type: 'artifact',
         title: firstString(doc, 'filename', 'title') ?? 'Project Document',
@@ -195,7 +196,8 @@ export class ClaudeAdapter implements SourceAdapter {
         const content = typeof convMem === 'string' ? convMem : JSON.stringify(convMem);
         if (content.length > 0) {
           out.push({
-            id: randomUUID(),
+            // account-level singleton — fixed discriminator, NOT content (memory grows).
+            id: stableHarvestId('claude', 'memory', 'conversations_memory', accountUuid ?? ''),
             source: 'claude',
             type: 'memory',
             title: 'Claude Memory — Conversations',
@@ -216,7 +218,8 @@ export class ClaudeAdapter implements SourceAdapter {
           const content = typeof memValue === 'string' ? memValue : JSON.stringify(memValue);
           if (content.length > 0) {
             out.push({
-              id: randomUUID(),
+              // per-project memory keyed on the project uuid map key (not content).
+              id: stableHarvestId('claude', 'memory', 'project_memory', accountUuid ?? '', projUuid),
               source: 'claude',
               type: 'memory',
               title: `Claude Memory — Project ${projUuid}`,
@@ -250,7 +253,7 @@ export class ClaudeAdapter implements SourceAdapter {
     if (messages.length === 0) return [];
 
     return [{
-      id: randomUUID(),
+      id: stableHarvestId('claude', getString(dc, 'uuid') ?? `designchat\x00${getString(dc, 'project') ?? ''}\x00${getString(dc, 'title') ?? ''}\x00${getString(dc, 'created_at') ?? ''}`),
       source: 'claude',
       type: 'conversation',
       title: getString(dc, 'title') ?? 'Claude Design Chat',

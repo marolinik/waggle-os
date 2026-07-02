@@ -103,6 +103,31 @@ describe('erased_subjects migration + backfill', () => {
   });
 });
 
+describe('RawArchive.append honors suppression (substrate-intrinsic backstop)', () => {
+  let db: MindDB;
+  let archive: RawArchive;
+  let sup: SuppressionStore;
+  beforeEach(() => {
+    db = new MindDB(':memory:');
+    archive = new RawArchive(db);
+    sup = new SuppressionStore(db);
+  });
+  afterEach(() => db.close());
+
+  it('skips the INSERT for a suppressed subject and reports created:false', () => {
+    sup.record('chatgpt', 'thread-5', 'gdpr');
+    const res = archive.append({ source: 'chatgpt', sourceRef: 'thread-5', content: 'must NOT re-materialize' });
+    expect(res.created).toBe(false);
+    expect(archive.count()).toBe(0);
+  });
+
+  it('still appends a subject that is not suppressed', () => {
+    const res = archive.append({ source: 'chatgpt', sourceRef: 'thread-6', content: 'fine to keep' });
+    expect(res.created).toBe(true);
+    expect(archive.count()).toBe(1);
+  });
+});
+
 describe('MindErasure captures suppression at erase time', () => {
   let db: MindDB;
   let erasure: MindErasure;

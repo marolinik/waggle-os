@@ -6,7 +6,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import fs from 'node:fs';
-import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive, readArchiveUids, withArchiveUid } from '@waggle/hive-mind-core';
+import { resolveRelativeDate, HARVEST_FRAME_CONTENT_CAP, writeRawTurnFrames, RawArchive, SuppressionStore, readArchiveUids, withArchiveUid } from '@waggle/hive-mind-core';
 import {
   getFrameStore,
   getSessions,
@@ -106,8 +106,13 @@ export function registerHarvestTools(server: McpServer): void {
       // #7: verbatim provenance archive — full immutable source per item, linked
       // from the summary frame via metadata.archiveUid. Append-only; idempotent.
       const rawArchive = new RawArchive(getPersonalDb());
+      // #7 sticky erasure: skip re-importing an Art.17-erased subject. One `continue`
+      // short-circuits the whole per-item fan-out (archive + summary + raw-turns + KG).
+      const suppression = new SuppressionStore(getPersonalDb());
+      let suppressedSkipped = 0;
 
       for (const item of items) {
+        if (suppression.isSuppressed(item.source, item.id)) { suppressedSkipped++; continue; }
         // Build a summary from the conversation
         const content = item.title
           ? `[${item.source}] ${item.title}: ${item.content.slice(0, HARVEST_FRAME_CONTENT_CAP)}`
@@ -231,6 +236,7 @@ export function registerHarvestTools(server: McpServer): void {
             items_found: items.length,
             frames_created: framesCreated,
             duplicates_skipped: duplicatesSkipped,
+            suppressed_skipped: suppressedSkipped,
             entities_created: entitiesCreated,
             raw_turns_written: rawTurnsWritten,
           }, null, 2),

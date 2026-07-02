@@ -405,7 +405,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     // Frames have a FK to sessions(gop_id) — ensure the stable `harvest`
     // session row exists before creating any frames, otherwise the insert
     // hits SQLITE_CONSTRAINT_FOREIGNKEY and nothing persists.
-    const { FrameStore, SessionStore, RawArchive, readArchiveUids, withArchiveUid } = await import('@waggle/core');
+    const { FrameStore, SessionStore, RawArchive, SuppressionStore, readArchiveUids, withArchiveUid } = await import('@waggle/core');
     const sessionStore = new SessionStore(personalDb);
     sessionStore.ensure('harvest', 'harvest', 'Imported memory from external sources');
 
@@ -413,7 +413,12 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     // #7: verbatim provenance archive — full immutable source per item, linked
     // from the summary frame via metadata.archiveUid. Append-only; idempotent.
     const rawArchive = new RawArchive(personalDb);
+    // #7 sticky erasure: skip any (source, source_ref) the user erased under Art.17,
+    // so a re-export/re-import can't re-materialize it. One `continue` short-circuits
+    // the whole per-item fan-out (archive + summary + raw-turns + cognify + wiki).
+    const suppression = new SuppressionStore(personalDb);
     let saved = 0;
+    let skippedSuppressed = 0;
     let timestampFallbacks = 0;
     let rawTurnsWritten = 0;
     // W4.6: cognify must see the SUMMARY frames only — collect their ids
@@ -425,6 +430,8 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     try {
       emitHarvestProgress({ phase: 'saving', current: 0, total: items.length, source });
       for (const item of items) {
+        // #7 sticky erasure: an erased subject must not re-materialize on re-import.
+        if (suppression.isSuppressed(item.source, item.id)) { skippedSuppressed++; continue; }
         const label = `[Harvest:${item.source}] ${item.title}`;
         const content = item.content.slice(0, HARVEST_PREVIEW_CAP_CHARS);
         // Preserve original source timestamp on the resulting frame so
@@ -625,6 +632,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         source,
         itemCount: items.length,
         saved,
+        skippedSuppressed,
         rawTurnsWritten,
         cognified: cognifyStats.processed,
         cognifySkippedReason,
@@ -633,9 +641,10 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         wikiCompiled: wikiStats,
         wikiSkippedReason,
         runId,
-        message: wikiSkippedReason
+        message: (wikiSkippedReason
           ? `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki skipped (${wikiSkippedReason})`
-          : `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki ${wikiStats.pagesCreated + wikiStats.pagesUpdated} pages updated`,
+          : `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki ${wikiStats.pagesCreated + wikiStats.pagesUpdated} pages updated`)
+          + (skippedSuppressed > 0 ? ` — ${skippedSuppressed} erased ${skippedSuppressed === 1 ? 'subject' : 'subjects'} suppressed (GDPR Art.17)` : ''),
       };
     } catch (err) {
       // M-08: record the failure with however many items we got through.

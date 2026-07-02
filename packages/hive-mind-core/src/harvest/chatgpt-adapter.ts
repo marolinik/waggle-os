@@ -5,7 +5,7 @@
  * messages. Each conversation has a title, create_time, and the mapping tree.
  */
 
-import { randomUUID } from 'node:crypto';
+import { stableHarvestId } from './stable-id.js';
 import type { SourceAdapter, UniversalImportItem, ConversationMessage } from './types.js';
 import { asRecord, getArray, getNumber, getString, type RawRecord } from './raw-types.js';
 
@@ -100,7 +100,9 @@ export class ChatGPTAdapter implements SourceAdapter {
       const createTime = getNumber(conv, 'create_time');
 
       items.push({
-        id: randomUUID(),
+        // #7 sticky erasure: stable per-conversation id (keyed on the export's own
+        // conversation id, NOT content, so a grown conversation keeps its id).
+        id: stableHarvestId('chatgpt', getString(conv, 'id') ?? getString(conv, 'conversation_id') ?? `conv\x00${title}\x00${createTime ?? ''}`),
         source: 'chatgpt',
         type: 'conversation',
         title,
@@ -118,7 +120,7 @@ export class ChatGPTAdapter implements SourceAdapter {
     // Also extract custom instructions / memory as separate items
     if (root?.user_custom_instructions) {
       items.push({
-        id: randomUUID(),
+        id: stableHarvestId('chatgpt', 'custom_instructions'), // singleton per export
         source: 'chatgpt',
         type: 'instruction',
         title: 'ChatGPT Custom Instructions',
@@ -138,7 +140,8 @@ export class ChatGPTAdapter implements SourceAdapter {
           ? rawMem
           : (mem && (getString(mem, 'content') ?? getString(mem, 'text'))) ?? JSON.stringify(rawMem);
         items.push({
-          id: randomUUID(),
+          // memory rows are immutable snapshots → keying on created_at+content is safe.
+          id: stableHarvestId('chatgpt', 'memory', (mem && getString(mem, 'created_at')) ?? '', content),
           source: 'chatgpt',
           type: 'memory',
           title: 'ChatGPT Memory',
