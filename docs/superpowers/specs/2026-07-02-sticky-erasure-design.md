@@ -136,6 +136,27 @@ independent of this feature). Making them sticky requires threading the connecto
 `sourceId` + routing `ingest_source` through `importEntitiesForFrame` — a separate engineering item.
 Noted in `raw-archive.ts` / the erase docstrings.
 
+### 6b. Known limitations (post-review, deferred — adversarial review 2026-07-02, 21 raised / 14 confirmed)
+
+All confirmed HIGH + most MEDIUM/LOW findings were **fixed in-arc**. Three are deliberately deferred:
+
+- **claude-code `decision-of` derived subject (MEDIUM, notable).** `extractDecisions` emits a SEPARATE
+  item per parent whose id = `stableHarvestId('claude-code','decision-of',parentId)` and whose content
+  is the parent's decision-pattern lines. Erasing/suppressing the PARENT subject does not reach this
+  derived subject (distinct key), so the derived frame (quoting the parent's decision text) survives
+  erasure AND re-materializes on re-import/auto-sync. Partly pre-existing (pre-arc it re-materialized
+  under a random key too). Proper fix couples erasure to the derivation (follow `metadata.extractedFrom`
+  in the sweep + record the derived key) — non-trivial, claude-code-specific; deferred to a follow-up.
+- **`isSuppressed` fail-closed labeling (LOW, cosmetic).** If ONLY `erased_subjects` is unreadable while
+  other tables are healthy (single-table corruption / manual DROP within one process lifetime), every
+  item is skipped and the harvest response mislabels the whole-corpus silent drop as "N erased subjects
+  suppressed (GDPR Art.17)". Fail-closed is the correct Art.17 posture; only the count/message conflates
+  a read-error with a real suppression. Uncommon trigger; deferred (surface a separate error counter).
+- **Workspace-scope suppression is inert (LOW, cosmetic).** A `mind=workspace` erase records a suppression
+  row in the workspace mind, but harvest only ever writes/reads the personal mind, so the row can never
+  suppress anything and the workspace re-consent panel's promise is vacuously true. Consistent with the
+  ratified per-mind model; the UI/API framing over both minds is the only misleading part. Deferred.
+
 ### 7. OSS forward-port (P2, monorepo-first per §7.5)
 
 `suppression.ts` + the `schema.ts`/`db.ts` additions are **generic substrate** (no governance/trust
