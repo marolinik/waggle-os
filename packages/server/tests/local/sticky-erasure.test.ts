@@ -88,3 +88,51 @@ describe('#7 sticky erasure — erased subject does not re-materialize on re-imp
     expect(findT1Summary()).toHaveLength(1); // re-materialized after re-consent
   });
 });
+
+describe('#7 sticky erasure — re-consent restores an IDENTICAL re-import (set-hash skip cleared)', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-reconsent-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+  });
+  afterAll(async () => {
+    await server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a byte-identical re-import after Allow re-import re-materializes (not skipped as unchanged)', async () => {
+    const U1 = chatgptThread('ReconsentIdenticalCase', 1710000000, 'private content to erase then re-consent');
+    const commit = (data: unknown[]) =>
+      injectWithAuth(server, { method: 'POST', url: '/api/harvest/commit', payload: { data, source: 'chatgpt' } });
+    const personalDb = server.multiMind!.personal;
+    const findU1 = (): number[] =>
+      (personalDb.getDatabase().prepare(
+        "SELECT id FROM memory_frames WHERE content LIKE '[Harvest:chatgpt]%ReconsentIdenticalCase%'"
+      ).all() as Array<{ id: number }>).map(r => r.id);
+
+    // 1. Import → erase (records suppression + leaves harvest_sources.last_content_hash).
+    await commit([U1]);
+    const f = findU1();
+    expect(f).toHaveLength(1);
+    new MindErasure(personalDb).eraseFrameComplete(f[0], 'gdpr');
+    expect(findU1()).toHaveLength(0);
+
+    // 2. Re-consent via the route (which also clears the set-hash skip).
+    const sup = new SuppressionStore(personalDb).list().find(s => s.source === 'chatgpt');
+    expect(sup).toBeTruthy();
+    const allow = await injectWithAuth(server, {
+      method: 'POST', url: '/api/memory/suppression/allow',
+      payload: { source: sup!.source, sourceRef: sup!.sourceRef },
+    });
+    expect(allow.statusCode).toBe(200);
+
+    // 3. Re-import the BYTE-IDENTICAL set. Without the set-hash clear this would be
+    //    skipped as "unchanged" and U1 would NOT return; with it, U1 re-materializes.
+    const r = await commit([U1]);
+    expect(r.statusCode).toBe(200);
+    const body = r.json() as { skipped?: boolean };
+    expect(body.skipped).not.toBe(true);
+    expect(findU1()).toHaveLength(1);
+  });
+});

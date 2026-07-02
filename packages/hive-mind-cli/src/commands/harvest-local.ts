@@ -13,6 +13,7 @@ import {
   ClaudeCodeAdapter,
   GeminiAdapter,
   UniversalAdapter,
+  SuppressionStore,
   type UniversalImportItem,
 } from '@waggle/hive-mind-core';
 import { openPersonalMind, type CliEnv } from '../setup.js';
@@ -42,6 +43,8 @@ export interface HarvestLocalResult {
   itemsFound: number;
   framesCreated: number;
   duplicatesSkipped: number;
+  /** #7 sticky erasure: items skipped because their (source, id) is on the erased-subject list. */
+  suppressedSkipped: number;
   errors: string[];
 }
 
@@ -99,6 +102,7 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
         itemsFound: 0,
         framesCreated: 0,
         duplicatesSkipped: 0,
+        suppressedSkipped: 0,
         errors: [`Path not found: ${resolved}`],
       };
     }
@@ -113,6 +117,7 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
         itemsFound: 0,
         framesCreated: 0,
         duplicatesSkipped: 0,
+        suppressedSkipped: 0,
         errors: [err instanceof Error ? err.message : String(err)],
       };
     }
@@ -124,6 +129,7 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
         itemsFound: 0,
         framesCreated: 0,
         duplicatesSkipped: 0,
+        suppressedSkipped: 0,
         errors: [`No items parsed from ${options.source} source`],
       };
     }
@@ -144,9 +150,15 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
 
     let framesCreated = 0;
     let duplicatesSkipped = 0;
+    let suppressedSkipped = 0;
     let timestampFallbacks = 0;
+    // #7 sticky erasure: this CLI seam writes to the SAME personal mind as the
+    // guarded MCP/route harvest paths, so it must consult the same suppression list
+    // or a re-import here would re-materialize an Art.17-erased subject.
+    const suppression = new SuppressionStore(env.db);
 
     for (const item of items) {
+      if (suppression.isSuppressed(item.source, item.id)) { suppressedSkipped++; continue; }
       // Sprint 9 Task 0.5: preview cap raised from 2000 → 10_000 chars.
       // Rationale: the 2000-char cap surfaced as the dominant secondary
       // failure mode after the Task 0 timestamp fix (Stage 0 re-run on
@@ -229,6 +241,7 @@ export async function runHarvestLocal(options: HarvestLocalOptions): Promise<Har
       itemsFound: items.length,
       framesCreated,
       duplicatesSkipped,
+      suppressedSkipped,
       errors,
     };
   } finally {

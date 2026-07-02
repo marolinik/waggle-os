@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Importance, MemoryFrame } from '@waggle/core';
-import { FrameStore, MindErasure, RawArchive, SessionStore, SuppressionStore, readArchiveUids } from '@waggle/core';
+import { FrameStore, HarvestSourceStore, MindErasure, RawArchive, SessionStore, SuppressionStore, readArchiveUids } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -701,6 +701,10 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       : server.multiMind.personal;
     if (!db) return reply.status(500).send({ error: 'Target mind unavailable' });
     const removed = new SuppressionStore(db).unsuppress(b.source, b.sourceRef);
+    // Re-consent must let an IDENTICAL re-import re-materialize the subject. The
+    // R3-004 set-hash skip would otherwise short-circuit an unchanged re-import
+    // before the per-item loop re-adds it, so clear the source's skip hash.
+    if (removed) new HarvestSourceStore(db).clearContentHash(b.source as Parameters<HarvestSourceStore['clearContentHash']>[0]);
     return reply.send({ removed, mind });
   });
 

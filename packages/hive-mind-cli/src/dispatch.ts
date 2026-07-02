@@ -83,6 +83,7 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
       return fmt === 'json' ? json(result) : (
         `Harvested ${result.itemsFound} items from ${result.source} ` +
         `(${result.framesCreated} new, ${result.duplicatesSkipped} duplicates` +
+        (result.suppressedSkipped ? `, ${result.suppressedSkipped} erased-suppressed` : '') +
         (result.errors.length ? `, ${result.errors.length} errors` : '') +
         `)`
       );
