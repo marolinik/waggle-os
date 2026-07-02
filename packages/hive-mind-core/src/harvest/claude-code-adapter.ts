@@ -14,6 +14,7 @@
  */
 
 import { stableHarvestId } from './stable-id.js';
+import { decisionOfSubjectId } from './decision-derivation.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { FilesystemAdapter, UniversalImportItem, ImportItemType } from './types.js';
@@ -292,8 +293,10 @@ export class ClaudeCodeAdapter implements FilesystemAdapter {
       if (decisionLines.length > 0) {
         decisions.push({
           // derived item — namespaced by the (now-stable) parent id so it never
-          // collides with the parent's own id.
-          id: stableHarvestId('claude-code', 'decision-of', item.id),
+          // collides with the parent's own id. decisionOfSubjectId is the SHARED
+          // derivation MindErasure.eraseBySourceRef recomputes to reach + suppress
+          // this derived subject on erasure (#7 P2), so the two sites cannot drift.
+          id: decisionOfSubjectId(item.id),
           source: 'claude-code',
           type: 'decision',
           title: `Decisions from: ${item.title}`,
