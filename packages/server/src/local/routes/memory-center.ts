@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import type { Importance, MemoryFrame } from '@waggle/core';
-import { FrameStore, MindErasure, RawArchive, SessionStore, readArchiveUids } from '@waggle/core';
+import { FrameStore, MindErasure, RawArchive, SessionStore, SuppressionStore, readArchiveUids } from '@waggle/core';
 import type { Memory, MemoryKind, MemoryStatus, Scope } from '@waggle/shared';
 import { redactSkillContent } from '@waggle/agent';
 import { emitAuditEvent } from './events.js';
@@ -662,6 +662,46 @@ export const memoryCenterRoutes: FastifyPluginAsync = async (server) => {
       output: JSON.stringify(result),
     });
     return reply.send({ erased: true, mind, result });
+  });
+
+  // GET /api/memory/suppression — the #7 "sticky erasure" re-consent surface. Lists
+  // the (source, source_ref) subjects an Art.17 erasure recorded on the suppression
+  // list; any re-import of these is skipped. Per-mind (mirrors /erase resolution).
+  server.get<{ Querystring: { workspace?: string; workspaceId?: string; mind?: string } }>(
+    '/api/memory/suppression', async (request, reply) => {
+      const workspace = request.query.workspace ?? request.query.workspaceId;
+      const parsed = parseMind(request.query.mind, workspace);
+      if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+      const mind = parsed.mind === 'workspace' ? 'workspace' : 'personal';
+      const db = mind === 'workspace' && workspace
+        ? server.agentState.getWorkspaceMindDb(workspace)
+        : server.multiMind.personal;
+      if (!db) return reply.status(500).send({ error: 'Target mind unavailable' });
+      return reply.send({ mind, suppressed: new SuppressionStore(db).list() });
+    });
+
+  // POST /api/memory/suppression/allow — re-consent: lift the suppression on a
+  // subject so it may be re-imported again (#7 sticky erasure). Idempotent — lifting
+  // a subject that isn't suppressed returns removed:false, still 200. NOT audited as
+  // data_erase_requested (that would mislabel a re-consent as an erasure); the row
+  // deletion is the state change and the original erase was already audited.
+  server.post<{
+    Body: { source?: string; sourceRef?: string; workspace?: string; workspaceId?: string; mind?: string };
+  }>('/api/memory/suppression/allow', async (request, reply) => {
+    const b = request.body ?? {};
+    if (typeof b.source !== 'string' || typeof b.sourceRef !== 'string' || !b.source || !b.sourceRef) {
+      return reply.status(400).send({ error: 'allow requires both source and sourceRef' });
+    }
+    const workspace = b.workspace ?? b.workspaceId;
+    const parsed = parseMind(b.mind, workspace);
+    if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
+    const mind = parsed.mind === 'workspace' ? 'workspace' : 'personal';
+    const db = mind === 'workspace' && workspace
+      ? server.agentState.getWorkspaceMindDb(workspace)
+      : server.multiMind.personal;
+    if (!db) return reply.status(500).send({ error: 'Target mind unavailable' });
+    const removed = new SuppressionStore(db).unsuppress(b.source, b.sourceRef);
+    return reply.send({ removed, mind });
   });
 
   // POST /api/memory/merge — merge >= 2 memories into one (C11: concatenate v1,
