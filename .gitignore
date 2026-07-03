@@ -271,3 +271,6 @@ docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.jpg
 # npm is the canonical package manager (CLAUDE.md); bun.lock removed to avoid a
 # divergent dependency graph from a stray `bun install`.
 bun.lock
+
+# /understand tool trash — regenerable deleted-graph JSON, not for the public repo
+.understand-anything/.trash*
