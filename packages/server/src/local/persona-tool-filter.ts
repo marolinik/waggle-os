@@ -8,7 +8,7 @@
  * directly (and lock it against regression at the exact break point).
  */
 
-import type { ToolDefinition, AgentPersona } from '@waggle/agent';
+import { READONLY_TOOLS, type ToolDefinition, type AgentPersona } from '@waggle/agent';
 
 /**
  * Tools that survive a persona's allowlist regardless of what the persona
@@ -35,6 +35,13 @@ export const ALWAYS_AVAILABLE_TOOLS: ReadonlySet<string> = new Set([
 /**
  * Write tools stripped for read-only personas (planner / verifier), even when
  * they would otherwise be always-available. `read_skill` is a read and stays.
+ *
+ * NOTE (SEC): this denylist is retained for documentation + back-compat only.
+ * The read-only strip below is now an ALLOWLIST (READ_ONLY_ALLOWED_TOOLS): a
+ * denylist silently leaks any write tool not enumerated here (add_task,
+ * create_plan, add_plan_step, compose_workflow, execute_step … did leak), and
+ * every future write tool would leak too. "No write tools ever" only holds when
+ * we allow known reads and drop everything else.
  */
 export const READ_ONLY_WRITE_TOOLS: ReadonlySet<string> = new Set([
   'write_file', 'edit_file', 'git_commit', 'git_push', 'git_merge',
@@ -45,11 +52,23 @@ export const READ_ONLY_WRITE_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * The ONLY tools a read-only persona (planner / verifier) may keep. Anything
+ * not in this set is stripped — so a new write tool cannot silently leak into a
+ * "no writes ever" persona. Built from the canonical READONLY_TOOLS set in
+ * @waggle/agent plus `read_skill` (reading a skill is a read).
+ */
+export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
+  ...READONLY_TOOLS,
+  'read_skill',
+]);
+
+/**
  * Apply a persona's tool policy:
  *   1. Allowlist — declared tools + always-available (only when the persona
  *      declares any tools; an empty `tools` array means "no narrowing").
  *   2. Denylist — `disallowedTools` wins over the allowlist AND always-available.
- *   3. Read-only strip — read-only personas lose every write tool.
+ *   3. Read-only strip — read-only personas keep ONLY known read tools
+ *      (allowlist intersect); every write tool is dropped.
  *
  * Pure: returns a filtered copy, never mutates the input array.
  */
@@ -70,7 +89,10 @@ export function applyPersonaToolFilter(
   }
 
   if (persona.isReadOnly) {
-    out = out.filter(t => !READ_ONLY_WRITE_TOOLS.has(t.name));
+    // Allowlist, not denylist: a read-only persona keeps only enumerated reads,
+    // so unlisted writes (add_task, create_plan, compose_workflow, …) and any
+    // future write tool are stripped rather than silently leaking.
+    out = out.filter(t => READ_ONLY_ALLOWED_TOOLS.has(t.name));
   }
 
   return out;

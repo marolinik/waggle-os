@@ -1214,8 +1214,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Dynamic tool availability — run checkAvailability on each tool
+        // SEC: capture the persona + availability filtered tool names BEFORE the
+        // conversational-turn narrowing. This is the allowlist a spawned
+        // sub-agent / workflow worker is intersected against: the persona and
+        // availability restrictions must carry across spawn, but the per-turn
+        // conversational narrowing (a UX heuristic) must not shrink a
+        // sub-agent's legitimate toolset for its explicit task.
+        let spawnAllowedToolNames: ReadonlySet<string> | null = null;
         if (!hasCustomRunner) {
           effectiveTools = filterAvailableTools(effectiveTools);
+          spawnAllowedToolNames = new Set(effectiveTools.map(t => t.name));
           const beforeNarrowing = effectiveTools.length;
           effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
           if (effectiveTools.length !== beforeNarrowing) {
@@ -1516,6 +1524,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 });
               }
             : undefined,
+        };
+
+        // SEC: publish the request-scoped security context so sub-agents /
+        // workflow workers spawned during this run inherit the SAME approval
+        // gate, governance denylist, and persona allowlist as the main loop.
+        // Without this, spawned agents ran the full tool pool with no
+        // confirmation gate (the sub-agent confirmation-bypass). Cleared in the
+        // outer finally so it never leaks into a later run.
+        server.agentState.spawnSecurityContext = hasCustomRunner ? null : {
+          hooks: hookRegistry,
+          blockedTools: governancePolicies?.blockedTools,
+          allowedToolNames: spawnAllowedToolNames,
         };
 
         // ── Run agent with credential pool + fallback chain ──
@@ -1916,6 +1936,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
+      // SEC: drop the request-scoped spawn security context. It must not leak
+      // into a later run, which could otherwise apply a stale workspace's
+      // governance / persona restrictions to a freshly spawned sub-agent.
+      server.agentState.spawnSecurityContext = null;
       // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
       // already unregisters and sets to undefined; this guarantees we never leak the
       // hook into the shared hookRegistry on any exception path.

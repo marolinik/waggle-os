@@ -9,6 +9,8 @@
 import { EventEmitter } from 'events';
 import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
+import type { HookRegistry } from './hooks.js';
+import { filterSpawnToolNames, type SpawnSecurityContext } from './subagent-tools.js';
 
 export type WorkerStatus = 'pending' | 'running' | 'done' | 'failed';
 
@@ -54,6 +56,16 @@ export interface OrchestratorConfig {
   litellmUrl: string;
   litellmApiKey: string;
   defaultModel?: string;
+  /** Approval-gate hooks forwarded into each worker loop (fallback when no request context). */
+  hooks?: HookRegistry;
+  /**
+   * Request-scoped security context accessor (same contract as the sub-agent
+   * spawn tool). When present, each worker loop inherits the request's approval
+   * gate + governance blockedTools, and its tool subset is intersected with the
+   * request's persona allowlist — so a workflow cannot escape the spawning
+   * request's restrictions.
+   */
+  getSpawnSecurityContext?: () => SpawnSecurityContext | undefined;
 }
 
 export class SubagentOrchestrator extends EventEmitter {
@@ -213,7 +225,11 @@ export class SubagentOrchestrator extends EventEmitter {
     this.emit('worker:status', { workerId: id, status: 'running', workerState });
 
     // Resolve tools
-    const toolNames = step.tools ?? SubagentOrchestrator.ROLE_TOOL_PRESETS[step.role] ?? SubagentOrchestrator.ROLE_TOOL_PRESETS.analyst!;
+    const baseToolNames = step.tools ?? SubagentOrchestrator.ROLE_TOOL_PRESETS[step.role] ?? SubagentOrchestrator.ROLE_TOOL_PRESETS.analyst!;
+    // SEC: inherit the spawning request's governance denylist + persona allowlist
+    // so a workflow worker cannot escape the request's tool restrictions.
+    const secCtx = this.config.getSpawnSecurityContext?.();
+    const toolNames = filterSpawnToolNames(baseToolNames, secCtx);
     const tools = this.config.availableTools.filter(t => toolNames.includes(t.name));
 
     // Build system prompt with optional context from previous steps
@@ -229,6 +245,13 @@ export class SubagentOrchestrator extends EventEmitter {
         messages: [{ role: 'user', content: step.task }],
         maxTurns: step.maxTurns ?? 50,
         stream: false,
+        // SEC: worker loops respect the request's approval gate + governance
+        // denylist. The executeToolCall critical floor still fail-closes
+        // destructive ops even when no gate is wired.
+        hooks: secCtx?.hooks ?? this.config.hooks,
+        governancePolicies: secCtx?.blockedTools?.length
+          ? { blockedTools: [...secCtx.blockedTools] }
+          : undefined,
       });
 
       workerState.status = 'done';

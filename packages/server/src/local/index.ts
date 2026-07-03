@@ -249,6 +249,19 @@ export interface AgentState {
   activeWorkspaceId: string | null;
   /** Current sub-agent orchestrator instance (set during workflow execution) */
   subagentOrchestrator: import('@waggle/agent').SubagentOrchestrator | null;
+  /**
+   * SEC: request-scoped security context for spawned agents. Set by the chat
+   * route for the lifetime of a single agent run (cleared in its finally) so
+   * that sub-agents / workflow workers spawned during the run inherit the same
+   * approval gate, governance blockedTools, and persona tool-allowlist as the
+   * main loop. `null` outside an active run. Structural shape matches
+   * @waggle/agent SpawnSecurityContext (kept inline to avoid a type re-export).
+   */
+  spawnSecurityContext: {
+    hooks?: import('@waggle/agent').HookRegistry;
+    blockedTools?: readonly string[];
+    allowedToolNames?: ReadonlySet<string> | null;
+  } | null;
   /** Plugin runtime manager — lifecycle, tools, skills from plugins */
   pluginRuntimeManager: import('@waggle/sdk').PluginRuntimeManager;
   /** MCP server runtime — stdio servers, health, tools */
@@ -776,6 +789,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmUrl: fullConfig.litellmUrl,
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
+    // SEC: sub-agents spawned during a chat request inherit that request's
+    // approval gate + governance denylist + persona allowlist. The chat route
+    // publishes this per request; called at spawn time (post-decoration).
+    getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     onSubAgentStatus: (event) => {
       emitSubagentStatus(server, server.agentState.activeWorkspaceId ?? defaultWorkspaceId, [{
         id: event.agentId,
@@ -831,6 +848,9 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     litellmUrl: fullConfig.litellmUrl,
     litellmApiKey: litellmApiKey,
     defaultModel: 'claude-sonnet-4-6',
+    // SEC: workflow workers inherit the spawning request's approval gate +
+    // governance denylist + persona allowlist (same contract as sub-agents).
+    getSpawnSecurityContext: () => server.agentState.spawnSecurityContext ?? undefined,
     onWorkerStatus: (event) => {
       // Relay sub-agent status to eventBus for SSE notification stream
       const orch = server.agentState.subagentOrchestrator;
@@ -1408,6 +1428,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     weaverState,
     workspaceWeaverStatus,
     subagentOrchestrator: null,
+    spawnSecurityContext: null,
     pluginRuntimeManager,
     mcpRuntime,
     commandRegistry,

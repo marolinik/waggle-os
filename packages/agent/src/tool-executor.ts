@@ -10,6 +10,8 @@
  *   2. onToolUse callback
  *   3. Governance.blockedTools — early return on block (fires onToolResult)
  *   4. pre:tool hook — early return on cancel
+ *  4b. critical-destructive hard floor — deny isCriticalNeverAutopass ops that
+ *      reach here without an approval gate (defense-in-depth; independent of hooks)
  *   5. pre:memory-write hook (save_memory only) — early return on cancel
  *   6. LoopGuard.check — produces error result if duplicate
  *   7. Execute (or capability-router fallback or unknown-tool error)
@@ -31,6 +33,7 @@ import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { LoopGuard } from './loop-guard.js';
 import { scanForInjection } from './injection-scanner.js';
+import { isCriticalNeverAutopass } from './confirmation.js';
 import { compressToolOutput } from './tool-output-compressor.js';
 import { logTurnEvent } from './turn-context.js';
 import { untrustedContextWrapper } from './untrusted-context.js';
@@ -42,6 +45,18 @@ export interface ToolExecutorDeps {
   capabilityRouter?: CapabilityRouter;
   /** Governance policy: tool names blocked at the team level */
   blockedTools?: readonly string[];
+  /**
+   * Defense-in-depth approval callback for CRITICAL_NEVER_AUTOPASS operations
+   * (`isCriticalNeverAutopass`: rm -rf ~, sudo, mkfs, dd of=/dev, git push
+   * --force main, delete_skill, connector deletes, high-risk installs). When
+   * provided, executeToolCall calls it for any critical-destructive tool BEFORE
+   * executing and denies on a false return. When ABSENT, executeToolCall falls
+   * back to requiring a `pre:tool` approval gate (`hooks`) to be wired —
+   * otherwise it fail-closes (denies). This guarantees that no spawn path
+   * (sub-agent / workflow / worker / future) can run a terminal-destructive
+   * command unconfirmed, regardless of whether hooks are wired.
+   */
+  confirmCriticalAction?: (name: string, args: Record<string, unknown>) => Promise<boolean> | boolean;
   onToolUse?: (name: string, args: Record<string, unknown>) => void;
   onToolResult?: (name: string, args: Record<string, unknown>, result: string) => void;
   /** H-AUDIT-1: per-turn trace ID for structured event logging */
@@ -68,7 +83,7 @@ export async function executeToolCall(
   toolCall: { id: string; function: { name: string; arguments: string } },
   deps: ToolExecutorDeps,
 ): Promise<ToolExecResult> {
-  const { toolMap, guard, hooks, capabilityRouter, blockedTools, onToolUse, onToolResult, turnId } = deps;
+  const { toolMap, guard, hooks, capabilityRouter, blockedTools, confirmCriticalAction, onToolUse, onToolResult, turnId } = deps;
   const fnName = toolCall.function.name;
 
   // ── Step 1: safely parse tool arguments ──
@@ -130,6 +145,36 @@ export async function executeToolCall(
         countedAsUsed: false,
         toolName: fnName,
       };
+    }
+  }
+
+  // ── Step 4b: critical-destructive hard floor (defense-in-depth) ──
+  // isCriticalNeverAutopass flags terminal, irreversible operations that must
+  // pass a human/policy approval gate at EVERY layer — not only the main chat
+  // loop. The main loop gates them via the pre:tool hook fired above; spawn
+  // paths (sub-agent / workflow / worker) that forward that same hook registry
+  // inherit the gate. If NO approval mechanism reached this call, fail closed:
+  // deny rather than silently execute. This runs unconditionally — it does not
+  // depend on the pre:tool hook being wired, which is the whole point. Without
+  // it, a spawn path constructed with `hooks: undefined` executed rm -rf ~,
+  // sudo, git push --force main, delete_skill, etc. unconfirmed.
+  if (isCriticalNeverAutopass(fnName, fnArgs)) {
+    const approvedOutOfBand = confirmCriticalAction
+      ? await confirmCriticalAction(fnName, fnArgs)
+      : false;
+    // A pre:tool approval gate present at step 4 already vetted this call (a
+    // critical op always trips needsConfirmationWithAutonomy, so reaching here
+    // past a non-cancelled hook means it was approved). No callback and no gate
+    // ⇒ no human in the loop ⇒ deny.
+    const gatedByHook = hooks !== undefined;
+    if (!approvedOutOfBand && !gatedByHook) {
+      const denyMsg =
+        `[BLOCKED] "${fnName}" is a critical, irreversible operation that requires ` +
+        `explicit human approval. It was denied because this execution context ` +
+        `(such as a sub-agent or automated workflow) has no approval gate. ` +
+        `Terminal-destructive commands never run unconfirmed.`;
+      if (onToolResult) onToolResult(fnName, fnArgs, denyMsg);
+      return { content: denyMsg, toolCallId: toolCall.id, countedAsUsed: false, toolName: fnName };
     }
   }
 

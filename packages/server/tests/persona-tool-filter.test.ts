@@ -4,6 +4,7 @@ import {
   applyPersonaToolFilter,
   ALWAYS_AVAILABLE_TOOLS,
   READ_ONLY_WRITE_TOOLS,
+  READ_ONLY_ALLOWED_TOOLS,
 } from '../src/local/persona-tool-filter.js';
 
 const tool = (name: string): ToolDefinition =>
@@ -54,5 +55,40 @@ describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => 
     expect(READ_ONLY_WRITE_TOOLS.has('create_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('delete_skill')).toBe(true);
     expect(READ_ONLY_WRITE_TOOLS.has('read_skill')).toBe(false);
+  });
+});
+
+// SEC-GATE fix #4: read-only personas use an ALLOWLIST, so write tools not on
+// the old denylist (add_task, create_plan, add_plan_step, compose_workflow,
+// execute_step) can no longer silently leak.
+describe('applyPersonaToolFilter — read-only allowlist (no write tool leaks)', () => {
+  const LEAK_POOL = [
+    'read_file', 'search_memory', 'read_skill', 'search_skills', 'show_plan',
+    'add_task', 'create_plan', 'add_plan_step', 'compose_workflow', 'execute_step',
+    'write_file', 'save_memory',
+  ].map(tool);
+
+  it('a read-only persona cannot invoke add_task / create_plan / add_plan_step / compose_workflow / execute_step', () => {
+    const out = applyPersonaToolFilter(LEAK_POOL, persona({ tools: [], isReadOnly: true })).map(t => t.name);
+    for (const leaked of ['add_task', 'create_plan', 'add_plan_step', 'compose_workflow', 'execute_step', 'write_file', 'save_memory']) {
+      expect(out, `${leaked} must be stripped from a read-only persona`).not.toContain(leaked);
+    }
+  });
+
+  it('a read-only persona keeps enumerated read tools', () => {
+    const out = applyPersonaToolFilter(LEAK_POOL, persona({ tools: [], isReadOnly: true })).map(t => t.name);
+    expect(out).toContain('read_file');
+    expect(out).toContain('search_memory');
+    expect(out).toContain('read_skill');
+    expect(out).toContain('search_skills');
+    expect(out).toContain('show_plan');
+  });
+
+  it('the read-only allowlist enumerates reads and excludes writes', () => {
+    expect(READ_ONLY_ALLOWED_TOOLS.has('read_file')).toBe(true);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('read_skill')).toBe(true);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('create_plan')).toBe(false);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('add_task')).toBe(false);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('compose_workflow')).toBe(false);
   });
 });

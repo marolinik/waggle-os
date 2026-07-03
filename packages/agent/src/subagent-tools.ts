@@ -10,6 +10,49 @@ import type { ToolDefinition } from './tools.js';
 import type { AgentLoopConfig, AgentResponse } from './agent-loop.js';
 import type { HookRegistry } from './hooks.js';
 
+/**
+ * Request-scoped security context threaded into a spawned sub-agent / workflow
+ * worker so it inherits the SAME restrictions as the chat request that spawned
+ * it. Without this, sub-agents ran with the full tool pool and no approval gate
+ * (the sub-agent confirmation-bypass). Populated per request by the chat route
+ * via `server.agentState.spawnSecurityContext` and read at spawn time.
+ */
+export interface SpawnSecurityContext {
+  /** Approval-gate hooks — the shared registry carrying the request's pre:tool confirmation gate. */
+  hooks?: HookRegistry;
+  /** Team governance denylist — tool names blocked for this request. */
+  blockedTools?: readonly string[];
+  /**
+   * Tool names the spawning request is permitted to use (persona allowlist ∩
+   * availability). A spawned agent's tool subset is intersected with this so a
+   * persona's tool restriction cannot be escaped by spawning. `null`/undefined
+   * ⇒ no persona narrowing (e.g. the general-purpose persona).
+   */
+  allowedToolNames?: ReadonlySet<string> | null;
+}
+
+/**
+ * Narrow candidate tool names to what the spawning request permits: intersect
+ * with the persona allowlist and drop governance-blocked tools. Pure — returns
+ * a new array; a missing context is a no-op (legacy behaviour).
+ */
+export function filterSpawnToolNames(
+  toolNames: readonly string[],
+  ctx: SpawnSecurityContext | undefined,
+): string[] {
+  if (!ctx) return [...toolNames];
+  let out = [...toolNames];
+  if (ctx.allowedToolNames) {
+    const allowed = ctx.allowedToolNames;
+    out = out.filter(n => allowed.has(n));
+  }
+  if (ctx.blockedTools?.length) {
+    const blocked = new Set(ctx.blockedTools);
+    out = out.filter(n => !blocked.has(n));
+  }
+  return out;
+}
+
 export interface SubAgentDef {
   id: string;
   name: string;
@@ -81,6 +124,16 @@ export interface SubAgentToolsDeps {
   onSubAgentComplete?: (result: SubAgentResult) => Promise<void> | void;
   /** Hook registry — passed to sub-agent loops so approval gates and memory validation apply */
   hooks?: HookRegistry;
+  /**
+   * Request-scoped security context accessor. Returns the approval-gate hooks,
+   * governance blockedTools, and persona tool-allowlist that apply to the
+   * CURRENT chat request. Called at spawn time so per-request restrictions
+   * reach a sub-agent even though these tools are constructed once at startup.
+   * When absent, sub-agents fall back to the static `hooks` above with no
+   * governance/persona narrowing — but the executeToolCall critical floor still
+   * fail-closes destructive ops.
+   */
+  getSpawnSecurityContext?: () => SpawnSecurityContext | undefined;
 }
 
 // In-memory registry of spawned sub-agents and their results
@@ -181,6 +234,12 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         } else {
           toolNames = ROLE_TOOL_PRESETS[role] ?? ROLE_TOOL_PRESETS.analyst!;
         }
+        // SEC: inherit the spawning request's approval gate + governance denylist
+        // + persona allowlist. The intersection here means a persona's tool
+        // restriction (and team blockedTools) cannot be escaped by spawning a
+        // sub-agent — the blocked/denied tools are simply absent from its pool.
+        const secCtx = deps.getSpawnSecurityContext?.();
+        toolNames = filterSpawnToolNames(toolNames, secCtx);
         const subTools = availableTools.filter(t => toolNames.includes(t.name));
 
         // Generate agent ID
@@ -236,7 +295,15 @@ ${task}
             messages: [{ role: 'user', content: task }],
             maxTurns,
             stream: false, // Sub-agents don't stream to the user
-            hooks: deps.hooks, // W2.9: sub-agents respect approval gates and memory validation hooks
+            // W2.9 + SEC: sub-agents respect approval gates and memory validation
+            // hooks. Prefer the request-scoped registry (carries this request's
+            // pre:tool confirmation gate) over the static deps.hooks.
+            hooks: secCtx?.hooks ?? deps.hooks,
+            // SEC: enforce the request's team governance denylist inside the
+            // sub-agent loop too (defense-in-depth alongside the tool-subset filter above).
+            governancePolicies: secCtx?.blockedTools?.length
+              ? { blockedTools: [...secCtx.blockedTools] }
+              : undefined,
             onToken: deps.onSubAgentToken
               ? (token: string) => deps.onSubAgentToken!(id, token)
               : undefined,
