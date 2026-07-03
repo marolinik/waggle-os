@@ -419,6 +419,11 @@ export async function harvestRoutes(fastify: FastifyInstance) {
     const suppression = new SuppressionStore(personalDb);
     let saved = 0;
     let skippedSuppressed = 0;
+    // #7: items skipped because the suppression read itself FAILED (fail-closed).
+    // Kept separate from skippedSuppressed so a broken-DB read is reported as
+    // "could not be verified against the erasure list" — never mislabeled as a
+    // confirmed erasure.
+    let couldNotVerify = 0;
     let timestampFallbacks = 0;
     let rawTurnsWritten = 0;
     // W4.6: cognify must see the SUMMARY frames only — collect their ids
@@ -431,7 +436,15 @@ export async function harvestRoutes(fastify: FastifyInstance) {
       emitHarvestProgress({ phase: 'saving', current: 0, total: items.length, source });
       for (const item of items) {
         // #7 sticky erasure: an erased subject must not re-materialize on re-import.
-        if (suppression.isSuppressed(item.source, item.id)) { skippedSuppressed++; continue; }
+        // Distinguish a confirmed MATCH from a fail-closed read ERROR — both skip
+        // the write (Art.17 wins on the ambiguous item), but a broken-DB read is
+        // counted as "could not verify", not as a confirmed erasure.
+        const supp = suppression.checkSuppressed(item.source, item.id);
+        if (supp.suppressed) {
+          if (supp.reason === 'error') couldNotVerify++;
+          else skippedSuppressed++;
+          continue;
+        }
         const label = `[Harvest:${item.source}] ${item.title}`;
         const content = item.content.slice(0, HARVEST_PREVIEW_CAP_CHARS);
         // Preserve original source timestamp on the resulting frame so
@@ -633,6 +646,7 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         itemCount: items.length,
         saved,
         skippedSuppressed,
+        couldNotVerify,
         rawTurnsWritten,
         cognified: cognifyStats.processed,
         cognifySkippedReason,
@@ -644,7 +658,8 @@ export async function harvestRoutes(fastify: FastifyInstance) {
         message: (wikiSkippedReason
           ? `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki skipped (${wikiSkippedReason})`
           : `Imported ${saved} items from ${source}, cognified ${cognifyStats.processed} frames, wiki ${wikiStats.pagesCreated + wikiStats.pagesUpdated} pages updated`)
-          + (skippedSuppressed > 0 ? ` — ${skippedSuppressed} erased ${skippedSuppressed === 1 ? 'subject' : 'subjects'} suppressed (GDPR Art.17)` : ''),
+          + (skippedSuppressed > 0 ? ` — ${skippedSuppressed} erased ${skippedSuppressed === 1 ? 'subject' : 'subjects'} suppressed (GDPR Art.17)` : '')
+          + (couldNotVerify > 0 ? ` — ${couldNotVerify} ${couldNotVerify === 1 ? 'item' : 'items'} could not be verified against the erasure list (skipped, fail-closed)` : ''),
       };
     } catch (err) {
       // M-08: record the failure with however many items we got through.

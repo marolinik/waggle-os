@@ -234,8 +234,22 @@ export class SessionTimeoutTracker {
 
 // ── Auth Token (Local Server) ────────────────────────────────────────────
 
-/** Routes exempt from bearer token authentication */
-const AUTH_EXEMPT_PATHS = ['/health', '/api/auth/session-token'];
+/**
+ * Routes exempt from bearer token authentication.
+ *
+ * `/api/stripe/webhook` is a tokenless POST from Stripe's servers — it can never
+ * carry our per-process session bearer, so in a hosted (0.0.0.0) deploy it would
+ * 401 before the handler and subscription-lifecycle events
+ * (customer.subscription.deleted/updated) would never process — cancelled subs
+ * would never downgrade to FREE. It is independently authenticated by Stripe
+ * *signature verification* inside the handler (stripe.webhooks.constructEvent
+ * rejects any body not signed with STRIPE_WEBHOOK_SECRET before the handler
+ * trusts it), so exempting it from the bearer gate does not widen the trust
+ * boundary. Desktop (loopback) mode is unaffected — Stripe can't reach a
+ * loopback bind. The path string matches the route registered in
+ * stripe/webhook.ts (`POST /api/stripe/webhook`, no prefix).
+ */
+const AUTH_EXEMPT_PATHS = ['/health', '/api/auth/session-token', '/api/stripe/webhook'];
 
 /**
  * P1b-SSE: EventSource cannot send an Authorization header, so these exact

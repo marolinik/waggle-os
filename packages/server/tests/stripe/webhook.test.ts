@@ -5,6 +5,7 @@ import path from 'node:path';
 import Fastify from 'fastify';
 import { updateUserTier } from '../../src/stripe/webhook.js';
 import { tierFromPriceId } from '../../src/stripe/index.js';
+import { securityMiddleware } from '../../src/local/security-middleware.js';
 import { parseTier } from '@waggle/shared';
 
 // Mock only getStripe; keep the real tierFromPriceId so the 17 existing tests
@@ -349,5 +350,81 @@ describe('Stripe Webhook — tier update logic', () => {
       const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
       expect(raw.tier).toBe('PRO');
     });
+  });
+});
+
+// ── P2: webhook reachable under the global bearer-auth middleware ────────────
+// In a hosted (0.0.0.0) deploy the securityMiddleware requires a bearer token on
+// every /api/* request when a sessionToken is configured. Stripe posts to
+// /api/stripe/webhook with NO bearer (it can't have our per-process token), so
+// without an auth exemption the webhook 401s BEFORE the handler and
+// customer.subscription.deleted/updated never process — cancelled subs never
+// downgrade. This composes the REAL securityMiddleware + REAL webhookRoutes and
+// proves a no-auth POST reaches the handler (the route is independently
+// authenticated by Stripe signature verification inside the handler).
+describe('P2 — webhook is auth-exempt under securityMiddleware (hosted-deploy reachability)', () => {
+  const SESSION_TOKEN = 'test-session-token-p2';
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-webhook-auth-'));
+    // Exercise the SECURE auth path — the suite default is trust=1, which would
+    // make this vacuous by trusting every loopback caller.
+    process.env.WAGGLE_TRUST_LOCALHOST = '0';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+  });
+
+  afterEach(() => {
+    nextEvent = null;
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    process.env.WAGGLE_TRUST_LOCALHOST = '1'; // restore suite default
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  async function buildGuardedServer() {
+    const { webhookRoutes } = await import('../../src/stripe/webhook.js');
+    const app = Fastify({ logger: false });
+    await app.register(securityMiddleware, { sessionToken: SESSION_TOKEN });
+    app.decorate('localConfig', { dataDir: tmpDir });
+    // A normal protected route to prove auth IS enforced for non-exempt paths.
+    app.post('/api/other', async () => ({ ok: true }));
+    await app.register(webhookRoutes);
+    await app.ready();
+    return app;
+  }
+
+  it('a NO-Authorization POST to /api/stripe/webhook reaches the handler (not 401)', async () => {
+    nextEvent = { id: 'evt_authexempt_1', type: 'customer.subscription.deleted', data: { object: {} } };
+    const app = await buildGuardedServer();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/stripe/webhook',
+        headers: { 'stripe-signature': 't=1,v1=fake', 'content-type': 'application/json' },
+        payload: Buffer.from('{}'),
+        // NOTE: deliberately NO authorization header.
+      });
+      // Passed the bearer gate and ran the handler → 200. The load-bearing
+      // assertion is that it is NOT a 401 (auth did not block Stripe).
+      expect(res.statusCode).not.toBe(401);
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ received: true });
+      // The handler actually processed the cancel → tier downgraded to FREE.
+      const cfg = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
+      expect(cfg.tier).toBe('FREE');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('a NON-exempt /api/* POST with no token is STILL 401 (exemption is webhook-specific)', async () => {
+    const app = await buildGuardedServer();
+    try {
+      const res = await app.inject({ method: 'POST', url: '/api/other' });
+      expect(res.statusCode).toBe(401);
+      expect(res.json().code).toBe('MISSING_TOKEN');
+    } finally {
+      await app.close();
+    }
   });
 });

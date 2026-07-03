@@ -136,3 +136,39 @@ describe('#7 sticky erasure — re-consent restores an IDENTICAL re-import (set-
     expect(findU1()).toHaveLength(1);
   });
 });
+
+describe('#7 sticky erasure — a fail-closed suppression READ is reported as "could not verify", not "erased"', () => {
+  let server: FastifyInstance;
+  let tmpDir: string;
+  beforeAll(async () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-suppress-err-'));
+    server = await buildLocalServer({ dataDir: tmpDir });
+  });
+  afterAll(async () => {
+    await server.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('a broken suppression read counts as couldNotVerify (not skippedSuppressed), stays fail-closed (saved 0)', async () => {
+    const personalDb = server.multiMind!.personal;
+    // Force checkSuppressed() to FAIL for every item: with the table gone the
+    // SELECT throws, and the store fails closed (reason:'error'). The harvest must
+    // report those as "could not verify" and skip the write — NOT tally them as
+    // confirmed erasures (skippedSuppressed) and NOT re-materialize them.
+    personalDb.getDatabase().prepare('DROP TABLE IF EXISTS erased_subjects').run();
+
+    const E1 = chatgptThread('ErrPathThreadOne', 1720000000, 'content one');
+    const E2 = chatgptThread('ErrPathThreadTwo', 1720100000, 'content two');
+    const res = await injectWithAuth(server, {
+      method: 'POST', url: '/api/harvest/commit', payload: { data: [E1, E2], source: 'chatgpt' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      saved: number; skippedSuppressed: number; couldNotVerify: number; message: string;
+    };
+    expect(body.couldNotVerify).toBe(2);
+    expect(body.skippedSuppressed).toBe(0);
+    expect(body.saved).toBe(0); // fail-closed: no write when erasure can't be verified
+    expect(body.message).toContain('could not be verified');
+  });
+});

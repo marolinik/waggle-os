@@ -1,6 +1,22 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { listPersonas, getPersona, saveCustomPersona, deleteCustomPersona, type AgentPersona } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
+import { validateBody } from '../../validate-body.js';
+
+/** POST /api/personas body — a custom persona (name + systemPrompt required). */
+const createPersonaSchema = z.object({
+  name: z.string().min(1).max(200),
+  systemPrompt: z.string().min(1),
+  id: z.string().max(200).optional(),
+  description: z.string().optional(),
+  icon: z.string().optional(),
+  modelPreference: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+  workspaceAffinity: z.array(z.string()).optional(),
+  suggestedCommands: z.array(z.string()).optional(),
+  defaultWorkflow: z.string().nullable().optional(),
+});
 
 /**
  * Personas routes — expose agent persona catalog to the UI.
@@ -28,13 +44,11 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
     return { personas };
   });
 
-  // POST /api/personas — create custom persona (BASIC+ tier required)
-  fastify.post('/api/personas', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
+  // POST /api/personas — create custom persona (PRO+ tier required).
+  // Body validated at the boundary (name + systemPrompt required) after the tier gate.
+  fastify.post('/api/personas', { preHandler: [requireTier('PRO'), validateBody(createPersonaSchema)] }, async (request, reply) => {
     const dataDir = fastify.localConfig.dataDir;
-    const body = request.body as Partial<AgentPersona>;
-    if (!body.name || !body.systemPrompt) {
-      return reply.code(400).send({ error: 'name and systemPrompt are required' });
-    }
+    const body = request.body as z.infer<typeof createPersonaSchema>;
     const id = body.id ?? body.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
 
     // Prevent overwriting built-in personas

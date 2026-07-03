@@ -1,14 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { WaggleConfig } from '@waggle/core';
 import { type Tier, TIERS, TIER_CAPABILITIES, parseTier, getCapabilities, getEffectiveTier, trialDaysRemaining } from '@waggle/shared';
 import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
+import { validateBody } from '../../validate-body.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 
 const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
+
+/** PUT /api/settings body — config write. All fields optional (partial update);
+ *  unknown keys are stripped. `providers` is a free-form map (per-provider
+ *  secret + metadata) validated shallowly here and destructured in the handler. */
+const settingsUpdateSchema = z.object({
+  defaultModel: z.string().optional(),
+  providers: z.record(z.string(), z.unknown()).optional(),
+  dailyBudget: z.number().nullable().optional(),
+  budgetHardCap: z.boolean().optional(),
+  fallbackModel: z.string().nullable().optional(),
+  budgetModel: z.string().nullable().optional(),
+  budgetThreshold: z.number().optional(),
+});
 
 /** P4: migrate legacy `yoloMode: boolean` to the three-level enum. */
 function coerceDefaultAutonomy(parsed: Record<string, unknown>): AutonomyLevel {
@@ -96,7 +111,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       budgetModel?: string | null;
       budgetThreshold?: number;
     };
-  }>('/api/settings', async (request) => {
+  }>('/api/settings', { preHandler: validateBody(settingsUpdateSchema) }, async (request) => {
     const config = new WaggleConfig(server.localConfig.dataDir);
     const { defaultModel, providers, dailyBudget, budgetHardCap, fallbackModel, budgetModel, budgetThreshold } = request.body;
 

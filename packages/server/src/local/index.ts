@@ -146,6 +146,7 @@ import { localInferenceRoutes } from './routes/local-inference.js';
 import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
 import { log, createLogger } from './logger.js';
+import { installErrorHandler } from './error-handler.js';
 import { seedDefaultCrons } from './setup-crons.js';
 import { registerConnectors } from './setup-connectors.js';
 import { securityMiddleware } from './security-middleware.js';
@@ -334,6 +335,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   fullConfig.tier = resolvedTier;
 
   const server = Fastify({ logger: false });
+
+  // ── Global error handler ──
+  // Fastify's own logger is disabled here, so without this an unhandled route
+  // exception logs nowhere and leaks raw err.message in the 500 body. One handler
+  // for the whole instance: 4xx pass through; 5xx log full context via `log` and
+  // return a generic envelope (message only outside production). See error-handler.ts.
+  installErrorHandler(server, log);
 
   // Decorate with local config
   server.decorate('localConfig', fullConfig);
@@ -1282,8 +1290,16 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           if (items.length === 0) continue;
 
           let saved = 0;
+          let couldNotVerify = 0;
           for (const item of items) {
-            if (suppression.isSuppressed(item.source, item.id)) continue; // #7 Art.17 erased
+            // #7 sticky erasure: distinguish a confirmed erasure MATCH from a
+            // fail-closed read ERROR — both skip the write, but a broken-DB read
+            // must be reported as "could not verify", not silently as "erased".
+            const supp = suppression.checkSuppressed(item.source, item.id);
+            if (supp.suppressed) {
+              if (supp.reason === 'error') couldNotVerify++;
+              continue; // #7 Art.17 erased (or unverifiable — fail-closed skip)
+            }
             // #7 Art.17: stamp the subject key (metadata.sourceId) so a subject-mode
             // DSAR can reach this auto-synced summary — shared with the cron path.
             writeAutoSyncSummaryFrame(personalFrameStore, item);
@@ -1292,7 +1308,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           // R3-004: store the content digest so the manual harvest route can
           // skip an unchanged re-scan on the next sync.
           harvestStore.recordSync(src.source, items.length, saved, harvestSetHash(items));
-          log.info(`[harvest-auto-sync] ${src.source}: imported ${saved} items`);
+          log.info(`[harvest-auto-sync] ${src.source}: imported ${saved} items`
+            + (couldNotVerify > 0 ? ` (${couldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
         } catch (err) {
           log.debug(`[harvest-auto-sync] ${src.source} failed:`, err);
         }
@@ -1512,6 +1529,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
             let totalItems = 0;
             let totalFrames = 0;
             let sourcesScanned = 0;
+            let totalCouldNotVerify = 0;
             for (const src of stale) {
               if (src.source !== 'claude-code' || !src.sourcePath) continue;
               try {
@@ -1519,7 +1537,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 const items = adapter.scan(src.sourcePath);
                 let saved = 0;
                 for (const item of items) {
-                  if (suppression.isSuppressed(item.source, item.id)) continue; // #7 Art.17 erased
+                  // #7 sticky erasure: a fail-closed read ERROR is skipped like a
+                  // MATCH but tallied separately (report "could not verify", not "erased").
+                  const supp = suppression.checkSuppressed(item.source, item.id);
+                  if (supp.suppressed) {
+                    if (supp.reason === 'error') totalCouldNotVerify++;
+                    continue; // #7 Art.17 erased (or unverifiable — fail-closed skip)
+                  }
                   // #7 Art.17: stamp the subject key (metadata.sourceId) so a
                   // subject-mode DSAR reaches this cron-synced summary — shared helper.
                   writeAutoSyncSummaryFrame(personalFrames, item);
@@ -1535,7 +1559,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               }
             }
             if (sourcesScanned > 0) {
-              log.info(`[cron] Harvest sync: ${totalFrames} frames from ${totalItems} items across ${sourcesScanned} source(s)`);
+              log.info(`[cron] Harvest sync: ${totalFrames} frames from ${totalItems} items across ${sourcesScanned} source(s)`
+                + (totalCouldNotVerify > 0 ? ` (${totalCouldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
             }
           } catch (err) {
             log.warn(`[cron] Harvest sync failed: ${(err as Error).message}`);

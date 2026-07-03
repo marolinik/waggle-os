@@ -2,9 +2,33 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import { MindDB, createFileStore, reconcileFtsIndex } from '@waggle/core';
 import { parseTier, getCapabilities } from '@waggle/shared';
 import { assertSafeSegment } from './validate.js';
+import { validateBody } from '../../validate-body.js';
+
+/** POST /api/workspaces body — create a workspace (name + group required). Model
+ *  format + local-path existence get deeper checks in the handler; enum fields
+ *  are constrained here so a bad `tone`/`storageType`/`teamRole` 400s cleanly. */
+const createWorkspaceSchema = z.object({
+  name: z.string().min(1).max(200),
+  group: z.string().min(1).max(200),
+  icon: z.string().max(200).optional(),
+  model: z.string().optional(),
+  personaId: z.string().optional(),
+  directory: z.string().optional(),
+  template: z.string().optional(),
+  templateId: z.string().optional(),
+  tone: z.enum(['professional', 'casual', 'technical', 'legal', 'marketing']).optional(),
+  storageType: z.enum(['virtual', 'local', 'team']).optional(),
+  storagePath: z.string().optional(),
+  storageConfig: z.record(z.string(), z.unknown()).optional(),
+  teamId: z.string().optional(),
+  teamServerUrl: z.string().optional(),
+  teamRole: z.enum(['owner', 'admin', 'member', 'viewer']).optional(),
+  teamUserId: z.string().optional(),
+});
 import { extractProgressItems, type ProgressItem } from './sessions.js';
 import { readFileRegistry, type FileRegistryEntry } from './ingest.js';
 import { buildWorkspaceState, type WorkspaceState, type StateItem } from '../workspace-state.js';
@@ -185,11 +209,8 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
       teamRole?: 'owner' | 'admin' | 'member' | 'viewer';
       teamUserId?: string;
     };
-  }>('/api/workspaces', async (request, reply) => {
+  }>('/api/workspaces', { preHandler: validateBody(createWorkspaceSchema) }, async (request, reply) => {
     const { name, group, icon, model, personaId, directory, tone, teamId, teamServerUrl, teamRole, teamUserId, storageType, storagePath, storageConfig } = request.body;
-    if (!name || !group) {
-      return reply.status(400).send({ error: 'name and group are required' });
-    }
 
     // Tier limit enforcement: check workspaceLimit from @waggle/shared
     try {

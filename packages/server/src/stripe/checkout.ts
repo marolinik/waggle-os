@@ -7,13 +7,23 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
+import { z } from 'zod';
 import type { Tier } from '@waggle/shared';
 import { getStripe, priceIdForTier } from './index.js';
+import { validateBody } from '../validate-body.js';
+
+/** POST /api/stripe/create-checkout-session body — a billing action. `tier` is
+ *  shape-validated here (required string); the PRO/TEAMS business rule stays in
+ *  the handler so it can return the specific INVALID_TIER envelope. */
+const createCheckoutSchema = z.object({
+  tier: z.string().min(1),
+  billingPeriod: z.enum(['monthly', 'annual']).optional(),
+});
 
 export const checkoutRoutes: FastifyPluginAsync = async (server) => {
   server.post<{
     Body: { tier: string; billingPeriod?: 'monthly' | 'annual' };
-  }>('/api/stripe/create-checkout-session', async (request, reply) => {
+  }>('/api/stripe/create-checkout-session', { preHandler: validateBody(createCheckoutSchema) }, async (request, reply) => {
     const stripe = getStripe();
     if (!stripe) {
       return reply.code(503).send({ error: 'STRIPE_NOT_CONFIGURED', message: 'Stripe is not configured. Set STRIPE_SECRET_KEY.' });

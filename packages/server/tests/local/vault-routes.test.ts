@@ -173,7 +173,11 @@ describe('Vault Routes', () => {
       });
 
       expect(res.statusCode).toBe(400);
-      expect(res.json().error).toContain('name');
+      // validateBody returns a generic error + structured zod issues naming the
+      // offending field (path), rather than embedding the field in the message.
+      const body = res.json();
+      expect(body.error).toBe('Invalid request body');
+      expect(JSON.stringify(body.issues)).toContain('name');
     });
 
     it('rejects missing value', async () => {
@@ -184,7 +188,9 @@ describe('Vault Routes', () => {
       });
 
       expect(res.statusCode).toBe(400);
-      expect(res.json().error).toContain('value');
+      const body = res.json();
+      expect(body.error).toBe('Invalid request body');
+      expect(JSON.stringify(body.issues)).toContain('value');
     });
   });
 

@@ -11,7 +11,16 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { isLocalRequest } from '../origin-guard.js';
+import { validateBody } from '../../validate-body.js';
+
+/** POST /api/vault body — a secret write (name + value, optional credential type). */
+const vaultUpsertSchema = z.object({
+  name: z.string().min(1).max(200),
+  value: z.string().min(1),
+  type: z.string().max(100).optional(),
+});
 
 /** Well-known secret names grouped by category for UI hints. */
 const SUGGESTED_SECRETS: { category: string; items: { name: string; type: string; label: string }[] }[] = [
@@ -126,22 +135,13 @@ export async function vaultRoutes(fastify: FastifyInstance) {
     return { secrets, suggestedKeys, suggestedSecrets };
   });
 
-  // POST /api/vault — add or update a secret
-  fastify.post('/api/vault', async (request, reply) => {
+  // POST /api/vault — add or update a secret.
+  // Body validated at the boundary (name + value required); a malformed body
+  // 400s in the preHandler before any vault write is attempted.
+  fastify.post('/api/vault', { preHandler: validateBody(vaultUpsertSchema) }, async (request, reply) => {
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
-    const { name, value, type } = (request.body ?? {}) as {
-      name?: string;
-      value?: string;
-      type?: string;
-    };
-
-    if (!name || typeof name !== 'string') {
-      return reply.code(400).send({ error: 'name is required' });
-    }
-    if (!value || typeof value !== 'string') {
-      return reply.code(400).send({ error: 'value is required' });
-    }
+    const { name, value, type } = request.body as z.infer<typeof vaultUpsertSchema>;
 
     fastify.vault.set(name, value, type ? { credentialType: type } : undefined);
 
