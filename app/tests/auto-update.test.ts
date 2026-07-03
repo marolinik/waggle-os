@@ -39,32 +39,15 @@ describe('auto-update configuration', () => {
       };
     };
 
-    it('has an updater plugin section', () => {
-      expect(config.plugins?.updater).toBeDefined();
-    });
-
-    it('has a non-empty pubkey', () => {
-      const pubkey = config.plugins?.updater?.pubkey;
-      expect(pubkey).toBeDefined();
-      expect(typeof pubkey).toBe('string');
-      expect(pubkey!.length).toBeGreaterThan(10);
-    });
-
-    it('has at least one endpoint URL', () => {
-      const endpoints = config.plugins?.updater?.endpoints;
-      expect(endpoints).toBeDefined();
-      expect(Array.isArray(endpoints)).toBe(true);
-      expect(endpoints!.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('endpoint URL points to GitHub releases latest.json', () => {
-      const url = config.plugins!.updater!.endpoints![0];
-      expect(url).toMatch(/^https:\/\/github\.com\/.+\/releases\/.+\/latest\.json$/);
-    });
-
-    it('endpoint URL uses HTTPS', () => {
-      const url = config.plugins!.updater!.endpoints![0];
-      expect(url.startsWith('https://')).toBe(true);
+    // The updater plugin CONFIG was removed for v1 because release.yml published
+    // latest.json with EMPTY signatures — with a pubkey present, every client
+    // update would fail signature verification (a broken update channel). The
+    // plugin dependency, lib.rs registration, and capability permission remain
+    // (verified below) so it can be re-enabled once updater signing is
+    // provisioned (TAURI_SIGNING_PRIVATE_KEY + createUpdaterArtifacts + a
+    // real-signature latest.json generator).
+    it('has the updater plugin config intentionally disabled for v1', () => {
+      expect(config.plugins?.updater).toBeUndefined();
     });
   });
 
@@ -119,23 +102,21 @@ describe('auto-update configuration', () => {
       expect(workflow).toContain('x86_64-apple-darwin');
     });
 
-    it('generates latest.json manifest', () => {
-      expect(workflow).toContain('latest.json');
-    });
-
     it('uses tauri-action for builds', () => {
       expect(workflow).toContain('tauri-apps/tauri-action');
     });
 
-    it('uploads latest.json to the release', () => {
-      expect(workflow).toContain('softprops/action-gh-release');
-      expect(workflow).toContain('files: latest.json');
+    it('does NOT publish a broken (empty-signature) updater manifest', () => {
+      // The update-manifest job was removed with the updater config (it published
+      // latest.json with empty signatures). Re-add it with real updater signing.
+      // A re-enable note in comments may still mention it — assert no active job.
+      expect(workflow).not.toMatch(/^\s*update-manifest:/m);
     });
 
-    it('includes platform URLs in the manifest template', () => {
-      expect(workflow).toContain('windows-x86_64');
-      expect(workflow).toContain('darwin-aarch64');
-      expect(workflow).toContain('darwin-x86_64');
+    it('stages sidecar dependencies before packaging (P0-2)', () => {
+      // The packaged sidecar require()s esbuild-externalized deps that must be
+      // staged into resources/node_modules or it dies with MODULE_NOT_FOUND.
+      expect(workflow).toContain('stage-sidecar-deps');
     });
   });
 
