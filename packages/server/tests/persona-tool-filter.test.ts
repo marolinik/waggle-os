@@ -58,37 +58,67 @@ describe('applyPersonaToolFilter — self-evolving skill loop guarantee', () => 
   });
 });
 
-// SEC-GATE fix #4: read-only personas use an ALLOWLIST, so write tools not on
-// the old denylist (add_task, create_plan, add_plan_step, compose_workflow,
-// execute_step) can no longer silently leak.
+// SEC-GATE fix #4: read-only personas use an ALLOWLIST, so genuine write tools
+// not on the old denylist (add_task, compose_workflow, execute_step) can no
+// longer silently leak. Ephemeral plan-authoring (create_plan / add_plan_step)
+// IS kept — verified side-effect-free in plan-tools.ts (in-memory Plan only),
+// exactly like show_plan — so the isReadOnly `planner` persona still works.
 describe('applyPersonaToolFilter — read-only allowlist (no write tool leaks)', () => {
   const LEAK_POOL = [
     'read_file', 'search_memory', 'read_skill', 'search_skills', 'show_plan',
     'add_task', 'create_plan', 'add_plan_step', 'compose_workflow', 'execute_step',
-    'write_file', 'save_memory',
+    'write_file', 'save_memory', 'bash',
   ].map(tool);
 
-  it('a read-only persona cannot invoke add_task / create_plan / add_plan_step / compose_workflow / execute_step', () => {
+  it('a read-only persona cannot invoke genuine writes (add_task / compose_workflow / execute_step / write_file / bash)', () => {
     const out = applyPersonaToolFilter(LEAK_POOL, persona({ tools: [], isReadOnly: true })).map(t => t.name);
-    for (const leaked of ['add_task', 'create_plan', 'add_plan_step', 'compose_workflow', 'execute_step', 'write_file', 'save_memory']) {
+    for (const leaked of ['add_task', 'compose_workflow', 'execute_step', 'write_file', 'save_memory', 'bash']) {
       expect(out, `${leaked} must be stripped from a read-only persona`).not.toContain(leaked);
     }
   });
 
-  it('a read-only persona keeps enumerated read tools', () => {
+  it('a read-only persona keeps read tools AND side-effect-free plan authoring', () => {
     const out = applyPersonaToolFilter(LEAK_POOL, persona({ tools: [], isReadOnly: true })).map(t => t.name);
     expect(out).toContain('read_file');
     expect(out).toContain('search_memory');
     expect(out).toContain('read_skill');
     expect(out).toContain('search_skills');
     expect(out).toContain('show_plan');
+    // Plan authoring is ephemeral (no persistence) — the planner persona needs it.
+    expect(out).toContain('create_plan');
+    expect(out).toContain('add_plan_step');
   });
 
-  it('the read-only allowlist enumerates reads and excludes writes', () => {
+  it('the read-only allowlist enumerates reads + ephemeral plan authoring, excludes real writes', () => {
     expect(READ_ONLY_ALLOWED_TOOLS.has('read_file')).toBe(true);
     expect(READ_ONLY_ALLOWED_TOOLS.has('read_skill')).toBe(true);
-    expect(READ_ONLY_ALLOWED_TOOLS.has('create_plan')).toBe(false);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('create_plan')).toBe(true);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('add_plan_step')).toBe(true);
     expect(READ_ONLY_ALLOWED_TOOLS.has('add_task')).toBe(false);
     expect(READ_ONLY_ALLOWED_TOOLS.has('compose_workflow')).toBe(false);
+    expect(READ_ONLY_ALLOWED_TOOLS.has('execute_step')).toBe(false);
+  });
+
+  it('the real planner persona keeps its planning tools but loses execute/write/bash (regression lock)', () => {
+    const PLANNER_POOL = [
+      'read_file', 'search_files', 'search_memory', 'query_knowledge',
+      'create_plan', 'add_plan_step', 'show_plan',
+      'execute_step', 'write_file', 'bash', 'save_memory',
+    ].map(tool);
+    // Mirrors the shipped isReadOnly planner (persona-data.ts): declares planning
+    // tools + bash, disallows the writes. The read-only strip must keep authoring.
+    const plannerLike = persona({
+      tools: ['read_file', 'search_files', 'search_memory', 'query_knowledge', 'create_plan', 'add_plan_step', 'show_plan', 'bash'],
+      disallowedTools: ['write_file', 'execute_step', 'save_memory'],
+      isReadOnly: true,
+    });
+    const out = applyPersonaToolFilter(PLANNER_POOL, plannerLike).map(t => t.name);
+    expect(out).toContain('create_plan');
+    expect(out).toContain('add_plan_step');
+    expect(out).toContain('show_plan');
+    expect(out).toContain('read_file');
+    expect(out).not.toContain('execute_step');
+    expect(out).not.toContain('write_file');
+    expect(out).not.toContain('bash'); // read-only strips arbitrary command execution
   });
 });

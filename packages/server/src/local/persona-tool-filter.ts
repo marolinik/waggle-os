@@ -60,6 +60,13 @@ export const READ_ONLY_WRITE_TOOLS: ReadonlySet<string> = new Set([
 export const READ_ONLY_ALLOWED_TOOLS: ReadonlySet<string> = new Set<string>([
   ...READONLY_TOOLS,
   'read_skill',
+  // Plan authoring is read-only-safe: create_plan / add_plan_step only build an
+  // in-memory Plan object in a closure (plan-tools.ts — no db/fs/persistence),
+  // exactly like show_plan (already in READONLY_TOOLS). Keeping them here lets
+  // the isReadOnly `planner` persona actually author plans — its whole purpose —
+  // while the genuine writes it disallows (execute_step, write_file, save_memory,
+  // add_task, compose_workflow) remain stripped.
+  'create_plan', 'add_plan_step',
 ]);
 
 /**
