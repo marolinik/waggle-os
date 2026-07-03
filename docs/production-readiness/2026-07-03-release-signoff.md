@@ -70,3 +70,9 @@ The gate between "repository-ready" (done) and "artifact published to the public
 I would approve the repository for the public release on the condition that those three maintainer steps are completed. I would **not** hold the release for the intentionally-deferred items (audit-moderate dependabot bumps, apps/web strict-mode burndown, full zod sweep, updater re-enablement, marketing-site deploy target) — they are tracked, non-blocking follow-ups with patterns already in place.
 
 **One-line:** the code is ready; the release is a signing-key-and-publish step away.
+
+## Post-push CI validation (real Linux runner)
+
+Pushed all commits to `origin/main` and watched CI. The first run **caught a genuine cross-platform bug the local (Windows) run masked**: the SSRF egress guard didn't strip IPv6 brackets, so `new URL('http://[::1]/').hostname` = `[::1]` failed `isIP()` and fell through to a DNS lookup — which throws `ENOTFOUND` on Linux (CI red) but happens to resolve on Windows (local green). Fixed by stripping brackets before classification in both guard copies (`97904e4f`); bracketed IPv6 literals now classify (loopback/private/…) with no DNS dependency. This is exactly the value of the hardened gates — the real typecheck + full test suite on a clean Linux runner surfaced a defect the dev box hid.
+
+Re-run result: **`RUN: success` — `test` job (build:packages + typecheck:web + lint + app tsc + npm test + apps/web suite) green on Linux/Node.** The `e2e` (Playwright) job is red but `continue-on-error` by design — a pre-existing advisory job for flake-prone broad journeys (stabilizing it is a tracked follow-up). Dependabot began opening its first monorepo update PRs immediately from the new config.
