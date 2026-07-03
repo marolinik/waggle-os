@@ -191,7 +191,12 @@ export async function assertUrlAllowed(
     );
   }
 
-  const hostname = parsed.hostname;
+  // url.hostname keeps the surrounding brackets on an IPv6 literal ("[::1]"),
+  // which isIP() does not recognize — strip them so the literal is classified
+  // directly (loopback/private/link-local/…) instead of falling through to a DNS
+  // lookup that fails ENOTFOUND on Linux (and only accidentally resolves on
+  // Windows). Without this, bracketed-IPv6 URLs bypass classification entirely.
+  const hostname = parsed.hostname.replace(/^\[|\]$/g, '');
   const literalFamily = isIP(hostname);
 
   let addresses: ResolvedAddress[];
