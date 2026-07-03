@@ -267,3 +267,7 @@ docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.jpg
 /EVAL-RESULTS.md
 /EVAL-RESULTS-V5.md
 /PLAN.md
+
+# npm is the canonical package manager (CLAUDE.md); bun.lock removed to avoid a
+# divergent dependency graph from a stray `bun install`.
+bun.lock
