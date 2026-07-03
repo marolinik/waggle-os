@@ -14,6 +14,8 @@
   "scripts": {
     "bench": "npx tsx benchmarks/harness/src/runner.ts",
     "dev": "cd apps/web && npx vite",
+    "dev:web": "npm run dev",
+    "dev:server": "cd packages/server && npx tsx src/local/start.ts",
     "build": "cd apps/web && npx tsc --noEmit -p tsconfig.app.json && npx vite build --outDir ../../dist --emptyOutDir",
     "build:dev": "cd apps/web && npx vite build --mode development --outDir ../../dist --emptyOutDir",
     "typecheck:web": "cd apps/web && npx tsc --noEmit -p tsconfig.app.json",

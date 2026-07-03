@@ -1,44 +1,82 @@
 # Architecture
 
-Waggle is a monorepo with 15 packages organized around a layered architecture: core data, agent intelligence, server API, and UI presentation. This document covers the package structure, data flow, and extension points.
+Waggle is a monorepo with **28 packages** under `packages/` organized around a layered architecture: the memory substrate, agent intelligence, server API, and UI presentation. This document covers the package structure, data flow, and extension points.
+
+> **Note (2026-04-30 monorepo migration):** the persistent-memory substrate
+> (`mind/` + `harvest/`) moved out of `@waggle/core` into
+> `@waggle/hive-mind-core` (`packages/hive-mind-core/src/{mind,harvest}`). The
+> React UI is **not** a package — it lives in `apps/web/src`. There is no
+> `@waggle/ui` package.
 
 ## Package Overview
 
 ```
-waggle-poc/
+waggle-os/
+  apps/
+    web/            # Main web app UI (React 19 + Vite + Tailwind 4 + base-ui/react)
+    www/            # Marketing site (Next.js)
+    browser-ext/    # Browser extension (unpacked; not an npm workspace)
   packages/
-    core/           # Memory, embeddings, .mind files, vault, cron, knowledge graph
-    agent/          # Agent loop, tools, sub-agents, workflows, trust, hooks, personas
-    server/         # Fastify API server, routes, daemons, KVARK client, scheduler
-    ui/             # React component library (chat, memory, settings, workspace)
-    cli/            # Command-line REPL
-    sdk/            # Plugin/skill SDK, capability packs, starter skills
+    # Product packages (MIT)
+    agent/          # Agent loop, tools, sub-agents, workflows, trust, hooks, personas, evolution
+    core/           # Config, vault (secrets), cron, file store, telemetry, compliance/audit
+    server/         # Fastify API server, local + team routes, daemons, KVARK client, scheduler
+    shared/         # Shared types, Zod schemas, tiers, MCP catalog
     marketplace/    # Marketplace catalog, installer, security gate, sync
     optimizer/      # Prompt optimization (GEPA engine)
     weaver/         # Memory consolidation daemon
-    worker/         # Background task processing (BullMQ)
-    shared/         # Shared types and utilities
-    admin-web/      # Admin dashboard for team deployments
     waggle-dance/   # Swarm orchestration protocol
+    worker/         # Background task processing (BullMQ)
+    sdk/            # Plugin/skill SDK, capability packs, starter skills
+    cli/            # Command-line REPL
+    launcher/       # AI-tool launcher / dock backend
+    admin-web/      # Admin dashboard for team deployments
+    wiki-compiler/  # Knowledge / wiki compiler
+    memory-mcp/     # MCP server exposing the memory substrate to external agents
+    # Memory substrate — hive-mind-* (Apache-2.0), mirrored to marolinik/hive-mind
+    hive-mind-core/         # The substrate: FrameStore, HybridSearch, KnowledgeGraph, Identity/Awareness, Harvest (src/mind + src/harvest)
+    hive-mind-cli/          # CLI for the substrate
+    hive-mind-mcp-server/   # MCP server for the substrate
+    hive-mind-shim-core/    # Signal-emitter shim library
+    hive-mind-wiki-compiler/# Wiki compiler (OSS)
+    hive-mind-hooks-core/   # Shared hook library
+    hive-mind-hooks-*/      # Per-tool capture hooks: claude-code, claude-desktop, codex,
+                            #   codex-desktop, cursor, hermes, openclaw
   sidecar/          # Node.js sidecar for Tauri desktop app
-  app/              # Tauri 2.0 desktop application (Rust + WebView2)
+  app/              # Tauri 2.0 desktop shell (Rust + WebView2) — loads the apps/web build
 ```
 
 ## Package Details
 
+### @waggle/hive-mind-core
+
+The persistent-memory substrate (Apache-2.0; mirrored to the public
+[`marolinik/hive-mind`](https://github.com/marolinik/hive-mind) repo). Zero
+network dependencies; runs on SQLite + sqlite-vec.
+
+- **MindDB** (`src/mind/db.ts`, `schema.ts`): SQLite wrapper for `.mind` files. Tables for memory frames, knowledge-graph entities/relations, embeddings, sessions, and improvement signals.
+- **FrameStore** (`src/mind/frames.ts`): CRUD on memory frames with FTS5 full-text search, importance ranking, and access counting.
+- **HybridSearch** (`src/mind/search.ts`): vector + keyword retrieval, with an optional cross-encoder reranker.
+- **KnowledgeGraph** (`src/mind/knowledge.ts`): entity-relation graph with temporal validity (`valid_from`/`valid_to`).
+- **IdentityLayer / AwarenessLayer** (`src/mind/identity.ts`, `awareness.ts`): personal-identity persistence and active task/state tracking.
+- **Embeddings** (`src/mind/*-embedder.ts`): pluggable providers — in-process, Ollama, Voyage, OpenAI, mock.
+- **Harvest** (`src/harvest/`): conversation/file ingestion adapters (ChatGPT, Claude, Claude Code, Gemini, Perplexity, PDF, markdown, URL, plaintext) plus the dedup pipeline.
+
+> Develop the substrate **here** and mirror it out — never the reverse. See the
+> "Memory Substrate Sync" section of the root [`CLAUDE.md`](../CLAUDE.md).
+
 ### @waggle/core
 
-The foundation layer. Zero network dependencies. Everything here runs synchronously on SQLite.
+The foundation layer for the desktop/server runtime. Zero network dependencies.
 
-- **MindDB**: SQLite database wrapper for `.mind` files. Creates and manages tables for memory frames, knowledge graph entities/relations, embeddings, and improvement signals.
-- **FrameStore**: CRUD operations on memory frames. Supports FTS5 full-text search, importance ranking, and access counting.
-- **MultiMind**: Manages personal + workspace minds simultaneously. Routes searches to both and merges results.
-- **KnowledgeGraph**: Entity-relation graph stored in the mind database. Supports temporal validity (valid_from/valid_to).
-- **Embeddings**: Vector embedding generation (sqlite-vec) for semantic search.
 - **WaggleConfig**: Configuration management (`~/.waggle/config.json`). Provider keys, default model, team server config.
-- **Vault**: AES-256-GCM encrypted secret storage (`vault.db`). Stores API keys, connector credentials, and sensitive metadata.
+- **Vault**: AES-256-GCM encrypted secret storage. Stores API keys, connector credentials, and sensitive metadata.
+- **MultiMind**: Manages personal + workspace minds simultaneously — routes searches to both and merges results. Wraps the `@waggle/hive-mind-core` substrate.
+- **FileStore**: Workspace filesystem access with a segment-boundary + symlink-aware containment guard and a secret deny-list (see the [threat model](../THREAT_MODEL.md)).
 - **CronStore**: Schedule management for the cron service. CRUD on cron expressions with last/next run tracking.
-- **ImportParser**: Parses ChatGPT and Claude export files, extracts knowledge items for import.
+- **ImportParser** (`memory-import.ts`): parses ChatGPT and Claude export files into importable knowledge items.
+- **InstallAudit**: append-only capability-install trail (proposed / approved / installed / rejected / uninstalled) backing the EU-AI-Act provenance story.
+- **Telemetry / Compliance**: telemetry pipeline and compliance reporting (`compliance/`).
 
 ### @waggle/agent
 
@@ -83,9 +121,12 @@ The API layer. Fastify server exposing 29 route modules.
 - **Session Manager**: Manages parallel workspace sessions for Mission Control.
 - **Notification System**: Event bus + SSE stream for real-time notifications (cron, approval, task, agent events).
 
-### @waggle/ui
+### apps/web (UI)
 
-React component library. All components are TypeScript with CSS modules.
+The React UI is an application, not a package — it lives in `apps/web/src`
+(React 19 + Vite + Tailwind 4 + base-ui/react). There is no `@waggle/ui`
+package. The desktop binary (`app/`) loads the `apps/web` build. Representative
+surfaces:
 
 - **ChatArea**: Main conversation interface with streaming, tool cards, approval gates, and file upload.
 - **MemoryBrowser**: Frame list with search, importance filters, and knowledge graph visualization.

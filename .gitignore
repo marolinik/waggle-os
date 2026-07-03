@@ -258,3 +258,12 @@ docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.docx
 docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/*.pptx
 docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.png
 docs/Waggle_OS_UX_Refactor_Master_Handoff_Package/Waggle_OS_Handoff_Assets/*.jpg
+
+# Internal / pre-OSS artifacts — kept on disk, excluded from the public repo.
+# These are currently tracked; run `git rm --cached <file>` once to stop tracking
+# them (the entries below keep them from being re-added). Root-anchored so nested
+# files of the same name elsewhere are unaffected.
+/Waggle_Competitive_Intelligence_Full_Landscape_March_2026.docx
+/EVAL-RESULTS.md
+/EVAL-RESULTS-V5.md
+/PLAN.md

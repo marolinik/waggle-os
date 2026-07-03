@@ -9,16 +9,20 @@
 ## Setup
 
 ```bash
-git clone https://github.com/marolinik/waggle.git
-cd waggle
+git clone https://github.com/marolinik/waggle-os.git
+cd waggle-os
 npm install
 ```
 
 ## Running the App
 
 ```bash
-# Local server (http://localhost:3333)
+# Local server / sidecar (http://localhost:3333)
 cd packages/server && npx tsx src/local/start.ts
+# — or, from the repo root: npm run dev:server
+
+# Web app (http://localhost:8080)
+npm run dev          # — or: npm run dev:web
 
 # Desktop app (requires Rust)
 cd app && npm run tauri dev
@@ -61,13 +65,13 @@ Tests live alongside source files in `__tests__/` directories or as `.test.ts` s
 
 ## Pull Request Process
 
-1. **Fork** the repository and create a feature branch from `master`
+1. **Fork** the repository and create a feature branch from `main`
 2. **Read the CLAUDE.md** for execution rules and product truths
 3. **Make your changes** following the slice-based approach (one focused change per PR)
 4. **Write tests** for new functionality
 5. **Run the full test suite**: `npx vitest run`
 6. **Verify the build**: `npx tsc --noEmit`
-7. **Submit a pull request** against `master`
+7. **Submit a pull request** against `main`
 8. **Describe your changes**: what was added, what was preserved, what was tested
 
 ### PR Title Format
@@ -142,6 +146,26 @@ Read `CLAUDE.md` in the repo root for the full execution protocol. Key rules:
 - **Approval gates are required** for sensitive operations
 - **No scope reduction without approval** -- do not simplify features "for now"
 - **Tests are part of the product** -- not an afterthought
+
+## Troubleshooting
+
+### Windows: sidecar fails to start with an esbuild platform error
+
+The Fastify sidecar runs through `tsx`, which uses esbuild. On a clean Windows
+machine the platform-specific esbuild binary is sometimes not resolved, and
+`npm run dev:server` (or `npx tsx src/local/start.ts`) fails with an error like
+`Cannot find module @esbuild/win32-x64` or an esbuild version/host mismatch.
+
+Fix it by installing the matching Windows esbuild binary without adding it to
+`package.json`:
+
+```bash
+npm i @esbuild/win32-x64@0.28.0 --no-save
+```
+
+This affects **Windows only** — macOS and Linux resolve their esbuild binaries
+normally. The version should match the esbuild your install resolved; `0.28.0`
+is the known-good pin for the sidecar.
 
 ## Questions?
 
