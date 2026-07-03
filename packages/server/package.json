@@ -16,7 +16,7 @@
     "start:local": "tsx src/local/start.ts"
   },
   "dependencies": {
-    "@clerk/fastify": "^3.1.3",
+    "@clerk/fastify": "^3.1.45",
     "@fastify/cors": "^10.0.0",
     "@fastify/static": "^9.0.0",
     "@fastify/websocket": "^11.0.0",
@@ -27,13 +27,13 @@
     "@waggle/waggle-dance": "*",
     "@waggle/wiki-compiler": "*",
     "archiver": "^7.0.1",
-    "bullmq": "^5.0.0",
+    "bullmq": "^5.79.2",
     "cron-parser": "^4.9.0",
     "drizzle-orm": "^0.45.2",
     "exceljs": "^4.4.0",
-    "fastify": "^5.3.0",
+    "fastify": "^5.9.0",
     "fastify-plugin": "^5.0.0",
-    "ioredis": "^5.4.0",
+    "ioredis": "^5.11.1",
     "mammoth": "^1.11.0",
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.0"
