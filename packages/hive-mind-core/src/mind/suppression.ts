@@ -28,28 +28,52 @@ export interface SuppressedSubject {
   reason: string | null;
 }
 
+/**
+ * Result of a suppression check that separates a genuine MATCH from a fail-closed
+ * read ERROR. Both outcomes mean "skip the write" (erasure safety), but a caller
+ * can then report "N items could not be verified" distinctly from "N erased
+ * subjects skipped" instead of mislabeling a broken-DB read as a confirmed erasure.
+ */
+export type SuppressionCheck =
+  | { suppressed: false }
+  | { suppressed: true; reason: 'match' }
+  | { suppressed: true; reason: 'error'; error: string };
+
 export class SuppressionStore {
   private db: MindDB;
   constructor(db: MindDB) { this.db = db; }
 
   /**
-   * Is this subject suppressed? FAIL-CLOSED: a read error is treated as suppressed
-   * (returns true) and logged. Art.17 wins on the ambiguous item — and a genuine
-   * read failure means the DB is broken, so the follow-on import INSERT fails anyway;
-   * we must not re-materialize erased PII on a transient error.
+   * Check whether a subject is suppressed, distinguishing a genuine match from a
+   * fail-closed read error. FAIL-CLOSED: a read error still reports suppressed
+   * (Art.17 wins on the ambiguous item — the DB is broken so the follow-on import
+   * INSERT fails anyway; we must not re-materialize erased PII on a transient
+   * error) but tags reason:'error' so the caller can count "could not verify"
+   * separately. A found row → reason:'match'.
    */
-  isSuppressed(source: string, sourceRef: string): boolean {
+  checkSuppressed(source: string, sourceRef: string): SuppressionCheck {
     try {
       const row = this.db.getDatabase()
         .prepare('SELECT 1 FROM erased_subjects WHERE source = ? AND source_ref = ? LIMIT 1')
         .get(source, sourceRef);
-      return row !== undefined;
+      return row !== undefined ? { suppressed: true, reason: 'match' } : { suppressed: false };
     } catch (err: unknown) {
+      const error = err instanceof Error ? err.message : String(err);
       log.error('isSuppressed read failed — failing closed (treating subject as suppressed)', {
-        source, sourceRef, error: err instanceof Error ? err.message : String(err),
+        source, sourceRef, error,
       });
-      return true;
+      return { suppressed: true, reason: 'error', error };
     }
+  }
+
+  /**
+   * Is this subject suppressed? FAIL-CLOSED: a read error is treated as suppressed.
+   * Thin boolean wrapper over checkSuppressed — a caller that needs to distinguish a
+   * read error from a genuine match (to report "N could not be verified") should
+   * call checkSuppressed directly.
+   */
+  isSuppressed(source: string, sourceRef: string): boolean {
+    return this.checkSuppressed(source, sourceRef).suppressed;
   }
 
   /** Record a subject as erased/suppressed. Idempotent (UNIQUE(source, source_ref)). */

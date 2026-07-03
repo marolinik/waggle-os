@@ -241,4 +241,73 @@ describe('MindDB (hive-mind port)', () => {
       expect(db!.getEmbeddingFingerprint()?.dim).toBe(768);
     });
   });
+
+  // P2 cross-process hardening: the sidecar + memory-mcp open the same
+  // ~/.waggle/personal.mind as separate processes, so a writer-writer clash or WAL
+  // snapshot-upgrade race must not throw on first contact.
+  describe('cross-process SQLite hardening', () => {
+    it('applies an explicit busy_timeout pragma', () => {
+      const timeout = db!.getDatabase().pragma('busy_timeout', { simple: true }) as number;
+      expect(timeout).toBe(10_000);
+    });
+
+    it('runWithBusyRetry retries a transient SQLITE_BUSY then succeeds', () => {
+      let calls = 0;
+      const result = db!.runWithBusyRetry(() => {
+        calls++;
+        if (calls === 1) {
+          const err = new Error('database is locked') as Error & { code: string };
+          err.code = 'SQLITE_BUSY';
+          throw err;
+        }
+        return 'ok';
+      });
+      expect(result).toBe('ok');
+      expect(calls).toBe(2);
+    });
+
+    it('runWithBusyRetry also retries SQLITE_BUSY_SNAPSHOT (the WAL upgrade race)', () => {
+      let calls = 0;
+      const result = db!.runWithBusyRetry(() => {
+        calls++;
+        if (calls < 3) {
+          const err = new Error('snapshot moved') as Error & { code: string };
+          err.code = 'SQLITE_BUSY_SNAPSHOT';
+          throw err;
+        }
+        return 42;
+      });
+      expect(result).toBe(42);
+      expect(calls).toBe(3);
+    });
+
+    it('runWithBusyRetry propagates a non-BUSY error immediately (no retry)', () => {
+      let calls = 0;
+      expect(() => db!.runWithBusyRetry(() => {
+        calls++;
+        const err = new Error('constraint failed') as Error & { code: string };
+        err.code = 'SQLITE_CONSTRAINT';
+        throw err;
+      })).toThrow('constraint failed');
+      expect(calls).toBe(1);
+    });
+
+    it('runWithBusyRetry gives up after the bounded budget and rethrows the last BUSY', () => {
+      let calls = 0;
+      expect(() => db!.runWithBusyRetry(() => {
+        calls++;
+        const err = new Error('still locked') as Error & { code: string };
+        err.code = 'SQLITE_BUSY';
+        throw err;
+      })).toThrow('still locked');
+      expect(calls).toBe(5); // BUSY_RETRY_MAX_ATTEMPTS
+    });
+
+    it('runWithBusyRetry returns the value on the happy path without retrying', () => {
+      let calls = 0;
+      const result = db!.runWithBusyRetry(() => { calls++; return 'immediate'; });
+      expect(result).toBe('immediate');
+      expect(calls).toBe(1);
+    });
+  });
 });

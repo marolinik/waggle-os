@@ -37,6 +37,10 @@ export interface RawArchiveRow {
   injection_flags: string;
   source_timestamp: string | null;
   created_at: string;
+  /** 1 when `content` was truncated to the size cap at append; 0 otherwise. */
+  truncated: 0 | 1;
+  /** Pre-truncation character count when truncated=1; NULL otherwise. */
+  original_length: number | null;
   /** GDPR Art.17: set once when this row's content has been redacted; NULL otherwise. */
   erased_at: string | null;
   erased_reason: string | null;
@@ -44,6 +48,15 @@ export interface RawArchiveRow {
 
 /** Placed in `content` when a row is erased under GDPR Art.17 (right to erasure). */
 export const RAW_ARCHIVE_REDACTION_MARKER = '[REDACTED — GDPR Art.17 erasure]';
+
+/**
+ * Max characters of verbatim `content` stored per row. A larger item is stored
+ * truncated to this prefix (with truncated=1 + original_length recorded) so a
+ * single huge harvested export can't blow the append-only store. ~1M chars
+ * (≈1–4 MB depending on encoding). Overridable per-store via the RawArchive
+ * constructor (`{ maxContentChars }`).
+ */
+export const RAW_ARCHIVE_MAX_CONTENT_CHARS = 1_000_000;
 
 /** sha256 hex over the raw, untouched content (NOT hashFrameContent — that strips/trims). */
 export function hashRaw(content: string): string {
@@ -80,7 +93,12 @@ export function withArchiveUid(meta: Record<string, unknown>, uid: string): Reco
 export class RawArchive {
   private db: MindDB;
   private suppression: SuppressionStore;
-  constructor(db: MindDB) { this.db = db; this.suppression = new SuppressionStore(db); }
+  private readonly maxContentChars: number;
+  constructor(db: MindDB, opts: { maxContentChars?: number } = {}) {
+    this.db = db;
+    this.suppression = new SuppressionStore(db);
+    this.maxContentChars = opts.maxContentChars ?? RAW_ARCHIVE_MAX_CONTENT_CHARS;
+  }
 
   /** Idempotent append. INSERT OR IGNORE on the UNIQUE archive_uid makes a
    *  re-append a no-op. Injection-scans (4KB probe) but stores verbatim.
@@ -102,6 +120,12 @@ export class RawArchive {
       return { archiveUid, created: false };
     }
     const contentSha = hashRaw(input.content);
+    // Size guard: cap a single row's stored blob so one giant harvested item can't
+    // blow the store. archive_uid + content_sha256 are already derived from the
+    // FULL content above (idempotency + integrity anchor unaffected); only the
+    // stored `content` column is truncated, flagged by truncated=1 + original_length.
+    const isTruncated = input.content.length > this.maxContentChars;
+    const storedContent = isTruncated ? input.content.slice(0, this.maxContentChars) : input.content;
     // injection_flagged is a 4KB PROBE (same budget as the harvest pipeline's
     // Pass 0) — advisory, NOT a full-content guarantee. Content is stored
     // verbatim regardless (zero-loss); the archive is never fed to an LLM, and
@@ -110,18 +134,20 @@ export class RawArchive {
     const result = raw.prepare(
       `INSERT OR IGNORE INTO raw_archive
          (archive_uid, source, source_ref, title, content, content_sha256,
-          injection_flagged, injection_flags, source_timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          injection_flagged, injection_flags, source_timestamp, truncated, original_length)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       archiveUid,
       input.source,
       input.sourceRef ?? null,
       input.title ?? null,
-      input.content,
+      storedContent,
       contentSha,
       scan.safe ? 0 : 1,
       scan.safe ? '' : scan.flags.join(','),
       input.sourceTimestamp ?? null,
+      isTruncated ? 1 : 0,
+      isTruncated ? input.content.length : null,
     );
     return { archiveUid, created: result.changes > 0 };
   }
@@ -178,6 +204,30 @@ export class RawArchive {
 
   count(): number {
     return (this.db.getDatabase().prepare('SELECT COUNT(*) as c FROM raw_archive').get() as { c: number }).c;
+  }
+
+  /**
+   * Reclaim disk pages freed by in-place Art.17 redaction. raw_archive is
+   * append-only (DELETE is trigger-blocked) and erase() only overwrites `content`
+   * with a short marker IN PLACE, so the freed bytes stay allocated to the file
+   * until a VACUUM rewrites it. VACUUM compacts the ENTIRE .mind file and does NOT
+   * fire the no-delete trigger (that guards DML, not the internal rebuild), so the
+   * append-only invariant survives untouched.
+   *
+   * This is an EXPLICIT maintenance/governance action: never auto-invoked, and it
+   * never deletes user data — it only compacts already-freed space. Must run
+   * OUTSIDE any transaction (SQLite forbids VACUUM inside one) and with no other
+   * statement in progress on this connection. Returns bytes reclaimed (>= 0).
+   */
+  reclaim(): number {
+    const raw = this.db.getDatabase();
+    const fileBytes = (): number =>
+      (raw.pragma('page_count', { simple: true }) as number) *
+      (raw.pragma('page_size', { simple: true }) as number);
+    const before = fileBytes();
+    raw.exec('VACUUM');
+    const after = fileBytes();
+    return Math.max(0, before - after);
   }
 
   /**

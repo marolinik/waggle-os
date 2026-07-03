@@ -7,6 +7,31 @@ import {
 } from './schema.js';
 import { hashFrameContent } from './content-hash.js';
 
+/** How long better-sqlite3 waits on a locked DB before throwing SQLITE_BUSY. The
+ *  Fastify sidecar and the standalone memory-mcp server open the SAME
+ *  ~/.waggle/personal.mind as separate OS processes, so a writer-writer clash would
+ *  otherwise throw immediately instead of waiting for the lock to clear. */
+const BUSY_TIMEOUT_MS = 10_000;
+
+/** Bounded retry for the WAL `SQLITE_BUSY_SNAPSHOT` race that busy_timeout does NOT
+ *  cover: a deferred transaction that began as a reader cannot upgrade to a writer
+ *  once another connection has committed in between, and SQLite fails it instantly
+ *  rather than waiting. Re-running the closure reads the fresh snapshot. */
+const BUSY_RETRY_MAX_ATTEMPTS = 5;
+const BUSY_RETRY_BASE_DELAY_MS = 20;
+
+/** True for the two transient cross-process contention codes worth retrying. */
+function isSqliteBusyError(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT';
+}
+
+/** Synchronous backoff. better-sqlite3 is fully synchronous, so there is no event
+ *  loop to yield to between retries; Atomics.wait blocks only this thread. */
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 // Reverse-ported from OSS hive-mind (oss-drift triage R7, 2026-06-11).
 /** A persisted embedding fingerprint: which provider/model produced this .mind's
  *  vectors, and at what dimension. Recorded in `meta` on the first vector use. */
@@ -48,6 +73,11 @@ export class MindDB {
     // Enable WAL mode for better concurrent read performance
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
+    // Cross-process contention: the sidecar and memory-mcp open the same .mind
+    // file. Wait for a held lock instead of throwing SQLITE_BUSY on first contact
+    // (the WAL snapshot-upgrade race that this doesn't cover is retried in
+    // runWithBusyRetry).
+    this.db.pragma(`busy_timeout = ${BUSY_TIMEOUT_MS}`);
 
     // Load sqlite-vec extension — support bundled path override for desktop builds
     const vecPath = process.env.WAGGLE_SQLITE_VEC_PATH;
@@ -333,6 +363,20 @@ export class MindDB {
         this.db.exec(`ALTER TABLE raw_archive ADD COLUMN ${col} TEXT`);
       }
     }
+    // Size-guard columns for pre-guard DBs (idempotent ADD COLUMN, distinct DDL
+    // per column so `truncated` gets its NOT NULL DEFAULT). Not referenced by the
+    // append-only trigger, so no trigger swap is needed. See raw-archive.ts append().
+    for (const [col, ddl] of [
+      ['truncated', 'INTEGER NOT NULL DEFAULT 0'],
+      ['original_length', 'INTEGER'],
+    ] as const) {
+      const has = this.db.prepare(
+        "SELECT COUNT(*) as cnt FROM pragma_table_info('raw_archive') WHERE name=?"
+      ).get(col) as { cnt: number };
+      if (has.cnt === 0) {
+        this.db.exec(`ALTER TABLE raw_archive ADD COLUMN ${col} ${ddl}`);
+      }
+    }
     // Upgrade the legacy ABSOLUTE no-update trigger to the redaction-aware one.
     // CREATE TRIGGER IF NOT EXISTS will NOT swap an existing trigger, so we DROP +
     // CREATE — but ATOMICALLY (one transaction), else a crash or a concurrent WAL
@@ -587,6 +631,33 @@ export class MindDB {
 
   getDatabase(): DatabaseType {
     return this.db;
+  }
+
+  /**
+   * Run a write closure, retrying on transient cross-process contention
+   * (SQLITE_BUSY / SQLITE_BUSY_SNAPSHOT) with bounded, growing backoff. The
+   * busy_timeout pragma already covers plain lock waits; this adds the WAL
+   * snapshot-upgrade race it cannot. Non-BUSY errors propagate immediately; after
+   * the attempt budget is exhausted the last BUSY error is rethrown.
+   *
+   * Centralized so a caller wraps the OUTERMOST write (a whole `db.transaction`)
+   * exactly ONCE. Do NOT wrap a statement nested inside an ambient transaction: a
+   * retry there cannot obtain a fresh snapshot and would mask the real failure.
+   */
+  runWithBusyRetry<T>(fn: () => T): T {
+    let lastErr: unknown;
+    for (let attempt = 0; attempt < BUSY_RETRY_MAX_ATTEMPTS; attempt++) {
+      try {
+        return fn();
+      } catch (err: unknown) {
+        if (!isSqliteBusyError(err)) throw err;
+        lastErr = err;
+        if (attempt < BUSY_RETRY_MAX_ATTEMPTS - 1) {
+          sleepSync(BUSY_RETRY_BASE_DELAY_MS * (attempt + 1));
+        }
+      }
+    }
+    throw lastErr;
   }
 
   close(): void {

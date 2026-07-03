@@ -66,6 +66,28 @@ describe('SuppressionStore', () => {
     db.getDatabase().exec('DROP TABLE erased_subjects');
     expect(sup.isSuppressed('chatgpt', 'thread-42')).toBe(true);
   });
+
+  it('checkSuppressed distinguishes a genuine MATCH from a fail-closed read ERROR', () => {
+    // not suppressed → { suppressed: false }
+    expect(sup.checkSuppressed('chatgpt', 'thread-1')).toEqual({ suppressed: false });
+
+    // genuine match → reason 'match'
+    sup.record('chatgpt', 'thread-1', 'gdpr');
+    expect(sup.checkSuppressed('chatgpt', 'thread-1')).toEqual({ suppressed: true, reason: 'match' });
+
+    // fail-closed error → still suppressed, but tagged 'error' with a message, so a
+    // caller can report "could not verify" separately instead of "confirmed erased".
+    db.getDatabase().exec('DROP TABLE erased_subjects');
+    const res = sup.checkSuppressed('chatgpt', 'thread-1');
+    expect(res.suppressed).toBe(true);
+    expect(res).toMatchObject({ suppressed: true, reason: 'error' });
+    if (res.suppressed && res.reason === 'error') {
+      expect(typeof res.error).toBe('string');
+      expect(res.error.length).toBeGreaterThan(0);
+    }
+    // isSuppressed stays a fail-closed boolean over the very same check.
+    expect(sup.isSuppressed('chatgpt', 'thread-1')).toBe(true);
+  });
 });
 
 describe('erased_subjects migration + backfill', () => {

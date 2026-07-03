@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rmSync } from 'node:fs';
 import { MindDB } from '../../src/mind/db.js';
-import { RawArchive, hashRaw, readArchiveUids, withArchiveUid, RAW_ARCHIVE_REDACTION_MARKER } from '../../src/mind/raw-archive.js';
+import { RawArchive, hashRaw, readArchiveUids, withArchiveUid, RAW_ARCHIVE_REDACTION_MARKER, RAW_ARCHIVE_MAX_CONTENT_CHARS } from '../../src/mind/raw-archive.js';
 import { FrameStore } from '../../src/mind/frames.js';
 import { SessionStore } from '../../src/mind/sessions.js';
 
@@ -520,6 +520,98 @@ describe('raw_archive erasure migration', () => {
       db2.close();
     } finally {
       try { rmSync(file); } catch { /* temp file cleanup best-effort */ }
+    }
+  });
+});
+
+// P2 unbounded-growth guard: a single giant harvested item can't blow the store.
+describe('RawArchive size guard', () => {
+  let db: MindDB;
+  afterEach(() => { db.close(); });
+
+  it('truncates an oversized item, flags it, and records original_length (uid + sha from FULL content)', () => {
+    db = new MindDB(':memory:');
+    const archive = new RawArchive(db, { maxContentChars: 100 });
+    const big = 'y'.repeat(250);
+    const r = archive.append({ source: 'pdf', sourceRef: 'huge-1', content: big });
+    const row = archive.getByUid(r.archiveUid)!;
+    expect(row.content.length).toBe(100);           // stored blob is capped
+    expect(row.content).toBe('y'.repeat(100));       // exact prefix, not the whole blob
+    expect(row.truncated).toBe(1);
+    expect(row.original_length).toBe(250);
+    // integrity anchor + uid still derive from the FULL content:
+    expect(row.content_sha256).toBe(hashRaw(big));
+    expect(r.archiveUid).toBe(hashRaw(`pdf\x00huge-1\x00${big}`));
+  });
+
+  it('re-appending the same oversized item stays idempotent (uid keyed on full content)', () => {
+    db = new MindDB(':memory:');
+    const archive = new RawArchive(db, { maxContentChars: 100 });
+    const big = 'z'.repeat(500);
+    const a = archive.append({ source: 'pdf', sourceRef: 'huge-2', content: big });
+    const again = archive.append({ source: 'pdf', sourceRef: 'huge-2', content: big });
+    expect(again.archiveUid).toBe(a.archiveUid);
+    expect(again.created).toBe(false);
+    expect(archive.count()).toBe(1);
+  });
+
+  it('stores a normal item verbatim with truncated=0 and NULL original_length', () => {
+    db = new MindDB(':memory:');
+    const archive = new RawArchive(db, { maxContentChars: 100 });
+    const r = archive.append({ source: 'claude', content: 'short and sweet' });
+    const row = archive.getByUid(r.archiveUid)!;
+    expect(row.content).toBe('short and sweet');
+    expect(row.truncated).toBe(0);
+    expect(row.original_length).toBeNull();
+  });
+
+  it('an item exactly at the cap is NOT truncated (boundary is strictly greater-than)', () => {
+    db = new MindDB(':memory:');
+    const archive = new RawArchive(db, { maxContentChars: 100 });
+    const r = archive.append({ source: 'pdf', content: 'e'.repeat(100) });
+    const row = archive.getByUid(r.archiveUid)!;
+    expect(row.truncated).toBe(0);
+    expect(row.content.length).toBe(100);
+  });
+
+  it('defaults to RAW_ARCHIVE_MAX_CONTENT_CHARS (25K fixture stays verbatim)', () => {
+    expect(RAW_ARCHIVE_MAX_CONTENT_CHARS).toBeGreaterThan(25_000);
+    db = new MindDB(':memory:');
+    const archive = new RawArchive(db);
+    const r = archive.append({ source: 'pdf', content: 'x'.repeat(25_000) });
+    const row = archive.getByUid(r.archiveUid)!;
+    expect(row.content.length).toBe(25_000);
+    expect(row.truncated).toBe(0);
+  });
+});
+
+// P2 reclaim path: erasure NULLs content in place; VACUUM returns the freed pages
+// without weakening the append-only no-delete trigger.
+describe('RawArchive.reclaim (VACUUM maintenance)', () => {
+  it('VACUUMs after erasure without violating the no-delete trigger, preserving the audit skeleton', () => {
+    const file = join(tmpdir(), `raw-archive-reclaim-${process.pid}-${Date.now()}.db`);
+    try {
+      const db = new MindDB(file);
+      const archive = new RawArchive(db);
+      const ids: number[] = [];
+      for (let i = 0; i < 20; i++) {
+        const r = archive.append({ source: 'pdf', sourceRef: `big-${i}`, content: 'q'.repeat(50_000) });
+        ids.push(archive.getByUid(r.archiveUid)!.id);
+        archive.erase(r.archiveUid, 'gdpr');   // content → marker, in place (no page reclaim yet)
+      }
+      const reclaimed = archive.reclaim();      // must not throw — no-delete trigger stays intact
+      expect(reclaimed).toBeGreaterThanOrEqual(0);
+      // Rows still exist (append-only) — the audit skeleton survives the VACUUM.
+      expect(archive.count()).toBe(20);
+      const row = archive.getById(ids[0])!;
+      expect(row.content).toBe(RAW_ARCHIVE_REDACTION_MARKER);
+      expect(row.erased_at).not.toBeNull();
+      // DELETE is still blocked after VACUUM.
+      expect(() => db.getDatabase().prepare('DELETE FROM raw_archive WHERE id = ?').run(ids[0]))
+        .toThrow(/append-only/);
+      db.close();
+    } finally {
+      for (const sfx of ['', '-wal', '-shm']) { try { rmSync(file + sfx); } catch { /* best-effort */ } }
     }
   });
 });

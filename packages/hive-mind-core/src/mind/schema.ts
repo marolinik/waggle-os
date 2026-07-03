@@ -1,3 +1,10 @@
+// INFORMATIONAL ONLY. Written once to meta.schema_version on first init (db.ts)
+// and exposed on the public barrel, but migrations are PRESENCE-based (they probe
+// for missing tables/columns/triggers), not gated on this value — nothing reads it
+// back to branch. It documents "this is v1 of the on-disk shape"; bump it (and add
+// a migration branch in MindDB.runMigrations()) only if you ever need version-gated
+// migration logic. Kept, not deleted: it is a re-exported public constant and the
+// meta row is asserted by schema.test.ts.
 export const SCHEMA_VERSION = '1';
 
 export const SCHEMA_SQL = `
@@ -319,6 +326,16 @@ CREATE TABLE IF NOT EXISTS raw_archive (
   injection_flags TEXT NOT NULL DEFAULT '',
   source_timestamp TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Size guard: a single item's content is truncated to
+  -- RAW_ARCHIVE_MAX_CONTENT_CHARS (raw-archive.ts) before storage so one giant
+  -- harvested export can't blow the append-only store. truncated=1 marks a capped
+  -- row; original_length is the pre-truncation character count (NULL when not
+  -- truncated). archive_uid + content_sha256 still derive from the FULL content, so
+  -- idempotency + the integrity anchor are unaffected. Not referenced by the
+  -- append-only trigger below, so an erasure UPDATE that leaves them untouched
+  -- passes unchanged. Pre-guard DBs get these via the idempotent ADD COLUMN in db.ts.
+  truncated INTEGER NOT NULL DEFAULT 0,
+  original_length INTEGER,
   -- GDPR Art.17 erasure: NULL until a data-subject erasure request. When set, the
   -- audit skeleton (id/source/refs/timestamps) is frozen as the audit record while
   -- content/content_sha256/title are redacted AND archive_uid is ROTATED to an opaque
