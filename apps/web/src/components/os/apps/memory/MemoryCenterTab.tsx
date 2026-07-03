@@ -447,7 +447,7 @@ export default function MemoryCenterTab({
               </div>
             ) : (
               suppressed.map((row) => (
-                <div key={`${row.source} ${row.sourceRef}`} className="flex items-center gap-2 text-xs bg-muted/40 rounded px-2 py-1">
+                <div key={`${row.source}::${row.sourceRef}`} className="flex items-center gap-2 text-xs bg-muted/40 rounded px-2 py-1">
                   <span className="font-medium shrink-0">{row.source}</span>
                   <span className="text-muted-foreground truncate flex-1 min-w-0" title={row.sourceRef}>{row.sourceRef}</span>
                   <button

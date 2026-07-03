@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -44,8 +43,6 @@ import {
 // Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
 // (applyStoredThemeEarly) to avoid a flash of the wrong theme on load.
 
-const queryClient = new QueryClient();
-
 /**
  * Root application component — UX Refactor v2.1 P1a (conversion plan §1.1):
  * `/` mounts the AppShell layout route (BootScreen gate + onboarding takeover
@@ -56,7 +53,6 @@ const App = () => (
   <ThemeProvider>
     <ServiceProvider>
     <InstallProvider>
-    <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <Sonner />
@@ -119,7 +115,6 @@ const App = () => (
           </WaggleClerkProvider>
         </BrowserRouter>
       </TooltipProvider>
-    </QueryClientProvider>
     </InstallProvider>
     </ServiceProvider>
   </ThemeProvider>

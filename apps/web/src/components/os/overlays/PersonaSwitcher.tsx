@@ -5,6 +5,7 @@ import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bot, Users, Loader2, Lock, Sparkles, ChevronDown, Eye } from 'lucide-react';
 import { useFeatureGate } from '@/hooks/useFeatureGate';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   UNIVERSAL_MODE_IDS,
   ALL_SPECIALIST_IDS,
@@ -173,15 +174,11 @@ const PersonaSwitcher = ({
     });
   }, [open]);
 
-  // A11y audit (WCAG 2.1.1): Escape closes the modal — #1 keyboard expectation for modal UIs.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped within the dialog,
+  // focus moves in on open and restores on close — the same shared hook the
+  // other modal overlays use. Replaces the prior Escape-only handler (which
+  // had no focus trap or restore, so keyboard users tabbed out into the shell).
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
 
   if (!open) return null;
 
@@ -282,13 +279,15 @@ const PersonaSwitcher = ({
       >
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-hidden="true" />
         <motion.div
+          ref={dialogRef}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="persona-switcher-title"
-          className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-5"
+          tabIndex={-1}
+          className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-5 focus:outline-none"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between mb-4">

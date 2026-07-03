@@ -29,6 +29,23 @@ export default defineConfig(({ mode }) => ({
     },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  build: {
+    rollupOptions: {
+      output: {
+        // Split the heaviest independent vendor libraries out of the single
+        // ~1.9MB app chunk so they cache separately and don't gate first paint.
+        // The React runtime + router stay in ONE chunk so context/singleton
+        // init order can't break across a chunk boundary.
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("framer-motion")) return "vendor-motion";
+          if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-")) return "vendor-charts";
+          if (id.includes("@radix-ui")) return "vendor-radix";
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return "vendor-react";
+        },
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

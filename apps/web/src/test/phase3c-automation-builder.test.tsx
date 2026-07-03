@@ -23,6 +23,13 @@ const mocks = vi.hoisted(() => ({
     testAutomation: vi.fn(),
     getWorkspaces: vi.fn(),
     getCronJobs: vi.fn(),
+    // AutomationCenterApp polls these on mount (engine pill + L2 approval queue).
+    // Without them the poll's `adapter.getEngineStatus()` call is `undefined()`,
+    // which throws synchronously in the effect (before the `.catch`) → the
+    // component crashes to the error boundary and the tests can't find their
+    // testids. Mirrors the phase3b-automation-center mock.
+    getEngineStatus: vi.fn(),
+    getPendingApprovals: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -49,6 +56,10 @@ beforeEach(() => {
   mocks.adapter.getAutomationLogs.mockResolvedValue([]);
   mocks.adapter.getWorkspaces.mockResolvedValue([{ id: 'ws-1', name: 'Acme Research', group: 'work' }]);
   mocks.adapter.getCronJobs.mockResolvedValue([]);
+  // AutomationCenterApp's mount poll: return real Promises (a bare vi.fn()
+  // yields undefined → `.then` throws in the effect and crashes the app).
+  mocks.adapter.getEngineStatus.mockResolvedValue({ running: true, host: 'test-host' });
+  mocks.adapter.getPendingApprovals.mockResolvedValue({ pending: [], count: 0 });
 });
 afterEach(cleanup);
 
@@ -77,10 +88,12 @@ describe('AutomationBuilder — S20', () => {
     await screen.findByTestId('automation-overview-tiles');
 
     fireEvent.click(screen.getByRole('button', { name: /New/ }));
-    await screen.findByTestId('automation-builder');
+    const builder = await screen.findByTestId('automation-builder');
     fireEvent.change(screen.getByLabelText('Automation name'), { target: { value: 'Nightly consolidation' } });
-    // Workspace picker options load async.
-    await screen.findByRole('option', { name: 'Acme Research' });
+    // Workspace picker options load async. Scope the wait to the builder: the
+    // Center behind the modal has its own "template workspace" select listing
+    // the same workspaces, so a document-wide option query is ambiguous.
+    await within(builder).findByRole('option', { name: 'Acme Research' });
     fireEvent.change(screen.getByTestId('automation-workspace'), { target: { value: 'ws-1' } });
     fireEvent.click(screen.getByTestId('automation-builder-next')); // → Action
     fireEvent.change(screen.getByTestId('automation-output-channel'), { target: { value: 'telegram' } });

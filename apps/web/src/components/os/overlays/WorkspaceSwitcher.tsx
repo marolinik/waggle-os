@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Brain, ChevronRight, Plus, Archive } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { Workspace } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
@@ -94,14 +95,11 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
 
 const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect, onCreateNew, error, onRetry }: WorkspaceSwitcherProps) => {
   const [showArchived, setShowArchived] = useState(false);
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+  // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped within the dialog,
+  // focus moves in on open and restores on close — the same shared hook the
+  // other modal overlays use. Replaces the prior Escape-only handler (which
+  // had no focus trap or restore, so keyboard users tabbed out into the shell).
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
 
   if (!open) return null;
 
@@ -131,13 +129,15 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
       >
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
         <motion.div
+          ref={dialogRef}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
           role="dialog"
           aria-modal="true"
           aria-labelledby="workspace-switcher-title"
-          className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl p-5"
+          tabIndex={-1}
+          className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl p-5 focus:outline-none"
           onClick={e => e.stopPropagation()}
         >
           <h2 id="workspace-switcher-title" className="text-sm font-display font-semibold text-foreground mb-1">Switch Workspace</h2>
