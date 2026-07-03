@@ -19,15 +19,39 @@ export interface UsageStats {
   byModel: Record<string, { input: number; output: number; cost: number }>;
 }
 
-/** Default pricing for common models (per 1K tokens). */
+/** Default pricing for common models (per 1K tokens). Model IDs cross-checked
+ *  against litellm-config.yaml (repo root) — the canonical router catalog. */
 export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
+  // ── Anthropic Claude — Opus class ($15/$75 per 1M) ──
+  'claude-opus-4-8': { inputPer1k: 0.015, outputPer1k: 0.075 },
+  'claude-opus-4-7': { inputPer1k: 0.015, outputPer1k: 0.075 },
+  'claude-opus-4-6': { inputPer1k: 0.015, outputPer1k: 0.075 },
+  // ── Claude — Sonnet class ($3/$15 per 1M) ──
+  'claude-sonnet-5': { inputPer1k: 0.003, outputPer1k: 0.015 },
   'claude-sonnet-4-6': { inputPer1k: 0.003, outputPer1k: 0.015 },
   'claude-sonnet-4-20250514': { inputPer1k: 0.003, outputPer1k: 0.015 },
+  'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
+  // ── Claude — Haiku class ──
+  'claude-haiku-4-5': { inputPer1k: 0.001, outputPer1k: 0.005 }, // 4.5 ($1/$5 per 1M)
+  'claude-haiku-4-5-20251001': { inputPer1k: 0.001, outputPer1k: 0.005 },
   'claude-haiku-3-5': { inputPer1k: 0.00025, outputPer1k: 0.00125 },
   'claude-3-5-haiku-20241022': { inputPer1k: 0.00025, outputPer1k: 0.00125 },
-  'claude-opus-4-6': { inputPer1k: 0.015, outputPer1k: 0.075 },
-  'claude-3-5-sonnet-20241022': { inputPer1k: 0.003, outputPer1k: 0.015 },
 };
+
+/**
+ * Family-aware fallback pricing for a model id with no explicit entry. Keys off
+ * the Anthropic tier word in the id so an unrecognized Opus snapshot isn't
+ * costed at ~5× under Sonnet rates. Defaults to Sonnet for everything else.
+ */
+function fallbackPricingFor(model: string): { label: string; pricing: ModelPricing } {
+  const m = model.toLowerCase();
+  if (m.includes('opus')) return { label: 'Opus', pricing: { inputPer1k: 0.015, outputPer1k: 0.075 } };
+  if (m.includes('haiku')) return { label: 'Haiku', pricing: { inputPer1k: 0.001, outputPer1k: 0.005 } };
+  return { label: 'Sonnet', pricing: { inputPer1k: 0.003, outputPer1k: 0.015 } };
+}
+
+/** Models already warned about — keeps the unknown-model warning to once each. */
+const warnedUnknownModels = new Set<string>();
 
 export type BudgetMode = 'soft' | 'hard';
 
@@ -95,11 +119,22 @@ export class CostTracker {
   /** Calculate cost for a single usage entry. */
   calculateCost(input: number, output: number, model: string): number {
     const price = this.pricing[model];
-    if (!price) {
-      // Fallback: use Sonnet pricing as a sensible default
-      return (input / 1000) * 0.003 + (output / 1000) * 0.015;
+    if (price) {
+      return (input / 1000) * price.inputPer1k + (output / 1000) * price.outputPer1k;
     }
-    return (input / 1000) * price.inputPer1k + (output / 1000) * price.outputPer1k;
+    // Unknown model: fall back to family-aware pricing (not always Sonnet — an
+    // unrecognized Opus id would otherwise under-report ~5×) and warn loudly
+    // once so the cost isn't silently wrong.
+    const { label, pricing } = fallbackPricingFor(model);
+    if (!warnedUnknownModels.has(model)) {
+      warnedUnknownModels.add(model);
+      console.warn(
+        `[cost-tracker] Unknown model "${model}" — no pricing entry; estimating with ` +
+          `${label} pricing ($${pricing.inputPer1k}/1K in, $${pricing.outputPer1k}/1K out). ` +
+          `Cost may be inaccurate — add it to DEFAULT_MODEL_PRICING.`,
+      );
+    }
+    return (input / 1000) * pricing.inputPer1k + (output / 1000) * pricing.outputPer1k;
   }
 
   getStats(): UsageStats {

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { CostTracker, type ModelPricing } from '../src/cost-tracker.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { CostTracker, DEFAULT_MODEL_PRICING, type ModelPricing } from '../src/cost-tracker.js';
 
 describe('CostTracker', () => {
   const pricing: Record<string, ModelPricing> = {
@@ -40,6 +40,37 @@ describe('CostTracker', () => {
     expect(summary).toContain('1000');
     expect(summary).toContain('500');
     expect(summary).toContain('$');
+  });
+
+  describe('current model pricing', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('prices a known Opus-class model at Opus rates ($15/$75 per 1M)', () => {
+      expect(DEFAULT_MODEL_PRICING['claude-opus-4-8']).toEqual({ inputPer1k: 0.015, outputPer1k: 0.075 });
+      const tracker = new CostTracker();
+      tracker.addUsage('claude-opus-4-8', 1000, 1000);
+      // 1K in * $0.015 + 1K out * $0.075 = $0.09
+      expect(tracker.getStats().estimatedCost).toBeCloseTo(0.09, 4);
+    });
+
+    it('includes current Sonnet and Haiku ids', () => {
+      expect(DEFAULT_MODEL_PRICING['claude-sonnet-5']).toBeDefined();
+      expect(DEFAULT_MODEL_PRICING['claude-haiku-4-5']).toBeDefined();
+    });
+
+    it('warns once and uses family-aware fallback for an unknown Opus id', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const tracker = new CostTracker();
+      const unknownOpus = `claude-opus-9-9-${Math.random().toString(36).slice(2)}`;
+      tracker.addUsage(unknownOpus, 1000, 1000);
+      tracker.addUsage(unknownOpus, 1000, 1000);
+      const stats = tracker.getStats();
+      // Opus fallback (not Sonnet): 2 * ($0.015 + $0.075) = $0.18, not $0.036.
+      expect(stats.estimatedCost).toBeCloseTo(0.18, 4);
+      // Loud warning fired, and only once for the same unknown model.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain(unknownOpus);
+    });
   });
 
   describe('getDailyTotal', () => {

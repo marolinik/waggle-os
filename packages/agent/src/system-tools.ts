@@ -6,6 +6,7 @@ import { glob } from 'glob';
 import type { ToolDefinition } from './tools.js';
 import { SearchCache, RateLimiter } from './web-search-utils.js';
 import { dedupTextResults, truncateToTokenBudget } from './tool-output-compressor.js';
+import { safeFetch, allowLocalFromEnv, EgressBlockedError } from './url-egress-guard.js';
 import {
   IMAGE_EXTENSIONS, DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
   checkDeniedBinaries, createSanitizedEnv, truncateOutput, resolveSafe,
@@ -696,16 +697,25 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           const ac = new AbortController();
           const timer = setTimeout(() => ac.abort(), 15_000);
 
-          const response = await fetch(url, {
-            headers: {
-              'User-Agent': 'Waggle/1.0 (AI Assistant)',
-              Accept: 'text/html,application/xhtml+xml,text/plain,application/json',
-            },
-            signal: ac.signal,
-            redirect: 'follow',
-          });
-
-          clearTimeout(timer);
+          // SSRF guard: resolve + reject loopback/private/link-local/reserved
+          // targets, and re-validate every redirect hop. Loopback is fetchable
+          // only when WAGGLE_ALLOW_LOCAL_FETCH is set (desktop dev servers).
+          let response: Response;
+          try {
+            response = await safeFetch(
+              url,
+              {
+                headers: {
+                  'User-Agent': 'Waggle/1.0 (AI Assistant)',
+                  Accept: 'text/html,application/xhtml+xml,text/plain,application/json',
+                },
+                signal: ac.signal,
+              },
+              { allowLocal: allowLocalFromEnv() },
+            );
+          } finally {
+            clearTimeout(timer);
+          }
 
           if (!response.ok) {
             return `Fetch failed (${response.status}): ${response.statusText}`;
@@ -745,6 +755,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           if (!text) return 'Page fetched but no text content found.';
           return truncateToTokenBudget(text, maxTokens);
         } catch (err: unknown) {
+          if (err instanceof EgressBlockedError) return `Error: blocked for safety — ${err.message}`;
           if (err instanceof Error && err.name === 'AbortError') return 'Error: Request timed out (15s)';
           return `Fetch error: ${err instanceof Error ? err.message : String(err)}`;
         }

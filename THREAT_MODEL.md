@@ -104,6 +104,29 @@ secret's existence. **This is real containment + a defense-in-depth BLOCKLIST �
 sandbox:** the deny is a curated list (it cannot enumerate every secret a home dir holds) and
 is deny-by-default with no per-workspace override yet.
 
+### 8. SSRF egress guard — `url-egress-guard.ts`
+`packages/agent/src/url-egress-guard.ts` (guarding `web_fetch` in `system-tools.ts`) and
+the structurally-identical `packages/hive-mind-core/src/harvest/url-egress-guard.ts`
+(guarding `UrlAdapter.fetchAndParse`, reached by the MCP `ingest_source` url path in
+`packages/{memory-mcp,hive-mind-mcp-server}/src/tools/ingest.ts`). A URL named by untrusted
+content or a user is resolved to concrete IP(s); the fetch is **refused if any resolved
+address is loopback / private (RFC1918 + CGNAT) / link-local / unique-local / multicast /
+reserved / unspecified**. This closes the **cloud instance-metadata** exfiltration path —
+`169.254.169.254` (link-local) reaching IAM credentials — which matters because the
+cloud/TEAMS sidecar binds `0.0.0.0` (`docker-compose.production.yml`, `render.yaml`).
+Coverage:
+- **Scheme allowlist:** only `http:`/`https:` (blocks `file:`/`gopher:`/`ftp:` redirect tricks).
+- **Obfuscated literals** (octal `0177.0.0.1`, decimal `2130706433`, hex `0x7f000001`) are
+  normalized by the OS resolver — `net.isIP` rejects them as literals, so they route through
+  `dns.lookup` (getaddrinfo) which returns the canonical dotted form the classifier blocks.
+- **IPv6** including `::1`, `fe80::/10`, `fc00::/7`, `ff00::/8`, and **IPv4-mapped**
+  (`::ffff:169.254.169.254`) which is unwrapped and classified as its embedded v4.
+- **Redirects** are followed manually (`redirect: 'manual'`) and the target is **re-validated
+  at every hop**, so a public URL cannot 30x-bounce into a private address; a hop cap bounds it.
+- **Desktop localhost:** loopback is blocked by default; a legitimate local-dev fetch is
+  permitted only when `WAGGLE_ALLOW_LOCAL_FETCH=1` (loopback only — private/link-local stay
+  blocked even then). Fail-closed: an unclassifiable/malformed address is treated as blocked.
+
 ## Known Gaps (open, honest)
 
 1. **Pattern-based scanner.** `scanForInjection` is regex/heuristic — novel phrasings,
@@ -138,3 +161,13 @@ is deny-by-default with no per-workspace override yet.
    per frame but NOT scanned for secrets/PII; the email harvest pins `$select` to
    subject/from/preview (not full bodies) to bound exposure. A secret-pattern redaction pass
    before `writeFrame` is a follow-up.
+7. **SSRF guard has a residual DNS-rebind TOCTOU window.** The egress guard (control 8)
+   resolves + validates the hostname, then hands the URL to `fetch`, which resolves it a
+   second time — a hostname whose DNS flips to a private IP between the two lookups could slip
+   through on the fetch's own resolution. The window is re-validated on every redirect hop, but
+   full closure needs IP-pinning (connect to the validated address) which `fetch`+HTTPS can't
+   do portably without breaking TLS SNI/cert validation. Also out of scope: the guard bounds
+   the *target* address, not response size/content, and does not defend a genuinely
+   public-but-malicious endpoint. The duplicated agent/hive-mind-core guard copies share one
+   spec and must be kept in sync (they cannot share a module — hive-mind-core is OSS-mirrored
+   and must not import `@waggle/agent`).

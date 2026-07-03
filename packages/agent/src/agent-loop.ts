@@ -49,12 +49,14 @@ export interface AgentLoopConfig {
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
   /** Team governance policies — blocked tools and allowed sources.
-   *  NOTE: `allowedSources` is **not yet enforced** (agent-loop review Critical #1).
-   *  Setting it on TEAMS/ENTERPRISE tiers logs a warning at startup but does not
-   *  restrict tool execution — tools don't carry source-provenance metadata yet.
-   *  `blockedTools` IS enforced. Remove this caveat when per-tool source is wired. */
+   *  `blockedTools` IS enforced. `allowedSources` is **accepted but NOT
+   *  enforced**: tools don't carry source-provenance metadata yet, so setting it
+   *  on TEAMS/ENTERPRISE only logs a loud warning at startup and does NOT
+   *  restrict tool execution. Do not rely on it as a security control. Remove
+   *  this caveat (and the runtime warning) once per-tool source is wired. */
   governancePolicies?: {
     blockedTools?: string[];
+    /** ACCEPTED BUT NOT ENFORCED — see the note above. */
     allowedSources?: string[];
   };
   /**
@@ -202,9 +204,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // metadata. Log once per invocation so the policy visibility gap is loud.
   if (config.governancePolicies?.allowedSources && config.governancePolicies.allowedSources.length > 0) {
     console.warn(
-      '[agent-loop] governancePolicies.allowedSources is set but NOT YET ENFORCED — ' +
-      'tool-source metadata required first. blockedTools IS enforced. ' +
-      `Received ${config.governancePolicies.allowedSources.length} allowed sources.`
+      '[agent-loop] SECURITY NOTICE: governancePolicies.allowedSources is accepted but NOT ENFORCED — ' +
+      'it does not restrict tool execution (tools carry no source-provenance metadata yet). ' +
+      'Do not rely on it as a security control. blockedTools IS enforced. ' +
+      `Received ${config.governancePolicies.allowedSources.length} allowed source(s), all ignored.`
     );
   }
 

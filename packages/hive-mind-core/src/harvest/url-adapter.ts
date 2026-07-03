@@ -7,6 +7,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { SourceAdapter, UniversalImportItem } from './types.js';
+import { safeFetch, allowLocalFromEnv } from './url-egress-guard.js';
 
 /** Strip HTML tags and decode common entities. Returns plain text. */
 function stripHtml(html: string): string {
@@ -79,15 +80,23 @@ export class UrlAdapter implements SourceAdapter {
     return [];
   }
 
-  /** Fetch a URL and parse its content. Async because of network I/O. */
+  /** Fetch a URL and parse its content. Async because of network I/O.
+   *  Routed through the SSRF egress guard — the target and every redirect hop
+   *  must resolve to a public address (loopback allowed only when
+   *  WAGGLE_ALLOW_LOCAL_FETCH is set). Blocked targets throw EgressBlockedError,
+   *  surfaced to the MCP ingest caller as an error result. */
   async fetchAndParse(url: string): Promise<UniversalImportItem[]> {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Waggle-Memory/1.0 (knowledge harvester)',
-        'Accept': 'text/html,application/xhtml+xml,text/plain',
+    const response = await safeFetch(
+      url,
+      {
+        headers: {
+          'User-Agent': 'Waggle-Memory/1.0 (knowledge harvester)',
+          'Accept': 'text/html,application/xhtml+xml,text/plain',
+        },
+        signal: AbortSignal.timeout(15_000),
       },
-      signal: AbortSignal.timeout(15_000),
-    });
+      { allowLocal: allowLocalFromEnv() },
+    );
 
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
