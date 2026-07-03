@@ -252,7 +252,6 @@ describe('ToolProcessTracker — persistence', () => {
 
   it('reconcile does not write when the store was empty (no eager file create)', () => {
     const store = memStore([]);
-    // eslint-disable-next-line no-new
     new ToolProcessTracker({
       isAlive: () => true,
       loadPersisted: store.loadPersisted,

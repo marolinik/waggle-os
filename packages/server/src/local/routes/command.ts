@@ -315,7 +315,8 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
       const apiKey = server.vault?.get('anthropic')?.value;
       if (!apiKey) return null;
       const addr = server.server.address();
-      const port = (addr && typeof addr === 'object' ? addr.port : undefined) ?? Number(process.env.WAGGLE_PORT) ?? 3333;
+      const envPort = Number(process.env.WAGGLE_PORT);
+      const port = (addr && typeof addr === 'object' ? addr.port : undefined) ?? (Number.isFinite(envPort) ? envPort : 3333);
       const token = server.agentState.wsSessionToken;
       try {
         const res = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {

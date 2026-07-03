@@ -1407,6 +1407,7 @@ test.describe('personal AI workspace positioning audit', () => {
     expect(protectedProbeUrls.length).toBeGreaterThan(0);
   });
 
+  // eslint-disable-next-line no-empty-pattern -- Playwright requires a destructuring pattern for fixtures; this test mocks page/request entirely
   test('reports cold-start readiness separately from warm product score', async ({}, testInfo) => {
     const response = (status: number, body: unknown) => ({
       ok: () => status >= 200 && status < 300,
