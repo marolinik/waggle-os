@@ -26,6 +26,18 @@ import Database from 'better-sqlite3';
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 
+// Wall-clock perf thresholds are environment-sensitive: shared CI runners (and a
+// dev box running other suites in parallel) vary wildly, so tight literal bounds
+// produce false failures under load. Scale the budget in CI so only GROSS
+// regressions (a sync-FS-per-item or an accidental O(n²)) trip the gate, while
+// local runs keep the tight bounds that make the numbers meaningful. `CI` is set
+// by GitHub Actions (and most CI providers).
+const PERF_SCALE = process.env.CI ? 6 : 1;
+/** Scale a base millisecond budget for the current environment. */
+function perfBudget(baseMs: number): number {
+  return baseMs * PERF_SCALE;
+}
+
 function createTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), `waggle-perf-${prefix}-`));
 }
@@ -55,7 +67,7 @@ describe('Performance Benchmarks', () => {
 
         expect(res.statusCode).toBe(200);
         // Generous threshold: CI machines can be slow. 5s is the safety margin.
-        expect(elapsed).toBeLessThan(5000);
+        expect(elapsed).toBeLessThan(perfBudget(5000));
 
         await server.close();
       } finally {
@@ -123,7 +135,7 @@ describe('Performance Benchmarks', () => {
 
       expect(results.length).toBeGreaterThan(0);
       // 200ms is generous — SQLite FTS5 on 1000 rows should be <10ms
-      expect(elapsed).toBeLessThan(200);
+      expect(elapsed).toBeLessThan(perfBudget(200));
     });
 
     it('FTS5 wildcard search completes within 200ms', () => {
@@ -139,7 +151,7 @@ describe('Performance Benchmarks', () => {
       const elapsed = Date.now() - start;
 
       expect(results.length).toBeGreaterThan(0);
-      expect(elapsed).toBeLessThan(200);
+      expect(elapsed).toBeLessThan(perfBudget(200));
     });
 
     it('frame count query completes within 50ms', () => {
@@ -150,7 +162,7 @@ describe('Performance Benchmarks', () => {
       const elapsed = Date.now() - start;
 
       expect(row.cnt).toBe(1000);
-      expect(elapsed).toBeLessThan(50);
+      expect(elapsed).toBeLessThan(perfBudget(50));
     });
   });
 
@@ -195,7 +207,7 @@ describe('Performance Benchmarks', () => {
       const body = JSON.parse(res.body);
       expect(body.length).toBe(50);
       // 500ms is generous for reading 50 JSON files from disk
-      expect(elapsed).toBeLessThan(500);
+      expect(elapsed).toBeLessThan(perfBudget(500));
     });
   });
 
@@ -242,7 +254,7 @@ describe('Performance Benchmarks', () => {
       expect(messages[0].role).toBe('user');
       expect(messages[499].role).toBe('assistant');
       // 500ms is generous — 500 lines of JSONL should parse in <50ms
-      expect(elapsed).toBeLessThan(500);
+      expect(elapsed).toBeLessThan(perfBudget(500));
     });
   });
 
@@ -288,7 +300,7 @@ describe('Performance Benchmarks', () => {
         `).all('code review');
         const elapsed = Date.now() - start;
 
-        expect(elapsed).toBeLessThan(200);
+        expect(elapsed).toBeLessThan(perfBudget(200));
         // The marketplace should have at least some results for "code review"
         expect(results.length).toBeGreaterThanOrEqual(0);
 
@@ -329,7 +341,7 @@ describe('Performance Benchmarks', () => {
       expect(result).not.toBeNull();
       expect(result!.value).toBe('sk-benchmark-secret-value-12345');
       // 100ms is generous — AES-256-GCM + file I/O should be <20ms
-      expect(elapsed).toBeLessThan(100);
+      expect(elapsed).toBeLessThan(perfBudget(100));
     });
 
     it('10 sequential set+get cycles complete within 500ms', () => {
@@ -343,7 +355,7 @@ describe('Performance Benchmarks', () => {
       const elapsed = Date.now() - start;
 
       // 500ms for 10 encrypt+decrypt+file-write cycles
-      expect(elapsed).toBeLessThan(500);
+      expect(elapsed).toBeLessThan(perfBudget(500));
     });
 
     it('vault list with 20 secrets completes within 50ms', () => {
@@ -357,7 +369,7 @@ describe('Performance Benchmarks', () => {
       const elapsed = Date.now() - start;
 
       expect(secrets.length).toBe(20);
-      expect(elapsed).toBeLessThan(50);
+      expect(elapsed).toBeLessThan(perfBudget(50));
     });
   });
 
@@ -400,7 +412,7 @@ describe('Performance Benchmarks', () => {
       const allFrames = frames.getGopFrames(gopId);
       expect(allFrames.length).toBe(100);
       // 2 seconds is generous — SQLite WAL mode batch writes should be <500ms
-      expect(elapsed).toBeLessThan(2000);
+      expect(elapsed).toBeLessThan(perfBudget(2000));
     });
 
     it('writing 100 P-frames completes within 2 seconds', () => {
@@ -424,7 +436,7 @@ describe('Performance Benchmarks', () => {
       // 1 base + 100 P-frames = 101
       const allFrames = frames.getGopFrames(gopId);
       expect(allFrames.length).toBe(101);
-      expect(elapsed).toBeLessThan(2000);
+      expect(elapsed).toBeLessThan(perfBudget(2000));
     });
 
     it('creating 50 sessions completes within 1 second', () => {
@@ -434,7 +446,7 @@ describe('Performance Benchmarks', () => {
       }
       const elapsed = Date.now() - start;
 
-      expect(elapsed).toBeLessThan(1000);
+      expect(elapsed).toBeLessThan(perfBudget(1000));
     });
   });
 });
