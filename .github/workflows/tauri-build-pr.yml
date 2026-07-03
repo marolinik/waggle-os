@@ -92,7 +92,7 @@ jobs:
           TAURI_KEY_PASSWORD: ''
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: waggle-windows-${{ github.sha }}
@@ -167,7 +167,7 @@ jobs:
           TAURI_KEY_PASSWORD: ''
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: waggle-macos-${{ matrix.target }}-${{ github.sha }}
