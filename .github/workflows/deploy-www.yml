@@ -24,7 +24,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: cd apps/www && npm install && npm run build
+      # Install at the root (apps/www is a workspace with no lockfile of its own),
+      # then build the www workspace. The `npm install → npm ci` switch is deferred
+      # to the deps/lockfile hardening pass (see ci.yml note).
+      - run: npm install
+      - run: cd apps/www && npm run build
       - uses: actions/upload-pages-artifact@v3
         with:
           path: apps/www/dist

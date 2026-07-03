@@ -1,0 +1,39 @@
+# Dependabot — dependency & supply-chain update gate for Waggle OS.
+# Docs: https://docs.github.com/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  # npm — one entry at the repo root. This is an npm workspaces monorepo with a
+  # SINGLE root package-lock.json shared by every workspace (apps/*, packages/*),
+  # so Dependabot's workspace-aware npm updater covers the root manifest AND all
+  # workspace package.json files from `directory: "/"`. (The plural `directories`
+  # form is for repos with independent per-directory lockfiles — not this layout.)
+  # Minor+patch bumps are grouped into one PR per run to keep review volume low;
+  # majors stay ungrouped so breaking changes land as isolated, reviewable PRs.
+  #
+  # Intentionally NOT covered: `app/` (the Tauri desktop shell) is a standalone
+  # npm project outside the workspace with its own app/package-lock.json, and its
+  # Tauri toolchain is owned by the release/tauri workflows — add a separate npm
+  # entry with `directory: "/app"` only if that wave asks for it. `external/**`
+  # is vendored third-party code and is left alone.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      npm-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions pinned across .github/workflows/*.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

@@ -23,10 +23,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
 
+      # NOTE: the switch to `npm ci` (deterministic, lockfile-faithful) is deferred
+      # to the deps/lockfile hardening pass, after the root package-lock.json is
+      # regenerated in sync with every workspace manifest. `npm install` is the
+      # safe, lockfile-tolerant install until then.
       - run: npm install
 
-      - name: TypeScript type check
-        run: npx tsc --noEmit
+      # Real typecheck gate. The old step ran `npx tsc --noEmit` against the root
+      # tsconfig.json, whose `"files": ["apps/web/src/vite-env.d.ts"]` (and no
+      # `include`) typechecks essentially nothing. build:packages is the actual
+      # `tsc --build` chain for every @waggle/* package (shared → hive-mind-core →
+      # core → agent → server) and also emits the dist/ that apps/web unit tests
+      # import; typecheck:web is the real apps/web check (tsc -p tsconfig.app.json).
+      - name: Type check — workspace packages (tsc --build chain)
+        run: npm run build:packages
+
+      - name: Type check — web (apps/web, tsc -p tsconfig.app.json)
+        run: npm run typecheck:web
 
       - name: Lint (root flat config)
         run: npm run lint
@@ -34,12 +47,29 @@ jobs:
       - name: Tauri TS typecheck (app/scripts)
         run: npx tsc -p app/tsconfig.json
 
-      - run: npm test
+      - name: Unit tests — packages + cross-cutting (root vitest)
+        run: npm test
+
+      # The root vitest.config.ts excludes `apps/**`, so apps/web's own 131-file
+      # suite never ran in CI. Run it via its own vitest config (jsdom). Blocking.
+      - name: Unit tests — apps/web
+        run: npm run test -w apps/web
 
       - name: Security audit (informational)
         run: npm audit --audit-level=high
         continue-on-error: true
 
+  # ADVISORY / NON-BLOCKING. `continue-on-error: true` means a red e2e run does
+  # NOT block merges — by design. These specs are broad product/audit journeys
+  # (full-product-audit, power-user-stress, competitive-benchmarks, …) that are
+  # historically flake-prone, so gating merges on them would produce false reds.
+  # The real regression net is the blocking `test` job above (package + web
+  # typecheck, lint, and the full unit suites incl. apps/web). No required e2e
+  # "smoke" step is wired here on purpose: the repo has no curated stable smoke
+  # subset (`test:fast` is the near-complete suite minus two known-flaky specs,
+  # not a small smoke), so promoting any of it to a required check would import
+  # exactly the flakiness this job is quarantined for. Revisit if a tagged
+  # @smoke subset is added.
   e2e:
     runs-on: ubuntu-latest
     needs: test
