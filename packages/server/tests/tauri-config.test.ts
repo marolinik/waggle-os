@@ -45,11 +45,15 @@ describe('Tauri Production Configuration', () => {
     expect(win.resizable).toBe(true);
   });
 
-  it('tauri.conf.json has updater configured', () => {
+  it('tauri.conf.json has the auto-updater intentionally disabled for v1', () => {
+    // The updater plugin config was removed because release.yml published
+    // latest.json with EMPTY signatures — with a pubkey present, every client
+    // update would fail signature verification (a broken update channel). It
+    // stays disabled until updater signing is provisioned (TAURI_SIGNING_PRIVATE_KEY
+    // + createUpdaterArtifacts + a real-signature manifest generator). The plugin
+    // dependency (Cargo.toml) and lib.rs init remain so it can be re-enabled then.
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
-    expect(conf.plugins.updater).toBeDefined();
-    expect(conf.plugins.updater.endpoints).toBeDefined();
-    expect(conf.plugins.updater.endpoints.length).toBeGreaterThan(0);
+    expect(conf.plugins?.updater).toBeUndefined();
   });
 
   it('tauri.conf.json has tray icon configured', () => {
@@ -124,13 +128,26 @@ describe('CI/CD Configuration', () => {
     expect(content).toContain('x86_64-apple-darwin');
   });
 
-  it('release workflow generates updater manifest', () => {
+  it('release workflow does NOT publish a broken (empty-signature) updater manifest', () => {
+    // The update-manifest job was removed with the updater config: it published
+    // latest.json with empty signatures, which every client would reject. Re-add
+    // it together with real updater signing (see tauri.conf updater note).
     const workflow = fs.readFileSync(
       path.join(ROOT, '.github', 'workflows', 'release.yml'),
       'utf-8',
     );
-    expect(workflow).toContain('latest.json');
-    expect(workflow).toContain('update-manifest');
+    // No active `update-manifest:` job (a re-enable note in comments is fine).
+    expect(workflow).not.toMatch(/^\s*update-manifest:/m);
+  });
+
+  it('release workflow stages sidecar dependencies before packaging', () => {
+    // P0-2: the packaged sidecar require()s esbuild-externalized deps that must
+    // be staged into resources/node_modules or it dies with MODULE_NOT_FOUND.
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+      'utf-8',
+    );
+    expect(workflow).toContain('stage-sidecar-deps');
   });
 });
 

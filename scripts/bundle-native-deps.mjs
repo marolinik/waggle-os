@@ -18,6 +18,21 @@ const nativeDir = path.join(root, 'app', 'src-tauri', 'resources', 'native');
 const platform = process.platform;
 const arch = process.env.TARGET_ARCH || process.arch;
 
+// macOS "universal" is not a valid staging target: sqlite-vec and onnxruntime
+// ship per-arch binaries (no darwin/universal path exists), so a universal run
+// silently falls through to the x64 variant and mis-stages the arm64 half.
+// Build each arch separately and lipo the app bundle instead.
+if (arch === 'universal') {
+  console.error(
+    '[bundle-native-deps] FATAL — TARGET_ARCH=universal is not supported.\n'
+    + '  Native modules (sqlite-vec, onnxruntime-node) are per-arch. Build each\n'
+    + '  arch separately: TARGET_ARCH=arm64 (aarch64-apple-darwin) and\n'
+    + '  TARGET_ARCH=x64 (x86_64-apple-darwin) — see release.yml\'s macOS matrix\n'
+    + '  and the app tauri:build:mac:arm64 / :x64 scripts.',
+  );
+  process.exit(1);
+}
+
 console.log(`[bundle-native-deps] Platform: ${platform}-${arch}`);
 
 // Ensure output directory

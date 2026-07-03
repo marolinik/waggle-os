@@ -21,6 +21,21 @@ const NODE_VERSION = '20.18.1';
 const platform = process.platform;
 const arch = process.env.TARGET_ARCH || process.arch;
 
+// macOS "universal" is not a valid download target: nodejs.org ships per-arch
+// binaries (node-vX-darwin-arm64 / -x64), and a universal run would fall
+// through to the x64 tarball and ship an x64-only node in an arm64 bundle.
+// Build each arch separately and lipo the app bundle instead.
+if (arch === 'universal') {
+  console.error(
+    '[bundle-node] FATAL — TARGET_ARCH=universal is not supported.\n'
+    + '  Node.js ships per-arch binaries. Build each arch separately:\n'
+    + '  TARGET_ARCH=arm64 (aarch64-apple-darwin) and TARGET_ARCH=x64\n'
+    + '  (x86_64-apple-darwin) — see release.yml\'s macOS matrix and the app\n'
+    + '  tauri:build:mac:arm64 / :x64 scripts.',
+  );
+  process.exit(1);
+}
+
 fs.mkdirSync(cacheDir, { recursive: true });
 fs.mkdirSync(resourcesDir, { recursive: true });
 

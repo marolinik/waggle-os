@@ -105,8 +105,22 @@ fn build_service_command(port: u16) -> Result<Command, String> {
         if let Some(ref dir) = exe_dir {
             let resources_dir = dir.join("resources");
             let native_dir = resources_dir.join("native");
+            let node_modules_dir = resources_dir.join("node_modules");
 
-            cmd.env("NODE_PATH", native_dir.to_string_lossy().as_ref());
+            // NODE_PATH must include the staged production deps
+            // (resources/node_modules — better-sqlite3, @fastify/static,
+            // drizzle-orm, @huggingface/transformers, …) so the sidecar's bare
+            // require()/import() calls resolve, plus resources/native for any
+            // abs-path native consumers. Node accepts multiple entries,
+            // ';'-separated on Windows and ':' elsewhere.
+            let sep = if cfg!(windows) { ";" } else { ":" };
+            let node_path = format!(
+                "{}{}{}",
+                node_modules_dir.to_string_lossy(),
+                sep,
+                native_dir.to_string_lossy(),
+            );
+            cmd.env("NODE_PATH", node_path);
 
             let vec_ext = if cfg!(windows) {
                 native_dir.join("vec0.dll")
