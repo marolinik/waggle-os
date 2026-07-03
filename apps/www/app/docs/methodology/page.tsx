@@ -4,6 +4,7 @@ import type { CSSProperties } from 'react';
 import type { Metadata } from 'next';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import BrandMark from '../../_components/BrandMark';
 
 /**
  * /docs/methodology — Day 0 Trust Band Card 4 link target per Path D landing
@@ -41,14 +42,7 @@ export default function MethodologyPage() {
     <main style={pageStyle}>
       <header style={headerStyle}>
         <a href="/" style={brandLinkStyle}>
-          <img
-            src="/brand/logo.jpeg"
-            alt="Waggle"
-            width={28}
-            height={28}
-            style={logoStyle}
-          />
-          <span style={brandTextStyle}>Waggle</span>
+          <BrandMark withWordmark />
           <span style={separatorStyle}>·</span>
           <span style={crumbStyle}>Methodology</span>
         </a>
@@ -91,19 +85,6 @@ const brandLinkStyle: CSSProperties = {
   textDecoration: 'none',
   color: 'var(--hive-200, #d8cfba)',
   fontSize: 14,
-};
-
-const logoStyle: CSSProperties = {
-  width: 28,
-  height: 28,
-  borderRadius: 6,
-  display: 'block',
-};
-
-const brandTextStyle: CSSProperties = {
-  fontSize: 16,
-  fontWeight: 700,
-  color: 'var(--hive-50, #f6f1e4)',
 };
 
 const separatorStyle: CSSProperties = {

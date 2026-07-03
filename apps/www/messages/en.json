@@ -1,258 +1,266 @@
 {
   "landing": {
+    "a11y": {
+      "skip": "Skip to content"
+    },
     "metadata": {
-      "title": "Waggle — Your Personal AI Workspace",
-      "description": "Your AI should know how you work. Waggle remembers you, your projects, and your decisions, then runs the right AI underneath so you stay focused on the work. Local-first.",
-      "og_title": "Waggle — Your Personal AI Workspace",
-      "og_description": "Your AI should know how you work. Waggle remembers you, your projects, and your decisions, guides the next step, and stays yours. Local-first.",
-      "twitter_title": "Waggle — Your Personal AI Workspace",
-      "twitter_description": "The personal AI workspace that remembers you, knows your work, evolves with each project, and stays yours."
+      "title": "Waggle — The AI workspace that remembers",
+      "description": "Waggle is a local-first AI workspace with persistent memory. Your projects, decisions, and context compound across every model — Claude, GPT, Gemini, or a local model — and never leave your machine.",
+      "og_title": "Waggle — The AI workspace that remembers",
+      "og_description": "A local-first AI workspace with persistent memory. Your context compounds across every model and stays on your machine.",
+      "twitter_title": "Waggle — The AI workspace that remembers",
+      "twitter_description": "A local-first AI workspace with persistent memory. Your context compounds across every model and stays on your machine."
     },
     "navbar": {
       "links": {
         "how_it_works": "How it works",
-        "personas": "Personas",
-        "pricing": "Pricing",
+        "memory": "Memory",
+        "benchmark": "Benchmark",
         "open_source": "Open source",
-        "audit": "Audit"
+        "pricing": "Pricing"
       },
       "ctas": {
         "sign_in": "Sign in",
-        "download": "Download",
-        "download_mobile": "Download →"
+        "download": "Download"
       },
       "aria": {
+        "home": "Waggle home",
+        "primary": "Primary",
         "toggle_menu": "Toggle menu"
       }
     },
     "hero": {
-      "variant_a": {
-        "eyebrow": "AI workspace with memory",
-        "headline_lead": "Your AI doesn't reset.",
-        "headline_emphasis": "Your work doesn't either.",
-        "subhead": "Persistent memory across every LLM you use. Claude, GPT, Qwen, Gemini, your local model — all drawing from the same locally-stored knowledge graph.",
-        "body": "Stop the paste-context-fatigue cycle. Your context lives once, persists across models, and compounds with every session you finish."
-      },
-      "variant_b": {
-        "eyebrow": "AI for regulated industries, finally",
-        "headline_lead": "AI workspace that satisfies your CISO.",
-        "subhead": "Local-first by default, EU AI Act audit reports built into the workflow, backed by Egzakta Group's regulated-industries practice.",
-        "body": "Your CISO blocked ChatGPT for good reasons. Waggle keeps the work on your machine and generates Article 12 audit reports automatically — no separate compliance workstream."
-      },
-      "variant_c": {
-        "eyebrow": "Shared context for moving teams",
-        "headline_lead": "Your team's memory, before someone has to write it down.",
-        "subhead": "Notion wikis go stale. Slack search is hostile. Waggle captures the context as you work — no extra step.",
-        "body": "Onboarding an 8-person team gets shorter when context auto-organizes from work activity, not from someone remembering to write the wiki page."
-      },
-      "variant_d": {
-        "eyebrow": "Memory substrate for any agent",
-        "headline_lead": "Memory layer that doesn't lock you to a vendor.",
-        "subhead": "Apache 2.0, MCP-native, runs locally. The substrate plugs into whatever agent harness you're already running.",
-        "body": "Mem0 is cloud-only. LangMem is toy-tier. Letta is agent-centric. Waggle is the substrate — fork the source, audit the graph, deploy on your infra."
-      },
-      "variant_e": {
-        "eyebrow": "AI for confidential work",
-        "headline_lead": "AI that never sees your client matter.",
-        "subhead": "Local-first by design, bar association compatible, full audit log per matter — work stays on your machine.",
-        "body": "ChatGPT-as-malpractice-risk has stalled adoption in legal. Waggle's hive lives on the device; every recall carries provenance, every matter has a trail."
-      },
-      "eyebrow": "Personal AI workspace for experts",
-      "headline": "Your AI should know how you work.",
-      "subhead": "Waggle remembers you, your projects, and the way you make decisions. It evolves with the work, guides the next step, and runs the right AI underneath.",
-      "cta_primary": "Start free",
-      "secondary_cta": "See how it learns your work.",
-      "microcopy_local_first": "Knows you",
-      "microcopy_any_model": "Knows your work",
-      "microcopy_data": "Stays yours"
+      "eyebrow": "Local-first · model-agnostic · open substrate",
+      "headline_lead": "The AI workspace that",
+      "headline_emphasis": "remembers",
+      "subhead": "Waggle keeps a real memory of you and your work — on your machine, under your control. Every session starts where the last one ended, whichever model you run.",
+      "cta_secondary": "Read the benchmark",
+      "microcopy_free": "Free forever tier",
+      "microcopy_platforms": "Windows & macOS",
+      "microcopy_oss": "Apache-2.0 memory substrate"
     },
     "hero_visual": {
-      "aria_label": "Waggle hive memory visualization",
-      "svg_aria_label": "Hive memory connecting four LLM providers",
-      "window_left": "~/.waggle/hive · live",
-      "window_right": "local · signed · 42ms",
-      "center_label": "your hive",
+      "aria_label": "Diagram of Waggle's local memory serving four AI models",
+      "window_title": "~/.waggle/hive",
+      "window_badge": "local · sqlite",
+      "center_label": "your memory",
+      "center_sublabel": "frames · graph",
       "chips": {
-        "claude_primary": "claude · sonnet",
+        "claude_primary": "claude",
         "claude_sub": "recall",
-        "gpt_primary": "gpt · 5",
+        "gpt_primary": "gpt",
         "gpt_sub": "recall",
         "qwen_primary": "qwen · local",
         "qwen_sub": "commit",
-        "gemini_primary": "gemini · 2.5",
+        "gemini_primary": "gemini",
         "gemini_sub": "recall"
       },
-      "stats": {
-        "edges_value": "One mind",
-        "edges_label": "KNOWS YOU",
-        "providers_value": "Every project",
-        "providers_label": "KNOWS YOUR WORK",
-        "recall_value": "0 prompts",
-        "recall_label": "RUNS THE AI",
-        "cloud_value": "Local-first",
-        "cloud_label": "STAYS YOURS"
-      },
-      "dev_tabs_aria": "Hero variant preview (dev only)"
+      "footer_left": "hybrid search: vector + keyword",
+      "footer_right": "nothing leaves without you"
     },
-    "proof": {
-      "eyebrow": "Validated",
-      "headline": "The layer does the work.",
-      "subhead": "It remembers what you told it — verified, not vibes. On LoCoMo, the standard test for long-term conversational memory, Waggle's open-source memory layer scores 86.49% — a new state of the art, measured under the previous leader's own protocol and judge. Run the test yourself, offline.",
-      "methodology": "The test is LoCoMo (N=1,540), scored with GPT-4.1-mini as both answerer and judge — the previous SOTA's exact published protocol, which we first reproduced in-harness to within 0.03 points before comparing. Waggle scores 86.49% vs the prior best 81.95% (+4.54 points; z=4.64, p<10⁻⁵), leading or tying every question category. The intelligence lives in the memory layer, not the model — so it travels onto a small local model too. Honest caveat: higher token use per question than the leanest systems; efficiency work underway. Reproducible offline: github.com/marolinik/hive-mind.",
-      "human_quote": ""
-    },
-    "pillars": {
-      "headline": "One memory knows how you work. Another remembers the work itself. Together, they make every AI session feel like it already belongs to you.",
-      "pillar_01": {
-        "title": "It knows you",
-        "body": "You're known here — so you never re-introduce yourself, never start from a stranger again. It already knows how you think and how you like your work done."
+    "problem": {
+      "eyebrow": "The problem",
+      "headline": "Every AI session starts from zero.",
+      "beats": {
+        "reintroduce": {
+          "title": "You re-introduce yourself",
+          "body": "The client, the voice, the constraints, the stack — explained again, to the same tool, for the hundredth time."
+        },
+        "tabs": {
+          "title": "Context dies in tabs",
+          "body": "The decision lives in one chat, the draft in another, the reasoning in neither. Nothing connects."
+        },
+        "compound": {
+          "title": "Nothing compounds",
+          "body": "A year of AI conversations — and your assistant knows you no better than it did on day one."
+        }
       },
-      "pillar_02": {
-        "title": "It knows your work",
-        "body": "Nothing is lost — walk back into any project after a day, a week, a quarter, and it's all still there, exactly as you left it."
-      },
-      "pillar_03": {
-        "title": "It guides the AI",
-        "body": "You stay the expert in your work. Waggle handles the prompting, routing, and scaffolding underneath, then shows the next useful step instead of making you operate the machinery."
-      },
-      "pillar_04": {
-        "title": "Your best work, and it's yours",
-        "body": "Excel built to the last detail, decks that hold up in the room, Word polished to the final word — every kind of work, start to finish. Everything you ship is genuinely your best, and unmistakably yours."
-      },
-      "pillar_05": {
-        "title": "It stays yours",
-        "body": "Local-first and model-agnostic — it runs on any model, even a small one on your own machine. It lives on your machine and your account — yours to keep, export, or delete anytime."
-      }
-    },
-    "comparison": {
-      "eyebrow": "AI for doing your work — not operating it.",
-      "headline": "Stop starting over with a stranger.",
-      "body": "Most AI tools make you explain yourself again and again: the client, the voice, the decision, the file, the standard. Waggle takes the opposite bet. It keeps the memory of you and your work, then runs the models underneath so the next session starts where the last one left off."
-    },
-    "wow": {
-      "headline": "It's 6pm. You thought about your work all day — not the AI.",
-      "body": "You didn't wrestle a prompt or babysit a pipeline — you made the call, shaped the argument, sweated the detail only you would catch. The deliverable is done, it's unmistakably yours, and you could swap models freely along the way — the output is yours, and you can always see exactly how it was made."
+      "turn": "Waggle takes the opposite bet: your context is an asset. Capture it once, own it locally, and let every session build on the last."
     },
     "how_it_works": {
       "eyebrow": "How it works",
-      "headline": "It learns the work around you.",
-      "subhead": "You bring the judgment. Waggle remembers the context, guides the next step, and brings the right AI to the moment. Open it once and your work-in-progress is already waiting — nothing re-explained, nothing lost.",
+      "headline": "Three steps to an AI that knows your work.",
       "step_01": {
         "number": "01",
-        "title": "Bring it all in",
-        "body": "Start fresh and it learns you fast — or bring your history in. One-click import from ChatGPT, Claude, and Cursor is rolling out now: imported on your machine, stays on your machine."
+        "title": "Bring your history",
+        "body": "Import your ChatGPT, Claude, and Gemini conversations — plus PDFs, notes, and documents. Harvest turns them into structured memory, entirely on your machine."
       },
       "step_02": {
         "number": "02",
-        "title": "Open to what's waiting",
-        "body": "Open it and you're already moving: here's where you left off, here's what's next — your work picks up mid-stride, never from a blank box."
+        "title": "Work in workspaces",
+        "body": "Chat, tasks, and files in one place, with specialist personas for the way you work — and any model underneath: Claude, GPT, Gemini, or a local model."
       },
       "step_03": {
         "number": "03",
-        "title": "Do the work that's yours",
-        "body": "You make the calls; Waggle runs the AI underneath and hands you finished work — and when you close it, all of it stays right where you left it for next time."
+        "title": "Let it compound",
+        "body": "Every session updates a knowledge graph of your projects, people, and decisions. Tomorrow starts where today ended — nothing re-explained, nothing lost."
       }
     },
+    "memory": {
+      "eyebrow": "Under the hood",
+      "headline": "A real memory substrate, not a longer prompt.",
+      "body": "Conversations and files become frames in a local SQLite store. Frames index into hybrid search — vector and keyword — and a knowledge graph links the people, projects, and decisions inside them. Identity and awareness layers track who you are and what you're working on, so recall is precise, explainable, and fast.",
+      "diagram": {
+        "input": "Your conversations & files",
+        "frames": "Frames",
+        "search": "Hybrid search",
+        "search_sub": "vector + keyword",
+        "graph": "Knowledge graph",
+        "graph_sub": "people · projects · decisions",
+        "output": "Any model"
+      },
+      "chips": {
+        "local": "SQLite on your device",
+        "provenance": "Provenance on every memory",
+        "erasure": "Erase actually erases"
+      }
+    },
+    "proof": {
+      "eyebrow": "Proof",
+      "headline": "State of the art on LoCoMo — on the previous leader's own ruler.",
+      "body": "LoCoMo is the standard benchmark for long-term conversational memory. Waggle's open-source memory substrate scores 86.49% — measured under the previous leader's exact protocol and judge, and ahead in or tied on every question category. The full harness ships in the repo: run it yourself, offline.",
+      "footnote": "N=1,540 · GPT-4.1-mini as answerer and judge (the prior leader's published protocol) · +4.54 points, z=4.64 · reproducible offline",
+      "cta_methodology": "Read the methodology",
+      "cta_reproduce": "Reproduce it on GitHub",
+      "chart_aria": "Bar chart comparing LoCoMo scores: Waggle 86.49%, Memori 81.95%, Mem0 73.96%"
+    },
+    "features": {
+      "eyebrow": "The workspace",
+      "headline": "A complete workspace, not another chat window.",
+      "items": {
+        "personas": {
+          "title": "22 specialist personas",
+          "body": "From planner and verifier to analyst and coder — each with its own tools, guardrails, and a hard boundary on what it won't do."
+        },
+        "models": {
+          "title": "Any model underneath",
+          "body": "Thirteen provider families under one router — Claude, GPT, Gemini, Qwen, Grok, DeepSeek, Mistral, and more, with your own keys. Switch mid-project; the memory stays."
+        },
+        "harvest": {
+          "title": "Harvest your history",
+          "body": "Import ChatGPT, Claude, Gemini, and Perplexity exports — plus PDF, Markdown, and URLs — into structured, searchable memory."
+        },
+        "loops": {
+          "title": "Loops & approvals",
+          "body": "Recurring agent runs that report before they act. Anything consequential waits in an approval queue for your sign-off."
+        },
+        "skills": {
+          "title": "Skills & connectors",
+          "body": "Installable skills with integrity auditing, connectors to your tools, and a built-in catalog of 149 MCP servers."
+        },
+        "memory_center": {
+          "title": "Memory Center",
+          "body": "See the original source behind every memory, trace where an answer came from, and erase for real — erasure survives re-import."
+        }
+      }
+    },
+    "sovereignty": {
+      "eyebrow": "Your data",
+      "headline": "Local-first isn't a feature flag. It's the architecture.",
+      "items": {
+        "device": {
+          "title": "On-device by default",
+          "body": "Your memory is a SQLite file on your machine — not a row in someone else's cloud."
+        },
+        "egress": {
+          "title": "Only what you send leaves",
+          "body": "Model calls go to the providers you configure, with your keys, held in a local vault."
+        },
+        "erasure": {
+          "title": "Erasure that holds",
+          "body": "Delete a source and it stays deleted — with provenance and an audit trail, built for the EU AI Act era."
+        },
+        "injection": {
+          "title": "Screened inputs",
+          "body": "External content is scanned for prompt injection before any agent acts on it."
+        }
+      },
+      "cta": "Read our EU AI Act statement"
+    },
     "personas_section": {
-      "eyebrow": "Built for",
-      "heading": "Thirteen ways people work. One memory layer.",
-      "subtitle": "Hunters chase, builders ship, orchestrators coordinate. Waggle remembers — across roles, across tools, across the moments in between."
+      "eyebrow": "Personas",
+      "heading": "Meet the hive.",
+      "subtitle": "22 personas ship in the box — universal modes like planner, verifier, and researcher, plus workspace specialists from sales to legal. Each one knows its tools, and its limits."
+    },
+    "open_source": {
+      "eyebrow": "Open source",
+      "headline": "The memory layer is open. Take it.",
+      "body": "hive-mind is Waggle's memory substrate — frames, hybrid search, knowledge graph — published with the full LoCoMo benchmark harness. Use it in your own agents, audit every query, or reproduce our numbers offline.",
+      "cta_github": "View on GitHub",
+      "cta_npm": "Install from npm",
+      "terminal_title": "reproduce the benchmark",
+      "terminal_aria": "Terminal commands for reproducing the LoCoMo benchmark"
     },
     "pricing": {
       "eyebrow": "Pricing",
-      "headline": "Free for individuals. Honest pricing for everyone else.",
-      "subhead": "Three tiers. No feature-count games. You pay for the scale of the team using the memory, not for arbitrary check-marks.",
+      "headline": "Memory is free forever. Pay when you scale.",
+      "subhead": "Every install starts with 15 days of everything unlocked — no credit card. After that, the free tier keeps your memory, import, and agents for good.",
       "toggle": {
         "monthly": "Monthly",
         "annual": "Annual",
-        "save_pill": "save 17%",
+        "save_pill": "2 months free",
         "aria_group": "Billing period"
       },
       "popular_badge": "Most popular",
       "loading": "Loading…",
       "tiers": {
         "solo": {
-          "name": "Solo",
+          "name": "Free",
           "price_monthly": "$0",
           "price_annual": "$0",
           "note": "Free, forever",
-          "tagline": "For individuals exploring AI workspace",
-          "audience": "Knowledge workers · students · hobbyist developers",
-          "bullet_personal_memory": "Personal memory graph",
-          "bullet_all_llms": "All major LLMs supported",
-          "bullet_local_first": "Local-first by default",
-          "bullet_audit_reports": "EU AI Act audit reports",
-          "bullet_apache_substrate": "Apache 2.0 substrate",
-          "bullet_community_support": "Community support"
+          "tagline": "Everything you need to start compounding.",
+          "bullet_memory": "Full memory + Harvest import",
+          "bullet_workspaces": "5 workspaces",
+          "bullet_personas": "Agents & built-in skills",
+          "bullet_models": "Any model with your own keys",
+          "bullet_trial": "15-day full trial on install"
         },
         "pro": {
           "name": "Pro",
           "price_monthly": "$19/month",
-          "price_annual": "$190/year — save $38",
-          "tagline": "For power users compounding across projects",
-          "audience": "Senior ICs · consultants · founders",
-          "cta": "Start free trial",
-          "bullet_everything_solo": "Everything in Solo",
-          "bullet_priority_sync": "Priority sync across multiple devices",
-          "bullet_advanced_queries": "Advanced graph queries",
-          "bullet_key_vault": "Personal API key vault",
-          "bullet_free_trial": "14-day free trial, no credit card",
-          "bullet_support": "Email support, 48h SLA"
+          "price_annual": "$190/year",
+          "note": "2 months free on annual",
+          "tagline": "For work that spans many projects.",
+          "cta": "Get Pro",
+          "bullet_everything_solo": "Everything in Free",
+          "bullet_unlimited": "Unlimited workspaces & agents",
+          "bullet_marketplace": "Skills marketplace",
+          "bullet_connectors": "All connectors"
         },
         "teams": {
           "name": "Teams",
           "price_monthly": "$49/seat/month",
-          "price_annual": "$490/seat/year — save $98",
-          "note": "3-seat minimum",
-          "tagline": "For teams that want shared memory without losing privacy",
-          "audience": "Small teams (3–50 seats) in regulated industries",
-          "cta": "Start team trial →",
+          "price_annual": "$490/seat/year",
+          "note": "2 months free on annual",
+          "tagline": "Shared memory without giving up custody.",
+          "cta": "Get Teams",
           "bullet_everything_pro": "Everything in Pro",
-          "bullet_shared_memory": "Shared team memory graph",
-          "bullet_sso_rbac": "SSO and role-based access",
-          "bullet_soc2": "SOC 2 Type II report on request",
-          "bullet_csm": "Dedicated account manager",
-          "bullet_kvark_bridge": "KVARK bridge for sovereign deployment escalation"
+          "bullet_shared": "Shared workspaces",
+          "bullet_dance": "WaggleDance multi-agent coordination",
+          "bullet_governance": "Governance & audit controls"
         }
       },
-      "comparison": {
-        "summary": "Compare tiers in detail",
-        "headers": {
-          "feature": "Feature",
-          "solo": "Solo",
-          "pro": "Pro",
-          "teams": "Teams"
-        }
+      "enterprise": {
+        "text": "Need it sovereign, on your own infrastructure? KVARK runs everything Waggle does inside your perimeter — your permissions, full audit trail, complete governance.",
+        "cta": "Talk to KVARK"
       },
       "errors": {
         "checkout_default": "Checkout configuration required. Please try again later.",
         "network": "Could not connect to server. Please try again later."
       }
     },
-    "trust": {
-      "eyebrow_badge": "Backed since 2010",
-      "headline": "Local-first, runs on any model down to the small ones, and your data never leaves your machine — Waggle is yours.",
-      "subhead": "Local-first means client and employee data never touches our servers — there's nothing for us to leak, subpoena, or sell.",
-      "signals": {
-        "zero_cloud": "Local-first by default",
-        "eu_ai_act": "Any model — even a small one on your machine",
-        "apache": "Yours to keep, export, or delete",
-        "methodology": "Open methodology — run the test yourself",
-        "egzakta": "Backed by Egzakta Group — regulated industries since 2010"
-      }
-    },
     "final_cta": {
-      "headline": "Your AI should know how you work.",
-      "subhead": "Bring your work home to the one place that remembers you, knows your projects, evolves with every decision, and makes the next step easier to take.",
-      "compare_cta": "Compare tiers →",
+      "headline": "Start remembering.",
+      "subhead": "Download Waggle, import your history, and give your AI a memory that's yours.",
+      "cta_github": "View on GitHub",
       "kvark_text": "Need it on your organization's sovereign infrastructure?",
-      "kvark_cta": "Talk to KVARK team →"
+      "kvark_cta": "Talk to the KVARK team"
     },
     "footer": {
       "brand": {
-        "wordmark": "Waggle",
-        "description": "The AI workspace where memory persists. Local-first, model-agnostic, audit-ready.",
-        "attribution": "A product of Egzakta Group · waggle-os.ai"
+        "description": "The local-first AI workspace with persistent memory. Built on the open hive-mind substrate.",
+        "attribution": "A product of Egzakta Group"
       },
       "columns": {
         "product": {
@@ -260,24 +268,23 @@
           "links": {
             "download": "Download",
             "pricing": "Pricing",
-            "personas": "Personas",
-            "how_it_works": "How it works"
+            "how_it_works": "How it works",
+            "memory": "Memory"
           }
         },
         "research": {
           "title": "Research",
           "links": {
             "methodology": "Methodology",
-            "benchmarks": "Benchmarks",
-            "changelog": "Changelog"
+            "benchmarks": "LoCoMo results",
+            "hive_mind": "hive-mind on GitHub"
           }
         },
         "company": {
           "title": "Company",
           "links": {
             "about_egzakta": "About Egzakta",
-            "blog": "Blog",
-            "press": "Press",
+            "kvark": "KVARK — sovereign AI",
             "contact": "Contact"
           }
         },
@@ -288,13 +295,13 @@
             "privacy": "Privacy",
             "cookies": "Cookies",
             "eu_ai_act": "EU AI Act statement",
-            "apache": "Apache 2.0 license"
+            "apache": "Apache-2.0 license"
           }
         }
       },
       "base_line": {
         "left": "© 2026 Egzakta Advisory · Waggle is a product of Egzakta Group",
-        "right": "v1.0 · waggle-os.ai · built calmly across DACH · CEE · UK"
+        "right": "waggle-os.ai · local-first · open substrate"
       }
     },
     "download_cta": {

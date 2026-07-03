@@ -128,15 +128,14 @@ const jetbrainsMono = JetBrains_Mono({
 /* `getTranslations`-driven values pulled at request time.             */
 /* ────────────────────────────────────────────────────────────────── */
 
-const META_TITLE = 'Waggle — Your Personal AI Workspace';
+const META_TITLE = 'Waggle — The AI workspace that remembers';
 const META_DESCRIPTION =
-  'Your AI should know how you work. Waggle remembers you, your projects, and your decisions, then runs the right AI underneath so you stay focused on the work. Local-first.';
+  'Waggle is a local-first AI workspace with persistent memory. Your projects, decisions, and context compound across every model — Claude, GPT, Gemini, or a local model — and never leave your machine.';
 const META_OG_DESCRIPTION =
-  'Your AI should know how you work. Waggle remembers you, your projects, and your decisions, guides the next step, and stays yours. Local-first.';
-const META_TWITTER_DESCRIPTION =
-  'The personal AI workspace that remembers you, knows your work, evolves with each project, and stays yours.';
+  'A local-first AI workspace with persistent memory. Your context compounds across every model and stays on your machine.';
+const META_TWITTER_DESCRIPTION = META_OG_DESCRIPTION;
 const META_CANONICAL = 'https://waggle-os.ai/';
-const META_OG_IMAGE = 'https://waggle-os.ai/brand/logo.jpeg';
+const META_OG_IMAGE = 'https://waggle-os.ai/brand/og.png';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://waggle-os.ai/'),
@@ -148,20 +147,60 @@ export const metadata: Metadata = {
     description: META_OG_DESCRIPTION,
     url: META_CANONICAL,
     type: 'website',
-    images: ['/brand/logo.jpeg'],
+    siteName: 'Waggle',
+    images: [{ url: '/brand/og.png', width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
     title: META_TITLE,
     description: META_TWITTER_DESCRIPTION,
+    images: [META_OG_IMAGE],
   },
-  icons: { icon: '/brand/logo.jpeg' },
+};
+
+/**
+ * JSON-LD structured data. Facts only: free tier at $0, Pro $19/mo, Teams
+ * $49/seat/mo (packages/shared/src/tiers.ts); Windows + macOS desktop app.
+ */
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'SoftwareApplication',
+      name: 'Waggle',
+      operatingSystem: 'Windows, macOS',
+      applicationCategory: 'ProductivityApplication',
+      description: META_DESCRIPTION,
+      url: META_CANONICAL,
+      image: META_OG_IMAGE,
+      offers: [
+        { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free' },
+        { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Pro (monthly)' },
+        { '@type': 'Offer', price: '49', priceCurrency: 'USD', name: 'Teams (per seat, monthly)' },
+      ],
+      publisher: { '@id': 'https://waggle-os.ai/#org' },
+    },
+    {
+      '@type': 'Organization',
+      '@id': 'https://waggle-os.ai/#org',
+      name: 'Egzakta Group',
+      url: 'https://egzakta.com',
+    },
+  ],
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`scroll-smooth ${hanken.variable} ${jetbrainsMono.variable}`}>
       <head>
+        {/* Progressive enhancement flag: scroll-reveal styles only apply
+            when JS runs (html.js gate in globals.css), so no-JS visitors
+            and crawlers see every section fully rendered. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "document.documentElement.classList.add('js')",
+          }}
+        />
         <title>{META_TITLE}</title>
         <meta name="description" content={META_DESCRIPTION} />
         <link rel="canonical" href={META_CANONICAL} />
@@ -174,7 +213,15 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <meta name="twitter:title" content={META_TITLE} />
         <meta name="twitter:description" content={META_TWITTER_DESCRIPTION} />
         <meta name="twitter:image" content={META_OG_IMAGE} />
-        <link rel="icon" href="/brand/logo.jpeg" />
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            // Static compile-time object (no user input); escape `<` per the
+            // standard JSON-LD embedding guidance to rule out </script> breaks.
+            __html: JSON.stringify(JSON_LD).replace(/</g, '\\u003c'),
+          }}
+        />
       </head>
       <body style={{ fontFamily: 'var(--sans)' }}>
         <ClerkProvider appearance={HIVE_CLERK_APPEARANCE}>

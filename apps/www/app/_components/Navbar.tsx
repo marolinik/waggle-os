@@ -1,81 +1,68 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Menu, X, Download } from 'lucide-react';
 import { SignInButton, UserButton, Show } from '@clerk/nextjs';
+import BrandMark from './BrandMark';
+import DownloadCTA from './DownloadCTA';
+import styles from './Navbar.module.css';
 
-interface NavLink {
-  readonly key: string;
-  readonly href: string;
-  readonly external?: boolean;
-}
-
-const NAV_LINKS: readonly NavLink[] = [
-  { key: 'how_it_works', href: '#how-it-works' },
-  { key: 'personas', href: '#personas' },
-  { key: 'pricing', href: '#pricing' },
-  { key: 'open_source', href: 'https://github.com/marolinik/waggle-os', external: true },
-  { key: 'audit', href: '#trust' },
-];
-
-const RELEASES_URL = 'https://github.com/marolinik/waggle-os/releases/latest';
+/* Absolute-path anchors so the navbar also works from /privacy, /terms,
+   and the other legal pages that render this chrome. */
+const NAV_ITEMS = [
+  { href: '/#how-it-works', key: 'how_it_works' },
+  { href: '/#memory', key: 'memory' },
+  { href: '/#proof', key: 'benchmark' },
+  { href: '/#open-source', key: 'open_source' },
+  { href: '/#pricing', key: 'pricing' },
+] as const;
 
 /**
- * Top navigation per v3.2 dump. All strings under `landing.navbar.*`.
+ * Fixed top navigation. Transparent over the hero, gains a blurred backdrop
+ * + hairline border after a small scroll. Collapses to a menu button below
+ * 860px; the mobile panel reuses the same anchor list.
  *
- * Stays a Client Component for scroll-aware backdrop blur + mobile menu state.
+ * Stays a Client Component for scroll-aware backdrop + menu state. All
+ * strings under `landing.navbar.*`.
  */
 export default function Navbar() {
   const t = useTranslations('landing.navbar');
   const [scrolled, setScrolled] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    const handler = () => setScrolled(window.scrollY > 40);
-    window.addEventListener('scroll', handler, { passive: true });
-    return () => window.removeEventListener('scroll', handler);
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  const headerClass = [
+    styles.header,
+    scrolled || open ? styles.headerScrolled : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <nav
-      style={{
-        ...navStyle,
-        background: scrolled ? 'rgba(20,17,11,0.95)' : 'transparent',
-        backdropFilter: scrolled ? 'blur(12px)' : undefined,
-        borderBottom: scrolled
-          ? '1px solid var(--hive-700, #272117)'
-          : '1px solid transparent',
-      }}
-    >
-      <div style={containerStyle}>
-        <a href="#hero" style={brandLinkStyle} aria-label="Waggle">
-          <img
-            src="/brand/logo.jpeg"
-            alt="Waggle"
-            width={32}
-            height={32}
-            style={logoStyle}
-          />
-          <span style={brandTextStyle}>Waggle</span>
-          <span style={versionPillStyle}>v1.0</span>
+    <header className={headerClass}>
+      <div className={styles.inner}>
+        <a href="/" className={styles.brand} aria-label={t('aria.home')}>
+          <BrandMark withWordmark />
         </a>
 
-        <div style={desktopNavStyle} className="nav-desktop">
-          {NAV_LINKS.map((l) => (
-            <a
-              key={l.key}
-              href={l.href}
-              {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : null)}
-              style={navLinkStyle}
-              className="nav-link"
-            >
-              {t(`links.${l.key}`)}
+        <nav className={styles.nav} aria-label={t('aria.primary')}>
+          {NAV_ITEMS.map((item) => (
+            <a key={item.key} href={item.href} className={styles.navLink}>
+              {t(`links.${item.key}`)}
             </a>
           ))}
+        </nav>
+
+        <div className={styles.actions}>
           <Show when="signed-out">
             <SignInButton mode="modal">
-              <button type="button" style={signInButtonStyle} className="nav-link">
+              <button type="button" className={styles.signIn}>
                 {t('ctas.sign_in')}
               </button>
             </SignInButton>
@@ -83,197 +70,84 @@ export default function Navbar() {
           <Show when="signed-in">
             <UserButton />
           </Show>
-          <a
-            href={RELEASES_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={downloadButtonStyle}
-            className="btn-press"
-          >
-            <Download size={14} />
+          <DownloadCTA section="navbar" size="small">
             {t('ctas.download')}
-          </a>
+          </DownloadCTA>
+          <button
+            type="button"
+            className={styles.menuButton}
+            aria-expanded={open}
+            aria-controls="mobile-nav"
+            aria-label={t('aria.toggle_menu')}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <MenuIcon open={open} />
+          </button>
         </div>
-
-        <button
-          type="button"
-          onClick={() => setMobileOpen((v) => !v)}
-          style={mobileToggleStyle}
-          className="nav-mobile-toggle"
-          aria-label={t('aria.toggle_menu')}
-          aria-expanded={mobileOpen}
-        >
-          {mobileOpen ? <X size={20} /> : <Menu size={20} />}
-        </button>
       </div>
 
-      {mobileOpen && (
-        <div style={mobileMenuStyle}>
-          {NAV_LINKS.map((l) => (
+      {open ? (
+        <nav
+          id="mobile-nav"
+          className={styles.mobilePanel}
+          aria-label={t('aria.primary')}
+        >
+          {NAV_ITEMS.map((item) => (
             <a
-              key={l.key}
-              href={l.href}
-              {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : null)}
-              onClick={() => setMobileOpen(false)}
-              style={mobileLinkStyle}
+              key={item.key}
+              href={item.href}
+              className={styles.mobileLink}
+              onClick={() => setOpen(false)}
             >
-              {t(`links.${l.key}`)}
+              {t(`links.${item.key}`)}
             </a>
           ))}
-          <Show when="signed-out">
-            <SignInButton mode="modal">
-              <button
-                type="button"
-                style={mobileSignInButtonStyle}
-                onClick={() => setMobileOpen(false)}
-              >
-                {t('ctas.sign_in')}
-              </button>
-            </SignInButton>
-          </Show>
-          <Show when="signed-in">
-            <div style={mobileUserButtonRowStyle} onClick={() => setMobileOpen(false)}>
+          <div className={styles.mobileActions}>
+            <Show when="signed-out">
+              <SignInButton mode="modal">
+                <button
+                  type="button"
+                  className={styles.signIn}
+                  style={{ display: 'inline-flex' }}
+                >
+                  {t('ctas.sign_in')}
+                </button>
+              </SignInButton>
+            </Show>
+            <Show when="signed-in">
               <UserButton />
-            </div>
-          </Show>
-          <a
-            href={RELEASES_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ ...mobileLinkStyle, color: 'var(--honey-400, #f6c45a)', fontWeight: 600 }}
-            onClick={() => setMobileOpen(false)}
-          >
-            {t('ctas.download_mobile')}
-          </a>
-        </div>
-      )}
-
-      <style>{navResponsiveCss}</style>
-    </nav>
+            </Show>
+          </div>
+        </nav>
+      ) : null}
+    </header>
   );
 }
 
-const navStyle: CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  zIndex: 50,
-  transition: 'background 0.3s, border-color 0.3s',
-  fontFamily: "var(--sans)",
-};
-const containerStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: '0 auto',
-  padding: '0 24px',
-  height: 64,
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-};
-const brandLinkStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 10,
-  textDecoration: 'none',
-};
-const logoStyle: CSSProperties = {
-  width: 32,
-  height: 32,
-  borderRadius: 8,
-  display: 'block',
-};
-const brandTextStyle: CSSProperties = {
-  fontSize: 18,
-  fontWeight: 700,
-  color: 'var(--hive-50, #f6f1e4)',
-};
-const versionPillStyle: CSSProperties = {
-  fontSize: 10,
-  fontWeight: 500,
-  padding: '2px 8px',
-  borderRadius: 999,
-  background: 'var(--hive-800, #1f1a12)',
-  color: 'var(--hive-400, #948a73)',
-  fontFamily: "var(--mono)",
-  letterSpacing: '0.02em',
-};
-const desktopNavStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 28,
-};
-const navLinkStyle: CSSProperties = {
-  fontSize: 14,
-  fontWeight: 500,
-  color: 'var(--hive-300, #c8bfa9)',
-  textDecoration: 'none',
-  transition: 'color 0.2s',
-};
-const signInButtonStyle: CSSProperties = {
-  ...navLinkStyle,
-  color: 'var(--hive-200, #d8cfba)',
-  background: 'none',
-  border: 'none',
-  padding: 0,
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-};
-const downloadButtonStyle: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  fontSize: 13,
-  fontWeight: 600,
-  padding: '8px 14px',
-  borderRadius: 8,
-  background: 'var(--honey-500, #e9a52c)',
-  color: 'var(--hive-950, #0e0c07)',
-  textDecoration: 'none',
-  boxShadow: 'var(--shadow-honey)',
-};
-const mobileToggleStyle: CSSProperties = {
-  display: 'none',
-  padding: 8,
-  color: 'var(--hive-200, #d8cfba)',
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-};
-const mobileMenuStyle: CSSProperties = {
-  padding: '16px 24px',
-  background: 'var(--hive-900, #14110b)',
-  borderTop: '1px solid var(--hive-700, #272117)',
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 4,
-};
-const mobileLinkStyle: CSSProperties = {
-  display: 'block',
-  fontSize: 14,
-  fontWeight: 500,
-  padding: '10px 0',
-  color: 'var(--hive-200, #d8cfba)',
-  textDecoration: 'none',
-};
-const mobileSignInButtonStyle: CSSProperties = {
-  ...mobileLinkStyle,
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  fontFamily: 'inherit',
-  textAlign: 'left',
-  width: '100%',
-};
-const mobileUserButtonRowStyle: CSSProperties = {
-  padding: '10px 0',
-  display: 'flex',
-  alignItems: 'center',
-};
-const navResponsiveCss = `
-  .nav-link:hover { color: var(--honey-500, #e9a52c); }
-  @media (max-width: 1023px) {
-    .nav-desktop { display: none !important; }
-    .nav-mobile-toggle { display: block !important; }
-  }
-`;
+function MenuIcon({ open }: { readonly open: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 18 18"
+      fill="none"
+      aria-hidden="true"
+    >
+      {open ? (
+        <path
+          d="M4 4 L14 14 M14 4 L4 14"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      ) : (
+        <path
+          d="M2 5 H16 M2 9 H16 M2 13 H16"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+        />
+      )}
+    </svg>
+  );
+}

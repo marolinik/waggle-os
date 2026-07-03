@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useState, type CSSProperties } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Check } from 'lucide-react';
 import DownloadCTA from './DownloadCTA';
 import { emit, events } from '../_lib/event-taxonomy';
+import styles from './Pricing.module.css';
 
 type BillingPeriod = 'monthly' | 'annual';
 type TierId = 'SOLO' | 'PRO' | 'TEAMS';
@@ -13,24 +13,27 @@ interface TierDef {
   readonly id: TierId;
   readonly nsKey: 'solo' | 'pro' | 'teams';
   readonly highlighted: boolean;
-  readonly hasNote: boolean;
   readonly bulletKeys: readonly string[];
   readonly ctaType: 'download' | 'stripe';
 }
 
+/**
+ * Tier content mirrors `packages/shared/src/tiers.ts` (the canonical tier
+ * system): FREE keeps memory + Harvest forever, PRO unlocks unlimited
+ * workspaces + marketplace + connectors, TEAMS adds shared workspaces,
+ * WaggleDance, and governance. No bullets beyond what tiers.ts encodes.
+ */
 const TIER_DEFS: readonly TierDef[] = [
   {
     id: 'SOLO',
     nsKey: 'solo',
     highlighted: false,
-    hasNote: true,
     bulletKeys: [
-      'bullet_personal_memory',
-      'bullet_all_llms',
-      'bullet_local_first',
-      'bullet_audit_reports',
-      'bullet_apache_substrate',
-      'bullet_community_support',
+      'bullet_memory',
+      'bullet_workspaces',
+      'bullet_personas',
+      'bullet_models',
+      'bullet_trial',
     ],
     ctaType: 'download',
   },
@@ -38,14 +41,11 @@ const TIER_DEFS: readonly TierDef[] = [
     id: 'PRO',
     nsKey: 'pro',
     highlighted: true,
-    hasNote: false,
     bulletKeys: [
       'bullet_everything_solo',
-      'bullet_priority_sync',
-      'bullet_advanced_queries',
-      'bullet_key_vault',
-      'bullet_free_trial',
-      'bullet_support',
+      'bullet_unlimited',
+      'bullet_marketplace',
+      'bullet_connectors',
     ],
     ctaType: 'stripe',
   },
@@ -53,47 +53,27 @@ const TIER_DEFS: readonly TierDef[] = [
     id: 'TEAMS',
     nsKey: 'teams',
     highlighted: false,
-    hasNote: true,
     bulletKeys: [
       'bullet_everything_pro',
-      'bullet_shared_memory',
-      'bullet_sso_rbac',
-      'bullet_soc2',
-      'bullet_csm',
-      'bullet_kvark_bridge',
+      'bullet_shared',
+      'bullet_dance',
+      'bullet_governance',
     ],
     ctaType: 'stripe',
   },
 ];
 
-interface ComparisonRow {
-  readonly feature: string;
-  readonly solo: string;
-  readonly pro: string;
-  readonly teams: string;
-}
-
-const COMPARISON_ROWS: readonly ComparisonRow[] = [
-  { feature: 'Memory graph', solo: 'Personal', pro: 'Personal', teams: 'Shared (team)' },
-  { feature: 'LLM providers', solo: 'All major', pro: 'All major + custom endpoints', teams: 'All major + custom + on-prem' },
-  { feature: 'Devices', solo: '1', pro: 'Multi-device sync', teams: 'Multi-device + team sync' },
-  { feature: 'EU AI Act audit reports', solo: '✓', pro: '✓', teams: '✓' },
-  { feature: 'Local-first runtime', solo: '✓', pro: '✓', teams: '✓' },
-  { feature: 'SSO / RBAC', solo: '—', pro: '—', teams: '✓' },
-  { feature: 'Personal API key vault', solo: '—', pro: '✓', teams: '✓' },
-  { feature: 'Advanced graph queries', solo: '—', pro: '✓', teams: '✓' },
-  { feature: 'Support', solo: 'Community', pro: 'Email · 48h', teams: 'Dedicated account manager' },
-  { feature: 'Trial', solo: '—', pro: '14-day, no card', teams: 'Team trial' },
-  { feature: 'KVARK sovereign bridge', solo: '—', pro: '—', teams: '✓' },
-];
-
 const STRIPE_ENDPOINT =
-  (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '') + '/api/stripe/checkout';
+  (process.env.NEXT_PUBLIC_API_URL ?? '').replace(/\/$/, '') +
+  '/api/stripe/checkout';
+
+const KVARK_URL = 'https://www.kvark.ai';
 
 export default function Pricing() {
   const t = useTranslations('landing.pricing');
   const [billing, setBilling] = useState<BillingPeriod>('monthly');
   const [loading, setLoading] = useState<TierId | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleBillingChange = useCallback((mode: BillingPeriod) => {
     setBilling(mode);
@@ -103,6 +83,7 @@ export default function Pricing() {
   const handleStripeCheckout = useCallback(
     async (tier: TierId) => {
       setLoading(tier);
+      setError(null);
       emit({
         name: events.ctaClick,
         properties: { section: 'pricing', tier, billing },
@@ -115,13 +96,17 @@ export default function Pricing() {
         });
         if (res.ok) {
           const data = (await res.json()) as { url?: string };
-          if (data.url) window.open(data.url, '_blank');
+          // Same-tab redirect: window.open is popup-blockable after an
+          // async fetch, which silently killed paid conversions.
+          if (data.url) window.location.assign(data.url);
         } else {
-          const err = (await res.json().catch(() => ({}))) as { message?: string };
-          alert(err.message ?? t('errors.checkout_default'));
+          const err = (await res.json().catch(() => ({}))) as {
+            message?: string;
+          };
+          setError(err.message ?? t('errors.checkout_default'));
         }
       } catch {
-        alert(t('errors.network'));
+        setError(t('errors.network'));
       } finally {
         setLoading(null);
       }
@@ -130,19 +115,30 @@ export default function Pricing() {
   );
 
   return (
-    <section id="pricing" style={sectionStyle}>
-      <div style={containerStyle}>
-        <header style={headerStyle}>
-          <p style={eyebrowStyle}>{t('eyebrow')}</p>
-          <h2 style={headlineStyle}>{t('headline')}</h2>
-          <p style={subheadStyle}>{t('subhead')}</p>
+    <section id="pricing" className="section" aria-labelledby="pricing-heading">
+      <div className="container-wide">
+        <header className={styles.header}>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h2 id="pricing-heading" className="section-headline">
+            {t('headline')}
+          </h2>
+          <p className="section-lead">{t('subhead')}</p>
         </header>
 
-        <div role="group" aria-label={t('toggle.aria_group')} style={toggleRowStyle}>
+        <div
+          role="group"
+          aria-label={t('toggle.aria_group')}
+          className={styles.toggleRow}
+        >
           <button
             type="button"
             onClick={() => handleBillingChange('monthly')}
-            style={billing === 'monthly' ? toggleActiveStyle : toggleInactiveStyle}
+            className={[
+              styles.toggle,
+              billing === 'monthly' ? styles.toggleActive : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             aria-pressed={billing === 'monthly'}
           >
             {t('toggle.monthly')}
@@ -150,56 +146,52 @@ export default function Pricing() {
           <button
             type="button"
             onClick={() => handleBillingChange('annual')}
-            style={billing === 'annual' ? toggleActiveStyle : toggleInactiveStyle}
+            className={[
+              styles.toggle,
+              billing === 'annual' ? styles.toggleActive : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
             aria-pressed={billing === 'annual'}
           >
-            {t('toggle.annual')}{' '}
-            <span style={{ color: 'var(--honey-400, #f6c45a)', fontWeight: 600, marginLeft: 4 }}>
-              {t('toggle.save_pill')}
-            </span>
+            {t('toggle.annual')}
+            <span className={styles.savePill}>{t('toggle.save_pill')}</span>
           </button>
         </div>
 
-        <div style={tiersGridStyle} className="pricing-grid">
+        <div className={styles.grid}>
           {TIER_DEFS.map((tier) => {
-            const priceKey = billing === 'monthly' ? 'price_monthly' : 'price_annual';
+            const priceKey =
+              billing === 'monthly' ? 'price_monthly' : 'price_annual';
+            const cardClass = [
+              styles.tierCard,
+              tier.highlighted ? styles.tierCardHighlighted : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
             return (
-              <div
-                key={tier.id}
-                className="card-lift"
-                style={{
-                  ...cardStyle,
-                  ...(tier.highlighted ? cardHighlightedStyle : null),
-                }}
-              >
-                {tier.highlighted && (
-                  <span style={badgeStyle}>{t('popular_badge')}</span>
-                )}
-                <h3 style={tierNameStyle}>{t(`tiers.${tier.nsKey}.name`)}</h3>
-                <p style={tierTaglineStyle}>{t(`tiers.${tier.nsKey}.tagline`)}</p>
-                <p style={tierAudienceStyle}>{t(`tiers.${tier.nsKey}.audience`)}</p>
-
-                <p style={priceStyle}>
-                  {t(`tiers.${tier.nsKey}.${priceKey}`)}
-                  {tier.hasNote && (
-                    <span style={priceNoteStyle}>
-                      {' · '}
-                      {t(`tiers.${tier.nsKey}.note`)}
-                    </span>
-                  )}
+              <div key={tier.id} className={cardClass}>
+                {tier.highlighted ? (
+                  <span className={styles.badge}>{t('popular_badge')}</span>
+                ) : null}
+                <h3 className={styles.tierName}>
+                  {t(`tiers.${tier.nsKey}.name`)}
+                </h3>
+                <p className={styles.tierTagline}>
+                  {t(`tiers.${tier.nsKey}.tagline`)}
                 </p>
 
-                <ul style={bulletsStyle}>
+                <p className={styles.price}>
+                  {t(`tiers.${tier.nsKey}.${priceKey}`)}
+                </p>
+                <p className={styles.priceNote}>
+                  {t(`tiers.${tier.nsKey}.note`)}
+                </p>
+
+                <ul className={styles.bullets}>
                   {tier.bulletKeys.map((bk) => (
-                    <li key={bk} style={bulletItemStyle}>
-                      <Check
-                        size={16}
-                        style={{
-                          color: 'var(--status-healthy, #6cb78c)',
-                          flexShrink: 0,
-                          marginTop: 2,
-                        }}
-                      />
+                    <li key={bk} className={styles.bullet}>
+                      <CheckIcon />
                       <span>{t(`tiers.${tier.nsKey}.${bk}`)}</span>
                     </li>
                   ))}
@@ -208,7 +200,7 @@ export default function Pricing() {
                 {tier.ctaType === 'download' ? (
                   <DownloadCTA
                     section="solo-tier"
-                    variant="primary"
+                    variant={tier.highlighted ? 'primary' : 'ghost'}
                     style={{ width: '100%' }}
                   />
                 ) : (
@@ -216,10 +208,15 @@ export default function Pricing() {
                     type="button"
                     onClick={() => handleStripeCheckout(tier.id)}
                     disabled={loading === tier.id}
-                    className="btn-press"
-                    style={tier.highlighted ? primaryCtaStyle : ghostCtaStyle}
+                    className={[
+                      'btn',
+                      tier.highlighted ? 'btn-primary' : 'btn-ghost',
+                      styles.tierCta,
+                    ].join(' ')}
                   >
-                    {loading === tier.id ? t('loading') : t(`tiers.${tier.nsKey}.cta`)}
+                    {loading === tier.id
+                      ? t('loading')
+                      : t(`tiers.${tier.nsKey}.cta`)}
                   </button>
                 )}
               </div>
@@ -227,258 +224,45 @@ export default function Pricing() {
           })}
         </div>
 
-        <details style={comparisonDetailsStyle}>
-          <summary style={comparisonSummaryStyle}>{t('comparison.summary')}</summary>
-          <div style={tableWrapperStyle}>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={thStyleFeature} scope="col">{t('comparison.headers.feature')}</th>
-                  <th style={thStyleValue} scope="col">{t('comparison.headers.solo')}</th>
-                  <th style={thStyleValue} scope="col">{t('comparison.headers.pro')}</th>
-                  <th style={thStyleValue} scope="col">{t('comparison.headers.teams')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {COMPARISON_ROWS.map((row) => (
-                  <tr key={row.feature}>
-                    <td style={tdFeatureStyle}>{row.feature}</td>
-                    <td style={tdValueStyle}>{row.solo}</td>
-                    <td style={tdValueStyle}>{row.pro}</td>
-                    <td style={tdValueStyle}>{row.teams}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      </div>
+        {error ? (
+          <p role="alert" style={{ textAlign: 'center', color: 'var(--risk)', fontSize: 13, marginBottom: 24 }}>
+            {error}
+          </p>
+        ) : null}
 
-      <style>{pricingResponsiveCss}</style>
+        <div className={styles.enterprise}>
+          <p className={styles.enterpriseText}>{t('enterprise.text')}</p>
+          <a
+            href={KVARK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-ghost btn-small"
+          >
+            {t('enterprise.cta')}
+          </a>
+        </div>
+      </div>
     </section>
   );
 }
 
-const sectionStyle: CSSProperties = {
-  padding: '96px 24px',
-  fontFamily: "var(--sans)",
-};
-const containerStyle: CSSProperties = { maxWidth: 1200, margin: '0 auto' };
-const headerStyle: CSSProperties = {
-  textAlign: 'center',
-  maxWidth: 640,
-  margin: '0 auto 40px',
-};
-const eyebrowStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.12em',
-  marginBottom: 12,
-  color: 'var(--honey-500, #e9a52c)',
-};
-const headlineStyle: CSSProperties = {
-  fontSize: 'clamp(28px, 4vw, 40px)',
-  fontWeight: 700,
-  marginBottom: 16,
-  color: 'var(--hive-50, #f6f1e4)',
-};
-const subheadStyle: CSSProperties = {
-  fontSize: 16,
-  lineHeight: 1.6,
-  color: 'var(--hive-300, #c8bfa9)',
-};
-const toggleRowStyle: CSSProperties = {
-  display: 'flex',
-  justifyContent: 'center',
-  gap: 6,
-  padding: 4,
-  background: 'var(--hive-900, #14110b)',
-  border: '1px solid var(--hive-700, #272117)',
-  borderRadius: 999,
-  width: 'fit-content',
-  margin: '0 auto 48px',
-};
-const toggleBaseStyle: CSSProperties = {
-  fontSize: 13,
-  fontWeight: 500,
-  padding: '8px 18px',
-  borderRadius: 999,
-  border: 'none',
-  cursor: 'pointer',
-  fontFamily: "var(--sans)",
-};
-const toggleActiveStyle: CSSProperties = {
-  ...toggleBaseStyle,
-  background: 'var(--hive-700, #272117)',
-  color: 'var(--hive-50, #f6f1e4)',
-};
-const toggleInactiveStyle: CSSProperties = {
-  ...toggleBaseStyle,
-  background: 'transparent',
-  color: 'var(--hive-300, #c8bfa9)',
-};
-const tiersGridStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, 1fr)',
-  gap: 20,
-  maxWidth: 1100,
-  margin: '0 auto 48px',
-};
-const cardStyle: CSSProperties = {
-  position: 'relative',
-  borderRadius: 16,
-  padding: 28,
-  background: 'var(--hive-900, #14110b)',
-  border: '1px solid var(--hive-700, #272117)',
-  display: 'flex',
-  flexDirection: 'column',
-};
-const cardHighlightedStyle: CSSProperties = {
-  background: 'var(--hive-850, #1a160f)',
-  borderColor: 'var(--honey-500, #e9a52c)',
-  boxShadow: 'var(--shadow-honey)',
-};
-const badgeStyle: CSSProperties = {
-  position: 'absolute',
-  top: -12,
-  left: '50%',
-  transform: 'translateX(-50%)',
-  fontSize: 10,
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.05em',
-  padding: '4px 12px',
-  borderRadius: 999,
-  background: 'var(--honey-500, #e9a52c)',
-  color: 'var(--hive-950, #0e0c07)',
-};
-const tierNameStyle: CSSProperties = {
-  fontSize: 20,
-  fontWeight: 700,
-  marginBottom: 4,
-  color: 'var(--hive-50, #f6f1e4)',
-};
-const tierTaglineStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--hive-200, #d8cfba)',
-  marginBottom: 4,
-};
-const tierAudienceStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--hive-400, #948a73)',
-  marginBottom: 18,
-};
-const priceStyle: CSSProperties = {
-  fontSize: 24,
-  fontWeight: 700,
-  color: 'var(--hive-50, #f6f1e4)',
-  marginBottom: 24,
-};
-const priceNoteStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 400,
-  color: 'var(--hive-400, #948a73)',
-};
-const bulletsStyle: CSSProperties = {
-  listStyle: 'none',
-  padding: 0,
-  marginBottom: 24,
-  flexGrow: 1,
-};
-const bulletItemStyle: CSSProperties = {
-  display: 'flex',
-  alignItems: 'flex-start',
-  gap: 10,
-  fontSize: 13,
-  color: 'var(--hive-200, #d8cfba)',
-  marginBottom: 10,
-  lineHeight: 1.5,
-};
-const primaryCtaStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  textAlign: 'center',
-  padding: '12px 0',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 600,
-  background: 'var(--honey-500, #e9a52c)',
-  color: 'var(--hive-950, #0e0c07)',
-  boxShadow: 'var(--shadow-honey)',
-  border: 'none',
-  cursor: 'pointer',
-  fontFamily: "var(--sans)",
-};
-const ghostCtaStyle: CSSProperties = {
-  display: 'block',
-  width: '100%',
-  textAlign: 'center',
-  padding: '12px 0',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 600,
-  background: 'var(--hive-800, #1f1a12)',
-  color: 'var(--hive-100, #ece3d0)',
-  border: '1px solid var(--hive-600, #4a4030)',
-  cursor: 'pointer',
-  fontFamily: "var(--sans)",
-};
-const comparisonDetailsStyle: CSSProperties = {
-  maxWidth: 1100,
-  margin: '0 auto',
-  borderRadius: 12,
-  border: '1px solid var(--hive-700, #272117)',
-  background: 'var(--hive-900, #14110b)',
-  overflow: 'hidden',
-};
-const comparisonSummaryStyle: CSSProperties = {
-  padding: '16px 24px',
-  fontSize: 14,
-  fontWeight: 600,
-  color: 'var(--hive-100, #ece3d0)',
-  cursor: 'pointer',
-  listStyle: 'none',
-};
-const tableWrapperStyle: CSSProperties = {
-  overflowX: 'auto',
-  borderTop: '1px solid var(--hive-700, #272117)',
-};
-const tableStyle: CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: 13,
-};
-const thStyleFeature: CSSProperties = {
-  textAlign: 'left',
-  padding: '12px 16px',
-  fontWeight: 600,
-  color: 'var(--hive-200, #d8cfba)',
-  background: 'var(--hive-850, #1a160f)',
-  borderBottom: '1px solid var(--hive-700, #272117)',
-};
-const thStyleValue: CSSProperties = {
-  ...thStyleFeature,
-  textAlign: 'center',
-};
-const tdFeatureStyle: CSSProperties = {
-  padding: '10px 16px',
-  color: 'var(--hive-300, #c8bfa9)',
-  borderBottom: '1px solid var(--hive-800, #1f1a12)',
-};
-const tdValueStyle: CSSProperties = {
-  padding: '10px 16px',
-  color: 'var(--hive-100, #ece3d0)',
-  textAlign: 'center',
-  borderBottom: '1px solid var(--hive-800, #1f1a12)',
-};
-const pricingResponsiveCss = `
-  @media (max-width: 1023px) {
-    .pricing-grid {
-      grid-template-columns: 1fr !important;
-      max-width: 480px;
-      margin-left: auto !important;
-      margin-right: auto !important;
-    }
-  }
-`;
+function CheckIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 16 16"
+      fill="none"
+      aria-hidden="true"
+      className={styles.bulletIcon}
+    >
+      <path
+        d="M3 8.5 L6.5 12 L13 4.5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}

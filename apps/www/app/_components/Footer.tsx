@@ -1,5 +1,6 @@
-import type { CSSProperties } from 'react';
 import { getTranslations } from 'next-intl/server';
+import BrandMark from './BrandMark';
+import styles from './Footer.module.css';
 
 interface FooterLink {
   readonly key: string;
@@ -7,26 +8,39 @@ interface FooterLink {
   readonly external?: boolean;
 }
 
+/**
+ * Footer link map. Rule: every link must resolve to a real destination —
+ * no `#` placeholders. Columns whose content does not exist yet (blog,
+ * press, changelog) are omitted until they do.
+ */
 const PRODUCT_LINKS: readonly FooterLink[] = [
-  { key: 'download', href: 'https://github.com/marolinik/waggle-os/releases/latest', external: true },
-  { key: 'pricing', href: '#pricing' },
-  { key: 'personas', href: '#personas' },
-  { key: 'how_it_works', href: '#how-it-works' },
+  {
+    key: 'download',
+    href: 'https://github.com/marolinik/waggle-os/releases/latest',
+    external: true,
+  },
+  { key: 'pricing', href: '/#pricing' },
+  { key: 'how_it_works', href: '/#how-it-works' },
+  { key: 'memory', href: '/#memory' },
 ];
 
 const RESEARCH_LINKS: readonly FooterLink[] = [
-  // arxiv preprint dropped per Path D landing decoupling (PM 2026-05-02):
-  // Day 0 ships methodology.md in OSS repo, arxiv linked retroactively
-  // post-launch news cycle.
   { key: 'methodology', href: '/docs/methodology' },
-  { key: 'benchmarks', href: '#', external: true },
-  { key: 'changelog', href: '#' },
+  {
+    key: 'benchmarks',
+    href: 'https://github.com/marolinik/hive-mind',
+    external: true,
+  },
+  {
+    key: 'hive_mind',
+    href: 'https://github.com/marolinik/hive-mind',
+    external: true,
+  },
 ];
 
 const COMPANY_LINKS: readonly FooterLink[] = [
   { key: 'about_egzakta', href: 'https://egzakta.com', external: true },
-  { key: 'blog', href: '#' },
-  { key: 'press', href: '#' },
+  { key: 'kvark', href: 'https://www.kvark.ai', external: true },
   { key: 'contact', href: 'mailto:hello@egzakta.com' },
 ];
 
@@ -35,7 +49,11 @@ const LEGAL_LINKS: readonly FooterLink[] = [
   { key: 'privacy', href: '/privacy' },
   { key: 'cookies', href: '/cookies' },
   { key: 'eu_ai_act', href: '/eu-ai-act' },
-  { key: 'apache', href: 'https://github.com/marolinik/waggle-os/blob/main/LICENSE', external: true },
+  {
+    key: 'apache',
+    href: 'https://github.com/marolinik/hive-mind/blob/master/LICENSE',
+    external: true,
+  },
 ];
 
 const COLUMN_DEFS = [
@@ -49,24 +67,26 @@ export default async function Footer() {
   const t = await getTranslations('landing.footer');
 
   return (
-    <footer id="footer" style={footerStyle}>
-      <div style={topGridStyle} className="footer-grid">
-        <div style={brandBlockStyle}>
-          <span style={wordmarkStyle}>{t('brand.wordmark')}</span>
-          <p style={brandDescriptionStyle}>{t('brand.description')}</p>
-          <p style={attributionStyle}>{t('brand.attribution')}</p>
+    <footer id="footer" className={styles.footer}>
+      <div className={styles.grid}>
+        <div className={styles.brandBlock}>
+          <BrandMark withWordmark />
+          <p className={styles.brandDescription}>{t('brand.description')}</p>
+          <p className={styles.attribution}>{t('brand.attribution')}</p>
         </div>
 
         {COLUMN_DEFS.map((col) => (
           <div key={col.ns}>
-            <h3 style={columnTitleStyle}>{t(`columns.${col.ns}.title`)}</h3>
-            <ul style={columnListStyle}>
+            <h3 className={styles.columnTitle}>{t(`columns.${col.ns}.title`)}</h3>
+            <ul className={styles.columnList}>
               {col.links.map((l) => (
-                <li key={l.key} style={{ marginBottom: 8 }}>
+                <li key={l.key}>
                   <a
                     href={l.href}
-                    {...(l.external ? { target: '_blank', rel: 'noopener noreferrer' } : null)}
-                    style={columnLinkStyle}
+                    {...(l.external
+                      ? { target: '_blank', rel: 'noopener noreferrer' }
+                      : null)}
+                    className={styles.columnLink}
                   >
                     {t(`columns.${col.ns}.links.${l.key}`)}
                   </a>
@@ -77,82 +97,10 @@ export default async function Footer() {
         ))}
       </div>
 
-      <div style={baseLineStyle} className="footer-baseline">
+      <div className={styles.baseline}>
         <span>{t('base_line.left')}</span>
-        <span style={baseLineRightStyle}>{t('base_line.right')}</span>
+        <span className={styles.baselineRight}>{t('base_line.right')}</span>
       </div>
-
-      <style>{footerResponsiveCss}</style>
     </footer>
   );
 }
-
-const footerStyle: CSSProperties = {
-  padding: '64px 24px 32px',
-  background: 'var(--hive-950, #0e0c07)',
-  borderTop: '1px solid var(--hive-700, #272117)',
-  fontFamily: "var(--sans)",
-};
-const topGridStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: '0 auto 48px',
-  display: 'grid',
-  gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr',
-  gap: 48,
-};
-const brandBlockStyle: CSSProperties = { maxWidth: 320 };
-const wordmarkStyle: CSSProperties = {
-  fontSize: 20,
-  fontWeight: 700,
-  color: 'var(--hive-50, #f6f1e4)',
-  display: 'block',
-  marginBottom: 12,
-};
-const brandDescriptionStyle: CSSProperties = {
-  fontSize: 13,
-  lineHeight: 1.6,
-  color: 'var(--hive-300, #c8bfa9)',
-  marginBottom: 12,
-};
-const attributionStyle: CSSProperties = {
-  fontSize: 12,
-  color: 'var(--hive-400, #948a73)',
-};
-const columnTitleStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.1em',
-  color: 'var(--hive-200, #d8cfba)',
-  marginBottom: 16,
-};
-const columnListStyle: CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
-const columnLinkStyle: CSSProperties = {
-  fontSize: 13,
-  color: 'var(--hive-300, #c8bfa9)',
-  textDecoration: 'none',
-};
-const baseLineStyle: CSSProperties = {
-  maxWidth: 1200,
-  margin: '0 auto',
-  paddingTop: 24,
-  borderTop: '1px solid var(--hive-800, #1f1a12)',
-  display: 'flex',
-  justifyContent: 'space-between',
-  flexWrap: 'wrap',
-  gap: 12,
-  fontSize: 12,
-  color: 'var(--hive-400, #948a73)',
-};
-const baseLineRightStyle: CSSProperties = {
-  fontFamily: "var(--mono)",
-};
-const footerResponsiveCss = `
-  @media (max-width: 1023px) {
-    .footer-grid { grid-template-columns: 1fr 1fr 1fr !important; gap: 32px !important; }
-  }
-  @media (max-width: 640px) {
-    .footer-grid { grid-template-columns: 1fr 1fr !important; }
-    .footer-baseline { justify-content: flex-start !important; flex-direction: column; }
-  }
-`;

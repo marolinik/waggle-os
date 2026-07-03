@@ -1,137 +1,44 @@
-import type { CSSProperties } from 'react';
 import { getTranslations } from 'next-intl/server';
+import Reveal from './Reveal';
+import styles from './HowItWorks.module.css';
 
-const STEP_BEES = [
-  '/brand/bee-builder-dark.png',
-  '/brand/bee-connector-dark.png',
-  '/brand/bee-researcher-dark.png',
-] as const;
-
-const STEP_KEYS = ['step_01', 'step_02', 'step_03'] as const;
+const STEPS = ['step_01', 'step_02', 'step_03'] as const;
 
 /**
- * 3-step "How It Works" section per v3.2 locked copy.
- *
- * Step 02 ending is v3.2 LOCKED (lock #5):
- *   "...persists across providers, sessions, and machines, automatically."
- *
- * All strings load from `messages/en.json` under `landing.how_it_works.*`.
+ * Three-step product story: import history → work in workspaces → memory
+ * compounds. Strings under `landing.how_it_works.*`.
  */
 export default async function HowItWorks() {
   const t = await getTranslations('landing.how_it_works');
 
   return (
-    <section id="how-it-works" style={sectionStyle} className="honeycomb-bg">
-      <div style={containerStyle}>
-        <header style={headerStyle}>
-          <p style={eyebrowStyle}>{t('eyebrow')}</p>
-          <h2 style={headlineStyle}>{t('headline')}</h2>
-          <p style={subheadStyle}>{t('subhead')}</p>
+    <section
+      id="how-it-works"
+      className="section"
+      aria-labelledby="how-heading"
+    >
+      <div className="container">
+        <header className={styles.header}>
+          <p className="eyebrow">{t('eyebrow')}</p>
+          <h2 id="how-heading" className="section-headline">
+            {t('headline')}
+          </h2>
         </header>
 
-        <ol style={stepsGridStyle} className="how-grid">
-          {STEP_KEYS.map((key, i) => (
-            <li key={key} style={stepItemStyle}>
-              <div style={beeWrapperStyle}>
-                <img
-                  src={STEP_BEES[i]}
-                  alt=""
-                  width={96}
-                  height={96}
-                  loading="lazy"
-                  decoding="async"
-                  style={beeImgStyle}
-                />
-                <span style={stepNumberStyle} aria-hidden="true">
-                  {t(`${key}.number`)}
+        <div className={styles.steps}>
+          {STEPS.map((step, i) => (
+            <Reveal key={step} delay={(i + 1) as 1 | 2 | 3}>
+              <div className={styles.step}>
+                <span className={styles.stepNumber} aria-hidden="true">
+                  {t(`${step}.number`)}
                 </span>
+                <h3 className={styles.stepTitle}>{t(`${step}.title`)}</h3>
+                <p className={styles.stepBody}>{t(`${step}.body`)}</p>
               </div>
-              <h3 style={stepTitleStyle}>{t(`${key}.title`)}</h3>
-              <p style={stepBodyStyle}>{t(`${key}.body`)}</p>
-            </li>
+            </Reveal>
           ))}
-        </ol>
+        </div>
       </div>
-
-      <style>{howResponsiveCss}</style>
     </section>
   );
 }
-
-const sectionStyle: CSSProperties = {
-  padding: '96px 24px',
-  fontFamily: "var(--sans)",
-};
-const containerStyle: CSSProperties = { maxWidth: 960, margin: '0 auto' };
-const headerStyle: CSSProperties = {
-  textAlign: 'center',
-  maxWidth: 640,
-  margin: '0 auto 64px',
-};
-const eyebrowStyle: CSSProperties = {
-  fontSize: 11,
-  fontWeight: 600,
-  textTransform: 'uppercase',
-  letterSpacing: '0.12em',
-  marginBottom: 12,
-  color: 'var(--honey-500, #e9a52c)',
-};
-const headlineStyle: CSSProperties = {
-  fontSize: 'clamp(28px, 4vw, 40px)',
-  fontWeight: 700,
-  marginBottom: 16,
-  color: 'var(--hive-50, #f6f1e4)',
-};
-const subheadStyle: CSSProperties = {
-  fontSize: 16,
-  lineHeight: 1.6,
-  color: 'var(--hive-300, #c8bfa9)',
-};
-const stepsGridStyle: CSSProperties = {
-  listStyle: 'none',
-  padding: 0,
-  margin: 0,
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, 1fr)',
-  gap: 32,
-};
-const stepItemStyle: CSSProperties = { textAlign: 'center' };
-const beeWrapperStyle: CSSProperties = {
-  position: 'relative',
-  display: 'inline-block',
-  marginBottom: 24,
-};
-const beeImgStyle: CSSProperties = { width: 96, height: 96, objectFit: 'contain' };
-const stepNumberStyle: CSSProperties = {
-  position: 'absolute',
-  top: -8,
-  right: -8,
-  width: 32,
-  height: 32,
-  borderRadius: '50%',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  fontSize: 12,
-  fontWeight: 700,
-  background: 'var(--honey-500, #e9a52c)',
-  color: 'var(--hive-950, #0e0c07)',
-};
-const stepTitleStyle: CSSProperties = {
-  fontSize: 18,
-  fontWeight: 600,
-  marginBottom: 12,
-  color: 'var(--hive-50, #f6f1e4)',
-};
-const stepBodyStyle: CSSProperties = {
-  fontSize: 14,
-  lineHeight: 1.6,
-  maxWidth: 280,
-  margin: '0 auto',
-  color: 'var(--hive-300, #c8bfa9)',
-};
-const howResponsiveCss = `
-  @media (max-width: 768px) {
-    .how-grid { grid-template-columns: 1fr !important; gap: 48px !important; }
-  }
-`;

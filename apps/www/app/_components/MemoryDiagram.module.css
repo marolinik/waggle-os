@@ -1,0 +1,89 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 72px;
+  align-items: center;
+}
+
+.body {
+  font-size: var(--text-body);
+  line-height: 1.7;
+  color: var(--hive-300);
+  margin-top: 20px;
+  max-width: 34em;
+}
+
+.chips {
+  list-style: none;
+  padding: 0;
+  margin: 28px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--hive-200);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 7px 14px;
+}
+
+/* ── Pipeline card ── */
+.pipeline {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--hive-900) 0%, var(--hive-950) 100%);
+  box-shadow: var(--shadow-elevated);
+  padding: 32px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.node {
+  border-radius: var(--r);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  padding: 14px 18px;
+  text-align: center;
+}
+
+.nodeAccent {
+  border-color: var(--honey-line);
+  background: var(--honey-wash);
+}
+
+.nodeTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--hive-50);
+  display: block;
+}
+
+.nodeSub {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 4px;
+}
+
+.connector {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
+  color: var(--honey-600);
+}
+
+@media (max-width: 1023px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+}

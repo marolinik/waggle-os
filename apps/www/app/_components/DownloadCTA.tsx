@@ -7,49 +7,27 @@ import { emit, events } from '../_lib/event-taxonomy';
 
 interface DownloadCTAProps {
   readonly variant?: 'primary' | 'ghost';
-  readonly section: 'hero' | 'solo-tier' | 'final-cta';
+  readonly size?: 'default' | 'small';
+  readonly section: 'hero' | 'navbar' | 'solo-tier' | 'final-cta';
   readonly children?: ReactNode;
   readonly style?: CSSProperties;
 }
 
 const RELEASES_URL = 'https://github.com/marolinik/waggle-os/releases/latest';
 
-const PRIMARY_STYLE: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 10,
-  padding: '14px 28px',
-  borderRadius: 12,
-  fontSize: 14,
-  fontWeight: 600,
-  textDecoration: 'none',
-  background: 'var(--honey-500, #e9a52c)',
-  color: 'var(--hive-950, #0e0c07)',
-  boxShadow: 'var(--shadow-honey)',
-  cursor: 'pointer',
-  border: 'none',
-  fontFamily: "var(--sans)",
-};
-
-const GHOST_STYLE: CSSProperties = {
-  ...PRIMARY_STYLE,
-  background: 'transparent',
-  color: 'var(--hive-100, #ece3d0)',
-  border: '1px solid var(--hive-600, #4a4030)',
-  boxShadow: undefined,
-};
-
 /**
  * OS-aware download CTA. Renders a generic "Download" label at SSR + first
  * paint, then swaps to "Download for {os}" after hydration via
  * `navigator.userAgent` detection.
  *
- * Strings live in `messages/en.json` under `landing.download_cta.*` with an
- * ICU placeholder for the OS name.
+ * Styling comes from the shared `.btn` primitives in globals.css so every
+ * download button on the page is pixel-identical. Strings live in
+ * `messages/en.json` under `landing.download_cta.*` with an ICU placeholder
+ * for the OS name.
  */
 export default function DownloadCTA({
   variant = 'primary',
+  size = 'default',
   section,
   children,
   style,
@@ -63,9 +41,15 @@ export default function DownloadCTA({
     }
   }, []);
 
-  const label =
-    children ?? (os ? t('with_os', { os }) : t('default'));
-  const baseStyle = variant === 'primary' ? PRIMARY_STYLE : GHOST_STYLE;
+  const label = children ?? (os ? t('with_os', { os }) : t('default'));
+
+  const className = [
+    'btn',
+    variant === 'primary' ? 'btn-primary' : 'btn-ghost',
+    size === 'small' ? 'btn-small' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const handleClick = () => {
     emit({
@@ -79,9 +63,9 @@ export default function DownloadCTA({
       href={RELEASES_URL}
       target="_blank"
       rel="noopener noreferrer"
-      className="btn-press"
+      className={className}
       onClick={handleClick}
-      style={{ ...baseStyle, ...style }}
+      style={style}
     >
       {label}
     </a>

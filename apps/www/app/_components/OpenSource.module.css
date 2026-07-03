@@ -1,0 +1,87 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 72px;
+  align-items: center;
+}
+
+.body {
+  font-size: var(--text-body);
+  line-height: 1.7;
+  color: var(--hive-300);
+  margin-top: 20px;
+  max-width: 34em;
+}
+
+.ctaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 32px;
+}
+
+.terminal {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--hive-950);
+  box-shadow: var(--shadow-elevated);
+  overflow: hidden;
+}
+
+.terminalBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(31, 26, 18, 0.6);
+}
+
+.terminalDots {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.terminalDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--hive-600);
+  opacity: 0.7;
+}
+
+.terminalTitle {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.terminalBody {
+  margin: 0;
+  padding: 22px 22px 26px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--hive-200);
+  overflow-x: auto;
+}
+
+.prompt {
+  color: var(--honey-500);
+  user-select: none;
+}
+
+.comment {
+  color: var(--text-muted);
+}
+
+.output {
+  color: var(--healthy);
+}
+
+@media (max-width: 1023px) {
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+}
