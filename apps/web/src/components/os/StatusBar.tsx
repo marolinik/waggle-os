@@ -77,23 +77,23 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 h-8 glass-strong flex items-center justify-between px-4 select-none">
-      <div className="flex items-center gap-3">
-        <img src={waggleLogo} alt="Waggle" className="w-4 h-4 rounded-sm" />
-        <span className="text-xs font-display font-semibold text-foreground">Waggle AI</span>
+      <div className="flex items-center gap-3 min-w-0">
+        <img src={waggleLogo} alt="Waggle" className="w-4 h-4 rounded-sm shrink-0" />
+        <span className="text-xs font-display font-semibold text-foreground whitespace-nowrap shrink-0">Waggle AI</span>
         {/* L-02: hide workspace + model below md (~768px) so the logo
             + "Waggle AI" stay visible on narrow windows. */}
         {workspaceName && (
           <>
-            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
-            <span className="text-[11px] text-muted-foreground hidden md:inline">{workspaceName}</span>
+            <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
+            <span className="text-[11px] text-muted-foreground hidden lg:inline">{workspaceName}</span>
           </>
         )}
         {focusedWindowLabel && (
           <>
-            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={focusedWindowLabel}>
               <span
-                className="text-[11px] text-foreground/80 font-display hidden md:inline truncate max-w-[240px]"
+                className="text-[11px] text-foreground/80 font-display hidden lg:inline truncate max-w-[240px]"
                 data-testid="statusbar-focused-window"
                 tabIndex={0}
               >
@@ -104,10 +104,10 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         )}
         {model && (
           <>
-            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={`${modelLabel} (${model}) — model this workspace's chat will use. Change it in the chat header; the global default lives in Settings → Models.`}>
               <span
-                className="text-[11px] text-primary/80 font-display hidden md:inline cursor-help"
+                className="text-[11px] text-primary/80 font-display hidden lg:inline cursor-help"
                 data-testid="statusbar-model"
                 tabIndex={0}
               >
@@ -118,10 +118,10 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         )}
         {memoryFrameCount !== null && (
           <>
-            <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
+            <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across all minds (personal + every workspace). This grows every time you chat — it's why Waggle gets better the more you use it.`}>
               <span
-                className="text-[11px] text-primary/80 font-display hidden md:inline-flex items-center gap-1 cursor-help"
+                className="text-[11px] text-primary/80 font-display hidden lg:inline-flex items-center gap-1 cursor-help"
                 data-testid="statusbar-memory-count"
                 aria-label={`${memoryFrameCount.toLocaleString()} memory frames across all minds`}
               >
@@ -142,14 +142,14 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         )}
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 lg:gap-4 shrink-0">
         {trialDays !== undefined && trialDays > 0 && (
-          <span className={`text-[10px] font-display font-semibold px-2 py-0.5 rounded-full ${trialDays <= 3 ? 'bg-destructive/20 text-destructive' : 'bg-primary/15 text-primary'}`}>
+          <span className={`text-[10px] font-display font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${trialDays <= 3 ? 'bg-destructive/20 text-destructive' : 'bg-primary/15 text-primary'}`}>
             Trial: {trialDays}d left
           </span>
         )}
         {trialExpired && (
-          <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive">
+          <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive whitespace-nowrap">
             Trial expired
           </span>
         )}
@@ -184,7 +184,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             </div>
           </div>
         )}
-        <span className="text-xs text-muted-foreground hidden md:inline">{formatDate(time)}</span>
+        <span className="text-xs text-muted-foreground hidden lg:inline">{formatDate(time)}</span>
         <span className="text-xs text-foreground font-medium">{formatTime(time)}</span>
       </div>
     </div>

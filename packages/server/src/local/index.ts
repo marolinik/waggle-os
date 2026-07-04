@@ -1509,7 +1509,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 title: 'Marketplace sync complete',
                 body: `${totalAdded} new capability${totalAdded === 1 ? '' : 's'} discovered`,
                 category: 'agent',
-                actionUrl: '/capabilities',
+                actionUrl: '/skills',
               });
             }
             log.info(`[cron] Marketplace sync: ${totalAdded} added across ${results.length} sources`);
@@ -1956,7 +1956,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                   title: `Scheduled task: ${schedule.name}`,
                   body: summary || 'Task completed',
                   category: 'cron',
-                  actionUrl: `/workspace/${target.id}`,
+                  actionUrl: `/workspaces/${target.id}`,
                 });
 
                 log.info(`[cron] agent_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
@@ -2070,7 +2070,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             title: `Loop: ${schedule.name}`,
             body: loopResult.summary || 'Loop ran',
             category: 'cron',
-            actionUrl: wsId && wsId !== '*' ? `/workspace/${wsId}` : '/',
+            actionUrl: wsId && wsId !== '*' ? `/workspaces/${wsId}` : '/',
           });
           log.info(`[cron] loop "${schedule.name}" ran${loopResult.score !== undefined ? ` (score ${loopResult.score.toFixed(2)})` : ''}${loopResult.wrote ? ', wrote 1 frame' : ''}`);
           // L2 assist mode: hold the maker's proposed action for human approval.
@@ -2111,14 +2111,14 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         title: `${schedule.name || 'Scheduled task'} completed`,
         body: 'Scheduled task ran successfully.',
         category: 'cron',
-        actionUrl: '/cockpit',
+        actionUrl: '/settings/mission-control',
       });
     } else {
       emitNotification(server, {
         title: `${schedule.name || 'Scheduled task'} failed`,
         body: `Error: ${result.error ?? 'Unknown error'}`,
         category: 'cron',
-        actionUrl: '/cockpit',
+        actionUrl: '/settings/mission-control',
       });
     }
 

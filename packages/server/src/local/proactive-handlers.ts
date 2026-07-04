@@ -208,7 +208,7 @@ export function checkStaleWorkspaces(ctx: ProactiveContext): ProactiveMessage[] 
           ? `This workspace has ${frameCount} memory frame${frameCount === 1 ? '' : 's'} that may need attention.`
           : 'Consider archiving or revisiting this workspace.',
         workspaceId: ws.id,
-        actionUrl: `/workspace/${ws.id}`,
+        actionUrl: `/workspaces/${ws.id}`,
         priority: idleDays > 30 ? 'medium' : 'low',
       });
     }
@@ -233,7 +233,7 @@ export function checkPendingTasks(ctx: ProactiveContext): ProactiveMessage[] {
       title: `${ws.name}: ${pending} pending item${pending === 1 ? '' : 's'}`,
       body: `You have ${pending} unresolved task${pending === 1 ? '' : 's'} or pending item${pending === 1 ? '' : 's'} in "${ws.name}".`,
       workspaceId: ws.id,
-      actionUrl: `/workspace/${ws.id}`,
+      actionUrl: `/workspaces/${ws.id}`,
       priority: pending > 3 ? 'high' : 'medium',
     });
   }
@@ -250,7 +250,7 @@ export function suggestCapabilities(ctx: ProactiveContext): ProactiveMessage | n
       title: 'Boost your workflow with capability packs',
       body: 'You haven\'t installed any capability packs yet. Explore Research, Writing, and Planning packs to supercharge your agent.',
       priority: 'low',
-      actionUrl: '/capabilities',
+      actionUrl: '/skills',
     };
   }
 
@@ -281,7 +281,7 @@ export function suggestCapabilities(ctx: ProactiveContext): ProactiveMessage | n
         title: 'Connect your external tools',
         body: `You have ${totalFrames} memories across ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}. Consider connecting GitHub, Slack, or other tools for richer context.`,
         priority: 'low',
-        actionUrl: '/settings',
+        actionUrl: '/connectors',
       };
     }
   }

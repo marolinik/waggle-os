@@ -147,7 +147,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       {/* Stats bar */}
       {ctx.stats && (
         <div className="flex gap-4 mb-5 text-[11px] text-muted-foreground">
-          <span><Brain className="w-3 h-3 inline mr-1" />{ctx.stats.memoryCount} memories</span>
+          <span><Brain className="w-3 h-3 inline mr-1" />{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
           {/* F9: "0 sessions" reads as broken on a fresh workspace — hide it until there's ≥1. */}
           {ctx.stats.sessionCount > 0 && (
             <span><MessageSquare className="w-3 h-3 inline mr-1" />{ctx.stats.sessionCount} sessions</span>

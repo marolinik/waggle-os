@@ -30,9 +30,15 @@ interface MemoryCardProps {
   selected?: boolean;
   onSelect?: (selected: boolean) => void;
   className?: string;
+  /**
+   * Count of near-identical memories this card represents (display-layer dedup,
+   * F22). When > 1, an "×N" badge is shown. Purely informational — the other
+   * copies remain in the store, nothing was merged or deleted.
+   */
+  duplicateCount?: number;
 }
 
-export function MemoryCard({ memory, onClick, selected, onSelect, className }: MemoryCardProps) {
+export function MemoryCard({ memory, onClick, selected, onSelect, className, duplicateCount }: MemoryCardProps) {
   const status = statusMeta(memory.status);
   const showTitle = memory.title && memory.title !== memory.content;
 
@@ -75,6 +81,14 @@ export function MemoryCard({ memory, onClick, selected, onSelect, className }: M
         </span>
         <ConfidenceBadge value={memory.confidence} compact />
         {status && <StatusBadge tone={status.tone} label={status.label} />}
+        {duplicateCount != null && duplicateCount > 1 && (
+          <span
+            className="inline-flex items-center rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+            title={`${duplicateCount} near-identical memories collapsed here — display only, nothing was merged or deleted.`}
+          >
+            ×{duplicateCount}
+          </span>
+        )}
         {memory.tags?.slice(0, 3).map((t) => (
           <span key={t} className="text-[10px] text-muted-foreground/80">#{t}</span>
         ))}

@@ -648,6 +648,8 @@ export interface Notification {
   body: string;
   read: boolean;
   timestamp: string;
+  /** Optional deep-link the inbox renders as a CTA (W4C/F25). */
+  actionUrl?: string;
 }
 
 export interface AgentStatus {

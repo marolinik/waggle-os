@@ -5,6 +5,7 @@ import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
 import { MEMORY_KIND_META, memoryKindLabel } from '@/lib/harvest-kind-map';
 import { MemoryCard } from './MemoryCard';
+import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { ConfidenceBadge } from '@/components/ui/confidence-badge';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -486,10 +487,15 @@ export default function MemoryCenterTab({
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            {memories.map((m) => (
+            {/* Display-only dedup (F22): near-identical frames (same fact, differing
+                by an embedded run/uuid/timestamp) collapse to one card with an ×N
+                badge. Row actions still key off the real representative id — nothing
+                is merged or deleted in the store. */}
+            {dedupeMemoriesForDisplay(memories).map(({ memory: m, duplicateCount }) => (
               <MemoryCard
                 key={m.id}
                 memory={m}
+                duplicateCount={duplicateCount}
                 onClick={() => openDetail(m)}
                 selected={checked.has(m.id)}
                 onSelect={(on) => toggleChecked(m.id, on)}

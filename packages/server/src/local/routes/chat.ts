@@ -52,6 +52,24 @@ export { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } fro
 
 export type AgentRunner = (config: AgentLoopConfig) => Promise<AgentResponse>;
 
+/**
+ * W4A diagnostics — the "MindDB flake". A long chat turn holds a workspace
+ * MindDB handle obtained from the process-wide MultiMindCache (LRU, maxOpen:20).
+ * If ≥20 OTHER workspaces are touched mid-turn (home-briefing fan-out, weaver
+ * timers, cross-workspace tools), the cache evicts + `.close()`s THIS turn's
+ * handle, and the post-response DB write-backs below throw better-sqlite3's
+ * native "The database connection is not open". Those catches are non-blocking
+ * and swallow it silently, which is exactly why the flake is invisible. This
+ * predicate lets us surface a structured warn at the failure seam WITHOUT
+ * changing behavior (the write still fails soft) so the root cause can be
+ * confirmed live. The real fix (pin-aware eviction) lives in the OSS substrate
+ * (packages/hive-mind-core/src/multi-mind-cache.ts) and is out of scope here.
+ */
+function isClosedDbError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /database (connection|handle) is not open|database is closed/i.test(msg);
+}
+
 const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'bash',
   'read_file',
@@ -1650,8 +1668,18 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               if (saved.length > 0) {
                 sendEvent('step', { content: `Auto-saved ${saved.length} memor${saved.length === 1 ? 'y' : 'ies'} from this exchange.` });
               }
-            } catch {
-              // Non-blocking
+            } catch (e) {
+              // Non-blocking. W4A: a closed-handle failure here is the signature
+              // of the MultiMindCache evicting this turn's mind mid-flight — log
+              // it with context so the flake is observable, but still fail soft.
+              if (isClosedDbError(e)) {
+                log.warn('[waggle][W4A] workspace mind handle closed mid-turn during auto-save', {
+                  workspaceId: effectiveWorkspace,
+                  sessionId,
+                  seam: 'autoSaveFromExchange',
+                  error: e instanceof Error ? e.message : String(e),
+                });
+              }
             }
           }
         }
@@ -1701,7 +1729,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               }
             }
           } catch (e) {
-            log.info('[waggle] KG extraction error:', e instanceof Error ? e.message : String(e));
+            if (isClosedDbError(e)) {
+              log.warn('[waggle][W4A] workspace mind handle closed mid-turn during KG extraction', {
+                workspaceId: effectiveWorkspace,
+                sessionId,
+                seam: 'knowledge.createEntity',
+                error: e instanceof Error ? e.message : String(e),
+              });
+            } else {
+              log.info('[waggle] KG extraction error:', e instanceof Error ? e.message : String(e));
+            }
           }
         }
 

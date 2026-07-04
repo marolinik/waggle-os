@@ -143,7 +143,7 @@ export const taskRoutes: FastifyPluginAsync = async (fastify) => {
       title: 'Task update',
       body: task.title || 'New task',
       category: 'task',
-      actionUrl: '/tasks',
+      actionUrl: `/workspaces/${id}/tasks`,
     });
 
     return reply.code(201).send(task);

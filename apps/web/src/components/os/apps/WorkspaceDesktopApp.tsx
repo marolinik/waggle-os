@@ -44,6 +44,7 @@ import TasksTab from './workspace/TasksTab';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import { HexAvatar, DotLive, SectionLabel, HexCheckTile, IconTile, ProvenanceLine } from '../warm';
 import { frameSourceLabel } from '@/lib/frame-source';
+import { formatModelLabel } from '@/lib/model-label';
 import type {
   WorkspaceContext,
   WorkspaceStateView,
@@ -213,7 +214,7 @@ function StatusCard({ ctx, agentsRunning }: { ctx: WorkspaceContext | null; agen
         {model && (
           <div className="flex items-center justify-between gap-2">
             <dt className="text-[var(--text-muted)]">Model</dt>
-            <dd className="max-w-[55%] truncate font-mono text-[12px] text-[var(--text-2)]">{model.split('/').pop()}</dd>
+            <dd className="max-w-[55%] truncate font-mono text-[12px] text-[var(--text-2)]">{formatModelLabel(model)}</dd>
           </div>
         )}
         {typeof ctx?.stats?.memoryCount === 'number' && (

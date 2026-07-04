@@ -722,7 +722,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
             className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="p-6">
-              <LockedFeature featureName="Multiple Workspaces" upgradePrompt="Upgrade to Teams for unlimited workspaces. Solo plan includes one workspace." />
+              <LockedFeature featureName="Multiple Workspaces" upgradePrompt="Upgrade to Teams for unlimited workspaces. Free plan includes one workspace." />
             </div>
           </motion.div>
         </motion.div>

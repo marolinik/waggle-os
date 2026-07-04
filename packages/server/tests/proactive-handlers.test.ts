@@ -252,7 +252,7 @@ describe('Proactive Handlers', () => {
       expect(result).not.toBeNull();
       expect(result!.type).toBe('capability_suggestion');
       expect(result!.title).toContain('capability packs');
-      expect(result!.actionUrl).toBe('/capabilities');
+      expect(result!.actionUrl).toBe('/skills');
     });
 
     it('returns null when capabilities installed and low memory count', () => {

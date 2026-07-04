@@ -3,6 +3,11 @@ import { validateOrigin } from '../cors-config.js';
 
 export interface NotificationEvent {
   type: 'notification';
+  /** Persisted row id (W4C/F25) — lets the client mark THIS live notification
+   *  read via PATCH /api/notifications/:id/read instead of sending `undefined`. */
+  id?: number;
+  /** Always false at emit time — a freshly broadcast notification is unread. */
+  read?: boolean;
   title: string;
   body: string;
   category: 'cron' | 'approval' | 'task' | 'message' | 'agent';
@@ -42,18 +47,25 @@ export interface WorkflowSuggestionEvent {
   timestamp: string;
 }
 
-export function emitNotification(fastify: FastifyInstance, event: Omit<NotificationEvent, 'type' | 'timestamp'>) {
+export function emitNotification(fastify: FastifyInstance, event: Omit<NotificationEvent, 'type' | 'timestamp' | 'id' | 'read'>) {
+  // W4C/F25: persist FIRST so the broadcast payload carries the real row id.
+  // Without it the live-pushed notification reaches the client id-less, and a
+  // subsequent markRead() PATCHes `/api/notifications/undefined/read` (400) —
+  // the badge/panel then drift on the next reload.
+  let id: number | undefined;
+  try {
+    // W5.10: persist so notifications survive offline/restart.
+    id = fastify.cronStore?.saveNotification(event.title, event.body, event.category, event.actionUrl);
+  } catch { /* non-blocking */ }
+
   const full: NotificationEvent = {
     type: 'notification',
     timestamp: new Date().toISOString(),
+    id,
+    read: false,
     ...event,
   };
   fastify.eventBus?.emit('notification', full);
-
-  // W5.10: Persist notification so it survives offline/restart
-  try {
-    fastify.cronStore?.saveNotification(event.title, event.body, event.category, event.actionUrl);
-  } catch { /* non-blocking */ }
 }
 
 /** Emit a sub-agent status event on the eventBus for SSE relay */

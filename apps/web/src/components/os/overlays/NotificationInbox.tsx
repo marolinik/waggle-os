@@ -1,7 +1,10 @@
-import { Bell, Check, CheckCheck, X, CheckCircle2 } from 'lucide-react';
+import { Bell, Check, CheckCheck, X, CheckCircle2, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import type { Notification } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { humanizeNotification } from '@/lib/notification-copy';
+import { formatRelativeTime } from '@/lib/agent-center-display';
 
 interface NotificationInboxProps {
   open: boolean;
@@ -16,7 +19,14 @@ const typeIcons: Record<string, string> = {
 };
 
 const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAllRead }: NotificationInboxProps) => {
+  const navigate = useNavigate();
   if (!open) return null;
+
+  const openAction = (n: Notification, href: string) => {
+    if (!n.read) onMarkRead(n.id);
+    onClose();
+    navigate(href);
+  };
 
   return (
     <AnimatePresence>
@@ -59,7 +69,9 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                 <p className="text-[11px] text-muted-foreground mt-1">No new notifications</p>
               </div>
             )}
-            {notifications.map(n => (
+            {notifications.map(n => {
+              const { title, body, href } = humanizeNotification(n);
+              return (
               <div
                 key={n.id}
                 className={`px-4 py-3 border-b border-border/20 transition-colors ${
@@ -69,18 +81,27 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                 <div className="flex items-start gap-2">
                   <span className="text-sm mt-0.5">{typeIcons[n.type] || '📌'}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-display font-medium text-foreground">{n.title}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{n.body}</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">{new Date(n.timestamp).toLocaleString()}</p>
+                    <p className="text-xs font-display font-medium text-foreground">{title}</p>
+                    {body && <p className="text-[11px] text-muted-foreground mt-0.5">{body}</p>}
+                    <p className="text-[11px] text-muted-foreground mt-1">{formatRelativeTime(n.timestamp)}</p>
+                    {href && (
+                      <button
+                        onClick={() => openAction(n, href)}
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                      >
+                        Open <ArrowRight className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                   {!n.read && (
-                    <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-primary transition-colors">
+                    <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-primary transition-colors" aria-label="Mark as read">
                       <Check className="w-3 h-3" />
                     </button>
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
       </motion.div>

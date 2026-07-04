@@ -1804,7 +1804,24 @@ class LocalAdapter {
       // would mint a junk unread Notification per connect/reopen. Filter it
       // at the adapter boundary.
       if ((data as { type?: string } | null)?.type === 'connected') return;
-      onNotification(data as Notification);
+      // W4C/F25: the SSE NotificationEvent has NO client-shaped id/read/type —
+      // normalize it the same way getNotificationHistory does so a live-pushed
+      // notification isn't {id:undefined, read:undefined, type:undefined}. Without
+      // this, markRead(undefined) 400s server-side while the badge/panel drift.
+      const raw = data as {
+        id?: number | string; category?: string; type?: string;
+        title?: string; body?: string; timestamp?: string; actionUrl?: string; action_url?: string;
+      };
+      const normalized: Notification = {
+        id: raw.id != null ? String(raw.id) : '',
+        type: (raw.category ?? raw.type ?? 'agent') as Notification['type'],
+        title: raw.title ?? '',
+        body: raw.body ?? '',
+        read: false,
+        timestamp: raw.timestamp ?? '',
+        actionUrl: raw.actionUrl ?? raw.action_url,
+      };
+      onNotification(normalized);
     });
   }
 
@@ -1892,6 +1909,7 @@ class LocalAdapter {
       type: n.category ?? n.type ?? 'agent',
       read: !!n.read,
       timestamp: n.timestamp ?? n.created_at ?? '',
+      actionUrl: n.action_url ?? n.actionUrl,
     }));
   }
 

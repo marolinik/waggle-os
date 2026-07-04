@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, Activity, Clock, Zap, TrendingDown, TrendingUp, Loader2 } from 'lucide-react';
+import { RefreshCw, Activity, Clock, Zap, TrendingDown, TrendingUp, Loader2, HelpCircle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 interface WeaverStatus {
   personalMind: { lastConsolidation: string | null; lastDecay: string | null; timerActive: boolean };
@@ -97,6 +98,12 @@ export default function WeaverPanel() {
         </button>
       </div>
 
+      {/* F24: plain-language explainer so the panel isn't opaque jargon. */}
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        The Weaver tidies your memory in the background — it merges duplicate facts, links related
+        ones, and lets stale details fade so what surfaces stays sharp. <span className="text-foreground/80">Run Now</span> does that pass immediately instead of waiting for the next scheduled sweep.
+      </p>
+
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl border border-border/30 p-3">
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
@@ -109,6 +116,11 @@ export default function WeaverPanel() {
           <div className="flex items-center gap-1.5 text-muted-foreground mb-1">
             <TrendingDown className="w-3 h-3" />
             <span className="text-[10px] uppercase tracking-wide">Last Decay</span>
+            <HintTooltip content="Decay gradually lowers the weight of memories that haven't been reinforced recently, so stale facts surface less. Nothing is deleted — it just ranks lower.">
+              <button type="button" aria-label="What is decay?" className="text-muted-foreground/70 hover:text-muted-foreground">
+                <HelpCircle className="w-3 h-3" />
+              </button>
+            </HintTooltip>
           </div>
           <p className="text-sm font-medium text-foreground">{timeAgo(personalMind.lastDecay)}</p>
         </div>

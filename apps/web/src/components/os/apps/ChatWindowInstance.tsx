@@ -3,6 +3,7 @@ import { useChat } from '@/hooks/useChat';
 import { useSessions } from '@/hooks/useSessions';
 import { useToast } from '@/hooks/use-toast';
 import { adapter } from '@/lib/adapter';
+import { formatModelLabel } from '@/lib/model-label';
 import ChatApp from './ChatApp';
 import type { TeamMember } from './ChatApp';
 
@@ -229,7 +230,7 @@ const ChatWindowInstance = ({
     setCurrentModel(model);
     adapter.setModel(model).catch((err) => console.error('[ChatWindowInstance] set model failed:', err));
     adapter.patchWorkspace(workspaceId, { model })
-      .then(() => toast({ title: 'Model updated', description: `Now using ${model.split('/').pop()}` }))
+      .then(() => toast({ title: 'Model updated', description: `Now using ${formatModelLabel(model)}` }))
       .catch(() => toast({ title: 'Model updated locally', description: 'Backend offline — will sync when connected', variant: 'destructive' }));
   };
 

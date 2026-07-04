@@ -34,14 +34,14 @@ beforeEach(() => { window.localStorage.clear(); });
 afterEach(() => { cleanup(); vi.clearAllMocks(); window.history.replaceState({}, '', '/'); });
 
 describe('PR7a · PlanCards', () => {
-  it('renders the 3-card grid (Solo / Pro · most-popular / Teams)', async () => {
+  it('renders the 3-card grid (Free / Pro · most-popular / Teams)', async () => {
     const { default: PlanCards } = await import('@/components/os/billing/PlanCards');
     render(<PlanCards currentTier="FREE" onChoose={vi.fn()} />);
-    expect(screen.getByText('Solo')).toBeInTheDocument();
+    expect(screen.getByText('Free')).toBeInTheDocument();
     expect(screen.getByText('Pro')).toBeInTheDocument();
     expect(screen.getByText('Teams')).toBeInTheDocument();
     expect(screen.getByText('Most popular')).toBeInTheDocument();
-    // FREE user → Solo is the current plan
+    // FREE user → Free is the current plan
     expect(screen.getByText('Your plan')).toBeInTheDocument();
   });
 
@@ -64,11 +64,11 @@ describe('PR7a · PlanCards', () => {
     const { default: PlanCards } = await import('@/components/os/billing/PlanCards');
     const onChoose = vi.fn();
     render(<PlanCards currentTier="PRO" onChoose={onChoose} />);
-    // PRO user: Pro = "Your plan", Solo = "Included", Teams = "Choose Teams"
+    // PRO user: Pro = "Your plan", Free = "Included", Teams = "Choose Teams"
     expect(screen.getByText('Your plan')).toBeInTheDocument();
     expect(screen.getByText('Included')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Choose Teams/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Choose Solo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Choose Free/i })).not.toBeInTheDocument();
   });
 
   it('TRIAL user: no card claims "Current"/"Your plan" — a trial is not a purchasable plan', async () => {

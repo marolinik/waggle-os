@@ -1,7 +1,7 @@
 /**
  * PlanCards — warm-Hive PR7a Billing (design screen 14 "Plans" state).
  *
- * The 3-card Plans grid (Solo / Pro · most-popular / Teams) + the Monthly|Annual
+ * The 3-card Plans grid (Free / Pro · most-popular / Teams) + the Monthly|Annual
  * −20% cycle toggle, themed to the warm tokens (PR1). Prices are DISPLAY COPY from
  * `tiers.ts` (D10) — the *charged* amount is whatever Stripe renders on the hosted
  * Checkout page; this UI never asserts the real charge. Choosing a plan hands off to
@@ -33,7 +33,7 @@ interface PlanDef {
 const PLANS: readonly PlanDef[] = [
   {
     tier: 'FREE',
-    name: 'Solo',
+    name: 'Free',
     priceMonthly: '$0',
     priceAnnual: '$0',
     unitMonthly: '/ forever',
@@ -49,7 +49,7 @@ const PLANS: readonly PlanDef[] = [
     unitMonthly: '/ month',
     unitAnnual: '/ mo · billed yearly',
     tagline: 'For power users compounding across projects.',
-    features: ['Everything in Solo', 'Sync across devices', 'Marketplace skills & connectors', 'Self-evolving skills'],
+    features: ['Everything in Free', 'Sync across devices', 'Marketplace skills & connectors', 'Self-evolving skills'],
     popular: true,
   },
   {
@@ -114,7 +114,7 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
         {PLANS.map((plan) => {
           const planRank = RANK[plan.tier];
-          // A TRIAL user is not on the Solo (FREE) plan — the honest "Trial — everything
+          // A TRIAL user is not on the Free plan — the honest "Trial — everything
           // unlocked" badge lives above the grid, so no card claims to be "current".
           const isCurrent = planRank === currentRank && currentTier !== 'TRIAL';
           const isUpgrade = planRank > currentRank && plan.tier !== 'FREE';

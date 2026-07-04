@@ -3,6 +3,7 @@ import { BarChart3, Loader2, Zap, DollarSign, TrendingUp, Check, AlertTriangle }
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 import { SurfaceRow } from './power/power-primitives';
+import { formatModelLabel } from '@/lib/model-label';
 
 interface CostEntry {
   workspaceId: string;
@@ -36,10 +37,6 @@ interface TelemetrySummary {
   budget: BudgetInfo;
 }
 
-/** Friendlier model label — strips the date suffix Anthropic/OpenAI append. */
-function modelLabel(id: string): string {
-  return id.replace(/-\d{8}$/, '').replace(/-(\d{4})$/, '');
-}
 
 const TelemetryApp = () => {
   const { toast } = useToast();
@@ -249,7 +246,7 @@ const TelemetryApp = () => {
                 return (
                   <div key={m.model} className="grid grid-cols-[120px_1fr_64px] items-center gap-3">
                     <span className="truncate text-right text-[12.5px] font-medium text-[var(--text-2)]" title={m.model}>
-                      {modelLabel(m.model)}
+                      {formatModelLabel(m.model)}
                     </span>
                     <div className="h-[22px] rounded-[6px] bg-[var(--surface-2)] border border-[var(--line-soft)] overflow-hidden">
                       <div

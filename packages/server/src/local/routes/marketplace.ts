@@ -692,7 +692,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
           title: 'Marketplace sync complete',
           body: `${packagesAdded} new capability${packagesAdded === 1 ? '' : 's'} discovered`,
           category: 'agent',
-          actionUrl: '/capabilities',
+          actionUrl: '/skills',
         });
       }
 

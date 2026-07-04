@@ -6,6 +6,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import { cmdKLabel } from '@/lib/platform';
+import { formatModelLabel } from '@/lib/model-label';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
@@ -987,7 +988,7 @@ const ChatApp = ({
             >
               <DotLive tone="healthy" size={7} />
               <span className="max-w-[140px] truncate font-mono text-[12px] text-[var(--text-2)]">
-                {currentModel ? currentModel.split('/').pop() : 'auto'}
+                {currentModel ? formatModelLabel(currentModel) : 'auto'}
               </span>
               <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
             </button>
@@ -1002,7 +1003,7 @@ const ChatApp = ({
                     }`}
                   >
                     <Cpu className="w-3 h-3 text-primary shrink-0" />
-                    <span className="font-display text-foreground truncate">{m}</span>
+                    <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
                   </button>
                 ))}
                 {(!availableModels || availableModels.length === 0) && !currentModel && (
@@ -1053,7 +1054,7 @@ const ChatApp = ({
                 {currentModel && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-display">
                     <Cpu className="w-2.5 h-2.5" />
-                    {currentModel.split('/').pop()}
+                    {formatModelLabel(currentModel)}
                   </span>
                 )}
               </div>
@@ -1160,7 +1161,7 @@ const ChatApp = ({
                   <div className="mb-1 flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-dim)]">
                     <span className="font-semibold text-[var(--text-2)]">Waggle</span>
                     {persona?.name && <span>· {persona.name}</span>}
-                    {currentModel && <span>· {currentModel.split('/').pop()}</span>}
+                    {currentModel && <span>· {formatModelLabel(currentModel)}</span>}
                   </div>
                 )}
                 <div className={`relative select-text cursor-text group/msg text-sm ${

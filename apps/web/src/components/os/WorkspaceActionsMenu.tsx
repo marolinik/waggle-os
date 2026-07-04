@@ -205,7 +205,7 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
             <h2 className="text-sm font-display font-semibold text-foreground mb-2">Delete "{workspace.name}"?</h2>
             <p className="text-xs text-muted-foreground mb-3">
               This permanently deletes the workspace and everything it remembers —{' '}
-              {memoryCount != null && memoryCount > 0 ? `${memoryCount} memories, ` : 'its memories, '}
+              {memoryCount != null && memoryCount > 0 ? `${memoryCount} ${memoryCount === 1 ? 'memory' : 'memories'}, ` : 'its memories, '}
               chats, and files. This can&rsquo;t be undone.
               {!isArchived && ' If you just want it out of the way, Archive keeps the memory safe.'}
             </p>

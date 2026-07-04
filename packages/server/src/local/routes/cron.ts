@@ -198,7 +198,7 @@ export const cronRoutes: FastifyPluginAsync = async (server) => {
         title: 'Routine complete',
         body: `${schedule.name || 'Scheduled task'} finished`,
         category: 'cron',
-        actionUrl: '/cockpit',
+        actionUrl: '/settings/mission-control',
       });
       return {
         triggered: true,

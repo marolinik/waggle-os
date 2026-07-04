@@ -199,7 +199,7 @@ const StorageApp = ({ workspaceId, workspaceName, workspace }: StorageAppProps) 
                 <div className="flex items-baseline gap-3 leading-[1.95] pl-[1.4em]">
                   <span className="flex-1" style={{ color: 'var(--text-2)' }}>hive.mind</span>
                   <span className="whitespace-nowrap" style={{ color: 'var(--text-dim, hsl(var(--muted-foreground)))' }}>
-                    {memoryCount !== null ? `${memoryCount} memories` : '—'}
+                    {memoryCount !== null ? `${memoryCount} ${memoryCount === 1 ? 'memory' : 'memories'}` : '—'}
                   </span>
                 </div>
                 {/* Real top-level entries from the file store. */}
