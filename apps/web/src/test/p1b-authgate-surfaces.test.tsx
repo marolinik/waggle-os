@@ -127,6 +127,10 @@ describe('ShellContext tier (P1b D3-4)', () => {
       'waggle:onboarding',
       JSON.stringify({ completed: true, step: 7, tier: 'power', completedAt }),
     );
+    // Wave-3 modal coordination: the paywall defers while the login briefing
+    // is eligible to show. These tests exercise the paywall itself, so arrange
+    // a dismissed briefing (as a returning user who closed it would have).
+    window.localStorage.setItem('waggle:login-briefing-dismissed', 'true');
   }
 
   it('failed getTier touches neither billingTier nor trialInfo; tierResolved stays false', async () => {
