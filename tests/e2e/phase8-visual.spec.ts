@@ -118,7 +118,7 @@ async function navigateTo(page: Page, viewName: string): Promise<void> {
     Chat: ['[data-testid="nav-chat"]', 'button[aria-label="Chat"]'],
     Memory: ['[data-testid="nav-memory"]', 'button[aria-label="Memory"]'],
     Settings: ['[data-testid="sidebar-user"]', 'button[aria-label="Account and settings"]'],
-    'Agents & tasks': ['[data-testid="nav-agents"]', 'button[aria-label="Agents & tasks"]'],
+    'Agents': ['[data-testid="nav-agents"]', 'button[aria-label="Agents"]'],
     Library: ['[data-testid="nav-library"]', 'button[aria-label="Library"]'],
   };
 

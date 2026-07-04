@@ -43,6 +43,7 @@ import { applyPersonaToolFilter } from '../persona-tool-filter.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
 import type { GoalAncestry } from '@waggle/shared';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 
 // ── Re-exports for backwards compatibility ─────────────────────────────
 // These were originally exported from chat.ts and are consumed by tests and other packages.
@@ -1900,7 +1901,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // saved message a refresh or /api/history call loses the assistant outcome
       // and the next turn lacks the failure context.
       if (activeHistory && activeWorkspaceId && activeSessionId) {
-        const assistantError = `Generation failed: ${errorMessage}`;
+        const assistantError = `${GENERATION_FAILED_PREFIX}${errorMessage}`;
         try {
           activeHistory.push({ role: 'assistant', content: assistantError });
           persistMessage(server.localConfig.dataDir, activeWorkspaceId, activeSessionId, {

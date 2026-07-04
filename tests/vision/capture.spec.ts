@@ -45,7 +45,7 @@ interface Surface {
 const SURFACES: Surface[] = [
   { key: 'chat', label: 'Chat', expectation: 'AI chat: a persona/model header, a message thread area, and a message input box at the bottom.' },
   { key: 'room', label: 'Room', expectation: 'The Room: a canvas for running agents, or a clean empty state ("no agents running").' },
-  { key: 'agents', label: 'Agent Center', expectation: 'Agent Center: a list of agents with status badges and category tabs, or an empty "no agents yet" state.' },
+  { key: 'agents', label: 'Agents', expectation: 'Agents: a list of agents with status badges and category tabs, or an empty "no agents yet" state.' },
   { key: 'files', label: 'Files', expectation: 'Files: a workspace file/folder browser, or an empty state.' },
   { key: 'approvals', label: 'Approvals', expectation: 'Approvals inbox: pending approval requests or a clean "no pending approvals" state.' },
   { key: 'cockpit', label: 'Mission Control', expectation: 'Mission Control / cockpit: KPI cards for health, cost, and activity.' },

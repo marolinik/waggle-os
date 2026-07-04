@@ -15,7 +15,7 @@ import type { ModelGateStepProps } from './types';
  * Reuses the shared ModelGate (same component as Settings → Models) so the gate and
  * the permanent home of model setup can never drift.
  */
-const ModelGateStep = ({ onContinue, onBack, onLater }: ModelGateStepProps) => {
+const ModelGateStep = ({ onContinue, onLater }: ModelGateStepProps) => {
   const { hasWorkingModel, loading, refresh } = useHasWorkingModel();
   return (
     <motion.div key="step-model-gate" {...fadeSlide}>
@@ -30,13 +30,7 @@ const ModelGateStep = ({ onContinue, onBack, onLater }: ModelGateStepProps) => {
 
       <ModelGate variant="onboarding" onModelReady={refresh} />
 
-      <div className="flex items-center justify-between gap-4 mt-6">
-        <button
-          onClick={onBack}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors font-display rounded-md px-1 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          Back
-        </button>
+      <div className="flex items-center justify-end gap-4 mt-6">
         <div className="flex items-center gap-3">
           <button
             onClick={onLater}

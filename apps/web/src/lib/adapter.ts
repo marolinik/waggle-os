@@ -514,6 +514,10 @@ class LocalAdapter {
     return list.map(ws => ({
       ...ws,
       persona: (ws.persona as string | undefined) ?? (ws.personaId as string | undefined),
+      // W2B: server stamps `lastActiveAt`; the FE reads `lastActive`. Map it so
+      // card footers / switcher recency / duplicate-name subtitles have a value
+      // wherever the server does stamp activity (inert until stamping lands).
+      lastActive: (ws.lastActive as string | undefined) ?? (ws.lastActiveAt as string | undefined),
     })) as Workspace[];
   }
 
@@ -2409,7 +2413,11 @@ class LocalAdapter {
   }
 
   // --- Memory Stats ---
-  async getMemoryStats(): Promise<{ personal: { frames: number; entities: number; relations: number }; workspace: { frames: number; entities: number; relations: number }; total: { frames: number; entities: number; relations: number } }> {
+  // W2D: `workspaceId` (optional) scopes the `workspace` bucket to one workspace
+  // so a surface can show workspace-scoped counts that agree with the KG tab's
+  // 'current' scope. No arg keeps the all-minds default (StatusBar/LoginBriefing/
+  // DashboardApp/brain-health) unchanged.
+  async getMemoryStats(workspaceId?: string): Promise<{ personal: { frames: number; entities: number; relations: number }; workspace: { frames: number; entities: number; relations: number }; total: { frames: number; entities: number; relations: number } }> {
     const zero = { frames: 0, entities: 0, relations: 0 };
     // Server emits snake-case {frameCount, entityCount, relationCount} and
     // can return `workspace: null` when no workspace filter is provided.
@@ -2428,7 +2436,10 @@ class LocalAdapter {
       // scope=all-minds: counts-only cross-mind total for the briefing brag.
       // Single-user local sidecar only — workspace minds stay separate stores;
       // the server never mixes their CONTENT (founder mind-isolation directive).
-      const res = await this.fetch('/api/memory/stats?scope=all-minds');
+      const url = workspaceId
+        ? `/api/memory/stats?scope=all-minds&workspace=${encodeURIComponent(workspaceId)}`
+        : '/api/memory/stats?scope=all-minds';
+      const res = await this.fetch(url);
       const raw = (await res.json()) as { personal?: unknown; workspace?: unknown; total?: unknown };
       return {
         personal: normalize(raw.personal),

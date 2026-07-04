@@ -117,6 +117,10 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     if (defaultModel) {
       config.setDefaultModel(defaultModel);
+      // W2C: keep the in-memory runtime model in lockstep with the saved
+      // default so the top-bar chip tracks a Settings save live (it used to
+      // only change on restart, so Settings and the chip diverged until then).
+      server.agentState.currentModel = defaultModel;
     }
 
     // F8: Update daily cost budget
@@ -133,7 +137,11 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
     // Model Pilot fields
     if (fallbackModel !== undefined) {
-      if (fallbackModel === null) {
+      // W2C: a fallback equal to the primary can never fire (chat.ts guards
+      // `resolvedModel !== fallbackModel`) — dead config presented as a safety
+      // net. Clear it instead of persisting the no-op.
+      const effectiveDefault = defaultModel ?? config.getDefaultModel();
+      if (fallbackModel === null || fallbackModel === effectiveDefault) {
         config.clearFallbackModel();
       } else {
         config.setFallbackModel(fallbackModel);

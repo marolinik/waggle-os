@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 import type {
   ChatMessage, StreamEvent, ApprovalRequest,
   ContentBlock, TextContentBlock, ToolExecution,
@@ -23,7 +24,20 @@ function ensureBlocks(msg: ChatMessage): ChatMessage {
   }
   const blocks: ContentBlock[] = [];
   if (msg.content) {
-    blocks.push({ type: 'text', blockId: nextBlockId('text'), content: msg.content });
+    // W2G: a persisted failed assistant turn ("Generation failed: …") arrives
+    // from /api/history as flat text with no block typing. Decode it back into
+    // an error block so a reloaded failure renders the same ErrorBlock (with its
+    // Retry / Open-API-key-settings actions) as the live SSE path — stripping the
+    // prefix restores the bare message the live 'error' event carried.
+    if (msg.role === 'assistant' && msg.content.startsWith(GENERATION_FAILED_PREFIX)) {
+      blocks.push({
+        type: 'error',
+        blockId: nextBlockId('error'),
+        message: msg.content.slice(GENERATION_FAILED_PREFIX.length),
+      });
+    } else {
+      blocks.push({ type: 'text', blockId: nextBlockId('text'), content: msg.content });
+    }
   }
   if (msg.tools) {
     for (const t of msg.tools) {

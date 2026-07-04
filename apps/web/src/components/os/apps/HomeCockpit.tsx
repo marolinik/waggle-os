@@ -499,7 +499,7 @@ function buildRunChips(o: OvernightSummary): RunChipProps[] {
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
-const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, userName }: HomeCockpitProps) => {
+const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, userName, totalWorkspaceCount }: HomeCockpitProps) => {
   const [briefing, setBriefing] = useState<HomeBriefing | null>(null);
   const [overnight, setOvernight] = useState<OvernightSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -669,7 +669,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
 
   return (
     <div className="relative mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit">
-      <GreetingHeader greeting={greeting} date={briefing.date} workspaceCount={recentWorkspaces.length} />
+      <GreetingHeader greeting={greeting} date={briefing.date} workspaceCount={totalWorkspaceCount ?? recentWorkspaces.length} />
 
       <StartHereCard
         move={startHereMove}
@@ -748,6 +748,13 @@ interface HomeCockpitProps {
    * server wins when present.
    */
   userName?: string;
+  /**
+   * W2B: canonical count of the user's real workspaces (non-noise, non-archived)
+   * for the "N workspaces waiting" line. The briefing's recentWorkspaces is a
+   * recency-ranked, content-filtered SUBSET (≤6) — using its length here read as
+   * a misleadingly small total. Optional; falls back to the subset length.
+   */
+  totalWorkspaceCount?: number;
 }
 
 export default HomeCockpit;

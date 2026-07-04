@@ -14,3 +14,11 @@ export const MAX_SUGGESTIONS_PER_INTERACTION = 1;
 export const SCOUT_DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
 export const SUBCONSCIOUS_INTERACTION_THRESHOLD = 10; // reflect every N tasks
 export const HIVE_MIND_CRON = '0 9 * * 1'; // weekly Monday 9am
+
+/**
+ * W2G — the prefix the chat route prepends to a persisted assistant turn when
+ * generation fails. Shared so the server (persist) and the web client (decode a
+ * reloaded failed turn back into an error block) can never drift. The bare error
+ * message follows the prefix, matching the live SSE 'error' event payload.
+ */
+export const GENERATION_FAILED_PREFIX = 'Generation failed: ';

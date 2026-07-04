@@ -30,8 +30,9 @@ const WorkspaceRoute = () => {
   // into shell state, so shell-global surfaces (StatusBar, PersonaSwitcher,
   // Ctrl+Shift+N / nav-Chat) track what is on screen. Covers the two
   // navigation paths that bypass every explicit selectWorkspace call site:
-  // typed deep links (useWorkspaces auto-selects data[0]) and browser
-  // Back/Forward. The pre-fetch placeholder never syncs (§3.3/§4.2 rule).
+  // typed deep links (W2A: useWorkspaces no longer auto-selects — this sync is
+  // now the persistence trigger for deep links) and browser Back/Forward. The
+  // pre-fetch placeholder never syncs (§3.3/§4.2 rule).
   useEffect(() => {
     if (workspaceId && workspaceId !== 'local-default' && workspaceId !== activeWorkspaceId) {
       selectWorkspace(workspaceId);

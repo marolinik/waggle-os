@@ -4,6 +4,7 @@ import {
   CURATED_ONBOARDING_TEMPLATES,
   CURATED_ONBOARDING_TEMPLATE_IDS,
   TEMPLATE_PERSONA,
+  TEMPLATE_SUGGESTIONS,
 } from './constants';
 
 describe('curated onboarding templates (PR5 D5)', () => {
@@ -21,6 +22,15 @@ describe('curated onboarding templates (PR5 D5)', () => {
   it('gives every curated template a non-empty hint for the first-task seed', () => {
     for (const t of CURATED_ONBOARDING_TEMPLATES) {
       expect(t.hint.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('gives every curated template a non-empty first-task suggestion group', () => {
+    for (const t of CURATED_ONBOARDING_TEMPLATES) {
+      const group = TEMPLATE_SUGGESTIONS[t.id];
+      expect(group).toBeDefined();
+      expect(group.length).toBeGreaterThan(0);
+      expect(group.every(s => s.length > 0)).toBe(true);
     }
   });
 });

@@ -410,17 +410,24 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     let workspaceEntities = 0;
     let workspaceRelations = 0;
 
+    // W2D: count entities/relations directly instead of listing them. The old
+    // path used getEntitiesByType('') → getEntities(limit 500), capping the
+    // entity count at 500/mind, then ran an N+1 getRelationsFrom loop over only
+    // those ≤500 alphabetical entities — so the displayed totals were undercounts.
+    const countRelations = (wsDb: NonNullable<ReturnType<typeof server.agentState.getWorkspaceMindDb>>): number => {
+      const row = wsDb.getDatabase().prepare(
+        'SELECT COUNT(*) as cnt FROM knowledge_relations WHERE valid_to IS NULL',
+      ).get() as { cnt: number };
+      return row.cnt;
+    };
+
     const countMind = (wsDb: ReturnType<typeof server.agentState.getWorkspaceMindDb>) => {
       if (!wsDb) return;
       const wsFrames = new FrameStore(wsDb);
       workspaceCount += wsFrames.list({ limit: 100000 }).length;
       const wsKg = new KnowledgeGraph(wsDb);
-      const entities = wsKg.getEntitiesByType('');
-      workspaceEntities += entities.length;
-      // Count relations from all entities
-      for (const e of entities) {
-        workspaceRelations += wsKg.getRelationsFrom(e.id).length;
-      }
+      workspaceEntities += wsKg.getEntityCount();
+      workspaceRelations += countRelations(wsDb);
     };
 
     if (workspaceId) {
@@ -441,16 +448,13 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     }
 
     const personalKg = new KnowledgeGraph(personalDb);
-    const personalEntities = personalKg.getEntitiesByType('');
-    let personalRelations = 0;
-    for (const e of personalEntities) {
-      personalRelations += personalKg.getRelationsFrom(e.id).length;
-    }
+    const personalEntityCount = personalKg.getEntityCount();
+    const personalRelations = countRelations(personalDb);
 
     return {
       personal: {
         frameCount: personalCount,
-        entityCount: personalEntities.length,
+        entityCount: personalEntityCount,
         relationCount: personalRelations,
       },
       workspace: workspaceId ? {
@@ -460,7 +464,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
       } : null,
       total: {
         frameCount: personalCount + workspaceCount,
-        entityCount: personalEntities.length + workspaceEntities,
+        entityCount: personalEntityCount + workspaceEntities,
         relationCount: personalRelations + workspaceRelations,
       },
     };

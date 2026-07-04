@@ -442,13 +442,36 @@ const KnowledgeGraphViewer = ({
   // ── Empty state ──
 
   if (nodes.length === 0) {
+    // W2D: an empty 'current' scope used to be a dead end — the scope <select>
+    // lived below this early return, unreachable exactly when the user needed to
+    // widen to Personal / All. Render the scope switcher inside the empty state.
+    const scopeNoun = scope === 'personal' ? 'your personal mind'
+      : scope === 'all' ? 'any workspace'
+      : 'this workspace';
     return (
       <div className="flex flex-col items-center justify-center h-full text-center p-4">
         <Network className="w-10 h-10 text-muted-foreground/20 mb-3" />
-        <p className="text-xs text-muted-foreground">No knowledge graph data</p>
+        <p className="text-xs text-muted-foreground">No knowledge graph data in {scopeNoun}</p>
         <p className="text-[11px] text-muted-foreground/60 mt-1">
-          Interact with the agent to build entity relationships
+          {scope === 'current'
+            ? 'Try Personal or All workspaces, or interact with the agent to build entity relationships.'
+            : 'Interact with the agent to build entity relationships.'}
         </p>
+        {onScopeChange && (
+          <div className="flex items-center gap-1.5 mt-3 px-2 py-1 rounded-md bg-muted/40">
+            <Globe className="w-3 h-3 text-muted-foreground" />
+            <select
+              value={scope ?? 'current'}
+              onChange={e => onScopeChange(e.target.value as KGScope)}
+              className="bg-transparent text-[11px] text-foreground border-0 p-0 focus:ring-0 cursor-pointer"
+              aria-label="Knowledge graph scope"
+            >
+              <option value="current">Current workspace</option>
+              <option value="personal">Personal only</option>
+              <option value="all">All workspaces</option>
+            </select>
+          </div>
+        )}
       </div>
     );
   }

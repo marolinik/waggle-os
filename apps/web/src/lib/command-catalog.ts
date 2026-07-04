@@ -66,7 +66,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
     { id: "workspaces", group: "jump", name: "All workspaces", subtitle: "every workspace · grid", icon: LayoutGrid, to: "/workspaces" },
     { id: "chat", group: "jump", name: "Chat", subtitle: "the work surface", icon: MessageSquare, to: chatHref },
     { id: "memory", group: "jump", name: "Memory", subtitle: "what Waggle knows · provenance kept", icon: Brain, to: "/memory" },
-    { id: "agents", group: "jump", name: "Agents & tasks", subtitle: "running · scheduled · finished", icon: ListTodo, to: "/agents" },
+    { id: "agents", group: "jump", name: "Agents", subtitle: "running · scheduled · finished", keywords: "tasks agent center", icon: ListTodo, to: "/agents" },
     { id: "library", group: "jump", name: "Library", subtitle: "artifacts · files · skills", icon: Library, to: "/artifacts" },
     { id: "profile", group: "jump", name: "Your profile", subtitle: "what Waggle knows about you", icon: UserCircle, to: "/settings/profile" },
   ];

@@ -44,8 +44,7 @@ async function openCurrentApp(page: Page, label: string) {
   const navAliases: Record<string, string[]> = {
     Chat: ['Chat'],
     Memory: ['Memory'],
-    'Agent Center': ['Agents & tasks'],
-    'Agents & tasks': ['Agents & tasks'],
+    Agents: ['Agents'],
     Connectors: ['Connectors'],
     Home: ['Home'],
     Settings: ['Account and settings'],
@@ -63,7 +62,7 @@ async function openCurrentApp(page: Page, label: string) {
   const routes: Record<string, string> = {
     Home: '/home',
     Room: '/room',
-    'Agent Center': '/agents',
+    Agents: '/agents',
     Files: '/files',
     Approvals: '/approvals',
     'Mission Control': '/settings/mission-control',
@@ -231,7 +230,7 @@ test.describe('2. Desktop Shell', () => {
 
   test('sidebar renders in power tier', async ({ page }) => {
     await gotoDesktop(page);
-    for (const label of ['Chat', 'Memory', 'Agents & tasks', 'Library']) {
+    for (const label of ['Chat', 'Memory', 'Agents', 'Library']) {
       const btn = page.locator('[role="navigation"]').locator('button', { hasText: label });
       await expect(btn).toBeVisible({ timeout: 5000 });
     }
@@ -255,7 +254,7 @@ test.describe('2. Desktop Shell', () => {
 const DIRECT_APPS = [
   { label: 'Chat', expect: /persona|message|waggle/i },
   { label: 'Room', expect: /room|agent|specialist|no.*running|empty/i },
-  { label: 'Agent Center', expect: /agent|task|persona|group/i },
+  { label: 'Agents', expect: /agent|task|persona|group/i },
   { label: 'Files', expect: /file|folder|workspace|document/i },
   { label: 'Approvals', expect: /approval|pending|no.*pending|history|upgrade|team/i },
 ];

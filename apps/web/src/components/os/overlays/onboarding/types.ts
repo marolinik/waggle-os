@@ -28,7 +28,6 @@ export interface WhoAreYouStepProps {
   readonly onChange: (patch: Partial<OnboardingProfileFields>) => void;
   /** Performs the dual write (profile + identity seed) then advances. */
   readonly onContinue: () => void;
-  readonly onBack: () => void;
   readonly saving: boolean;
 }
 
@@ -44,7 +43,6 @@ export interface ImportStepProps {
   /** Claude Code auto-detect status; when found, renders a one-click harvest. */
   readonly claudeCodeDetected?: { found: boolean; itemCount: number; path: string } | null;
   readonly onClaudeCodeHarvest?: () => void;
-  readonly onBack: () => void;
   readonly onContinue: () => void;
 }
 
@@ -71,7 +69,6 @@ export interface WorkspaceCreateStepProps {
 export interface ModelGateStepProps {
   /** Advance to Import — only reachable once a working model exists (hard gate). */
   readonly onContinue: () => void;
-  readonly onBack: () => void;
   /** Soft escape: dismiss onboarding to Home (the NoModelBanner persists there). */
   readonly onLater: () => void;
 }
@@ -81,11 +78,12 @@ export interface TemplateStepProps {
   readonly templates: readonly OnboardingTemplate[];
   /** Create the workspace from this template (persona + templateId), then advance. */
   readonly onSelect: (templateId: string) => void;
-  readonly onBack: () => void;
   readonly creating: boolean;
   /** The template id currently being created (for a per-card spinner). */
   readonly creatingId: string | null;
   readonly createError: string | null;
+  /** Curated id recommended from the who-are-you answers (badge + first ordering); null = none. */
+  readonly recommendedId?: string | null;
 }
 
 /* ─── FirstTaskStep (PR5 — terminal: seed the first message, open the workspace) ─── */

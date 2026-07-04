@@ -5,8 +5,8 @@
  *  - the search box filters by name
  *  - the storage-type pills filter (All / Virtual / Local / Team)
  *  - a zero-workspace visit shows the create-first empty state (D16)
- *  - NO-FABRICATION: a workspace with undefined memoryCount shows "—", never an
- *    invented number (PR3/PR3.5 honesty contract)
+ *  - NO-FABRICATION: a workspace with undefined memoryCount renders NO memory
+ *    chip (W2B: not even a filler "—"), never an invented number (PR3/PR3.5)
  *  - opening a card selects the workspace + fires onOpenWorkspace
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -74,8 +74,9 @@ describe('AllWorkspacesApp', () => {
   it('does NOT fabricate a count for a workspace with undefined memoryCount', () => {
     render(<AllWorkspacesApp />);
     const card = screen.getByTestId('all-workspaces-card-w4');
-    // Honest dash present, and no stray digit invented for the missing count.
-    expect(card.textContent).toContain('—');
+    // W2B: no memory chip at all when the count is absent — no filler dash, and
+    // no stray digit invented for the missing count.
+    expect(card.textContent).not.toContain('—');
     expect(card.textContent).not.toMatch(/\d+\s*memor/);
   });
 

@@ -5,6 +5,8 @@ import waggleLogoLight from "@/assets/waggle-logo.png";
 import { useIsLightTheme } from "@/hooks/useIsLightTheme";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { useDeveloperMode } from "@/hooks/useDeveloperMode";
+import { useProviders } from "@/hooks/useProviders";
+import { formatModelLabel } from "@/lib/model-label";
 import { adapter } from "@/lib/adapter";
 
 interface StatusBarProps {
@@ -33,6 +35,11 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
   // M-20 / UX-5: token + cost are developer-facing signal. Hidden by
   // default; Settings → Advanced → Developer mode flips them on.
   const [developerMode] = useDeveloperMode();
+  // W2C: format the raw model id into a friendly display name via the shared
+  // formatter (catalog lookup + heuristic). The chip means "model this
+  // workspace's chat will use"; the tooltip carries the raw id + where to change it.
+  const { providers } = useProviders();
+  const modelLabel = formatModelLabel(model, providers);
   // F2 from the 2026-05-28 addictiveness audit — surface accumulated
   // memory count as a visible "trophy" so users see their investment
   // compounding (rubric dim 8). Hidden when the count is zero (a
@@ -98,16 +105,25 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         {model && (
           <>
             <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
-            <span className="text-[11px] text-primary/80 font-display hidden md:inline">{model}</span>
+            <HintTooltip content={`${modelLabel} (${model}) — model this workspace's chat will use. Change it in the chat header; the global default lives in Settings → Models.`}>
+              <span
+                className="text-[11px] text-primary/80 font-display hidden md:inline cursor-help"
+                data-testid="statusbar-model"
+                tabIndex={0}
+              >
+                {modelLabel}
+              </span>
+            </HintTooltip>
           </>
         )}
         {memoryFrameCount !== null && (
           <>
             <span className="text-muted-foreground text-[11px] hidden md:inline">·</span>
-            <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across your workspaces. This grows every time you chat — it's why Waggle gets better the more you use it.`}>
+            <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across all minds (personal + every workspace). This grows every time you chat — it's why Waggle gets better the more you use it.`}>
               <span
                 className="text-[11px] text-primary/80 font-display hidden md:inline-flex items-center gap-1 cursor-help"
                 data-testid="statusbar-memory-count"
+                aria-label={`${memoryFrameCount.toLocaleString()} memory frames across all minds`}
               >
                 <Brain className="w-3 h-3" aria-hidden="true" />
                 {memoryFrameCount.toLocaleString()}

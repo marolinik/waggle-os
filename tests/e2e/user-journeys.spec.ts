@@ -58,7 +58,7 @@ test.describe('User Journey Tests', () => {
     const sidebar = page.getByRole('navigation', { name: 'Primary' });
     await expect(sidebar).toBeVisible();
 
-    for (const label of ['Home', 'Chat', 'Memory', 'Agents & tasks', 'Library']) {
+    for (const label of ['Home', 'Chat', 'Memory', 'Agents', 'Library']) {
       await expect(sidebar.getByRole('button', { name: label })).toBeVisible();
     }
     await expect(page.getByTestId('sidebar-command')).toBeVisible();

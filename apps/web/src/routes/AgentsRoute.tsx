@@ -6,7 +6,7 @@ import { useShell } from '@/providers/ShellContext';
 const AgentsRoute = () => {
   const { workspaces } = useShell();
   return (
-    <SurfaceBoundary appName="Agent Center">
+    <SurfaceBoundary appName="Agents">
       <AgentsApp workspaces={workspaces} />
     </SurfaceBoundary>
   );

@@ -145,7 +145,7 @@ async function routeForLabel(page: Page, label: string): Promise<string | null> 
     Home: '/home',
     Room: '/room',
     Memory: '/memory',
-    'Agent Center': '/agents',
+    'Agents': '/agents',
     Files: '/files',
     Approvals: '/approvals',
     'Mission Control': '/settings/mission-control',

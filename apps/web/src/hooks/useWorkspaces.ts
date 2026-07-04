@@ -2,10 +2,18 @@ import { useState, useCallback, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import type { Workspace } from '@/lib/types';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
+import {
+  resolveActiveWorkspaceId,
+  readPersistedWorkspaceId,
+  persistWorkspaceId,
+  clearPersistedWorkspaceId,
+} from '@/lib/workspace-selection';
 
 export const useWorkspaces = () => {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  // W2A: selection is explicit-only + survives full page loads. Seed from
+  // localStorage so a typed-URL visit to / or /workspaces keeps the workspace.
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(() => readPersistedWorkspaceId());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -14,7 +22,9 @@ export const useWorkspaces = () => {
     try {
       const data = await adapter.getWorkspaces();
       setWorkspaces(data);
-      setActiveWorkspaceId(prev => prev ?? data[0]?.id ?? null);
+      // W2A: NO auto-select. Validate the existing selection against the fresh
+      // list (dropping a stale/deleted id to null); never promote data[0].
+      setActiveWorkspaceId(prev => resolveActiveWorkspaceId(prev, data.map(w => w.id)));
       setError(null);
     } catch (err) {
       console.error('[useWorkspaces] fetch failed:', err);
@@ -36,6 +46,7 @@ export const useWorkspaces = () => {
       const ws = await adapter.createWorkspace(data);
       setWorkspaces(prev => [...prev, ws]);
       setActiveWorkspaceId(ws.id);
+      persistWorkspaceId(ws.id);
       return ws;
     } catch (err) {
       console.error('[useWorkspaces] create failed, using local fallback:', err);
@@ -53,6 +64,7 @@ export const useWorkspaces = () => {
       };
       setWorkspaces(prev => [...prev, localWs]);
       setActiveWorkspaceId(localWs.id);
+      persistWorkspaceId(localWs.id);
       return localWs;
     }
   }, []);
@@ -69,11 +81,14 @@ export const useWorkspaces = () => {
       return false;
     }
     setWorkspaces(prev => prev.filter(w => w.id !== id));
+    // W2A: deleting the active workspace clears the selection (no silent
+    // successor-pick) — the shell then prompts the user to choose one.
     if (activeWorkspaceId === id) {
-      setActiveWorkspaceId(workspaces.find(w => w.id !== id)?.id || null);
+      setActiveWorkspaceId(null);
+      clearPersistedWorkspaceId();
     }
     return true;
-  }, [activeWorkspaceId, workspaces]);
+  }, [activeWorkspaceId]);
 
   const patchWorkspace = useCallback(async (id: string, data: Partial<Pick<Workspace, 'persona' | 'agentGroupId' | 'name' | 'group' | 'model' | 'status' | 'description'>>): Promise<boolean> => {
     try {
@@ -88,6 +103,7 @@ export const useWorkspaces = () => {
 
   const selectWorkspace = useCallback((id: string) => {
     setActiveWorkspaceId(id);
+    persistWorkspaceId(id);
   }, []);
 
   const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId) || null;

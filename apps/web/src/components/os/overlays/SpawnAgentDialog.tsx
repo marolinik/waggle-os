@@ -5,6 +5,8 @@ import { PERSONAS } from '@/lib/personas';
 import { countProvidersWithKeys, selectDefaultModel } from '@/lib/spawn-agent-helpers';
 import { useToast } from '@/hooks/use-toast';
 import type { Workspace, ModelPricing } from '@/lib/types';
+import type { Provider } from '@/hooks/useProviders';
+import { formatModelLabel } from '@/lib/model-label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
@@ -32,6 +34,8 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
   const [modelsError, setModelsError] = useState<string | null>(null);
   /** How many providers have a vault key configured — drives the empty-state copy. */
   const [providersWithKeys, setProvidersWithKeys] = useState<number | null>(null);
+  // W2C: keep the fetched provider catalog so raw router ids render as friendly names.
+  const [providerList, setProviderList] = useState<Provider[]>([]);
   const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [showPersona, setShowPersona] = useState(false);
   const [form, setForm] = useState({
@@ -89,6 +93,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       setModels(modelList);
       setPricing(p);
       setProvidersWithKeys(countProvidersWithKeys(providers.providers));
+      setProviderList(providers.providers as Provider[]);
       const defaultModel = selectDefaultModel(wsModel, modelList);
       setForm(f => ({ ...f, model: f.model || defaultModel }));
     } catch (err) {
@@ -132,7 +137,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
 
       toast({
         title: 'Agent spawned',
-        description: `Running on ${form.model.split('/').pop()} — see Waggle Dance for live signals.`,
+        description: `Running on ${formatModelLabel(form.model, providerList)} — see Waggle Dance for live signals.`,
       });
       onClose();
       setStep('config');
@@ -330,6 +335,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                       <button
                         key={m}
                         type="button"
+                        title={m}
                         onClick={() => setForm(f => ({ ...f, model: m }))}
                         className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
                           form.model === m
@@ -337,7 +343,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                             : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground'
                         }`}
                       >
-                        {m}
+                        {formatModelLabel(m, providerList)}
                       </button>
                     ))}
                   </div>
@@ -373,7 +379,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Model</p>
-                  <p className="text-sm text-foreground font-mono">{form.model}</p>
+                  <p className="text-sm text-foreground" title={form.model}>{formatModelLabel(form.model, providerList)}</p>
                 </div>
                 {selectedPersona && (
                   <div>

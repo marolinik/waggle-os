@@ -41,19 +41,18 @@ beforeEach(() => {
 });
 
 describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => {
-  it('gates "High confidence & fresh" to — when no memory carries confidence (no fabrication)', async () => {
+  it('gates "high confidence" to — when no memory carries confidence (no fabrication)', async () => {
     mocks.adapter.listMemories.mockResolvedValue([
       mem({ id: '1', createdAt: iso(1) }),
       mem({ id: '2', createdAt: iso(60) }),
     ]);
     render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
-    await waitFor(() => expect(screen.getByText('Memories in this hive')).toBeTruthy());
-    // No confidence on any frame → the dimension chip's VALUE is a neutral dash,
-    // never a count. (Empty ConfidenceRings also show "—", so assert the chip's
-    // value via its label's sibling rather than a global getByText.) The stat bar
-    // was restructured (QA-polish 2026-06-24) to a total headline + subordinate
-    // overlapping-dimension chips; the label is now lowercase.
-    const card = screen.getByText('high confidence & fresh').previousElementSibling;
+    // W2D: headline now names the scope ("· personal mind").
+    await waitFor(() => expect(screen.getByText(/Memories in this hive/)).toBeTruthy());
+    // No confidence on any frame → the "high confidence" dimension chip's VALUE
+    // is a neutral dash, never a count. (W2D split the old near-always-0
+    // "high confidence & fresh" conjunction into two independent chips.)
+    const card = screen.getByText('high confidence').previousElementSibling;
     expect(card?.textContent).toBe('—');
   });
 

@@ -13,7 +13,14 @@ export const useKnowledgeGraph = (workspaceId: string | null) => {
   const [scope, setScope] = useState<KGScope>('current');
 
   const fetchKG = useCallback(async () => {
-    if (!workspaceId && scope === 'current') return;
+    // W2D: with no real workspace, 'current' has nothing to point at — used to
+    // silently return (a permanently empty graph). Fall back to the Personal
+    // mind and reflect that in the scope select so the UI tells the truth.
+    const noRealWorkspace = !workspaceId || workspaceId === 'local-default';
+    if (noRealWorkspace && scope === 'current') {
+      setScope('personal');
+      return;
+    }
     setLoading(true);
     try {
       const data = await adapter.getKnowledgeGraph(workspaceId ?? '', scope);

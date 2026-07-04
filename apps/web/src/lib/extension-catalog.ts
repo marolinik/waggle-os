@@ -171,7 +171,7 @@ export function fromPersona(persona: Persona): Extension {
     lifecycle: 'installed',
     installable: false,
     kind: 'federated',
-    openIn: { appId: 'agents', label: 'Agent Center' },
+    openIn: { appId: 'agents', label: 'Agents' },
   };
 }
 

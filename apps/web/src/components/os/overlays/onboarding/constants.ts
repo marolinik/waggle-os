@@ -58,6 +58,46 @@ export const CURATED_ONBOARDING_TEMPLATES: readonly OnboardingTemplate[] =
     .map((id) => TEMPLATES.find((t) => t.id === id))
     .filter((t): t is OnboardingTemplate => Boolean(t));
 
+/**
+ * First-task suggestion chips per curated template. The single `hint` on each
+ * TEMPLATE seeds the textarea; this gives the terminal step 2-3 tailored prompts
+ * to pick from instead of the same 6 generic hints for everyone. Keyed by curated
+ * template id; the wizard falls back to the curated hints when the chosen id has
+ * no group. Each group leads with the template's own `hint` for continuity.
+ */
+export const TEMPLATE_SUGGESTIONS: Readonly<Record<string, readonly string[]>> = {
+  'research-project': [
+    'Help me design a literature review on my topic',
+    'Summarize the key debates in my field',
+    'Find the strongest sources for my argument',
+  ],
+  'code-review': [
+    'Read my project and tell me what you see',
+    'Review this file for bugs and edge cases',
+    'Explain how this codebase is structured',
+  ],
+  'sales-pipeline': [
+    'Research the top 5 competitors in my industry',
+    'Draft a cold outreach email for a new prospect',
+    'Help me prep for an upcoming sales call',
+  ],
+  'marketing-campaign': [
+    'Draft a campaign brief for my product launch',
+    'Write three headline options for this landing page',
+    'Outline a content calendar for next month',
+  ],
+  'product-launch': [
+    'Help me write a PRD for my next feature',
+    'Draft a roadmap for the next quarter',
+    'Turn this idea into user stories',
+  ],
+  'blank': [
+    'Hello! What can you help me with?',
+    'Summarize a document I paste here',
+    'Help me plan my week',
+  ],
+};
+
 export const ALL_ONBOARDING_PERSONAS: readonly OnboardingPersona[] = [
   { id: 'general-purpose', name: 'General Purpose', icon: Brain, desc: 'Adapts to any task', tier: 'universal' as const },
   { id: 'researcher', name: 'Researcher', icon: Microscope, desc: 'Deep research & synthesis', tier: 'knowledge' as const },

@@ -141,8 +141,8 @@ const Sidebar = ({
         </>
       )}
 
-      {/* Everything else → ⌘K */}
-      <div className={zoneLabel}>Everything else</div>
+      {/* General → ⌘K */}
+      <div className={zoneLabel}>General</div>
       <button
         data-testid="sidebar-command"
         aria-label="Search and commands"

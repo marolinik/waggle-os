@@ -2,8 +2,9 @@
  * P1a review finding — WorkspaceRoute URL→shell sync (§2.1: the URL is the
  * single source of truth). activeWorkspaceId is parallel state only updated
  * through explicit selectWorkspace call sites; two sanctioned navigation
- * paths bypass all of them (typed deep links — useWorkspaces auto-selects
- * data[0] — and browser Back/Forward). WorkspaceRoute must reconcile the
+ * paths bypass all of them (typed deep links — W2A: useWorkspaces no longer
+ * auto-selects data[0], so this sync also persists the deep link — and browser
+ * Back/Forward). WorkspaceRoute must reconcile the
  * routed :workspaceId into shell state so shell-global surfaces (StatusBar,
  * PersonaSwitcher, Ctrl+Shift+N / nav-Chat) act on the on-screen workspace.
  */

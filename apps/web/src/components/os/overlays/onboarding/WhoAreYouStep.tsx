@@ -18,7 +18,7 @@ const INDUSTRIES = [
  * cockpit greets the user by name (B8). This component is presentational: it
  * lifts every field through `onChange` and delegates the save to `onContinue`.
  */
-const WhoAreYouStep = ({ profile, onChange, onContinue, onBack, saving }: WhoAreYouStepProps) => {
+const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepProps) => {
   const goals = profile.goals ?? [];
   const toggleGoal = (id: string) => {
     const next = goals.includes(id) ? goals.filter(g => g !== id) : [...goals, id];
@@ -159,13 +159,7 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, onBack, saving }: WhoAre
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-4 mt-6">
-        <button
-          onClick={onBack}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors font-display rounded-md px-1 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          Back
-        </button>
+      <div className="flex items-center justify-end gap-4 mt-6">
         <button
           onClick={onContinue}
           disabled={saving}

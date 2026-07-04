@@ -67,6 +67,27 @@ describe('LocalAdapter.getMemoryStats', () => {
     expect(stats.personal).toEqual({ frames: 7, entities: 3, relations: 1 });
   });
 
+  it('W2D: scopes to a workspace via ?workspace= when an id is passed', async () => {
+    respondWith({
+      personal: { frameCount: 100, entityCount: 20, relationCount: 15 },
+      workspace: { frameCount: 5, entityCount: 2, relationCount: 1 },
+      total: { frameCount: 105, entityCount: 22, relationCount: 16 },
+    });
+    const adapter = new LocalAdapter('http://test:1');
+    await adapter.getMemoryStats('ws-42');
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toContain('/api/memory/stats');
+    expect(url).toContain('workspace=ws-42');
+  });
+
+  it('does not append a workspace param when called with no argument', async () => {
+    respondWith({ personal: { frameCount: 1 }, workspace: null, total: { frameCount: 1 } });
+    const adapter = new LocalAdapter('http://test:1');
+    await adapter.getMemoryStats();
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).not.toContain('workspace=');
+  });
+
   it('returns zeroed stats on network / parse failure', async () => {
     fetchSpy.mockRejectedValue(new Error('boom'));
     const adapter = new LocalAdapter('http://test:1');

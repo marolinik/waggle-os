@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
   Loader2, X, AlertTriangle, Lightbulb,
@@ -15,6 +16,7 @@ import { useService } from '@/providers/ServiceProvider';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import type { Workspace } from '@/lib/types';
 import { selectBriefingHighlights } from '@/lib/briefing-highlights';
+import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import {
   computeBragSummary,
@@ -66,19 +68,11 @@ function truncateHighlight(content: string): string {
   return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
 }
 
-// Workspace names matching these patterns are E2E/test artefacts that leaked
-// into the user's real workspace store and should not surface in the
-// briefing's workspace summary list. Filtered at the UI layer (defensive),
-// not deleted from the data store.
-const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
-  /^E2E-Audit-\d+$/,
-  /^test-/i,
-  /^smoke-/i,
-  /^audit-/i,
-];
-
-const isTestWorkspace = (name: string): boolean =>
-  TEST_WORKSPACE_PATTERNS.some(p => p.test(name));
+// Workspace names matching dev/test-artefact patterns leaked into the user's
+// real store and should not surface in the briefing's summary list. Filtered at
+// the UI layer (defensive), not deleted. W2B: consolidated into one shared
+// predicate (was a local copy that missed ai-os-audit-*/StressTest-*).
+const isTestWorkspace = isDevNoiseWorkspace;
 
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
@@ -89,26 +83,20 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   // backend failure was indistinguishable from a brand-new user (and the
   // brag header sat on 'Loading…' forever).
   const [errored, setErrored] = useState(false);
-  const [greeting, setGreeting] = useState('');
   // P1b D3: defer the batch until the connect attempt settles (the 0609
   // HomeCockpit gate pattern) — gates on connecting-SETTLED, not connected,
   // so a failed connect still reaches the errored UI instead of a skeleton.
   const { connecting } = useService();
+  // W2G: Escape/Tab-trap/focus-restore via the shared modal hook (the bespoke
+  // overlay previously closed only on a backdrop click). Escape routes through
+  // onDismiss — same session-only dismissal as the backdrop.
+  const dialogRef = useFocusTrap<HTMLDivElement>(true, () => onDismiss());
 
   useEffect(() => {
-    const hour = new Date().getHours();
-    const timeGreeting =
-      hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    setGreeting(timeGreeting);
     if (connecting) return;
-    // Best-effort identity fetch — appends the user's name to the greeting
-    // when configured. Silent on failure so the briefing never blocks on it.
-    adapter.getIdentity()
-      .then(id => {
-        if (id?.name) setGreeting(`${timeGreeting}, ${id.name}`);
-      })
-      .catch(() => { /* no identity yet — leave greeting time-only */ });
-
+    // W2G: the modal no longer computes its own greeting — that duplicated the
+    // server-personalized Home greeting rendered directly behind it. Static
+    // title now; identity is unused here.
     loadBriefing();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connecting]);
@@ -215,17 +203,22 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         onClick={() => onDismiss()}
       >
         <motion.div
+          ref={dialogRef}
           initial={{ opacity: 0, y: 20, scale: 0.95 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           transition={{ type: 'spring', damping: 25 }}
-          className="w-full max-w-lg glass rounded-2xl p-6 shadow-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="login-briefing-title"
+          tabIndex={-1}
+          className="w-full max-w-lg glass rounded-2xl p-6 shadow-2xl focus:outline-none"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <div className="min-w-0">
-              <h2 className="text-lg font-display font-bold text-foreground">{greeting}</h2>
+              <h2 id="login-briefing-title" className="text-lg font-display font-bold text-foreground">Catching you up</h2>
               <p className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-1 gap-y-0.5" data-testid="login-briefing-brag-line">
                 <Brain className="w-3 h-3 inline mr-0.5 shrink-0" />
                 <span>{bragLine ?? (errored ? 'Briefing unavailable' : 'Loading…')}</span>
@@ -240,7 +233,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                 )}
               </p>
             </div>
-            <button onClick={() => onDismiss()} className="p-1 rounded-lg hover:bg-muted/50 transition-colors shrink-0">
+            <button onClick={() => onDismiss()} aria-label="Close briefing" className="p-1 rounded-lg hover:bg-muted/50 transition-colors shrink-0">
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
@@ -409,8 +402,9 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
             </HintTooltip>
             <button
               onClick={() => onDismiss(false)}
+              disabled={loading}
               data-testid="login-briefing-dismiss"
-              className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-display"
+              className="px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 transition-colors font-display disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Start Working
             </button>

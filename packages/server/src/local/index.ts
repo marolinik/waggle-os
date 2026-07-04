@@ -978,8 +978,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Session histories (server-side, like CLI)
   const sessionHistories = new Map<string, Array<{ role: string; content: string }>>();
 
-  // Default model
-  const currentModel = 'claude-sonnet-4-6';
+  // Default model — W2C: initialize from config.json's defaultModel so the
+  // top-bar chip and Settings → Models agree from the first launch (this was
+  // hardcoded, so a user whose default was e.g. Opus saw Sonnet in the chip
+  // until they changed it). The literal is only the last-resort fallback.
+  const currentModel = new WaggleConfig(fullConfig.dataDir).getDefaultModel() || 'claude-sonnet-4-6';
 
   // Pending approvals map for confirmation gates
   const pendingApprovals = new Map<string, PendingApproval>();

@@ -14,7 +14,7 @@ import ModelGateStep from './ModelGateStep';
 const state = (over: Record<string, unknown> = {}) => ({
   hasWorkingModel: false, cloudReady: false, localReady: false, loading: false, refresh: vi.fn(), ...over,
 });
-const props = () => ({ onContinue: vi.fn(), onBack: vi.fn(), onLater: vi.fn() });
+const props = () => ({ onContinue: vi.fn(), onLater: vi.fn() });
 
 beforeEach(() => mocks.useHasWorkingModel.mockReturnValue(state()));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -49,12 +49,5 @@ describe('ModelGateStep — the hard model gate', () => {
     render(<ModelGateStep {...p} />);
     fireEvent.click(screen.getByRole('button', { name: /do this later/i }));
     expect(p.onLater).toHaveBeenCalledTimes(1);
-  });
-
-  it('Back returns to the previous step', () => {
-    const p = props();
-    render(<ModelGateStep {...p} />);
-    fireEvent.click(screen.getByRole('button', { name: /^back$/i }));
-    expect(p.onBack).toHaveBeenCalledTimes(1);
   });
 });

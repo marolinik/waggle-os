@@ -67,13 +67,13 @@ const POWER_CONFIG: DockEntry[] = [
   { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces', description: 'Talk to your AI agents' },
   { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory', description: 'Everything Waggle remembers about you and your work' },
   { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files', description: 'Browse the files in your workspaces' },
-  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Artifacts', color: 'text-amber-300', route: '/artifacts', description: 'Documents and files your agents produce' },
+  { type: 'app', key: 'artifacts', appId: 'artifacts', icon: FileStack, label: 'Library', color: 'text-amber-300', route: '/artifacts', description: 'Documents and files your agents produce' },
   { type: 'separator', key: 'sep-work', label: '' },
   // ── Intelligence ──
   {
     type: 'zone-parent', key: 'intelligence', icon: Bot, label: 'Intelligence', color: 'text-violet-400', description: 'Your agents and what they can do',
     children: [
-      { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents', description: 'Create and manage your AI agents' },
+      { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agents', color: 'text-orange-400', route: '/agents', description: 'Create and manage your AI agents' },
       { type: 'app', key: 'skills', appId: 'capabilities', icon: Package, label: 'Skills Hub', color: 'text-violet-400', route: '/skills', description: 'Teach your agents new abilities' },
       { type: 'app', key: 'jobs', appId: 'scheduled-jobs', icon: Clock, label: 'Automation Center', color: 'text-amber-400', route: '/automations', description: 'Set up tasks that run on a schedule' },
       { type: 'app', key: 'room', appId: 'room', icon: Users, label: 'Room', color: 'text-violet-400', route: '/room', description: 'Watch your agents work together live' },
@@ -133,7 +133,7 @@ export const TIER_DOCK_CONFIG: Record<UserTier, DockEntry[]> = {
   professional: [
     { type: 'app', key: 'home', appId: 'home', icon: LayoutDashboard, label: 'Home', color: 'text-sky-400', route: '/home', description: 'Your starting point — daily briefing and quick actions' },
     { type: 'app', key: 'chat', appId: 'chat', icon: MessageSquare, label: 'Chat', color: 'text-primary', route: '/workspaces', description: 'Talk to your AI agents' },
-    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agent Center', color: 'text-orange-400', route: '/agents', description: 'Create and manage your AI agents' },
+    { type: 'app', key: 'agents', appId: 'agents', icon: Bot, label: 'Agents', color: 'text-orange-400', route: '/agents', description: 'Create and manage your AI agents' },
     { type: 'app', key: 'files', appId: 'files', icon: FolderOpen, label: 'Files', color: 'text-amber-300', route: '/files', description: 'Browse the files in your workspaces' },
     { type: 'separator', key: 'sep-1', label: '' },
     { type: 'app', key: 'memory', appId: 'memory', icon: Brain, label: 'Memory', color: 'text-amber-300', route: '/memory', description: 'Everything Waggle remembers about you and your work' },

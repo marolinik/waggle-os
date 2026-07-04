@@ -14,7 +14,8 @@ import {
   FirstTaskStep,
 } from './onboarding';
 import type { OnboardingProfileFields } from './onboarding';
-import { CURATED_ONBOARDING_TEMPLATES, TEMPLATE_PERSONA } from './onboarding/constants';
+import { CURATED_ONBOARDING_TEMPLATES, TEMPLATE_PERSONA, TEMPLATE_SUGGESTIONS } from './onboarding/constants';
+import { recommendTemplateId } from './onboarding/recommend-template';
 
 /* ─── Props ─── */
 interface OnboardingWizardProps {
@@ -93,7 +94,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           industry: p.industry ?? prev.industry,
           workType: p.workType ?? prev.workType,
           teamSize: p.teamSize ?? prev.teamSize,
-          goals: p.goals ?? prev.goals ?? [],
+          // Intent-signal chips always start unselected — hydrating stored goals
+          // lit every chip and gave zero fresh signal. Identity fields above
+          // still prefill; a returning user re-selecting none can't clobber the
+          // stored goals (handleProfileContinue maps empty → undefined, and the
+          // PUT /api/profile merge skips undefined).
+          goals: prev.goals ?? [],
         }));
       } catch { /* sidecar not ready — start with empty profile */ }
     })();
@@ -215,24 +221,35 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
     setCreatingTemplateId(templateId);
     try {
       let wsId: string;
-      try {
-        const ws = await adapter.createWorkspace({
-          name: wsName,
-          group: 'Personal',
-          type: 'project',
-          persona,
-          templateId,
-        });
-        wsId = ws.id;
+      // Reuse guard (nav-chrome now reaches first-task, so Back → re-select is
+      // possible): if this exact template already created a workspace, reuse it
+      // instead of minting a duplicate. Picking a DIFFERENT template still
+      // creates a new one (the prior workspace is orphaned but cheap/deletable).
+      if (state.workspaceId && state.templateId === templateId) {
+        wsId = state.workspaceId;
         setCreateError(null);
-      } catch {
-        setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
-        wsId = `local-${Date.now()}`;
+      } else {
+        try {
+          const ws = await adapter.createWorkspace({
+            name: wsName,
+            group: 'Personal',
+            type: 'project',
+            persona,
+            templateId,
+          });
+          wsId = ws.id;
+          setCreateError(null);
+        } catch {
+          setCreateError('Could not connect to server — workspace created locally. Connect to sync later.');
+          wsId = `local-${Date.now()}`;
+        }
       }
       setWorkspaceName(wsName);
       // Seed the first task with the template's hint — the user can edit it.
       setFirstMessage(tmpl?.hint?.trim() || DEFAULT_FIRST_MESSAGE);
-      onUpdate({ workspaceId: wsId, personaId: persona });
+      // Persist templateId so the first-task suggestion chips are template-
+      // tailored (and survive a mid-wizard refresh) and the reuse guard can fire.
+      onUpdate({ workspaceId: wsId, personaId: persona, templateId });
       trackTelemetry(serverBaseUrl, 'onboarding_complete', { templateId, importedMemory: importDone });
       captureOnboardingComplete({ templateId, personaId: persona, model: null });
       goToName('first-task');
@@ -240,7 +257,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       setCreatingWorkspace(false);
       setCreatingTemplateId(null);
     }
-  }, [importDone, onUpdate, serverBaseUrl, goToName]);
+  }, [importDone, onUpdate, serverBaseUrl, goToName, state.workspaceId, state.templateId]);
 
   const handleLetsGo = useCallback(() => {
     clearTimeout(autoTimer.current);
@@ -254,7 +271,13 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   if (state.completed) return null;
 
   const progressPct = LAST_INDEX > 0 ? (step / LAST_INDEX) * 100 : 0;
-  const showNavChrome = step >= FIRST_NAV_INDEX && step <= LAST_NAV_INDEX;
+  // Nav chrome (Back + "Step N of M" + dots) now extends through the terminal
+  // first-task step; the counter/dots clamp at the template scale so both the
+  // template and first-task steps read "Step 4 of 4".
+  const showNavChrome = step >= FIRST_NAV_INDEX;
+  const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
+  const navCurrent = Math.min(step, LAST_NAV_INDEX) - FIRST_NAV_INDEX + 1;
+  const recommendedId = recommendTemplateId(profile.workType, profile.role);
 
   return (
     <motion.div
@@ -304,7 +327,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           )}
           {showNavChrome && (
             <span className="text-xs font-display text-muted-foreground">
-              Step {step - FIRST_NAV_INDEX + 1} of {LAST_NAV_INDEX - FIRST_NAV_INDEX + 1}
+              Step {navCurrent} of {navTotal}
             </span>
           )}
           {showNavChrome && (
@@ -349,14 +372,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 profile={profile}
                 onChange={(patch) => setProfile(prev => ({ ...prev, ...patch }))}
                 onContinue={handleProfileContinue}
-                onBack={() => goToName('first-launch')}
                 saving={savingProfile}
               />
             )}
             {step === stepIndex('model-gate') && (
               <ModelGateStep
                 onContinue={() => goToName('memory-import')}
-                onBack={() => goToName('who-are-you')}
                 onLater={() => {
                   clearTimeout(autoTimer.current);
                   trackTelemetry(serverBaseUrl, 'onboarding_skip', { atStep: step, via: 'model-gate-later' });
@@ -374,7 +395,6 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
                 onImportCommit={handleImportCommit}
                 claudeCodeDetected={claudeCodeDetected}
                 onClaudeCodeHarvest={handleClaudeCodeHarvest}
-                onBack={() => goToName('model-gate')}
                 onContinue={() => goToName('template')}
               />
             )}
@@ -382,17 +402,17 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               <TemplateStep
                 templates={CURATED_ONBOARDING_TEMPLATES}
                 onSelect={handleCreateFromTemplate}
-                onBack={() => goToName('memory-import')}
                 creating={creatingWorkspace}
                 creatingId={creatingTemplateId}
                 createError={createError}
+                recommendedId={recommendedId}
               />
             )}
             {step === stepIndex('first-task') && (
               <FirstTaskStep
                 message={firstMessage}
                 onMessageChange={setFirstMessage}
-                suggestions={CURATED_ONBOARDING_TEMPLATES.map(t => t.hint)}
+                suggestions={TEMPLATE_SUGGESTIONS[state.templateId ?? ''] ?? CURATED_ONBOARDING_TEMPLATES.map(t => t.hint)}
                 onPickSuggestion={setFirstMessage}
                 onLetsGo={handleLetsGo}
                 createError={createError}

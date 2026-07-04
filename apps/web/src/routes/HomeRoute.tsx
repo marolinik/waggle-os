@@ -5,10 +5,11 @@ import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
 import { routeFor } from '@/lib/routes';
 import { NoModelBanner } from '@/components/os/model-gate/NoModelBanner';
+import { workspaceCounts } from '@/lib/workspace-counts';
 
 const HomeRoute = () => {
   const navigate = useNavigate();
-  const { selectWorkspace, overlays } = useShell();
+  const { selectWorkspace, overlays, workspaces } = useShell();
   return (
     <SurfaceBoundary appName="Home">
       {/* PR5 D2 — persists on Home until a working model exists (the soft-escape
@@ -28,6 +29,7 @@ const HomeRoute = () => {
           navigate(routeFor('workspace-desktop', { activeWorkspaceId: workspaceId }));
         }}
         onCreateWorkspace={() => overlays.setShowCreateWorkspace(true)}
+        totalWorkspaceCount={workspaceCounts(workspaces).visible}
       />
     </SurfaceBoundary>
   );

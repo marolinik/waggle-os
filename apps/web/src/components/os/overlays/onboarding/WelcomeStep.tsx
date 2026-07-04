@@ -43,18 +43,15 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
       Waggle remembers you, knows your projects, evolves with each decision, and guides the next step.
     </p>
 
-    {/* C28: static, disabled language chip — no i18n exists yet, so this is a
-        non-interactive placeholder signalling the (sole) current language. */}
+    {/* C28: static language badge — no i18n exists yet, so this is a
+        non-interactive marker of the (sole) current language, not a control. */}
     <div className="mb-5">
-      <button
-        type="button"
-        disabled
-        aria-disabled="true"
+      <span
         title="More languages coming soon"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 bg-muted/30 text-xs font-display text-muted-foreground cursor-not-allowed"
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 bg-muted/30 text-xs font-display text-muted-foreground"
       >
         🌐 English (US)
-      </button>
+      </span>
     </div>
 
     <button

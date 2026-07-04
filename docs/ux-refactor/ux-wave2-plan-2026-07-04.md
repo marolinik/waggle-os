@@ -66,3 +66,14 @@ server-persisted failed pair must not duplicate after a local Retry + reload.
 - F22 dedup, F23 wiki quality floor, F24 weaver explainer
 - F25 notifications rework, F26 team invite moment, F28 responsive top bar
 - F29 locale, F30 copy nits, F31 tier naming (Solo vs Free), F32 stale drawer/breadcrumb
+
+## Incidental defects from wave-1 QA (2026-07-04, not UX-wave scoped)
+- Ollama cloud models fail every send with server error "The database connection
+  is not open" (reproducible across Retry; ErrorBlock renders it correctly).
+  Smells like the LiteLLM no-DB bearer-key class of bug — backend triage needed.
+- Onboarding template pick that collides with an existing workspace slug 409s
+  and silently continues INTO the existing workspace — user never learns their
+  "new" workspace wasn't created. Needs suffixing or a visible choice.
+- Transient F2 window: during the auto-sent first task's streaming, the text
+  briefly also sat in the composer before clearing — an Enter there would
+  double-send. Cosmetic, final state correct.

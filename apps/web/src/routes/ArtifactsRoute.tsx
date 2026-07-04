@@ -13,7 +13,7 @@ const ArtifactsRoute = () => {
   const wsId = searchParams.get('workspace') ?? activeWorkspaceId ?? undefined;
   const ws = workspaces.find(w => w.id === wsId);
   return (
-    <SurfaceBoundary appName="Artifacts">
+    <SurfaceBoundary appName="Library">
       <ArtifactCenterApp activeWorkspaceId={wsId} workspaceName={ws?.name} />
     </SurfaceBoundary>
   );

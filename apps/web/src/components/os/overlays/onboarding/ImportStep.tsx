@@ -45,7 +45,6 @@ const ImportStep = ({
   onImportCommit,
   claudeCodeDetected,
   onClaudeCodeHarvest,
-  onBack,
   onContinue,
 }: ImportStepProps) => (
   <motion.div key="step-memory-import" {...fadeSlide}>
@@ -180,13 +179,7 @@ const ImportStep = ({
       </div>
     )}
 
-    <div className="flex items-center justify-between gap-4">
-      <button
-        onClick={onBack}
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors font-display rounded-md px-1 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        Back
-      </button>
+    <div className="flex items-center justify-end gap-4">
       <button
         onClick={onContinue}
         className="text-xs text-muted-foreground hover:text-foreground transition-colors rounded-md px-1 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"

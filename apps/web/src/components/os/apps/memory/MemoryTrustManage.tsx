@@ -280,13 +280,18 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
 
   const stats = useMemo(() => {
     const total = live.length >= FETCH_LIMIT ? `${FETCH_LIMIT}+` : String(live.length);
+    // W2D: the old "high confidence & fresh" conjunction was structurally ~0 —
+    // confidence is harvest-only (chat/agent frames carry none) and harvest
+    // imports are bulk-dated >7d ago, so the two populations barely overlap
+    // while rows showed "fresh". Split into two honest, independent dimensions.
     const hasAnyConfidence = live.some((m) => typeof m.confidence === 'number');
-    const highConfFresh = hasAnyConfidence
-      ? String(live.filter((m) => typeof m.confidence === 'number' && m.confidence >= 85 && freshness(m.createdAt).state === 'fresh').length)
+    const freshCount = String(live.filter((m) => freshness(m.createdAt).state === 'fresh').length);
+    const highConf = hasAnyConfidence
+      ? String(live.filter((m) => typeof m.confidence === 'number' && m.confidence >= 85).length)
       : '—';
     const staleCount = String(live.filter(isStale).length);
     const needsConfirm = String(live.filter((m) => m.status === 'unreviewed').length);
-    return { total, highConfFresh, staleCount, needsConfirm };
+    return { total, freshCount, highConf, staleCount, needsConfirm };
   }, [live]);
 
   const shown = useMemo(() => {
@@ -346,10 +351,14 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       <div className="rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-4 sm:p-5">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="text-[34px] font-[750] leading-none tracking-[-0.02em] text-[var(--text)]">{stats.total}</span>
-          <span className="text-[13.5px] text-[var(--text-muted)]">Memories in this hive</span>
+          <span className="text-[13.5px] text-[var(--text-muted)]">
+            Memories in this hive · {mind === 'workspace' ? 'this workspace' : 'personal mind'}
+          </span>
         </div>
         <div className="mt-3.5 flex flex-wrap gap-2">
-          <DimensionChip value={stats.highConfFresh} label="high confidence & fresh" tone={stats.highConfFresh === '—' ? 'default' : 'healthy'} />
+          {/* W2D: two independent dimensions instead of a near-always-0 conjunction. */}
+          <DimensionChip value={stats.freshCount} label="fresh (last 7 days)" tone={stats.freshCount === '0' ? 'default' : 'healthy'} />
+          <DimensionChip value={stats.highConf} label="high confidence" tone={stats.highConf === '—' || stats.highConf === '0' ? 'default' : 'healthy'} />
           <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
           <DimensionChip value={stats.needsConfirm} label="awaiting your confirm" tone="attention" />
         </div>

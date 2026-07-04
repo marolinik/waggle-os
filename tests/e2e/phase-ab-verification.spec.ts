@@ -261,7 +261,7 @@ test.describe('Structural health', () => {
 
   test('dock renders all expected buttons', async ({ page }) => {
     await gotoDesktop(page);
-    const expectedApps = ['Chat', 'Memory', 'Agents & tasks'];
+    const expectedApps = ['Chat', 'Memory', 'Agents'];
     for (const label of expectedApps) {
       const btn = page.locator(`button[aria-label="${label}"]`);
       await expect(btn).toBeVisible({ timeout: 5000 });

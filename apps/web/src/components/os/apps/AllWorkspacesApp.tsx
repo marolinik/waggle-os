@@ -11,8 +11,7 @@
  * Honesty (PR3/PR3.5 no-fabrication contract): cards render ONLY real Workspace
  * fields. memoryCount / sessionCount / health / lastActive are all optional on
  * the type — each is gated off (or shown as "—") when absent. We never invent a
- * count. The Grid variation ships (D14); the Table view is a deferred alternate,
- * scaffolded as a disabled "Table — soon" toggle.
+ * count. The Grid variation ships (D14).
  *
  * Data + selection reuse the canonical bundle: `useShell()` exposes the single
  * `useWorkspaces` instance (list · selectWorkspace · createWorkspace · refresh),
@@ -78,7 +77,8 @@ function FilterPills({
 }) {
   return (
     <div role="radiogroup" aria-label="Filter by storage type" className="flex flex-wrap gap-1.5">
-      {STORAGE_FILTERS.map(f => {
+      {/* W2B: hide never-matching filters — only 'all' plus pills with a count. */}
+      {STORAGE_FILTERS.filter(f => f.id === 'all' || counts[f.id] > 0).map(f => {
         const on = active === f.id;
         return (
           <button
@@ -163,15 +163,12 @@ function WorkspaceCard({
       </button>
 
       <div className="flex items-center gap-3.5 text-[12px] text-[var(--text-dim)]">
-        {hasMemoryCount ? (
+        {/* W2B: no fabricated count AND no filler dash — render the memory chip
+            only when the field actually exists (the Open button always shows). */}
+        {hasMemoryCount && (
           <span className="inline-flex items-center gap-1.5">
             <Hexagon className="h-3 w-3" strokeWidth={1.8} />
             {ws.memoryCount} {ws.memoryCount === 1 ? 'memory' : 'memories'}
-          </span>
-        ) : (
-          // No fabricated count — an honest dash, never an invented number.
-          <span className="inline-flex items-center gap-1.5" aria-label="memory count unavailable">
-            <Hexagon className="h-3 w-3" strokeWidth={1.8} />—
           </span>
         )}
         {hasSessionCount && (
@@ -219,10 +216,13 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
   const [showCreate, setShowCreate] = useState(false);
 
+  // W2B: storageType is persisted only when explicitly set at create (0/56 live
+  // today); the runtime treats absent as 'virtual' (storage/index.ts default), so
+  // classify the same way here — otherwise Virtual/Local/Team all read 0.
   const counts = useMemo<Record<StorageFilter, number>>(() => {
     const base: Record<StorageFilter, number> = { all: workspaces.length, virtual: 0, local: 0, team: 0 };
     for (const w of workspaces) {
-      if (w.storageType) base[w.storageType] += 1;
+      base[w.storageType ?? 'virtual'] += 1;
     }
     return base;
   }, [workspaces]);
@@ -230,7 +230,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return workspaces.filter(w => {
-      if (storageFilter !== 'all' && w.storageType !== storageFilter) return false;
+      if (storageFilter !== 'all' && (w.storageType ?? 'virtual') !== storageFilter) return false;
       if (!q) return true;
       const haystack = `${w.name} ${w.group ?? ''} ${w.description ?? ''}`.toLowerCase();
       return haystack.includes(q);
@@ -337,17 +337,6 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
           />
         </div>
         <FilterPills active={storageFilter} counts={counts} onChange={setStorageFilter} />
-        {/* Table view is the deferred alternate (D14) — scaffolded, disabled. */}
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title="Table view — coming soon"
-          data-testid="all-workspaces-table-toggle"
-          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-[9px] border border-[var(--line-soft)] bg-[var(--surface)] px-3.5 py-2 text-[12.5px] font-semibold text-[var(--text-dim)] opacity-60"
-        >
-          Table — soon
-        </button>
       </div>
 
       <SectionLabel rule className="mb-4">

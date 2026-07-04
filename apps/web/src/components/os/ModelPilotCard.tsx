@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import type { Provider } from '@/hooks/useProviders';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { formatModelLabel } from '@/lib/model-label';
 
 interface ModelPilotCardProps {
   defaultModel: string;
@@ -87,11 +88,14 @@ const LaneDropdown = ({
   value,
   onChange,
   onClose,
+  sameAsPrimaryId,
 }: {
   providers: Provider[];
   value: string | null;
   onChange: (modelId: string | null) => void;
   onClose: () => void;
+  /** W2C: model id equal to Primary — disabled here (a fallback == primary can never fire). */
+  sameAsPrimaryId?: string;
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -127,7 +131,8 @@ const LaneDropdown = ({
           </div>
           {provider.models.map(m => {
             const isFree = m.id.includes(':free');
-            const disabled = !provider.hasKey && provider.requiresKey;
+            const isSameAsPrimary = m.id === sameAsPrimaryId;
+            const disabled = (!provider.hasKey && provider.requiresKey) || isSameAsPrimary;
             return (
               <button
                 key={m.id}
@@ -150,7 +155,9 @@ const LaneDropdown = ({
                   )}
                 </span>
                 <span className="flex items-center gap-1.5 text-[11px]">
-                  {disabled ? (
+                  {isSameAsPrimary ? (
+                    <span className="text-muted-foreground/60">Same as Primary</span>
+                  ) : disabled ? (
                     <span className="text-muted-foreground/40">Add key in Vault</span>
                   ) : (
                     <HintTooltip content={COST_TOOLTIPS[m.cost] ?? ''}>
@@ -172,16 +179,9 @@ const LaneDropdown = ({
   );
 };
 
-/** Resolve display name for a model id */
-const resolveModelName = (modelId: string | null, providers: Provider[]): string => {
-  if (!modelId) return 'Not set';
-  for (const p of providers) {
-    const found = p.models.find(m => m.id === modelId);
-    if (found) return found.name;
-  }
-  // Fallback: show the raw id in a readable form
-  return modelId;
-};
+/** Resolve display name for a model id (W2C: via the shared formatter). */
+const resolveModelName = (modelId: string | null, providers: Provider[]): string =>
+  modelId ? formatModelLabel(modelId, providers) : 'Not set';
 
 /** Resolve cost tier for a model id */
 const resolveModelCost = (modelId: string | null, providers: Provider[]): string | null => {
@@ -348,12 +348,31 @@ const ModelPilotCard = ({
                   value={modelId}
                   onChange={(id) => handleLaneChange(lane.key, id)}
                   onClose={handleClose}
+                  sameAsPrimaryId={lane.key === 'fallback' ? (defaultModel || undefined) : undefined}
                 />
               )}
             </div>
           );
         })}
       </div>
+
+      {/* W2C: a persisted fallback equal to the primary can never fire
+          (chat.ts guards resolvedModel !== fallbackModel). Warn + one-click clear. */}
+      {!singleMode && fallbackModel && fallbackModel === defaultModel && (
+        <div
+          className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-2 text-[11px] text-amber-300"
+          data-testid="model-pilot-fallback-equals-primary"
+        >
+          <Shield className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1">Fallback equals Primary — failover will never trigger.</span>
+          <button
+            onClick={() => onUpdate({ fallbackModel: null })}
+            className="shrink-0 font-display font-semibold text-amber-200 hover:text-amber-100 transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      )}
 
       {/* Budget threshold slider — only when budget lane visible & daily budget is set */}
       {!singleMode && dailyBudget != null && dailyBudget > 0 && (

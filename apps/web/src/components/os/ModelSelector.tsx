@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { ChevronDown, Key, AlertTriangle } from 'lucide-react';
 import type { Provider, ProviderModel } from '@/hooks/useProviders';
+import { formatModelLabel } from '@/lib/model-label';
 
 interface ModelSelectorProps {
   value: string;
@@ -85,7 +86,9 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
       <button onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground hover:border-primary/50 transition-colors">
         <span className="truncate">
-          {value || 'Select model...'}
+          {/* W2C: the closed button showed the raw id — format it to the
+              friendly catalog name (matches the list rows below). */}
+          {value ? formatModelLabel(value, filtered) : 'Select model...'}
           {value && (() => {
             const p = filtered.find(prov => prov.models.some(m => m.id === value));
             if (p && !p.hasKey && p.requiresKey) return <AlertTriangle className="w-3 h-3 text-amber-400 inline ml-1.5" />;

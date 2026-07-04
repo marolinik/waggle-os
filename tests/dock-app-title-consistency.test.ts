@@ -58,13 +58,13 @@ describe('nav (dock-tiers) canonical label pins', () => {
     expect([...(dockLabels.get('marketplace') ?? [])]).toEqual(['Marketplace']);
   });
 
-  it('the agents appId canonicalises to "Agent Center" (UX-Refactor Phase 3B, S09)', () => {
-    // Explicit regression pin. History: M-35/P8 renamed Agents→Personas
-    // (the app managed persona definitions); Phase 3B reworked the app into
-    // the Agent Center over the B3 /api/agents entity, with the persona
-    // catalog kept as its Templates side affordance (C22). A silent revert
-    // to "Personas" or "Agents" breaks here first.
-    expect([...(dockLabels.get('agents') ?? [])]).toEqual(['Agent Center']);
+  it('the agents appId canonicalises to "Agents" (W2F IA-naming: "Agent Center" → "Agents")', () => {
+    // Explicit regression pin. History: M-35/P8 renamed Agents→Personas (the
+    // app managed persona definitions); Phase 3B reworked it into the Agent
+    // Center over the B3 /api/agents entity; W2F renamed the user-facing label
+    // to the plain "Agents" to end the sidebar/breadcrumb/header naming drift.
+    // A silent revert to "Personas" or "Agent Center" breaks here first.
+    expect([...(dockLabels.get('agents') ?? [])]).toEqual(['Agents']);
   });
 
   it('the cockpit appId canonicalises to "Mission Control" (D8: "Command Center" reserved for the Ctrl+K palette)', () => {

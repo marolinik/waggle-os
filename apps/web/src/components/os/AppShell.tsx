@@ -82,24 +82,24 @@ const ShellLayout = () => {
 
   const { allSignals: waggleSignals } = useWaggleDance();
   const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
+  // W2A: no implicit workspaces[0] fallback — the chrome shows a workspace only
+  // when one was explicitly selected. Sidebar/StatusBar accept null names; the
+  // Chat spine item opens the WorkspaceSwitcher when there is no real selection.
   const effectiveActiveWorkspaceId =
     activeWorkspaceId && activeWorkspaceId !== 'local-default'
       ? activeWorkspaceId
-      : workspaces[0]?.id ?? null;
+      : null;
   const effectiveActiveWorkspace =
     activeWorkspace ?? workspaces.find(ws => ws.id === effectiveActiveWorkspaceId) ?? null;
   const navigateToActiveChat = useCallback(() => {
-    if (effectiveActiveWorkspaceId && effectiveActiveWorkspaceId !== 'local-default') {
+    if (effectiveActiveWorkspaceId) {
       navigate(routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }));
       return;
     }
-    void adapter.getWorkspaces()
-      .then((rows) => {
-        const fallbackId = Array.isArray(rows) ? rows[0]?.id : null;
-        navigate(routeFor('chat', { activeWorkspaceId: fallbackId ?? null }));
-      })
-      .catch(() => navigate('/home'));
-  }, [effectiveActiveWorkspaceId, navigate]);
+    // W2A: with no explicit selection, prompt the user to pick a workspace
+    // instead of jumping into the filesystem-first one.
+    ov.toggleWorkspaceSwitcher();
+  }, [effectiveActiveWorkspaceId, navigate, ov]);
 
   // §4.2/§1.2: PersonaSwitcher (Ctrl+Shift+P) targets the ACTIVE workspace's
   // chat widget (focused-window resolution died with focus tracking, §4.3);
@@ -274,7 +274,7 @@ const ShellLayout = () => {
       onClick: hasRealActiveWorkspace ? undefined : ov.toggleWorkspaceSwitcher,
     },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
-    { key: 'agents', label: 'Agents & tasks', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
+    { key: 'agents', label: 'Agents', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
   ], [effectiveActiveWorkspaceId, waggleUnacknowledged, hasRealActiveWorkspace, ov.toggleWorkspaceSwitcher]);
   const pinned: SidebarNavItem[] = useMemo(() => {
@@ -338,7 +338,10 @@ const ShellLayout = () => {
 
       <StatusBar workspaceName={effectiveActiveWorkspace?.name}
         focusedWindowLabel={surfaceLabel}
-        model={agentStatus.model !== 'unknown' ? agentStatus.model : effectiveActiveWorkspace?.model}
+        // W2C: workspace-first precedence — the chip means "the model this
+        // workspace's chat will use" (chat.ts: request ?? workspace.model ??
+        // config default), falling back to the global runtime model.
+        model={effectiveActiveWorkspace?.model ?? (agentStatus.model !== 'unknown' ? agentStatus.model : undefined)}
         tokensUsed={agentStatus.tokensUsed} costUsd={agentStatus.costUsd} offline={offline}
         unreadNotifications={unreadCount}
         trialDaysRemaining={trialInfo.trialDaysRemaining} trialExpired={trialInfo.trialExpired}
@@ -405,6 +408,7 @@ const ShellLayout = () => {
         workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId}
         error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
         onCreateNew={() => ov.setShowCreateWorkspace(true)}
+        onViewAll={() => navigate('/workspaces')}
         onSelect={(id) => { selectWorkspace(id); navigate(`/workspaces/${id}`); }} />
       <NotificationInbox open={ov.showNotifications} onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />

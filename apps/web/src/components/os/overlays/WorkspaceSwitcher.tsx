@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Brain, ChevronRight, Plus, Archive } from 'lucide-react';
+import { Brain, ChevronRight, Plus, Archive, Check } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById } from '@/lib/personas';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { Workspace } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
+import { isDevNoiseWorkspace, compareWorkspaceRecency, workspaceCounts } from '@/lib/workspace-counts';
 
 interface WorkspaceSwitcherProps {
   open: boolean;
@@ -15,20 +16,16 @@ interface WorkspaceSwitcherProps {
   onSelect: (id: string) => void;
   /** G1 (UX-Northstar 2026-06-13): create from the switcher itself. */
   onCreateNew?: () => void;
+  /** W2B: jump to the full workspace shelf when the switcher is capped. */
+  onViewAll?: () => void;
   /** P1b D3: load failure — an errored empty list must not read as "No workspaces". */
   error?: string | null;
   onRetry?: () => void;
 }
 
-// Mirrors the LoginBriefing filter — workspace names matching these patterns
-// are E2E/test artefacts that leaked into the real store. Filtered defensively
-// at the UI surface so they don't pollute the switcher.
-const TEST_WORKSPACE_PATTERNS: ReadonlyArray<RegExp> = [
-  /^E2E-Audit-\d+$/,
-  /^test-/i,
-  /^smoke-/i,
-  /^audit-/i,
-];
+// W2B: cap the un-searchable switcher list so the ~55-row store doesn't flood a
+// 256px scrollbox; the rest is one click away via "view all".
+const MAX_SWITCHER_ROWS = 12;
 
 /** Compact relative time — disambiguates same-named workspaces (issue 2b). */
 function relativeTime(iso?: string): string | null {
@@ -83,7 +80,9 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
           <span className="text-xs font-display font-medium text-foreground truncate block">{ws.name}</span>
           {subtitle && <span className="text-[11px] text-muted-foreground truncate block">{subtitle}</span>}
         </div>
-        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        {isActive
+          ? <Check className="w-3.5 h-3.5 text-primary shrink-0" aria-label="Current workspace" />
+          : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
       </button>
       <WorkspaceActionsMenu
         workspace={{ id: ws.id, name: ws.name, status: ws.status }}
@@ -93,7 +92,7 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
   );
 }
 
-const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect, onCreateNew, error, onRetry }: WorkspaceSwitcherProps) => {
+const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSelect, onCreateNew, onViewAll, error, onRetry }: WorkspaceSwitcherProps) => {
   const [showArchived, setShowArchived] = useState(false);
   // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped within the dialog,
   // focus moves in on open and restores on close — the same shared hook the
@@ -104,9 +103,16 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
   if (!open) return null;
 
   const visibleWorkspaces = workspaces.filter(
-    ws => ws.id === activeWorkspaceId || !TEST_WORKSPACE_PATTERNS.some(p => p.test(ws.name)),
+    ws => ws.id === activeWorkspaceId || !isDevNoiseWorkspace(ws.name),
   );
-  const activeList = visibleWorkspaces.filter(ws => ws.status !== 'archived');
+  // W2B: recency-sorted (most recent first, missing timestamps last), then
+  // capped so the un-searchable list can't flood the scrollbox.
+  const activeListFull = visibleWorkspaces
+    .filter(ws => ws.status !== 'archived')
+    .sort(compareWorkspaceRecency);
+  const activeList = activeListFull.slice(0, MAX_SWITCHER_ROWS);
+  const hiddenCount = activeListFull.length - activeList.length;
+  const totalCount = workspaceCounts(workspaces).total;
   const archivedList = visibleWorkspaces.filter(ws => ws.status === 'archived');
 
   // Names shared by more than one visible workspace — those rows get a date
@@ -154,6 +160,16 @@ const WorkspaceSwitcher = ({ open, onClose, workspaces, activeWorkspaceId, onSel
                 onSelect={(id) => { onSelect(id); onClose(); }}
               />
             ))}
+            {hiddenCount > 0 && (
+              <button
+                onClick={() => { onViewAll?.(); onClose(); }}
+                data-testid="workspace-switcher-overflow"
+                className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Showing {activeList.length} of {totalCount} — view all
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
             {visibleWorkspaces.length === 0 && (
               error ? (
                 <div className="text-center py-4 space-y-2" data-testid="workspace-switcher-error">

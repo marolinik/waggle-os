@@ -26,10 +26,13 @@ export const useMemory = (workspaceId: string | null) => {
         : await adapter.getMemoryFrames(workspaceId);
       setFrames(data);
       setError(null);
-      // Fetch entity/relation counts in background
-      adapter.getMemoryStats().then(s => {
-        setEntityCount(s.total.entities);
-        setRelationCount(s.total.relations);
+      // W2D: scope entity/relation counts to THIS workspace so the Timeline
+      // header is one scope (frames are already per-workspace). Previously read
+      // the all-minds `total`, so "50 of 50 frames · 617 entities · 9420
+      // relations" mixed per-workspace frames with global entities/relations.
+      adapter.getMemoryStats(workspaceId).then(s => {
+        setEntityCount(s.workspace.entities);
+        setRelationCount(s.workspace.relations);
       }).catch(() => {});
     } catch (e) {
       console.error('[useMemory] fetch failed:', e);
