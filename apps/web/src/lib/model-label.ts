@@ -54,7 +54,12 @@ function heuristicLabel(rawId: string): string {
 
 export function formatModelLabel(id: string | undefined | null, providers?: Provider[]): string {
   if (!id) return '';
-  if (providers) {
+  // Ollama's catalog `name` is deliberately the bare installed tag (server
+  // fetchOllamaModels — "Display name stays the bare tag"), not a curated
+  // display name like the static cloud catalog's. Trusting it here would
+  // short-circuit before the heuristic gets to humanize the colon/dash tag,
+  // so local models always go through the same formatting as everyone else.
+  if (providers && !id.startsWith('ollama/')) {
     for (const p of providers) {
       for (const m of p.models) {
         if (m.id === id && m.name && m.name !== id) return m.name;

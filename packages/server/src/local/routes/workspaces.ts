@@ -83,13 +83,13 @@ function composeWorkspaceSummary(
   const daysSince = lastDate ? Math.floor((now.getTime() - lastDate.getTime()) / (86400 * 1000)) : 0;
 
   if (daysSince === 0) {
-    parts.push(`Active today with ${memoryCount} memories across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
+    parts.push(`Active today with ${memoryCount} ${memoryCount !== 1 ? 'memories' : 'memory'} across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
   } else if (daysSince === 1) {
-    parts.push(`Last active yesterday. ${memoryCount} memories across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
+    parts.push(`Last active yesterday. ${memoryCount} ${memoryCount !== 1 ? 'memories' : 'memory'} across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
   } else if (daysSince <= 7) {
-    parts.push(`Last active ${daysSince} days ago. ${memoryCount} memories across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
+    parts.push(`Last active ${daysSince} days ago. ${memoryCount} ${memoryCount !== 1 ? 'memories' : 'memory'} across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
   } else {
-    parts.push(`Last active ${mostRecent}. ${memoryCount} memories across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
+    parts.push(`Last active ${mostRecent}. ${memoryCount} ${memoryCount !== 1 ? 'memories' : 'memory'} across ${sessionCount} session${sessionCount !== 1 ? 's' : ''}.`);
   }
 
   // D1: Decisions and topics are rendered separately by the UI (ChatArea recentDecisions list),

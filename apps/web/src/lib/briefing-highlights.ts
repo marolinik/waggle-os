@@ -17,6 +17,8 @@
  *   - skip empty / null content.
  */
 
+import { normalizeMemoryKey, isGroupableKey } from '@/lib/memory-text-normalize';
+
 export interface BriefingFrameLike {
   readonly content?: string | null;
   readonly importance?: string | number | null;
@@ -69,9 +71,20 @@ function isConcrete(f: BriefingFrameLike): boolean {
   return true;
 }
 
-/** First line of the content, normalized — the identity used for dedup. */
+/**
+ * First line of the content, normalized — the identity used for dedup.
+ *
+ * Routes through the shared `normalizeMemoryKey` (F22) so near-duplicates that
+ * differ only by an embedded volatile token (audit-run id, uuid, timestamp)
+ * collapse to a single highlight too — not just byte-identical rewrites. Falls
+ * back to the raw first line when the normalized key is too thin to trust
+ * (short/punctuation-only), so unrelated short facts never merge.
+ */
 function highlightKey(f: BriefingFrameLike): string {
-  return (f.content ?? '').split('\n')[0].trim().toLowerCase().slice(0, 120);
+  const firstLine = (f.content ?? '').split('\n')[0];
+  const normalized = normalizeMemoryKey(firstLine);
+  if (isGroupableKey(normalized)) return normalized.slice(0, 120);
+  return firstLine.trim().toLowerCase().slice(0, 120);
 }
 
 /**

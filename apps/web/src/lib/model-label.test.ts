@@ -35,4 +35,16 @@ describe('formatModelLabel (W2C)', () => {
     const p: Provider[] = [{ id: 'x', name: 'X', hasKey: true, badge: null, keyUrl: null, requiresKey: false, models: [{ id: 'kimi-k2', name: 'kimi-k2', cost: '', speed: '' }] }];
     expect(formatModelLabel('kimi-k2', p)).toBe('Kimi K2');
   });
+
+  it('humanizes an installed Ollama model even when the catalog carries a matching (bare-tag) entry (wave-4 QA regression)', () => {
+    // Reproduces the live bug: routes/providers.ts fetchOllamaModels sets
+    // `name` to the bare installed tag by design ("Display name stays the
+    // bare tag") — the catalog-match branch must not trust that as an
+    // already-friendly name and short-circuit before the heuristic runs.
+    const p: Provider[] = [{
+      id: 'ollama', name: 'Local / Ollama', hasKey: true, badge: null, keyUrl: null, requiresKey: false,
+      models: [{ id: 'ollama/gemma4:31b', name: 'gemma4:31b', cost: '', speed: '' }],
+    }];
+    expect(formatModelLabel('ollama/gemma4:31b', p)).toBe('Gemma4 (31b)');
+  });
 });

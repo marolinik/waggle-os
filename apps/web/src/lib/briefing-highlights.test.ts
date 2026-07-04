@@ -49,6 +49,33 @@ describe('selectBriefingHighlights', () => {
     expect(dupes[0].timestamp).toBe('2026-05-01T00:00:00Z');
   });
 
+  it('collapses near-duplicates that differ only by an embedded run/uuid token (F22)', () => {
+    const input = [
+      make({ content: 'LoCoMo benchmark hit 86.49 (audit-run-id: 3f9a2b)', timestamp: '2026-07-04T00:00:00Z' }),
+      make({ content: 'LoCoMo benchmark hit 86.49 (audit-run-id: 71ee44)', timestamp: '2026-07-01T00:00:00Z' }),
+      make({ content: 'A different, equally concrete memory about pricing.', timestamp: '2026-06-01T00:00:00Z' }),
+    ];
+    const result = selectBriefingHighlights(input);
+    const benchmarks = result.filter(f => (f.content ?? '').startsWith('LoCoMo benchmark'));
+    expect(benchmarks).toHaveLength(1);
+    // Earliest-learned copy is kept.
+    expect(benchmarks[0].timestamp).toBe('2026-07-01T00:00:00Z');
+  });
+
+  it('collapses near-duplicates that differ only by a bare "audit-<digits>" id (live wave-4 QA regression)', () => {
+    // Reproduces the actual finding: "Imran uses 2x2 frameworks…" appeared
+    // twice in the briefing, differing only by "audit-1782648502308" vs
+    // "audit-1782638749061" — a form RUN_ID_RE didn't cover (no "run" word).
+    const input = [
+      make({ content: 'Imran uses 2x2 frameworks and wants every client decision remembered by account. (audit-1782648502308)', timestamp: '2026-07-04T00:00:00Z' }),
+      make({ content: 'Imran uses 2x2 frameworks and wants every client decision remembered by account. (audit-1782638749061)', timestamp: '2026-07-01T00:00:00Z' }),
+    ];
+    const result = selectBriefingHighlights(input);
+    const imran = result.filter(f => (f.content ?? '').startsWith('Imran uses 2x2'));
+    expect(imran).toHaveLength(1);
+    expect(imran[0].timestamp).toBe('2026-07-01T00:00:00Z');
+  });
+
   it('filters out content shorter than 20 chars', () => {
     const input = [make({ content: 'short' }), make({ content: '' }), make({ content: 'x'.repeat(50) })];
     const result = selectBriefingHighlights(input);
