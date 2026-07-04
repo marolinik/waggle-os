@@ -274,3 +274,4 @@ bun.lock
 
 # /understand tool trash — regenerable deleted-graph JSON, not for the public repo
 .understand-anything/.trash*
+.gstack/

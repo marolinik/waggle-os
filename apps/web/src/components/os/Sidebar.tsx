@@ -21,6 +21,9 @@ export interface SidebarNavItem {
   to: string;
   /** Route prefixes that mark this item active (exact or `${prefix}/…`). */
   match: string[];
+  /** Optional predicate override for active state (used when a static prefix
+   *  can't express the route, e.g. Chat = /workspaces/:id/chat). */
+  activeWhen?: (pathname: string) => boolean;
   /** Optional attention count; only rendered when > 0. */
   badge?: number;
   /** Optional click override — e.g. open the workspace switcher when there is
@@ -60,7 +63,9 @@ const Sidebar = ({
   const { pathname } = useLocation();
 
   const isActive = (item: SidebarNavItem): boolean =>
-    item.match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+    item.activeWhen
+      ? item.activeWhen(pathname)
+      : item.match.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 
   const renderNavItem = (item: SidebarNavItem) => {
     const active = isActive(item);

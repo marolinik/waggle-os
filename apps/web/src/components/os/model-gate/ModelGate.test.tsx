@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     testApiKey: vi.fn(),
     setProviderKey: vi.fn(),
     pullLocalModel: vi.fn(),
+    probeProvider: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -43,6 +44,9 @@ beforeEach(() => {
   mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: true });
   mocks.adapter.setProviderKey.mockResolvedValue(undefined);
   mocks.adapter.pullLocalModel.mockResolvedValue({ ok: true });
+  // F3: default probe = network-degrade neutral (valid, not verified) so the
+  // key-presence tests keep their "You have a working model" wording.
+  mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -81,7 +85,9 @@ describe('ModelGate', () => {
     await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalledWith('anthropic', 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxx'));
     expect(mocks.adapter.testApiKey).toHaveBeenCalledWith('anthropic', 'sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxx', { live: true });
     expect(onModelReady).toHaveBeenCalled();
-    expect(await screen.findByText(/verified/i)).toBeInTheDocument();
+    // F3: the save confirmation AND the banner now both read "verified" — assert
+    // the specific saved-state line to disambiguate.
+    expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
   });
 
   it('a format-only valid key (not live-verified) saves but does NOT claim "verified"', async () => {
@@ -105,6 +111,38 @@ describe('ModelGate', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/rejected/i);
     expect(mocks.adapter.setProviderKey).not.toHaveBeenCalled();
     expect(onModelReady).not.toHaveBeenCalled();
+  });
+
+  // ── F3: probe-backed banner ──
+  it('probes the stored key and shows "Model verified" when the provider confirms it', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: true });
+    render(<ModelGate />);
+    expect(await screen.findByText(/model verified/i)).toBeInTheDocument();
+    expect(mocks.adapter.probeProvider).toHaveBeenCalledWith('anthropic');
+  });
+
+  it('a rejected stored key shows the honest "not responding" banner and opens the provider key input', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: false, verified: true, error: 'rejected' });
+    render(<ModelGate />);
+    expect(await screen.findByText(/not responding/i)).toBeInTheDocument();
+    // Grid auto-opened on the offending provider → its key input is visible.
+    expect(await screen.findByLabelText(/api key for anthropic/i)).toBeInTheDocument();
+  });
+
+  it('does not probe when nothing is keyed', async () => {
+    render(<ModelGate />);
+    expect(await screen.findByText(/no working model yet/i)).toBeInTheDocument();
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
+  it('a network-degraded probe (valid, not verified) keeps the neutral key-found wording', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
+    render(<ModelGate />);
+    expect(await screen.findByText(/you have a working model/i)).toBeInTheDocument();
+    expect(screen.queryByText(/model verified/i)).toBeNull();
   });
 
   it('the local tab pulls a model and fires onModelReady', async () => {

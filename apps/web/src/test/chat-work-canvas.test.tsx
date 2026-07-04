@@ -69,4 +69,21 @@ describe('BlockRenderer — activity grouping', () => {
     render(<BlockRenderer blocks={[writeBlock('out/report.md', '# R')]} />);
     expect(screen.getByTestId('chat-artifact-block')).toBeInTheDocument();
   });
+
+  it('F11: steps split by a tool_use (auto-recall) still yield ONE Activity card', () => {
+    const blocks: ContentBlock[] = [
+      { type: 'step', blockId: 's1', description: 'Recalling relevant memories', status: 'done' },
+      { type: 'tool_use', id: 't1', name: 'auto_recall', status: 'done', input: {}, result: '2 memories recalled' },
+      { type: 'step', blockId: 's2', description: 'Recalled 2 relevant memories', status: 'done' },
+      { type: 'step', blockId: 's3', description: 'Searched 3 sites', status: 'done' },
+    ];
+    render(<BlockRenderer blocks={blocks} />);
+    // Exactly one summary despite the tool_use splitting the step run.
+    expect(screen.getAllByText(/Worked across your memory/)).toHaveLength(1);
+    // Expanding the single card reveals all three step descriptions.
+    fireEvent.click(screen.getByRole('button', { expanded: false }));
+    expect(screen.getByText('Recalling relevant memories')).toBeInTheDocument();
+    expect(screen.getByText('Recalled 2 relevant memories')).toBeInTheDocument();
+    expect(screen.getByText('Searched 3 sites')).toBeInTheDocument();
+  });
 });

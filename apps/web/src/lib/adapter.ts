@@ -1995,6 +1995,21 @@ class LocalAdapter {
   }
 
   /**
+   * F3: live-probe a STORED provider key (resolved server-side from the Vault /
+   * config by provider id — no raw key crosses the wire). Powers the ModelGate
+   * readiness banner's "verified" state. Returns booleans only.
+   */
+  async probeProvider(
+    provider: string,
+  ): Promise<{ configured: boolean; valid: boolean; verified: boolean; error?: string }> {
+    const res = await this.fetch('/api/settings/probe-provider', {
+      method: 'POST',
+      body: JSON.stringify({ provider }),
+    });
+    return res.json();
+  }
+
+  /**
    * Write a provider API key to the Vault via PUT /api/settings (keyed by provider id —
    * the same name GET /api/providers reads `hasKey` from — which also invalidates the
    * server's key-validation cache). This is the canonical key→vault path; do NOT use the

@@ -109,10 +109,24 @@ describe('useBilling (P1b D3-4)', () => {
 // ── ShellContext tier (the severity-critical silent-FREE class) ────────────
 
 describe('ShellContext tier (P1b D3-4)', () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
   async function renderShell() {
     const { ShellProvider, useShell } = await import('@/providers/ShellContext');
     const wrapper = ({ children }: { children: React.ReactNode }) => <ShellProvider>{children}</ShellProvider>;
     return renderHook(() => useShell(), { wrapper });
+  }
+
+  /** Seed a completed-wizard onboarding blob so the trial gate's
+   *  onboardingCompleted precondition is met. `completedAt` past the 10-min
+   *  quiet window by default. */
+  function seedOnboardingCompleted(completedAt = Date.now() - 11 * 60_000) {
+    window.localStorage.setItem(
+      'waggle:onboarding',
+      JSON.stringify({ completed: true, step: 7, tier: 'power', completedAt }),
+    );
   }
 
   it('failed getTier touches neither billingTier nor trialInfo; tierResolved stays false', async () => {
@@ -145,6 +159,47 @@ describe('ShellContext tier (P1b D3-4)', () => {
     mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
     settleConnect();
     await waitFor(() => expect(result.current.tierError).toBeNull());
+  });
+
+  // ── F1: trial-expired auto-open gate ──
+  it('auto-opens the paywall once and stamps the snooze when trial expired + onboarding done', async () => {
+    seedOnboardingCompleted();
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TRIAL', trialExpired: true, capabilities: {}, usage: {} });
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.showTrialExpired).toBe(true));
+    expect(window.localStorage.getItem('waggle:trial-expired-last-shown-at')).not.toBeNull();
+  });
+
+  it('does NOT auto-open within the post-onboarding quiet window', async () => {
+    seedOnboardingCompleted(Date.now() - 60_000); // completed 1 min ago
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TRIAL', trialExpired: true, capabilities: {}, usage: {} });
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.tierResolved).toBe(true));
+    expect(result.current.showTrialExpired).toBe(false);
+  });
+
+  it('a dismissed paywall stays closed on later same-session refreshTier re-runs', async () => {
+    seedOnboardingCompleted();
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TRIAL', trialExpired: true, capabilities: {}, usage: {} });
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.showTrialExpired).toBe(true));
+    act(() => { result.current.setShowTrialExpired(false); });
+    await act(async () => { await result.current.refreshTier(); });
+    expect(result.current.showTrialExpired).toBe(false);
+  });
+
+  it('a fresh session (reload) within the 7-day snooze does not auto-open', async () => {
+    const now = Date.now();
+    seedOnboardingCompleted(now - 2 * 24 * 60 * 60_000);
+    window.localStorage.setItem('waggle:trial-expired-last-shown-at', String(now - 24 * 60 * 60_000));
+    mocks.adapter.getWorkspaces.mockResolvedValue([]);
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TRIAL', trialExpired: true, capabilities: {}, usage: {} });
+    const { result } = await renderShell();
+    await waitFor(() => expect(result.current.tierResolved).toBe(true));
+    expect(result.current.showTrialExpired).toBe(false);
   });
 });
 
@@ -306,5 +361,55 @@ describe('useChat error surfacing (P1b)', () => {
     const result = await sendFailing(new TypeError('fetch failed'));
     const last = result.current.messages[result.current.messages.length - 1];
     expect(last.content).toBe('Backend is offline. Connect to a Waggle server to start chatting.');
+  });
+
+  // ── F2/F4: sendMessage success reporting + retryLastFailed ──
+  it('sendMessage resolves true on a clean stream, false on HTTP failure', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({ workspaceId: 'ws-1', sessionId: 'sess-1' }));
+    await act(async () => { await Promise.resolve(); });
+
+    mocks.adapter.sendMessage.mockImplementation(async function* () {
+      yield { type: 'done', data: { content: 'hi there' } };
+    });
+    let ok: boolean | void = undefined;
+    await act(async () => { ok = await result.current.sendMessage('hello'); });
+    expect(ok).toBe(true);
+
+    mocks.adapter.sendMessage.mockImplementation(async function* (): AsyncGenerator<never> {
+      throw httpError(500, { error: 'boom' }, 'boom');
+      // eslint-disable-next-line no-unreachable
+      yield undefined as never;
+    });
+    let failed: boolean | void = undefined;
+    await act(async () => { failed = await result.current.sendMessage('again'); });
+    expect(failed).toBe(false);
+  });
+
+  it('retryLastFailed drops the failed pair and re-issues the same content (no duplicate user bubble)', async () => {
+    const { useChat } = await import('@/hooks/useChat');
+    const { result } = renderHook(() => useChat({ workspaceId: 'ws-1', sessionId: 'sess-1' }));
+    await act(async () => { await Promise.resolve(); });
+
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* (): AsyncGenerator<never> {
+      throw httpError(500, { error: 'boom' }, 'boom');
+      // eslint-disable-next-line no-unreachable
+      yield undefined as never;
+    });
+    await act(async () => { await result.current.sendMessage('hello'); });
+    expect(result.current.messages).toHaveLength(2); // user + assistant(error)
+
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'done', data: { content: 'recovered' } };
+    });
+    await act(async () => {
+      result.current.retryLastFailed();
+      await new Promise(r => setTimeout(r, 0));
+    });
+
+    const users = result.current.messages.filter(m => m.role === 'user');
+    expect(users).toHaveLength(1);
+    expect(users[0].content).toBe('hello');
+    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith('ws-1', 'hello', 'sess-1', undefined, undefined);
   });
 });

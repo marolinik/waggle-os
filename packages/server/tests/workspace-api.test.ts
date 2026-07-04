@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -404,6 +404,60 @@ describe('Workspace & Session API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.valid).toBe(true);
+  });
+
+  // --- F3: probe-provider (live-probe a STORED key) ---
+
+  it('probe-provider returns configured:false when no key is stored', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/settings/probe-provider',
+      payload: { provider: 'anthropic' },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body).toMatchObject({ configured: false, valid: false, verified: false });
+  });
+
+  it('probe-provider rejects a body missing provider (validateBody 400)', async () => {
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/settings/probe-provider',
+      payload: {},
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('probe-provider reports valid:false when the provider rejects the stored key', async () => {
+    const { _clearKeyProbeCache } = await import('../src/local/llm-key-probe.js');
+    const configPath = path.join(dataDir, 'config.json');
+    const original = fs.readFileSync(configPath, 'utf-8');
+    // Stash a format-valid anthropic key in config (fallback path of the route).
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        defaultModel: 'test/model',
+        providers: { anthropic: { apiKey: 'sk-ant-1234567890abcdefg', models: [] } },
+      }),
+      'utf-8',
+    );
+    _clearKeyProbeCache(); // 60s TTL — avoid a stale verdict from another case
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 401 })));
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-provider',
+        payload: { provider: 'anthropic' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.configured).toBe(true);
+      expect(body.valid).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+      _clearKeyProbeCache();
+      fs.writeFileSync(configPath, original, 'utf-8');
+    }
   });
 
   // --- E3: Progress extraction tests ---

@@ -53,6 +53,8 @@ interface ChatWindowInstanceProps {
   initialPersona?: string;
   /** QW-1: starter prompt prefilled into the chat input once on first mount. */
   initialMessage?: string;
+  /** F2: auto-send the initialMessage once the chat is ready (wizard "Let's go"). */
+  autoSendInitial?: boolean;
   templateId?: string;
   storageType?: 'virtual' | 'local' | 'team';
   /**
@@ -76,6 +78,7 @@ const ChatWindowInstance = ({
   workspaceName,
   initialPersona,
   initialMessage,
+  autoSendInitial = false,
   templateId,
   storageType,
   onPersonaChange,
@@ -107,7 +110,7 @@ const ChatWindowInstance = ({
       ? { ...s, title: 'New session' }
       : s,
   );
-  const { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction } = useChat({
+  const { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
     sessionId: activeSessionId,
     persona: currentPersona,
@@ -256,6 +259,9 @@ const ChatWindowInstance = ({
       onAutonomyChange={onAutonomyChange}
       onContextRail={onContextRail}
       initialMessage={initialMessage}
+      autoSendInitial={autoSendInitial}
+      historyLoaded={historyLoaded}
+      onRetry={retryLastFailed}
     />
   );
 };

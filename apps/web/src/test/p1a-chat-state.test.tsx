@@ -185,6 +185,13 @@ describe('seedChat (§4.2 one-shot)', () => {
     expect(localStorage.getItem(CHAT_STATE_KEY)).toBeNull();
     expect(takeChatSeed('ws-x')).toEqual({ initialMessage: 'draft' });
   });
+
+  it('F2: round-trips the autoSend flag and is still never persisted', () => {
+    seedChat('ws-auto', { personaId: 'coder', initialMessage: 'Ship it', autoSend: true });
+    expect(localStorage.getItem(CHAT_STATE_KEY)).toBeNull();
+    expect(takeChatSeed('ws-auto')).toEqual({ personaId: 'coder', initialMessage: 'Ship it', autoSend: true });
+    expect(takeChatSeed('ws-auto')).toBeUndefined();
+  });
 });
 
 describe('composeChatTitle (§3.2 getWindowTitle relocation)', () => {

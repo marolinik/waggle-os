@@ -86,6 +86,15 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
 
   const hasContent = ctx.greeting || ctx.summary || (ctx.recentMemories?.length ?? 0) > 0 || (ctx.suggestedPrompts?.length ?? 0) > 0;
 
+  // F9: a brand-new workspace (0 sessions) — even one seeded with imported
+  // memories — must not greet "here's where you left off" / "across 0 sessions".
+  // View-layer override only; keyed on sessionCount so `stats` absent = old
+  // behavior. Server greeting/summary are left untouched (other consumers).
+  const isFirstVisit = ctx.stats?.sessionCount === 0;
+  const displayGreeting = isFirstVisit
+    ? "This is a fresh workspace — here's what it's set up to do"
+    : ctx.greeting;
+
   if (collapsed) {
     return (
       <div className="shrink-0 p-3 flex items-center justify-between border-b border-border/30" data-testid="workspace-briefing-collapsed">
@@ -98,7 +107,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
         >
           <ChevronDown className="w-3.5 h-3.5" />
           <span className="font-display">
-            {ctx.greeting || (ctx.workspace?.name ? `Briefing for ${ctx.workspace.name}` : 'Briefing')}
+            {displayGreeting || (ctx.workspace?.name ? `Briefing for ${ctx.workspace.name}` : 'Briefing')}
           </span>
         </button>
       </div>
@@ -111,12 +120,14 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       <div className="mb-6 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-display font-bold text-foreground mb-1">
-            {ctx.greeting || (ctx.workspace?.name ? `Welcome to ${ctx.workspace.name}` : 'Welcome')}
+            {displayGreeting || (ctx.workspace?.name ? `Welcome to ${ctx.workspace.name}` : 'Welcome')}
           </h2>
-          {ctx.summary && (
+          {/* F9: on first visit suppress the "…across 0 sessions" summary and
+              prefer the template welcome copy. */}
+          {!isFirstVisit && ctx.summary && (
             <p className="text-sm text-muted-foreground">{ctx.summary}</p>
           )}
-          {ctx.welcomeMessage && !ctx.summary && (
+          {ctx.welcomeMessage && (isFirstVisit || !ctx.summary) && (
             <p className="text-sm text-muted-foreground">{ctx.welcomeMessage}</p>
           )}
         </div>
@@ -137,7 +148,10 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       {ctx.stats && (
         <div className="flex gap-4 mb-5 text-[11px] text-muted-foreground">
           <span><Brain className="w-3 h-3 inline mr-1" />{ctx.stats.memoryCount} memories</span>
-          <span><MessageSquare className="w-3 h-3 inline mr-1" />{ctx.stats.sessionCount} sessions</span>
+          {/* F9: "0 sessions" reads as broken on a fresh workspace — hide it until there's ≥1. */}
+          {ctx.stats.sessionCount > 0 && (
+            <span><MessageSquare className="w-3 h-3 inline mr-1" />{ctx.stats.sessionCount} sessions</span>
+          )}
           {ctx.lastActive && (
             <span><Clock className="w-3 h-3 inline mr-1" />Last active: {new Date(ctx.lastActive).toLocaleDateString()}</span>
           )}

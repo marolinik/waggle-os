@@ -242,6 +242,26 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     return { ...fmt, verified: false };
   });
 
+  // POST /api/settings/probe-provider — live-probe a STORED provider key (F3).
+  // test-key only probes a RAW key sent in the body (used on key SAVE); this
+  // resolves the vaulted/config key by provider id so the ModelGate banner can
+  // verify readiness on mount without the user re-entering the key. Returns only
+  // booleans + an error string — the key itself never leaves the server.
+  const probeProviderSchema = z.object({ provider: z.string().min(1) });
+  server.post<{ Body: { provider: string } }>(
+    '/api/settings/probe-provider',
+    { preHandler: validateBody(probeProviderSchema) },
+    async (request) => {
+      const provider = request.body.provider.toLowerCase();
+      const key =
+        server.vault?.get(provider)?.value ??
+        new WaggleConfig(server.localConfig.dataDir).getProviders()[provider]?.apiKey;
+      if (!key) return { configured: false, valid: false, verified: false };
+      // probeProviderKey brings its own 5s timeout + 60s TTL cache.
+      return { configured: true, ...(await probeProviderKey(provider, key)) };
+    },
+  );
+
   // ── Permission settings ─────────────────────────────────────────────
 
   const DEFAULTS: PermissionsData = {

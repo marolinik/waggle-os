@@ -4,12 +4,15 @@ import TextBlock from './TextBlock';
 import ToolUseBlock from './ToolUseBlock';
 import ModelSwitchBlock from './ModelSwitchBlock';
 import ArtifactBlock, { isArtifactBlock } from './ArtifactBlock';
+import ErrorBlock from './ErrorBlock';
 import { ActivityStream, type ActivityStep } from '../../warm';
 import { frameSourceLabel } from '@/lib/frame-source';
 
 interface BlockRendererProps {
   blocks: ContentBlock[];
   isStreaming?: boolean;
+  /** F4: re-issue the last failed turn (threaded to error blocks). */
+  onRetry?: () => void;
 }
 
 function getBlockKey(block: ContentBlock, index: number): string {
@@ -19,13 +22,17 @@ function getBlockKey(block: ContentBlock, index: number): string {
 }
 
 /**
- * Group a consecutive run of "thinking" steps into one collapsible Activity
- * card — the design's "the magic" surface (SCREENS §02). Default-open on the
- * active (streaming) turn; collapsed on prior turns (history loads with
+ * Group ALL "thinking" steps of a turn into one collapsible Activity card —
+ * the design's "the magic" surface (SCREENS §02). Default-open on the active
+ * (streaming) turn; collapsed on prior turns (history loads with
  * isStreaming=false). Memory-recall steps carry provenance (PR3.5): the
  * distinct sources of what was recalled, composed into a ⬡ pill via the FE
  * label map. Non-memory steps stay provenance-less by design — never a
  * fabricated source.
+ *
+ * F11: steps that are split by a non-step block (e.g. the auto-recall tool_use
+ * between the "Recalling…" and "Recalled N…" steps) must still yield exactly
+ * ONE card per turn — see the single-group anchoring in BlockRenderer below.
  */
 function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: boolean): ReactNode {
   const anyRunning = steps.some(s => s.status === 'running');
@@ -50,25 +57,20 @@ function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: bo
   );
 }
 
-const BlockRenderer = ({ blocks, isStreaming }: BlockRendererProps) => {
+const BlockRenderer = ({ blocks, isStreaming, onRetry }: BlockRendererProps) => {
   const out: ReactNode[] = [];
-  let stepRun: StepContentBlock[] = [];
-  let stepRunStart = 0;
-
-  const flushSteps = () => {
-    if (stepRun.length === 0) return;
-    out.push(renderStepGroup(stepRun, `steps-${stepRunStart}`, !!isStreaming));
-    stepRun = [];
-  };
+  // F11: one Activity card per turn. Collect every step of the turn and render
+  // the single group at the FIRST step's position; skip the rest. Non-step
+  // blocks (tool rows, artifacts, text, model_switch, error) keep their order,
+  // so a tool_use between two steps no longer splits the run into two cards.
+  const allSteps = blocks.filter((b): b is StepContentBlock => b.type === 'step');
+  const firstStepIdx = blocks.findIndex(b => b.type === 'step');
 
   blocks.forEach((block, i) => {
     if (block.type === 'step') {
-      if (stepRun.length === 0) stepRunStart = i;
-      stepRun.push(block);
+      if (i === firstStepIdx) out.push(renderStepGroup(allSteps, 'activity', !!isStreaming));
       return;
     }
-    // Any non-step block ends the current activity run.
-    flushSteps();
     const key = getBlockKey(block, i);
     const isLast = i === blocks.length - 1;
     switch (block.type) {
@@ -88,17 +90,12 @@ const BlockRenderer = ({ blocks, isStreaming }: BlockRendererProps) => {
         out.push(<ModelSwitchBlock key={key} block={block} />);
         break;
       case 'error':
-        out.push(
-          <div key={key} className="flex items-center gap-2 py-1 text-[11px] text-[var(--risk)]">
-            <span>&#x26A0;&#xFE0F; {block.message}</span>
-          </div>,
-        );
+        out.push(<ErrorBlock key={key} block={block} onRetry={onRetry} />);
         break;
       default:
         break;
     }
   });
-  flushSteps();
 
   return <>{out}</>;
 };

@@ -205,6 +205,7 @@ All paths are relative to the sidecar base (`http://127.0.0.1:3333`). Source fil
 | PUT | `/api/settings` | `settings.ts` | Update models/budgets/providers. |
 | PATCH | `/api/settings` | `settings.ts` | Partial merge (non-provider). |
 | POST | `/api/settings/test-key` | `settings.ts` | Validate API-key format (no network). |
+| POST | `/api/settings/probe-provider` | `settings.ts` | Live-probe a STORED provider key by id (F3). |
 | GET | `/api/settings/permissions` | `settings.ts` | Read autonomy/gates/overrides. |
 | PUT | `/api/settings/permissions` | `settings.ts` | Save permission settings. |
 | GET | `/api/tier` | `settings.ts` | **Authoritative tier source** (effective tier, trial, capabilities). |

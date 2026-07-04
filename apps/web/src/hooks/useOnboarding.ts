@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { UserTier } from '@/lib/dock-tiers';
 import { adapter } from '@/lib/adapter';
+import { ONBOARDED_THIS_SESSION_KEY, COACH_MARKS_FORCE_KEY } from '@/lib/coach-marks-gate';
 import {
   isTauri,
   isFirstLaunch as tauriIsFirstLaunch,
@@ -16,6 +17,9 @@ export interface OnboardingState {
   templateId?: string;
   personaId?: string;
   tooltipsDismissed?: boolean;
+  /** Epoch ms the wizard was completed via update() (F1/F5). Legacy/returning
+   *  profiles that auto-complete leave this undefined on purpose. */
+  completedAt?: number;
   // --- Phase 2D additive fields (localStorage only, back-compat) ---
   /** Set once the Who-Are-You step has written profile + seeded identity (B8). */
   profileSeeded?: boolean;
@@ -204,8 +208,19 @@ export const useOnboarding = () => {
   const update = useCallback((updates: Partial<OnboardingState>) => {
     setState(prev => {
       const next = { ...prev, ...updates };
-      saveState(next);
-      if (next.completed && !prev.completed) {
+      // F1/F5: stamp the completion time on the transition ONLY (immutable copy)
+      // so the trial-modal gate + coach-marks gate can quiet themselves right
+      // after the wizard. The two returning-user auto-complete effects use
+      // saveState() directly and deliberately leave completedAt unset.
+      const justCompleted = next.completed && !prev.completed;
+      const stamped = justCompleted ? { ...next, completedAt: Date.now() } : next;
+      saveState(stamped);
+      if (justCompleted) {
+        // F5: per-session latch so the coach-mark carousel defers on the very
+        // first landing right after finishing the wizard.
+        try {
+          sessionStorage.setItem(ONBOARDED_THIS_SESSION_KEY, '1');
+        } catch { /* storage disabled — the completedAt window still covers first-run */ }
         // P4: stamp the server-side completion flag — the durable signal the
         // auto-complete effect above keys on. Fire-and-forget; failure is
         // non-fatal (localStorage still says completed for this webview).
@@ -221,7 +236,7 @@ export const useOnboarding = () => {
           });
         }
       }
-      return next;
+      return stamped;
     });
   }, []);
 
@@ -244,6 +259,11 @@ export const useOnboarding = () => {
     try {
       window.localStorage.removeItem('waggle:tooltips_done');
     } catch { /* storage disabled — state-side flip still triggers re-render */ }
+    // F5: force the coach-marks gate to show immediately, bypassing the
+    // post-completion deferral (this is an explicit user "replay" action).
+    try {
+      sessionStorage.setItem(COACH_MARKS_FORCE_KEY, '1');
+    } catch { /* storage disabled — tooltipsDismissed flip still re-renders */ }
     setState(prev => {
       const next = { ...prev, tooltipsDismissed: false };
       saveState(next);

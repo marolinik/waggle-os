@@ -42,6 +42,8 @@ export interface ChatWidgetEntry {
 export interface ChatSeed {
   personaId?: string;
   initialMessage?: string;
+  /** F2: auto-send the initialMessage once the chat is ready (wizard "Let's go"). */
+  autoSend?: boolean;
 }
 
 // Relocated verbatim from useWindowManager.ts:86-105.

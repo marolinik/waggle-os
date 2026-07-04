@@ -134,6 +134,7 @@ const ChatHostInstance = ({ workspaceId }: { workspaceId: string }) => {
           storageType={ws?.storageType}
           initialPersona={personaId}
           initialMessage={seed?.initialMessage}
+          autoSendInitial={seed?.autoSend ?? false}
           onPersonaChange={setPersona}
           autonomyLevel={entry.autonomyLevel ?? 'normal'}
           autonomyExpiresAt={entry.autonomyExpiresAt ?? null}

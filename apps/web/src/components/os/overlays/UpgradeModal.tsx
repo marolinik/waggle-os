@@ -39,21 +39,25 @@ function CellValue({ value, isBool }: { value: string; isBool: boolean }) {
 interface UpgradeModalProps {
   onStartTrial?: () => void;
   onUpgrade?: (tier: 'PRO' | 'TEAMS') => void;
+  /** F5: report open/close so the shell can suppress coach-marks while this
+   *  event-driven modal (invisible to AppShell otherwise) is up. */
+  onOpenChange?: (open: boolean) => void;
 }
 
-export default function UpgradeModal({ onStartTrial, onUpgrade }: UpgradeModalProps) {
+export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: UpgradeModalProps) {
   const [event, setEvent] = useState<TierEvent | null>(null);
 
   const handleTierInsufficient = useCallback((e: Event) => {
     setEvent((e as CustomEvent<TierEvent>).detail);
-  }, []);
+    onOpenChange?.(true);
+  }, [onOpenChange]);
 
   useEffect(() => {
     window.addEventListener('waggle:tier-insufficient', handleTierInsufficient);
     return () => window.removeEventListener('waggle:tier-insufficient', handleTierInsufficient);
   }, [handleTierInsufficient]);
 
-  const close = useCallback(() => setEvent(null), []);
+  const close = useCallback(() => { setEvent(null); onOpenChange?.(false); }, [onOpenChange]);
 
   // A11y (WCAG 2.1.1/2.4.3): Escape closes, Tab is trapped within the dialog,
   // focus moves in on open and restores on close. Replaces the prior hand-rolled

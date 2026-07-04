@@ -24,8 +24,14 @@
  * Desktop.tsx itself is untouched at this stage; it keeps hosting its own
  * copies until the Stage-C flip mounts AppShell.
  */
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { adapter } from '@/lib/adapter';
+import {
+  shouldAutoOpenTrialModal,
+  readOnboardingCompletionSnapshot,
+  readTrialModalLastAutoOpenedAt,
+  writeTrialModalLastAutoOpenedAt,
+} from '@/lib/trial-expired-gate';
 import type { BillingTier, UserTier } from '@/lib/dock-tiers';
 import type { ContextRailTarget } from '@/components/os/overlays/ContextRail';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
@@ -121,6 +127,10 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
   const [tierResolved, setTierResolved] = useState(false);
   const [tierError, setTierError] = useState<string | null>(null);
   const [showTrialExpired, setShowTrialExpired] = useState(false);
+  // F1: auto-open the paywall at most once per page-load session. The gate
+  // (localStorage-backed 7d snooze + post-onboarding quiet window) plus this
+  // ref make refreshTier's mount/focus/online/connect-settled re-runs harmless.
+  const trialModalShownThisSessionRef = useRef(false);
   // Extracted so post-action paths (start-trial, post-checkout-redirect)
   // can re-pull tier/trial state without duplicating the fetch+parse logic.
   // P1b D3-4: getTier now THROWS on HTTP failure (adapter chokepoint), so the
@@ -139,7 +149,24 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
       }
       setTierResolved(true);
       setTierError(null);
-      if (data.trialExpired) setShowTrialExpired(true);
+      // F1: gate the auto-open. Reads flow through localStorage/refs so this
+      // []-dep callback never closes over stale onboarding state. Stamp at OPEN
+      // time (not dismiss) so a reload while the modal is up can't re-fire it.
+      if (data.trialExpired) {
+        const ob = readOnboardingCompletionSnapshot();
+        if (shouldAutoOpenTrialModal({
+          trialExpired: true,
+          onboardingCompleted: ob.completed,
+          onboardingCompletedAt: ob.completedAt,
+          lastAutoOpenedAt: readTrialModalLastAutoOpenedAt(),
+          shownThisSession: trialModalShownThisSessionRef.current,
+          now: Date.now(),
+        })) {
+          trialModalShownThisSessionRef.current = true;
+          writeTrialModalLastAutoOpenedAt();
+          setShowTrialExpired(true);
+        }
+      }
     } catch (e) {
       setTierError(e instanceof Error ? e.message : 'Tier lookup failed');
     }

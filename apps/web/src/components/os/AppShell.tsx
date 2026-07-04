@@ -39,6 +39,7 @@ import TrialExpiredModal from './overlays/TrialExpiredModal';
 import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
 import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '@/lib/login-briefing';
+import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
 import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
@@ -114,6 +115,9 @@ const ShellLayout = () => {
   // call can race the session-token attach and 401 → name:null. Falls back to
   // "Account" in the row when unconfigured.
   const [userName, setUserName] = useState<string | null>(null);
+  // F5: the UpgradeModal self-opens on a window event, so the shell can't see
+  // its open state without this. Feeds `anyModalOpen` so coach-marks hide under it.
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const loadIdentity = () => {
@@ -222,7 +226,9 @@ const ShellLayout = () => {
     // mount. The name is resolved live from the workspaces list (refresh
     // below), so the wizard's workspaceName arg is no longer needed.
     void workspaceName;
-    seedChat(workspaceId, { personaId, initialMessage: firstMessage });
+    // F2: auto-send the wizard's first task so "Let's go" lands the user in a
+    // live conversation instead of a pre-filled-but-unsent composer.
+    seedChat(workspaceId, { personaId, initialMessage: firstMessage, autoSend: true });
     // P2 fix (acceptance check 8 live-run): the wizard usually finishes at
     // pathname '/', and completing onboarding (normal-priority state) commits
     // BEFORE this navigate (a v7_startTransition update) — so the shell
@@ -260,7 +266,11 @@ const ShellLayout = () => {
     // user picks a workspace to chat in.
     {
       key: 'chat', label: 'Chat', icon: MessageSquare,
-      to: routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }), match: ['/workspaces'],
+      to: routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }),
+      // F8: only the chat TAB (/workspaces/:id/chat) marks Chat active — a
+      // static '/workspaces' prefix wrongly lit Chat on Overview and every
+      // other workspace tab. Workspace-agnostic regex, no id coupling.
+      match: [], activeWhen: (p: string) => /^\/workspaces\/[^/]+\/chat(\/|$)/.test(p),
       onClick: hasRealActiveWorkspace ? undefined : ov.toggleWorkspaceSwitcher,
     },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
@@ -312,6 +322,14 @@ const ShellLayout = () => {
       />
     );
   }
+
+  // F5: any shell overlay open ⇒ suppress the coach-mark carousel (hide-but-keep
+  // tour state, per OnboardingTooltips' `suppressed` contract). Includes the
+  // event-driven UpgradeModal (via upgradeOpen) and the trial paywall.
+  const anyModalOpen =
+    ov.showGlobalSearch || ov.showCreateWorkspace || ov.showPersonaSwitcher ||
+    ov.showWorkspaceSwitcher || ov.showNotifications || ov.showKeyboardHelp ||
+    ov.showSpawnAgent || showTrialExpired || upgradeOpen;
 
   return (
     <div className="relative w-screen h-screen overflow-hidden select-none">
@@ -392,11 +410,17 @@ const ShellLayout = () => {
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />
       <SpawnAgentDialog open={ov.showSpawnAgent} onClose={() => ov.setShowSpawnAgent(false)}
         workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)} />
-      {onboardingState.completed && !onboardingState.tooltipsDismissed && (
+      {shouldShowCoachMarks({
+        completed: onboardingState.completed,
+        tooltipsDismissed: !!onboardingState.tooltipsDismissed,
+        completedAt: onboardingState.completedAt ?? null,
+        completedThisSession: readOnboardedThisSession(),
+        forceTour: readForceTour(),
+      }) && (
         <OnboardingTooltips
           templateId={onboardingState.templateId}
-          onDismiss={() => updateOnboarding({ tooltipsDismissed: true })}
-          suppressed={ov.showGlobalSearch}
+          onDismiss={() => { clearForceTour(); updateOnboarding({ tooltipsDismissed: true }); }}
+          suppressed={anyModalOpen}
         />
       )}
       {/* FR #45: one post-onboarding overlay at a time — Tour first, then the
@@ -420,6 +444,7 @@ const ShellLayout = () => {
       <ContextRail target={contextRailTarget} onClose={() => setContextRailTarget(null)} />
 
       <UpgradeModal
+        onOpenChange={setUpgradeOpen}
         onStartTrial={() => {
           adapter.startTrial().then(refreshTier).catch(refreshTier);
         }}

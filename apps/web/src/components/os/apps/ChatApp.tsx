@@ -15,6 +15,7 @@ import WorkspaceBriefing from '@/components/os/WorkspaceBriefing';
 import { useContainerWidth } from '@/hooks/useContainerWidth';
 import { shouldCollapseChatHeader } from '@/lib/chat-header-layout';
 import { extractSuggestedActions } from '@/lib/suggested-actions';
+import { shouldAutoSendFirstTask } from '@/lib/auto-send-first-task';
 import {
   buildRecallQuery,
   previewRecall,
@@ -34,7 +35,9 @@ type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 interface ChatAppProps {
   messages: ChatMessage[];
   isLoading: boolean;
-  onSendMessage: (content: string) => void;
+  /** F2: widened to observe send success for the wizard auto-send. Existing
+   *  callers ignore the return value — non-breaking. */
+  onSendMessage: (content: string) => void | Promise<boolean | void>;
   onClearHistory: () => void;
   pendingApproval: ApprovalRequest | null;
   onApprove: (id: string, approved: boolean, opts?: { always?: boolean }) => void;
@@ -61,6 +64,12 @@ interface ChatAppProps {
   onContextRail?: (target: { type: 'message'; id: string; label: string }) => void;
   /** QW-1: starter prompt prefilled into input once on first mount (used by onboarding). */
   initialMessage?: string;
+  /** F2: auto-send the initialMessage once the chat is ready (wizard "Let's go"). */
+  autoSendInitial?: boolean;
+  /** F2: true once a real session's history has landed — gates the auto-send. */
+  historyLoaded?: boolean;
+  /** F4: re-issue the last failed turn (Retry button on error blocks). */
+  onRetry?: () => void;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -460,6 +469,9 @@ const ChatApp = ({
   autonomyLevel = 'normal', autonomyExpiresAt = null, onAutonomyChange,
   onContextRail,
   initialMessage,
+  autoSendInitial = false,
+  historyLoaded = false,
+  onRetry,
 }: ChatAppProps) => {
   const [input, setInput] = useState(initialMessage ?? '');
   const [showSlash, setShowSlash] = useState(false);
@@ -611,6 +623,26 @@ const ChatApp = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
+
+  // F2: mount-once auto-send of the wizard's first task. The prefill (line ~464)
+  // stays visible — the same "about to ship" beat as the FR #32 starter prompts —
+  // and this fires it exactly once, after the session has landed and history has
+  // been fetched (so the optimistic turn isn't clobbered by the history replace).
+  const autoSentRef = useRef(false);
+  useEffect(() => {
+    const inputUnchanged = !inputRef.current || inputRef.current.value === initialMessage;
+    if (!shouldAutoSendFirstTask({
+      autoSendInitial, alreadySent: autoSentRef.current, initialMessage,
+      activeSessionId, historyLoaded, inputUnchanged,
+    })) return;
+    const text = (initialMessage as string).trim();
+    autoSentRef.current = true; // consume BEFORE dispatch: StrictMode/effect-rerun safe
+    void Promise.resolve(onSendMessage(text)).then((ok) => {
+      // Clear only if untouched and the send succeeded; on failure leave the
+      // text in the composer (useChat already rendered the inline error block).
+      if (ok !== false) setInput(prev => (prev === initialMessage ? '' : prev));
+    });
+  }, [autoSendInitial, initialMessage, activeSessionId, historyLoaded, onSendMessage]);
 
   const handleSend = () => {
     const text = input.trim();
@@ -1142,6 +1174,7 @@ const ChatApp = ({
                     <BlockRenderer
                       blocks={msg.blocks}
                       isStreaming={isLoading && msg === messages[messages.length - 1]}
+                      onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
                     />
                   ) : (
                     <span className="whitespace-pre-wrap">{msg.content}</span>

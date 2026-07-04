@@ -54,6 +54,14 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   const [keyValue, setKeyValue] = useState('');
   const [validate, setValidate] = useState<ValidateState>({ status: 'idle' });
 
+  // F3: live probe of the STORED cloud key(s) so the banner stops claiming
+  // readiness from mere key PRESENCE. 'unverified' = network-degrade / no cheap
+  // probe / timeout (honest neutral, not the scary "failed").
+  const [probe, setProbe] = useState<{
+    status: 'idle' | 'probing' | 'verified' | 'failed' | 'unverified';
+    failedProvider?: string;
+  }>({ status: 'idle' });
+
   // Local models
   const [local, setLocal] = useState<LocalStatus | null>(null);
   const [pullName, setPullName] = useState('');
@@ -73,6 +81,46 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   const cloudReady = activeProviders.length > 0;
   const localReady = (local?.totalLocalModels ?? 0) > 0;
   const ready = cloudReady || localReady;
+
+  // F3: on mount (once providers land), live-probe the stored cloud key(s). If
+  // only local models exist, skip — totalLocalModels is already a live query.
+  const activeProviderIds = activeProviders.map((p) => p.id).join(',');
+  useEffect(() => {
+    if (providersLoading || activeProviders.length === 0) return;
+    let cancelled = false;
+    setProbe({ status: 'probing' });
+    const ids = activeProviders.map((p) => p.id);
+    const run = Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
+    // Client-side guard on top of the server's 5s AbortSignal so a hung sidecar
+    // can't strand the banner on 'probing'.
+    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
+    void Promise.race([run, timeout]).then((outcome) => {
+      if (cancelled) return;
+      if (outcome === 'timeout') { setProbe({ status: 'unverified' }); return; }
+      let verified = false;
+      let failedProvider: string | undefined;
+      outcome.forEach((r, i) => {
+        if (r.status !== 'fulfilled') return;
+        const v = r.value;
+        if (v.configured && v.valid && v.verified) verified = true;
+        else if (v.configured && !v.valid && !failedProvider) failedProvider = ids[i];
+      });
+      if (verified) setProbe({ status: 'verified' });
+      else if (failedProvider) {
+        setProbe({ status: 'failed', failedProvider });
+        // Open the provider grid + key input on the offending provider.
+        setTab('cloud');
+        setSelected(failedProvider);
+      } else {
+        setProbe({ status: 'unverified' });
+      }
+    });
+    return () => { cancelled = true; };
+    // probe.status must NOT be a dep: setting 'probing' inside would re-run the
+    // effect and its cleanup would cancel every outcome (banner stuck probing).
+    // Re-probing on provider-list changes is correct; the server caches 60s.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providersLoading, activeProviderIds]);
 
   const keyProviders = useMemo(
     () => providers.filter((p) => p.requiresKey && p.id !== 'ollama'),
@@ -98,6 +146,9 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       }
       await adapter.setProviderKey(selectedProvider.id, key);
       setValidate({ status: 'saved', verified: res.verified === true });
+      // F3: a freshly verified key upgrades the banner immediately, without
+      // waiting out the 60s probe cache.
+      if (res.verified === true) setProbe({ status: 'verified' });
       setKeyValue('');
       await refreshProviders();
       onModelReady?.();
@@ -132,27 +183,49 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
 
   return (
     <div className={wrap}>
-      {/* Readiness banner — mirrors the shared useHasWorkingModel signal. */}
-      <div
-        role="status"
-        className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm ${
-          ready
-            ? 'border-primary/30 bg-primary/10 text-foreground'
-            : 'border-border bg-muted/40 text-muted-foreground'
-        }`}
-      >
-        {ready ? (
-          <>
-            <Check className="size-4 shrink-0 text-primary" aria-hidden />
-            <span>You have a working model — you’re ready to go.</span>
-          </>
-        ) : (
-          <>
-            <AlertTriangle className="size-4 shrink-0" aria-hidden />
-            <span>No working model yet — add a provider key or a local model below.</span>
-          </>
-        )}
-      </div>
+      {/* Readiness banner — F3: probe-backed, not key-presence-backed. */}
+      {probe.status === 'probing' ? (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+          <span>Model key found — checking it works…</span>
+        </div>
+      ) : probe.status === 'verified' ? (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-foreground">
+          <Check className="size-4 shrink-0 text-primary" aria-hidden />
+          <span>Model verified — you’re ready to go.</span>
+        </div>
+      ) : probe.status === 'failed' ? (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2.5 text-sm text-foreground">
+          <AlertTriangle className="size-4 shrink-0 text-yellow-500" aria-hidden />
+          <span>Key found but not responding — you can fix it now or continue.</span>
+        </div>
+      ) : probe.status === 'unverified' ? (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+          <AlertTriangle className="size-4 shrink-0" aria-hidden />
+          <span>Couldn’t verify your key just now — you can continue and check it in Settings later.</span>
+        </div>
+      ) : (
+        <div
+          role="status"
+          className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-sm ${
+            ready
+              ? 'border-primary/30 bg-primary/10 text-foreground'
+              : 'border-border bg-muted/40 text-muted-foreground'
+          }`}
+        >
+          {ready ? (
+            <>
+              <Check className="size-4 shrink-0 text-primary" aria-hidden />
+              <span>You have a working model — you’re ready to go.</span>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="size-4 shrink-0" aria-hidden />
+              <span>No working model yet — add a provider key or a local model below.</span>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div role="tablist" aria-label="How to add a model" className="flex gap-1 rounded-lg bg-muted/40 p-1">

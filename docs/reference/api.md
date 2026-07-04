@@ -67,6 +67,7 @@ The chat endpoint streams responses via Server-Sent Events (SSE). Events include
 | GET | `/api/settings` | Read config: default model, providers (masked keys), paths |
 | PUT | `/api/settings` | Update config. Body: `{ defaultModel?, providers? }` |
 | POST | `/api/settings/test-key` | Validate API key format. Body: `{ provider, apiKey }` |
+| POST | `/api/settings/probe-provider` | Live-probe a STORED provider key by id. Body: `{ provider }` → `{ configured, valid, verified, error? }` |
 | GET | `/api/settings/permissions` | Read permission settings (YOLO mode, external gates) |
 | PUT | `/api/settings/permissions` | Update permissions. Body: `{ yoloMode?, externalGates?, workspaceOverrides? }` |
 

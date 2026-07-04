@@ -551,7 +551,10 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent
-        className="overflow-hidden p-0 shadow-2xl sm:max-w-xl"
+        // F10: hide the dialog's built-in absolute ✕ (ui/dialog.tsx) — with p-0
+        // it lands on the ESC chip in the query row. ESC key / overlay click /
+        // onOpenChange all still close the palette; the ESC chip is the affordance.
+        className="overflow-hidden p-0 shadow-2xl sm:max-w-xl [&>button]:hidden"
         style={{ backgroundColor: 'var(--hive-850)', border: '1px solid var(--hive-700)' }}
         data-testid="command-center-dialog"
       >

@@ -72,6 +72,10 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState<ApprovalRequest | null>(null);
+  // F2: true only after a real session's history fetch has landed. The wizard
+  // auto-send waits on this so its optimistic turn isn't clobbered by the
+  // history-replace that fires when the session id resolves.
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Cancel any in-flight stream on unmount
@@ -82,16 +86,24 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
   // Load history when session changes
   useEffect(() => {
     if (workspaceId && sessionId) {
+      setHistoryLoaded(false);
       adapter.getHistory(workspaceId, sessionId)
         .then((history) => setMessages(history.map(ensureBlocks)))
-        .catch((err) => { console.error('[useChat] history fetch failed:', err); setMessages([]); });
+        .catch((err) => { console.error('[useChat] history fetch failed:', err); setMessages([]); })
+        .finally(() => setHistoryLoaded(true));
     } else {
+      // No session yet — leave historyLoaded false so an auto-send waits for a
+      // real session's history to land (never race the replace below).
       setMessages([]);
     }
   }, [workspaceId, sessionId]);
 
-  const sendMessage = useCallback(async (content: string) => {
-    if (!workspaceId || !content.trim()) return;
+  const sendMessage = useCallback(async (content: string): Promise<boolean> => {
+    if (!workspaceId || !content.trim()) return false;
+    // F2: report send success so the wizard auto-send knows whether to clear
+    // the composer or leave the text for a manual retry. Error handling below
+    // is unchanged — this only observes it.
+    let failed = false;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -272,6 +284,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         });
       }
     } catch (e) {
+      failed = true;
       // P1b D3: sendMessage now THROWS AdapterHttpError on HTTP failure (it
       // used to parse the error body as an empty SSE stream — silent dead
       // chat). 'Backend is offline' is reserved for genuine network failures;
@@ -303,7 +316,23 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     } finally {
       setIsLoading(false);
     }
+    return !failed;
   }, [workspaceId, sessionId, persona, autonomy]);
+
+  // F4: re-issue the last user turn after a failure. Drops the failed
+  // user+assistant pair from local state first, then sendMessage re-appends a
+  // fresh pair — avoiding a duplicate user bubble.
+  const retryLastFailed = useCallback(() => {
+    if (isLoading) return;
+    let idx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') { idx = i; break; }
+    }
+    if (idx === -1) return;
+    const content = messages[idx].content;
+    setMessages(prev => prev.slice(0, idx));
+    void sendMessage(content);
+  }, [messages, isLoading, sendMessage]);
 
   const clearHistory = useCallback(async () => {
     if (sessionId) {
@@ -332,5 +361,5 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     setPendingApproval(null);
   }, [pendingApproval]);
 
-  return { messages, isLoading, sendMessage, clearHistory, pendingApproval, approveAction };
+  return { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, clearHistory, pendingApproval, approveAction };
 };
