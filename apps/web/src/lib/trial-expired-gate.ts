@@ -31,6 +31,10 @@ export interface TrialModalGateInput {
   trialExpired: boolean;
   /** The onboarding wizard has been completed. */
   onboardingCompleted: boolean;
+  /** The login-briefing modal is (or is about to be) showing this session.
+   *  We never stack the paywall on top of it — defer WITHOUT stamping the
+   *  snooze so a later session (once the briefing is dismissed) can show it. */
+  briefingOpen: boolean;
   /** Epoch ms the modal was last auto-opened; null = never. */
   lastAutoOpenedAt: number | null;
   /** Epoch ms the wizard was completed; null = unknown/legacy. */
@@ -49,6 +53,10 @@ export function shouldAutoOpenTrialModal(input: TrialModalGateInput): boolean {
   if (!input.trialExpired) return false;
   // Never overlay the paywall on top of / under the onboarding wizard.
   if (!input.onboardingCompleted) return false;
+  // Never stack the paywall with the login briefing (same-load collision).
+  // Returning false here also skips the caller's snooze stamp, so this is a
+  // deferral — a later session shows the paywall once the briefing is gone.
+  if (input.briefingOpen) return false;
   // Once per page-load session — covers post-dismissal re-fires from
   // focus/visibility/online/connect-settled revalidation.
   if (input.shownThisSession) return false;

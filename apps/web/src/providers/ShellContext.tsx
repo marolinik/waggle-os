@@ -32,6 +32,12 @@ import {
   readTrialModalLastAutoOpenedAt,
   writeTrialModalLastAutoOpenedAt,
 } from '@/lib/trial-expired-gate';
+import {
+  shouldShowLoginBriefing,
+  readLoginBriefingDismissed,
+  readMinutesSinceLastDismiss,
+  readSkipBriefingParam,
+} from '@/lib/login-briefing';
 import type { BillingTier, UserTier } from '@/lib/dock-tiers';
 import type { ContextRailTarget } from '@/components/os/overlays/ContextRail';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
@@ -154,10 +160,18 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
       // time (not dismiss) so a reload while the modal is up can't re-fire it.
       if (data.trialExpired) {
         const ob = readOnboardingCompletionSnapshot();
+        // Same snapshot useOverlayState uses to decide the briefing's initial
+        // visibility, so the paywall never auto-opens under a showing briefing.
+        const briefingOpen = shouldShowLoginBriefing({
+          skipBriefing: readSkipBriefingParam(),
+          permanentlyDismissed: readLoginBriefingDismissed(),
+          minutesSinceLastDismiss: readMinutesSinceLastDismiss(),
+        });
         if (shouldAutoOpenTrialModal({
           trialExpired: true,
           onboardingCompleted: ob.completed,
           onboardingCompletedAt: ob.completedAt,
+          briefingOpen,
           lastAutoOpenedAt: readTrialModalLastAutoOpenedAt(),
           shownThisSession: trialModalShownThisSessionRef.current,
           now: Date.now(),

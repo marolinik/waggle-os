@@ -60,6 +60,9 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   const [probe, setProbe] = useState<{
     status: 'idle' | 'probing' | 'verified' | 'failed' | 'unverified';
     failedProvider?: string;
+    // The probe verifies a PROVIDER KEY, not the model the chat will use — the
+    // banner names which provider confirmed so the copy stays honest.
+    verifiedProvider?: string;
   }>({ status: 'idle' });
 
   // Local models
@@ -97,15 +100,16 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     void Promise.race([run, timeout]).then((outcome) => {
       if (cancelled) return;
       if (outcome === 'timeout') { setProbe({ status: 'unverified' }); return; }
-      let verified = false;
+      // outcome[i] ↔ ids[i] ↔ activeProviders[i], so the display name lines up.
+      let verifiedProvider: string | undefined;
       let failedProvider: string | undefined;
       outcome.forEach((r, i) => {
         if (r.status !== 'fulfilled') return;
         const v = r.value;
-        if (v.configured && v.valid && v.verified) verified = true;
+        if (v.configured && v.valid && v.verified) { if (!verifiedProvider) verifiedProvider = activeProviders[i]?.name; }
         else if (v.configured && !v.valid && !failedProvider) failedProvider = ids[i];
       });
-      if (verified) setProbe({ status: 'verified' });
+      if (verifiedProvider) setProbe({ status: 'verified', verifiedProvider });
       else if (failedProvider) {
         setProbe({ status: 'failed', failedProvider });
         // Open the provider grid + key input on the offending provider.
@@ -148,7 +152,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       setValidate({ status: 'saved', verified: res.verified === true });
       // F3: a freshly verified key upgrades the banner immediately, without
       // waiting out the 60s probe cache.
-      if (res.verified === true) setProbe({ status: 'verified' });
+      if (res.verified === true) setProbe({ status: 'verified', verifiedProvider: selectedProvider.name });
       setKeyValue('');
       await refreshProviders();
       onModelReady?.();
@@ -192,7 +196,11 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       ) : probe.status === 'verified' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-foreground">
           <Check className="size-4 shrink-0 text-primary" aria-hidden />
-          <span>Model verified — you’re ready to go.</span>
+          <span>
+            {probe.verifiedProvider
+              ? `${probe.verifiedProvider} key verified — you’re ready to go.`
+              : 'Model verified — you’re ready to go.'}
+          </span>
         </div>
       ) : probe.status === 'failed' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2.5 text-sm text-foreground">

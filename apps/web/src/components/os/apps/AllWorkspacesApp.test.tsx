@@ -112,6 +112,21 @@ describe('AllWorkspacesApp', () => {
     expect(screen.queryByTestId('all-workspaces-card-w4')).not.toBeInTheDocument();
   });
 
+  it('hides a storage pill whose count equals the All total (adds no info)', () => {
+    // Every workspace is virtual → a "Virtual" pill would filter to the same
+    // set as "All", so only the All pill should render.
+    mocks.shell.workspaces = [
+      ws({ id: 'v1', name: 'Alpha', storageType: 'virtual' }),
+      ws({ id: 'v2', name: 'Beta', storageType: 'virtual' }),
+      // No storageType → runtime treats absent as virtual (same classify path).
+      ws({ id: 'v3', name: 'Gamma' }),
+    ];
+    render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-filter-all')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-filter-virtual')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-filter-local')).not.toBeInTheDocument();
+  });
+
   it('opening a card selects the workspace and fires onOpenWorkspace', () => {
     const onOpenWorkspace = vi.fn();
     render(<AllWorkspacesApp onOpenWorkspace={onOpenWorkspace} />);

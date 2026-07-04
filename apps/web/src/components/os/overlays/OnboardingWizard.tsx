@@ -42,9 +42,10 @@ type StepName = typeof STEP_NAMES[number];
 const stepIndex = (name: StepName): number => STEP_NAMES.indexOf(name);
 const LAST_INDEX = STEP_NAMES.length - 1;
 /** Steps that show the Back affordance + numbered dots (every interactive step
- *  after first-launch, excluding the terminal first-task). */
+ *  after first-launch, THROUGH the terminal first-task — so it reads its own
+ *  "Step 5 of 5" rather than a second "Step 4 of 4" duplicating the template). */
 const FIRST_NAV_INDEX = stepIndex('who-are-you');
-const LAST_NAV_INDEX = stepIndex('template');
+const LAST_NAV_INDEX = stepIndex('first-task');
 
 const DEFAULT_FIRST_MESSAGE = 'Hello! What can you help me with?';
 
@@ -271,12 +272,12 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   if (state.completed) return null;
 
   const progressPct = LAST_INDEX > 0 ? (step / LAST_INDEX) * 100 : 0;
-  // Nav chrome (Back + "Step N of M" + dots) now extends through the terminal
-  // first-task step; the counter/dots clamp at the template scale so both the
-  // template and first-task steps read "Step 4 of 4".
+  // Nav chrome (Back + "Step N of M" + dots) spans who-are-you → first-task, so
+  // each interactive step has a distinct counter/dot fill (template = 4 of 5,
+  // first-task = 5 of 5) instead of two identical "Step 4 of 4" screens.
   const showNavChrome = step >= FIRST_NAV_INDEX;
   const navTotal = LAST_NAV_INDEX - FIRST_NAV_INDEX + 1;
-  const navCurrent = Math.min(step, LAST_NAV_INDEX) - FIRST_NAV_INDEX + 1;
+  const navCurrent = step - FIRST_NAV_INDEX + 1;
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
 
   return (

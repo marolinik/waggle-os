@@ -114,11 +114,13 @@ describe('ModelGate', () => {
   });
 
   // ── F3: probe-backed banner ──
-  it('probes the stored key and shows "Model verified" when the provider confirms it', async () => {
+  it('probes the stored key and names the provider that confirmed it', async () => {
     mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: true });
     render(<ModelGate />);
-    expect(await screen.findByText(/model verified/i)).toBeInTheDocument();
+    // Honest copy: names the verified PROVIDER, not "the model" (the probe
+    // checks a provider key, not the workspace chat's configured model).
+    expect(await screen.findByText(/anthropic key verified/i)).toBeInTheDocument();
     expect(mocks.adapter.probeProvider).toHaveBeenCalledWith('anthropic');
   });
 
@@ -142,7 +144,7 @@ describe('ModelGate', () => {
     mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
     render(<ModelGate />);
     expect(await screen.findByText(/you have a working model/i)).toBeInTheDocument();
-    expect(screen.queryByText(/model verified/i)).toBeNull();
+    expect(screen.queryByText(/key verified/i)).toBeNull();
   });
 
   it('the local tab pulls a model and fires onModelReady', async () => {

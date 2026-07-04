@@ -25,6 +25,7 @@ function base(overrides: Partial<TrialModalGateInput> = {}): TrialModalGateInput
   return {
     trialExpired: true,
     onboardingCompleted: true,
+    briefingOpen: false,
     lastAutoOpenedAt: null,
     onboardingCompletedAt: null,
     shownThisSession: false,
@@ -48,6 +49,10 @@ describe('shouldAutoOpenTrialModal', () => {
 
   it('never opens twice in one page-load session', () => {
     expect(shouldAutoOpenTrialModal(base({ shownThisSession: true }))).toBe(false);
+  });
+
+  it('defers while the login briefing is showing (no stack)', () => {
+    expect(shouldAutoOpenTrialModal(base({ briefingOpen: true }))).toBe(false);
   });
 
   it('suppresses during the post-onboarding quiet window (9 min ago)', () => {

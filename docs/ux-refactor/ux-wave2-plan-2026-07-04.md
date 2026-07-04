@@ -77,3 +77,11 @@ server-persisted failed pair must not duplicate after a local Retry + reload.
 - Transient F2 window: during the auto-sent first task's streaming, the text
   briefly also sat in the composer before clearing — an Enter there would
   double-send. Cosmetic, final state correct.
+- The "The database connection is not open" send failure is provider-agnostic —
+  it hit an Anthropic retry too, not just Ollama cloud. Intermittent, not
+  reproducible on demand. Backend triage (the LiteLLM no-DB class, above).
+- Probe truth-gap (deeper than the wave-3 copy fix): the model gate verifies a
+  PROVIDER KEY, not the workspace chat's configured default model. Product
+  decision whether the gate should probe the actual default model instead.
+- Workspace switcher: the active row lacks the "· time ago" disambiguator when
+  `lastActive` is null, so it can't be told apart from same-named rows.

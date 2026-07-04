@@ -77,8 +77,10 @@ function FilterPills({
 }) {
   return (
     <div role="radiogroup" aria-label="Filter by storage type" className="flex flex-wrap gap-1.5">
-      {/* W2B: hide never-matching filters — only 'all' plus pills with a count. */}
-      {STORAGE_FILTERS.filter(f => f.id === 'all' || counts[f.id] > 0).map(f => {
+      {/* W2B: hide never-matching filters — only 'all' plus pills with a count.
+          W3: also hide a storage pill whose count equals the All total — it
+          would filter to the same set, so it adds zero information. */}
+      {STORAGE_FILTERS.filter(f => f.id === 'all' || (counts[f.id] > 0 && counts[f.id] !== counts.all)).map(f => {
         const on = active === f.id;
         return (
           <button
