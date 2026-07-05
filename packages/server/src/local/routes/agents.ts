@@ -176,7 +176,7 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
 
   // POST /api/agents — create. NOT tier-gated: CLAUDE.md §1 moat strategy says
   // "Agents are free (they generate memory)" and the executor (fleet spawn) is
-  // free for all tiers — a PRO gate here would be an incoherent surface.
+  // free for all tiers — a tier gate here would be an incoherent surface.
   // Blueprint hard gate: goal, model, memoryScopes and autonomyLevel are
   // required so the stored record is the full effective surface ("no hidden
   // tool/memory access").

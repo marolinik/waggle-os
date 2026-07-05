@@ -51,8 +51,8 @@ export const skillsAliasRoutes: FastifyPluginAsync = async (server) => {
 
   // POST /api/skills/:id/install — thin dispatcher resolving the install source
   // to the existing installer. All writes flow through those installers, so
-  // install_audit + trust assessment + (for marketplace) the PRO tier gate and
-  // SecurityGate ride along unchanged. The `:id` means a DIFFERENT thing per
+  // install_audit + trust assessment + (for marketplace) SecurityGate ride
+  // along unchanged. The `:id` means a DIFFERENT thing per
   // source: 'starter' = a starter-skill id; 'pack' = a CAPABILITY-PACK id (the
   // pack's skills install, not a skill named :id); 'marketplace' IGNORES :id —
   // the numeric `packageId` in the body rules.

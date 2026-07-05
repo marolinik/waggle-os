@@ -16,8 +16,9 @@ import { Check, Loader2, AlertCircle } from 'lucide-react';
 import { useBilling } from '@/hooks/useBilling';
 
 const TIER_HEADLINE: Record<string, string> = {
+  // PRO retained for legacy checkout sessions that predate the Solo/Team split.
   PRO: 'Pro',
-  TEAMS: 'Teams',
+  TEAMS: 'Team',
   ENTERPRISE: 'Enterprise',
 };
 
@@ -60,7 +61,7 @@ export default function PaymentSuccessApp() {
               You’re <span className="text-primary">{TIER_HEADLINE[billing.tier] ?? billing.tier}.</span>
             </h1>
             <p className="text-[15px] text-[var(--text-2)] leading-relaxed mx-auto mb-7 max-w-[42ch]">
-              Your hive just leveled up — <b className="text-foreground">sync, the marketplace, and self-evolving skills</b> are live.
+              Your hive just leveled up — <b className="text-foreground">shared team memory, cross-device sync, and governance</b> are live.
             </p>
             <div className="inline-flex gap-2.5">
               <button

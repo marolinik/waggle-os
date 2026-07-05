@@ -6,9 +6,9 @@ import { getCapabilities, parseTier, type Tier } from '@waggle/shared';
 import type { RecordAuditInput } from '@waggle/core';
 
 /**
- * Tier cap for connecting connectors (CLAUDE.md moat: skills + connectors are
- * the upgrade trigger). FREE has a finite connectorLimit; PRO+ is unlimited
- * (-1). Re-connecting an already-connected connector (token refresh) does NOT
+ * Tier cap for connecting connectors. All current tiers (Solo + Team) have an
+ * unlimited connectorLimit (-1); the gate is retained for any future finite cap.
+ * Re-connecting an already-connected connector (token refresh) does NOT
  * count against the cap. Returns the 403 payload data if the cap is exceeded,
  * else null. Pure (no IO) so it is unit-testable.
  */
@@ -138,7 +138,8 @@ export async function connectorRoutes(fastify: FastifyInstance) {
 
     if (!fastify.vault) return reply.code(503).send({ error: 'Vault not available' });
 
-    // Tier cap — FREE limits connectors; PRO+ unlimited. Count REAL credentialed
+    // Tier cap — connectors are unlimited on all current tiers (Solo + Team);
+    // gate retained for any future finite cap. Count REAL credentialed
     // connections (getDefinitions status==='connected' excludes the always-on
     // mock channels). Marker `error:'TIER_INSUFFICIENT'` so the adapter's tier
     // event + the install store's tier classification light up. Fail-open if the
@@ -154,7 +155,7 @@ export async function connectorRoutes(fastify: FastifyInstance) {
       if (cap) {
         return reply.code(403).send({
           error: 'TIER_INSUFFICIENT',
-          required: 'PRO',
+          required: 'TEAMS',
           actual: tier,
           message: `Connector limit reached for ${tier} (${cap.limit} max). Upgrade to connect more.`,
           limit: cap.limit,

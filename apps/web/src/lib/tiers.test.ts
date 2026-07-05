@@ -19,6 +19,7 @@ import {
   isTrialExpired,
   getEffectiveTier,
   trialDaysRemaining,
+  parseTier,
   TRIAL_DURATION_DAYS,
 } from '@waggle/shared';
 
@@ -34,6 +35,20 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe('parseTier (Solo/Team migration)', () => {
+  it('maps legacy PRO → FREE (Solo) — never null, never a lockout for a legacy sub', () => {
+    expect(parseTier('PRO')).toBe('FREE');
+    expect(parseTier('pro')).toBe('FREE');
+  });
+
+  it('maps legacy basic → FREE and preserves the canonical names', () => {
+    expect(parseTier('basic')).toBe('FREE');
+    expect(parseTier('FREE')).toBe('FREE');
+    expect(parseTier('TEAMS')).toBe('TEAMS');
+    expect(parseTier('ENTERPRISE')).toBe('ENTERPRISE');
+  });
 });
 
 describe('TRIAL_DURATION_DAYS', () => {
@@ -84,12 +99,6 @@ describe('getEffectiveTier', () => {
   it('passes FREE through unchanged regardless of trialStartedAt', () => {
     expect(getEffectiveTier('FREE', null)).toBe('FREE');
     expect(getEffectiveTier('FREE', NOW_ISO)).toBe('FREE');
-  });
-
-  it('passes PRO through unchanged regardless of trialStartedAt', () => {
-    expect(getEffectiveTier('PRO', null)).toBe('PRO');
-    const longAgo = new Date(NOW_MS - 100 * ONE_DAY_MS).toISOString();
-    expect(getEffectiveTier('PRO', longAgo)).toBe('PRO');
   });
 
   it('passes TEAMS through unchanged', () => {

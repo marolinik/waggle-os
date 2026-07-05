@@ -133,7 +133,7 @@ test.describe('Phase 2 — Tier Gating', () => {
     const res = await fetch(`${API}/api/tier`);
     expect(res.ok).toBeTruthy();
     const data = await res.json();
-    expect(['FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
+    expect(['TRIAL', 'FREE', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
     expect(data.capabilities).toBeDefined();
   });
 });

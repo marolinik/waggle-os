@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { listPersonas, getPersona, saveCustomPersona, deleteCustomPersona, type AgentPersona } from '@waggle/agent';
-import { requireTier } from '../../middleware/assert-tier.js';
 import { validateBody } from '../../validate-body.js';
 
 /** POST /api/personas body — a custom persona (name + systemPrompt required). */
@@ -44,9 +43,9 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
     return { personas };
   });
 
-  // POST /api/personas — create custom persona (PRO+ tier required).
-  // Body validated at the boundary (name + systemPrompt required) after the tier gate.
-  fastify.post('/api/personas', { preHandler: [requireTier('PRO'), validateBody(createPersonaSchema)] }, async (request, reply) => {
+  // POST /api/personas — create custom persona (free / Solo).
+  // Body validated at the boundary (name + systemPrompt required).
+  fastify.post('/api/personas', { preHandler: [validateBody(createPersonaSchema)] }, async (request, reply) => {
     const dataDir = fastify.localConfig.dataDir;
     const body = request.body as z.infer<typeof createPersonaSchema>;
     const id = body.id ?? body.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-');
@@ -110,8 +109,8 @@ export const personaRoutes: FastifyPluginAsync = async (fastify) => {
     return merged;
   });
 
-  // POST /api/personas/generate — AI-generate a persona from a prompt (BASIC+ tier required)
-  fastify.post('/api/personas/generate', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
+  // POST /api/personas/generate — AI-generate a persona from a prompt (free / Solo)
+  fastify.post('/api/personas/generate', async (request, reply) => {
     const body = request.body as { prompt?: string } | undefined;
     if (!body?.prompt) {
       return reply.code(400).send({ error: 'prompt is required' });

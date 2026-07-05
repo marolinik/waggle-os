@@ -7,11 +7,11 @@ import { emit, events } from '../_lib/event-taxonomy';
 import styles from './Pricing.module.css';
 
 type BillingPeriod = 'monthly' | 'annual';
-type TierId = 'SOLO' | 'PRO' | 'TEAMS';
+type TierId = 'SOLO' | 'TEAMS';
 
 interface TierDef {
   readonly id: TierId;
-  readonly nsKey: 'solo' | 'pro' | 'teams';
+  readonly nsKey: 'solo' | 'teams';
   readonly highlighted: boolean;
   readonly bulletKeys: readonly string[];
   readonly ctaType: 'download' | 'stripe';
@@ -19,9 +19,10 @@ interface TierDef {
 
 /**
  * Tier content mirrors `packages/shared/src/tiers.ts` (the canonical tier
- * system): FREE keeps memory + Harvest forever, PRO unlocks unlimited
- * workspaces + marketplace + connectors, TEAMS adds shared workspaces,
- * WaggleDance, and governance. No bullets beyond what tiers.ts encodes.
+ * system): SOLO is free forever with full memory + Harvest, unlimited
+ * workspaces, marketplace, all connectors, and BYO cloud models; TEAMS adds
+ * shared workspaces, WaggleDance, and governance. No bullets beyond what
+ * tiers.ts encodes.
  */
 const TIER_DEFS: readonly TierDef[] = [
   {
@@ -31,30 +32,19 @@ const TIER_DEFS: readonly TierDef[] = [
     bulletKeys: [
       'bullet_memory',
       'bullet_workspaces',
-      'bullet_personas',
+      'bullet_marketplace',
       'bullet_models',
+      'bullet_skills',
       'bullet_trial',
     ],
     ctaType: 'download',
   },
   {
-    id: 'PRO',
-    nsKey: 'pro',
+    id: 'TEAMS',
+    nsKey: 'teams',
     highlighted: true,
     bulletKeys: [
       'bullet_everything_solo',
-      'bullet_unlimited',
-      'bullet_marketplace',
-      'bullet_connectors',
-    ],
-    ctaType: 'stripe',
-  },
-  {
-    id: 'TEAMS',
-    nsKey: 'teams',
-    highlighted: false,
-    bulletKeys: [
-      'bullet_everything_pro',
       'bullet_shared',
       'bullet_dance',
       'bullet_governance',

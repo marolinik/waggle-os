@@ -47,8 +47,8 @@ const TAB_LABELS: Record<HubTab, string> = {
 
 const TAB_HINTS: Record<HubTab, string> = {
   installed: 'Servers registered on this machine — running state, scope, test, revoke',
-  catalog: 'Curated MCP catalog — install routes through the security-scanned marketplace installer (Pro)',
-  custom: 'Register your own local stdio MCP server (Pro)',
+  catalog: 'Curated MCP catalog — install routes through the security-scanned marketplace installer',
+  custom: 'Register your own local stdio MCP server',
   remote: 'Remote registries are reference links in v1 — the runtime is stdio-only',
   activity: 'MCP install / revoke history from the shared audit trail',
 };
@@ -178,9 +178,9 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
         // the unit-testable contract) — the event is idempotent.
         window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
           detail: {
-            required: res.required ?? 'PRO',
+            required: res.required ?? 'TEAMS',
             actual: res.actual ?? 'FREE',
-            message: `Installing MCP servers needs a Pro plan or active trial.`,
+            message: `Installing MCP servers needs the Team plan or an active trial.`,
           },
         }));
         return;

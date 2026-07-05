@@ -2952,7 +2952,7 @@ class LocalAdapter {
   }
 
   async createCheckoutSession(
-    tier: 'PRO' | 'TEAMS',
+    tier: 'TEAMS',
     billingPeriod?: 'monthly' | 'annual',
   ): Promise<{ url: string }> {
     // PR7a/D8: thread billingPeriod so the annual toggle resolves the real annual

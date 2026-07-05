@@ -627,9 +627,9 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const { workspaces } = useWorkspaces();
   const { billingTier } = useShell();
   // Gate off the SAME canonical rule the server enforces (tiers.ts
-  // workspaceLimit), not the stale feature-gates.ts 'multi-workspace' flag that
-  // blocked FREE/PRO at workspace #2 while the backend would have allowed 5 /
-  // unlimited. Client and server now agree by construction.
+  // workspaceLimit), not the retired onboarding-complexity flag that blocked
+  // Solo at workspace #2 while the backend would have allowed unlimited. Client
+  // and server now agree by construction.
   const canCreateWorkspace = canCreateWorkspaceAtTier(billingTier, workspaces.length);
 
   const [name, setName] = useState('');

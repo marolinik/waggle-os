@@ -35,7 +35,7 @@
       "headline_emphasis": "remembers",
       "subhead": "Waggle keeps a real memory of you and your work — on your machine, under your control. Every session starts where the last one ended, whichever model you run.",
       "cta_secondary": "Read the benchmark",
-      "microcopy_free": "Free forever tier",
+      "microcopy_free": "Solo — free forever",
       "microcopy_platforms": "Windows & macOS",
       "microcopy_oss": "Apache-2.0 memory substrate"
     },
@@ -205,37 +205,26 @@
       "loading": "Loading…",
       "tiers": {
         "solo": {
-          "name": "Free",
+          "name": "Solo",
           "price_monthly": "$0",
           "price_annual": "$0",
           "note": "Free, forever",
           "tagline": "Everything you need to start compounding.",
           "bullet_memory": "Full memory + Harvest import",
-          "bullet_workspaces": "5 workspaces",
-          "bullet_personas": "Agents & built-in skills",
-          "bullet_models": "Any model with your own keys",
-          "bullet_trial": "15-day full trial on install"
-        },
-        "pro": {
-          "name": "Pro",
-          "price_monthly": "$19/month",
-          "price_annual": "$190/year",
-          "note": "2 months free on annual",
-          "tagline": "For work that spans many projects.",
-          "cta": "Get Pro",
-          "bullet_everything_solo": "Everything in Free",
-          "bullet_unlimited": "Unlimited workspaces & agents",
-          "bullet_marketplace": "Skills marketplace",
-          "bullet_connectors": "All connectors"
+          "bullet_workspaces": "Unlimited workspaces & agents",
+          "bullet_marketplace": "Skills marketplace & all connectors",
+          "bullet_models": "Any model & embeddings, your keys",
+          "bullet_skills": "Custom skills, PDF & JSON export",
+          "bullet_trial": "15-day Team trial on install"
         },
         "teams": {
-          "name": "Teams",
+          "name": "Team",
           "price_monthly": "$49/seat/month",
           "price_annual": "$490/seat/year",
           "note": "2 months free on annual",
           "tagline": "Shared memory without giving up custody.",
-          "cta": "Get Teams",
-          "bullet_everything_pro": "Everything in Pro",
+          "cta": "Get Team",
+          "bullet_everything_solo": "Everything in Solo",
           "bullet_shared": "Shared workspaces",
           "bullet_dance": "WaggleDance multi-agent coordination",
           "bullet_governance": "Governance & audit controls"

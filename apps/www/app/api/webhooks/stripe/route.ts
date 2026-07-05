@@ -23,6 +23,10 @@ import Stripe from 'stripe';
  * surface as 500 (Stripe will retry up to its standard backoff schedule).
  */
 
+// New checkout is TEAMS-only, but this webhook still accepts legacy 'pro'
+// subscription events so existing subscribers keep getting status updates
+// (renewals, cancellations). Pro is no longer a sold tier — the app coerces
+// it to the free Solo label at display time (parseTier('PRO') → 'FREE').
 type Tier = 'pro' | 'teams';
 
 interface ClerkPublicMetadata {

@@ -82,10 +82,10 @@ describe('Stripe Checkout — billingPeriod-aware price resolution', () => {
   }
 
   it('annual billingPeriod uses the annual price (price_pa)', async () => {
-    process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pm';
-    process.env['STRIPE_PRICE_PRO_ANNUAL'] = 'price_pa';
+    process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_pm';
+    process.env['STRIPE_PRICE_TEAMS_ANNUAL'] = 'price_pa';
 
-    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'annual' });
+    const res = await postCheckout({ tier: 'TEAMS', billingPeriod: 'annual' });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().url).toBe('https://checkout.stripe.test/session_123');
@@ -94,51 +94,67 @@ describe('Stripe Checkout — billingPeriod-aware price resolution', () => {
   });
 
   it('monthly billingPeriod uses the monthly price (price_pm)', async () => {
-    process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pm';
-    process.env['STRIPE_PRICE_PRO_ANNUAL'] = 'price_pa';
+    process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_pm';
+    process.env['STRIPE_PRICE_TEAMS_ANNUAL'] = 'price_pa';
 
-    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'monthly' });
+    const res = await postCheckout({ tier: 'TEAMS', billingPeriod: 'monthly' });
 
     expect(res.statusCode).toBe(200);
     expect(lastPriceArg).toBe('price_pm');
   });
 
   it('omitted billingPeriod defaults to the monthly price (price_pm)', async () => {
-    process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pm';
-    process.env['STRIPE_PRICE_PRO_ANNUAL'] = 'price_pa';
+    process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_pm';
+    process.env['STRIPE_PRICE_TEAMS_ANNUAL'] = 'price_pa';
 
-    const res = await postCheckout({ tier: 'PRO' });
+    const res = await postCheckout({ tier: 'TEAMS' });
 
     expect(res.statusCode).toBe(200);
     expect(lastPriceArg).toBe('price_pm');
   });
 
   it('monthly falls back to the legacy single-var price when no 4-var contract is set', async () => {
-    process.env['STRIPE_PRICE_PRO'] = 'price_legacy';
+    process.env['STRIPE_PRICE_TEAMS'] = 'price_legacy';
 
-    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'monthly' });
+    const res = await postCheckout({ tier: 'TEAMS', billingPeriod: 'monthly' });
 
     expect(res.statusCode).toBe(200);
     expect(lastPriceArg).toBe('price_legacy');
   });
 
   it('annual FAILS CLOSED when only a (monthly) legacy single-var is set — never silently charges monthly (F9)', async () => {
-    // The legacy STRIPE_PRICE_PRO is a monthly price; an annual selection must not
+    // The legacy STRIPE_PRICE_TEAMS is a monthly price; an annual selection must not
     // resolve to it (would charge monthly while the UI shows the annual price).
-    process.env['STRIPE_PRICE_PRO'] = 'price_legacy';
+    process.env['STRIPE_PRICE_TEAMS'] = 'price_legacy';
 
-    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'annual' });
+    const res = await postCheckout({ tier: 'TEAMS', billingPeriod: 'annual' });
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('NO_PRICE_CONFIGURED');
     expect(fakeStripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 
-  it('returns 400 NO_PRICE_CONFIGURED when nothing is configured', async () => {
-    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'monthly' });
+  it('returns 400 NO_PRICE_CONFIGURED for an annual selection when nothing is configured', async () => {
+    // The monthly path can fall back to the legacy single-var / TIER_CAPABILITIES
+    // default (STRIPE_PRICE_TEAMS is present in .env at module load), so the
+    // deterministic "no price" case is the annual one: annual fails closed (F9)
+    // and never falls back, so with nothing configured it returns null → 400.
+    const res = await postCheckout({ tier: 'TEAMS', billingPeriod: 'annual' });
 
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('NO_PRICE_CONFIGURED');
+    expect(fakeStripe.checkout.sessions.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-TEAMS tier (legacy PRO) with 400 INVALID_TIER — TEAMS is the only paid checkout (PRO removed)', async () => {
+    // Even with a price configured, a PRO checkout must be refused before price
+    // resolution — Solo is free, Team is the only Stripe tier.
+    process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_pm';
+
+    const res = await postCheckout({ tier: 'PRO', billingPeriod: 'monthly' });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('INVALID_TIER');
     expect(fakeStripe.checkout.sessions.create).not.toHaveBeenCalled();
   });
 });

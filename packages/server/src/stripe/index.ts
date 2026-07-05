@@ -63,10 +63,14 @@ function readPriceEnvs(...keys: string[]): string[] {
  *       STRIPE_PRICE_TEAMS_MONTHLY  / STRIPE_PRICE_TEAMS_ANNUAL
  *   - **Legacy single-var contract** (older desktop sidecar env):
  *       STRIPE_PRICE_PRO            / STRIPE_PRICE_TEAMS
- *       STRIPE_PRICE_BASIC          (oldest alias, resolves to PRO)
+ *       STRIPE_PRICE_BASIC          (oldest alias)
  *
  * New contract is checked first; legacy vars act as additional fallbacks.
  * Resolution is synchronous and offline-safe — no Stripe API round-trip.
+ *
+ * PRO removed (Solo/Team collapse): the legacy PRO/BASIC price vars are still
+ * READ, but now resolve to `'FREE'` so a legacy PRO subscriber lands on Solo
+ * (never null, never locked out). Only TEAMS mints a paid tier.
  */
 export function tierFromPriceId(priceId: string): Tier | null {
   const proPrices = readPriceEnvs(
@@ -81,7 +85,7 @@ export function tierFromPriceId(priceId: string): Tier | null {
     'STRIPE_PRICE_TEAMS',
   );
 
-  if (proPrices.includes(priceId)) return 'PRO';
+  if (proPrices.includes(priceId)) return 'FREE';
   if (teamsPrices.includes(priceId)) return 'TEAMS';
   return null;
 }
@@ -90,12 +94,11 @@ export function tierFromPriceId(priceId: string): Tier | null {
  *  period-specific contract, falls back to legacy single-var, then TIER_CAPABILITIES. */
 export function priceIdForTier(tier: Tier, billingPeriod: 'monthly' | 'annual' = 'monthly'): string | null {
   const period = billingPeriod === 'annual' ? 'ANNUAL' : 'MONTHLY';
-  // The period-specific 4-var price is always preferred.
-  const periodSpecific = tier === 'PRO'
-    ? process.env[`STRIPE_PRICE_PRO_${period}`]
-    : tier === 'TEAMS'
-      ? process.env[`STRIPE_PRICE_TEAMS_${period}`]
-      : undefined;
+  // The period-specific 4-var price is always preferred. TEAMS is the only
+  // paid tier post-PRO-removal, so it is the only tier with a checkout price.
+  const periodSpecific = tier === 'TEAMS'
+    ? process.env[`STRIPE_PRICE_TEAMS_${period}`]
+    : undefined;
   if (periodSpecific) return periodSpecific;
   // F9 fail-closed: for ANNUAL, never fall back to a monthly-priced var. The legacy
   // single-var (STRIPE_PRICE_PRO/TEAMS/BASIC) and the TIER_CAPABILITIES default are
@@ -103,11 +106,9 @@ export function priceIdForTier(tier: Tier, billingPeriod: 'monthly' | 'annual' =
   // annual price — is a billing lie. Returning null yields an honest 400
   // NO_PRICE_CONFIGURED (checkout.ts:30) instead of a wrong charge.
   if (billingPeriod === 'annual') return null;
-  const candidates = tier === 'PRO'
-    ? [process.env.STRIPE_PRICE_PRO, process.env.STRIPE_PRICE_BASIC]
-    : tier === 'TEAMS'
-      ? [process.env.STRIPE_PRICE_TEAMS]
-      : [];
+  const candidates = tier === 'TEAMS'
+    ? [process.env.STRIPE_PRICE_TEAMS]
+    : [];
   for (const c of candidates) if (c) return c;
   return TIER_CAPABILITIES[tier]?.stripePriceId ?? null;
 }

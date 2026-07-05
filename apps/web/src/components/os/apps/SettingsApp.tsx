@@ -7,8 +7,8 @@ import {
 } from 'lucide-react';
 import PlanCards from '@/components/os/billing/PlanCards';
 import { useToast } from '@/hooks/use-toast';
-import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useBilling } from '@/hooks/useBilling';
+import { parseTier, tierSatisfies, TIER_LABELS, type Tier } from '@waggle/shared';
 import LockedFeature from '@/components/os/LockedFeature';
 import { adapter } from '@/lib/adapter';
 import { Input } from '@/components/ui/input';
@@ -110,14 +110,15 @@ const SettingsApp = () => {
   // Billing
   const billing = useBilling();
 
-  // Feature gating
-  const { isEnabled } = useFeatureGate();
-  const isTeamLocked = !isEnabled('mission-control');
-  const isEnterpriseLocked = !isEnabled('audit-trail');
+  // Tier gating — canonical resolution off the billing tier (never null: a
+  // legacy/unknown value falls back to Solo/FREE, never locking a user out).
+  const tier: Tier = parseTier(billing.tier) ?? 'FREE';
+  const isTeamLocked = !tierSatisfies(tier, 'TEAMS');
+  const isEnterpriseLocked = !tierSatisfies(tier, 'ENTERPRISE');
 
   const LOCKED_TABS: Partial<Record<SettingsTab, { feature: string; label: string; prompt: string }>> = {
-    ...(isTeamLocked ? { team: { feature: 'mission-control', label: 'Team Management', prompt: 'Upgrade to Business for team management features' } } : {}),
-    ...(isEnterpriseLocked ? { enterprise: { feature: 'audit-trail', label: 'Enterprise Features', prompt: 'Enterprise feature — contact sales for audit trail, compliance, and governance' } } : {}),
+    ...(isTeamLocked ? { team: { feature: 'team', label: 'Team Management', prompt: 'Upgrade to Team for shared workspaces and governance' } } : {}),
+    ...(isEnterpriseLocked ? { enterprise: { feature: 'enterprise', label: 'Enterprise Features', prompt: 'Enterprise feature — contact sales for audit trail, compliance, and governance' } } : {}),
   };
 
   // P4: permissions state. `defaultAutonomy` replaces the old yoloMode
@@ -280,12 +281,12 @@ const SettingsApp = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Tier</p>
-                  <p className="text-[11px] text-muted-foreground capitalize">
-                    {billing.tierResolved ? `${billing.tier} plan` : 'Confirming plan…'}
+                  <p className="text-[11px] text-muted-foreground">
+                    {billing.tierResolved ? `${TIER_LABELS[tier]} plan` : 'Confirming plan…'}
                   </p>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-primary capitalize">
-                  {billing.tierResolved ? billing.tier : '…'}
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-primary">
+                  {billing.tierResolved ? TIER_LABELS[tier] : '…'}
                 </span>
               </div>
             </div>
@@ -569,9 +570,8 @@ const SettingsApp = () => {
                 <div>
                   <p className="text-xs font-display font-medium text-foreground">Current Plan</p>
                   <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
-                    {billing.tier === 'FREE' && 'Free tier — upgrade to unlock all features'}
-                    {billing.tier === 'TRIAL' && 'Trial — 15 days of everything unlocked'}
-                    {billing.tier === 'PRO' && '$19/mo — unlimited workspaces, marketplace, all connectors'}
+                    {billing.tier === 'FREE' && 'Solo — every individual feature, free forever'}
+                    {billing.tier === 'TRIAL' && 'Trial — 15 days of Team features, then Solo'}
                     {billing.tier === 'TEAMS' && '$49/mo per seat — shared workspaces, WaggleDance, governance'}
                     {billing.tier === 'ENTERPRISE' && 'Enterprise — KVARK sovereign deployment'}
                   </p>
@@ -579,11 +579,10 @@ const SettingsApp = () => {
                 <span className={`px-3 py-1 rounded-full text-xs font-display font-semibold ${
                   billing.tier === 'FREE' ? 'bg-muted text-muted-foreground' :
                   billing.tier === 'TRIAL' ? 'bg-[var(--honey-wash)] text-primary' :
-                  billing.tier === 'PRO' ? 'bg-primary/20 text-primary' :
                   billing.tier === 'TEAMS' ? 'bg-[var(--intel-wash)] text-[var(--intel)]' :
                   'bg-[var(--work-wash)] text-[var(--work)]'
                 }`}>
-                  {billing.tier}
+                  {TIER_LABELS[tier]}
                 </span>
               </div>
             </div>
@@ -624,7 +623,7 @@ const SettingsApp = () => {
               <div className="p-5 rounded-[18px] bg-[var(--surface)] border border-[var(--honey-line)]">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-[15px] font-display font-semibold text-foreground">Waggle {billing.tier === 'PRO' ? 'Pro' : 'Teams'}</p>
+                    <p className="text-[15px] font-display font-semibold text-foreground">Waggle {billing.tier === 'PRO' ? 'Pro (legacy)' : 'Team'}</p>
                     <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Subscription managed securely via Stripe.</p>
                   </div>
                   <span className="text-[11.5px] font-[650] text-primary bg-[var(--honey-wash)] border border-[var(--honey-line)] px-3 py-1.5 rounded-full whitespace-nowrap">● Active</span>

@@ -5,23 +5,26 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 interface TrialExpiredModalProps {
   open: boolean;
   onDismiss: () => void;
-  onUpgrade: (tier: 'PRO' | 'TEAMS') => void;
+  onUpgrade: (tier: 'TEAMS') => void;
 }
 
+// Solo (free) keeps every personal capability — the trial only ever gated the
+// collaboration/governance layer, so those are the only things "lost".
 const KEEP_FEATURES = [
   'Memory & Harvest — unlimited, forever',
-  'Up to 5 workspaces',
+  'Unlimited workspaces & connectors',
+  'Marketplace skills & connectors',
+  'Self-evolving skills',
   'All built-in agents',
-  'Knowledge Graph',
-  'Voice input',
+  'PDF & advanced exports',
 ];
 
 const LOSE_FEATURES = [
-  'Custom skills & workflows',
-  'Marketplace access',
-  'PDF & advanced exports',
-  'Unlimited connectors',
-  'Audit trail',
+  'Shared team workspaces',
+  'Sync across devices',
+  'Team skill library',
+  'Team governance & audit',
+  'SSO & role-based access',
 ];
 
 export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialExpiredModalProps) {
@@ -67,7 +70,7 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
                 Your 15-day trial has ended
               </h2>
               <p className="text-sm text-muted-foreground mt-2">
-                Upgrade to keep the Pro features you've been using, or continue with the free plan.
+                Upgrade to Team to keep the collaboration features you've been using, or continue free with Solo.
               </p>
             </div>
 
@@ -102,25 +105,18 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
 
             <div className="px-6 pb-6 pt-2 space-y-2">
               <button
-                onClick={() => onUpgrade('PRO')}
+                onClick={() => onUpgrade('TEAMS')}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/90 transition-colors"
               >
-                <Crown className="w-4 h-4" />
-                Upgrade to Pro — $19/mo
+                <Users className="w-4 h-4" />
+                Upgrade to Team — $49/seat/mo
                 <ArrowRight className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => onUpgrade('TEAMS')}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-border/50 text-foreground font-display text-sm font-medium hover:bg-muted/30 transition-colors"
-              >
-                <Users className="w-4 h-4 text-muted-foreground" />
-                Teams — $49/seat/mo
               </button>
               <button
                 onClick={onDismiss}
                 className="w-full px-4 py-2 text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                Continue with Free
+                Continue free with Solo
               </button>
             </div>
           </motion.div>

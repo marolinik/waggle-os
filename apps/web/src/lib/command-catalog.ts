@@ -1,4 +1,5 @@
 import type { ElementType } from "react";
+import { BILLING_TIER_ORDER } from "@/lib/dock-tiers";
 import {
   Home, MessageSquare, Brain, ListTodo, Library, UserCircle,
   Plus, Rocket, Settings, Sparkles,
@@ -35,7 +36,7 @@ export interface CatalogCommand {
   action?: "spawn";
   /** Keyboard hint shown on the right. */
   meta?: string;
-  /** Minimum billing rank to show (FREE 0 · TRIAL 1 · PRO 2 · TEAMS 3 · ENT 4). */
+  /** Minimum billing rank to show (FREE 0 · TRIAL 1 · TEAMS 2 · ENT 3). */
   minBillingRank?: number;
   /** Also floats into the Pro "★ Pinned" group. */
   pinned?: boolean;
@@ -56,7 +57,7 @@ export interface CatalogContext {
   billingRank: number;
 }
 
-const TEAMS_RANK = 3;
+const TEAMS_RANK = BILLING_TIER_ORDER.TEAMS;
 
 export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
   const { chatHref, isPro, billingRank } = ctx;
@@ -76,7 +77,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
     { id: "launch-agent", group: "do", name: "Launch a coding agent", subtitle: "Claude Code · Cursor · Codex — shares this hive", icon: Rocket, to: "/launcher" },
     { id: "watch-agent", group: "do", name: "Watch a coding agent live", subtitle: "Claude Code · Cursor · Codex — stream its output", keywords: "observe pty terminal live output tail", icon: Eye, to: "/launcher?watch=1" },
     { id: "settings", group: "do", name: "Settings", subtitle: "models · failover · permissions · plan", icon: Settings, to: "/settings" },
-    { id: "upgrade", group: "do", name: "Upgrade to Pro", subtitle: "plans · billing · invoices", icon: Sparkles, to: "/settings?tab=billing" },
+    { id: "upgrade", group: "do", name: "Upgrade to Team", subtitle: "plans · billing · invoices", icon: Sparkles, to: "/settings?tab=billing" },
   ];
 
   const power: CatalogCommand[] = [

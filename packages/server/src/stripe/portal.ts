@@ -12,7 +12,10 @@ import { requireTier } from '../middleware/assert-tier.js';
 import { getStripe } from './index.js';
 
 export const portalRoutes: FastifyPluginAsync = async (server) => {
-  server.post('/api/stripe/create-portal-session', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
+  // Ungated to any authenticated user (requireTier('FREE') is a no-op floor): a
+  // legacy PRO subscriber (now Solo/FREE) must still reach the portal to self-cancel.
+  // Non-subscribers are handled by the route's own NO_STRIPE_CUSTOMER 400 below.
+  server.post('/api/stripe/create-portal-session', { preHandler: [requireTier('FREE')] }, async (request, reply) => {
     const stripe = getStripe();
     if (!stripe) {
       return reply.code(503).send({ error: 'STRIPE_NOT_CONFIGURED' });

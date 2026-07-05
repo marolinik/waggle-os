@@ -19,7 +19,7 @@ export type AppId =
 
 export type UserTier = 'simple' | 'professional' | 'power' | 'admin';
 
-export type BillingTier = 'TRIAL' | 'FREE' | 'PRO' | 'TEAMS' | 'ENTERPRISE';
+export type BillingTier = 'TRIAL' | 'FREE' | 'TEAMS' | 'ENTERPRISE';
 
 export interface DockEntry {
   type: 'app' | 'zone-parent' | 'separator';
@@ -51,8 +51,8 @@ export interface DockEntry {
   description?: string;
 }
 
-const BILLING_TIER_ORDER: Record<BillingTier, number> = {
-  FREE: 0, TRIAL: 1, PRO: 2, TEAMS: 3, ENTERPRISE: 4,
+export const BILLING_TIER_ORDER: Record<BillingTier, number> = {
+  FREE: 0, TRIAL: 1, TEAMS: 2, ENTERPRISE: 3,
 };
 
 export const DEFAULT_TIER: UserTier = 'simple';

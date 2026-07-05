@@ -70,7 +70,7 @@ describe('POST /api/stripe/sync — payment gate (R1-002)', () => {
       status: 'open',
       payment_status: 'unpaid',
       customer: 'cus_unpaid',
-      metadata: { tier: 'PRO' },
+      metadata: { tier: 'TEAMS' },
     };
 
     const res = await server.inject({
@@ -104,8 +104,10 @@ describe('POST /api/stripe/sync — payment gate (R1-002)', () => {
     expect(readTier(tmpDir)).toBeUndefined();
   });
 
-  // (b) Paid session with a known subscription price → 200, PRO persisted.
-  it('accepts a paid session and persists PRO from the subscription price', async () => {
+  // (b) Paid session with a legacy PRO subscription price → 200. Post-collapse a
+  // legacy PRO price resolves to FREE (Solo), so a legacy PRO subscriber lands on
+  // Solo rather than being locked out (decision #5).
+  it('accepts a paid session and maps a legacy PRO subscription price to FREE (Solo)', async () => {
     process.env['STRIPE_PRICE_PRO'] = 'price_x';
     nextSession = {
       status: 'complete',
@@ -121,12 +123,13 @@ describe('POST /api/stripe/sync — payment gate (R1-002)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ tier: 'PRO', customerId: 'cus_paid' });
-    expect(readTier(tmpDir)).toBe('PRO');
+    expect(res.json()).toMatchObject({ tier: 'FREE', customerId: 'cus_paid' });
+    expect(readTier(tmpDir)).toBe('FREE');
   });
 
   // (c) Promo / 100%-off session → no_payment_required is treated as paid → 200.
-  it('accepts a no_payment_required (promo) session and persists the metadata tier', async () => {
+  // A legacy PRO metadata tier collapses to FREE via parseTier.
+  it('accepts a no_payment_required (promo) session and maps a legacy PRO metadata tier to FREE', async () => {
     nextSession = {
       status: 'complete',
       payment_status: 'no_payment_required',
@@ -141,7 +144,7 @@ describe('POST /api/stripe/sync — payment gate (R1-002)', () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ tier: 'PRO' });
-    expect(readTier(tmpDir)).toBe('PRO');
+    expect(res.json()).toMatchObject({ tier: 'FREE' });
+    expect(readTier(tmpDir)).toBe('FREE');
   });
 });

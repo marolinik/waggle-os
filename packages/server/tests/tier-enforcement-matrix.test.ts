@@ -2,7 +2,7 @@
  * H-31 Tier Enforcement Matrix.
  *
  * Asserts that every gated route enforces its minimum tier per `tiers.ts`.
- * Matrix = every gated endpoint × every tier ∈ { FREE, PRO, TEAMS, ENTERPRISE, TRIAL }.
+ * Matrix = every gated endpoint × every tier ∈ { FREE, TEAMS, ENTERPRISE, TRIAL }.
  *
  * For each cell we compute the expected verdict from TIER_ORDER:
  *   - "allow"  → response must not be 403 TIER_INSUFFICIENT (downstream 4xx/5xx is fine —
@@ -35,26 +35,28 @@ interface GatedEndpoint {
 
 // Matches TIER_ORDER in @waggle/shared/tiers.ts. TRIAL ranks with ENTERPRISE
 // but downgrades to FREE when expired — the fallback is tested separately.
+// PRO removed (Solo/Team collapse): personal features are free/Solo now.
 const TIER_ORDER: Record<Tier, number> = {
-  FREE: 0, PRO: 1, TEAMS: 2, ENTERPRISE: 3, TRIAL: 3,
+  FREE: 0, TEAMS: 2, ENTERPRISE: 3, TRIAL: 3,
 };
 
 const GATED_ENDPOINTS: GatedEndpoint[] = [
-  // PRO-gated — denies FREE, allows PRO/TEAMS/ENTERPRISE/TRIAL
-  { method: 'POST', url: '/api/personas', minTier: 'PRO', body: { name: 'x', systemPrompt: 'y' } },
-  { method: 'POST', url: '/api/personas/generate', minTier: 'PRO', body: { prompt: 'x' } },
-  { method: 'POST', url: '/api/marketplace/install', minTier: 'PRO', body: { skillId: 'x' } },
-  { method: 'POST', url: '/api/marketplace/publish', minTier: 'PRO', body: {} },
-  { method: 'POST', url: '/api/stripe/create-portal-session', minTier: 'PRO', body: {} },
+  // Free/Solo (PRO removed) — these were PRO-gated; now every tier is allowed.
+  // Kept as minTier FREE so a re-gating regression flips these to "denies" and fails.
+  { method: 'POST', url: '/api/personas', minTier: 'FREE', body: { name: 'x', systemPrompt: 'y' } },
+  { method: 'POST', url: '/api/personas/generate', minTier: 'FREE', body: { prompt: 'x' } },
+  { method: 'POST', url: '/api/marketplace/install', minTier: 'FREE', body: { skillId: 'x' } },
+  { method: 'POST', url: '/api/marketplace/publish', minTier: 'FREE', body: {} },
+  { method: 'POST', url: '/api/stripe/create-portal-session', minTier: 'FREE', body: {} },
 
-  // TEAMS-gated — denies FREE/PRO, allows TEAMS/ENTERPRISE/TRIAL
+  // TEAMS-gated — denies FREE, allows TEAMS/ENTERPRISE/TRIAL
   { method: 'GET',  url: '/api/cost/by-workspace', minTier: 'TEAMS' },
   { method: 'POST', url: '/api/cloud-sync/toggle', minTier: 'TEAMS', body: { enabled: true } },
   { method: 'GET',  url: '/api/admin/overview', minTier: 'TEAMS' },
   { method: 'GET',  url: '/api/admin/audit-export', minTier: 'TEAMS' },
   { method: 'POST', url: '/api/team/connect', minTier: 'TEAMS', body: { serverUrl: 'http://x', token: 'y' } },
 
-  // ENTERPRISE-gated — denies FREE/PRO/TEAMS, allows ENTERPRISE/TRIAL
+  // ENTERPRISE-gated — denies FREE/TEAMS, allows ENTERPRISE/TRIAL
   { method: 'GET',  url: '/api/marketplace/enterprise-packs', minTier: 'ENTERPRISE' },
   { method: 'GET',  url: '/api/team/governance/permissions?workspaceId=default', minTier: 'ENTERPRISE' },
 ];
@@ -126,14 +128,13 @@ describe('Tier Enforcement Matrix (H-31)', () => {
   }
 
   describe('TRIAL expiry fallback (getEffectiveTier)', () => {
-    it('expired TRIAL is treated as FREE — denies PRO endpoint', async () => {
+    it('expired TRIAL is treated as FREE — denies a TEAMS endpoint', async () => {
       const sixteenDaysAgo = new Date(Date.now() - 16 * 24 * 3600 * 1000).toISOString();
       writeTier(tmpDir, 'TRIAL', sixteenDaysAgo);
 
       const res = await server.inject(authInject(server, {
-        method: 'POST',
-        url: '/api/personas',
-        payload: { name: 'x', systemPrompt: 'y' },
+        method: 'GET',
+        url: '/api/cost/by-workspace',
       }));
 
       expect(res.statusCode).toBe(403);
@@ -154,9 +155,8 @@ describe('Tier Enforcement Matrix (H-31)', () => {
     it('TRIAL with null trialStartedAt is treated as FREE', async () => {
       writeTier(tmpDir, 'TRIAL', null);
       const res = await server.inject(authInject(server, {
-        method: 'POST',
-        url: '/api/personas',
-        payload: { name: 'x', systemPrompt: 'y' },
+        method: 'GET',
+        url: '/api/cost/by-workspace',
       }));
       expect(res.statusCode).toBe(403);
       const body = parseJsonSafe(res.body);
@@ -169,14 +169,13 @@ describe('Tier Enforcement Matrix (H-31)', () => {
     it('denial response includes upgradeUrl for UI linking', async () => {
       writeTier(tmpDir, 'FREE');
       const res = await server.inject(authInject(server, {
-        method: 'POST',
-        url: '/api/personas',
-        payload: { name: 'x', systemPrompt: 'y' },
+        method: 'GET',
+        url: '/api/cost/by-workspace',
       }));
       expect(res.statusCode).toBe(403);
       const body = JSON.parse(res.body) as Record<string, unknown>;
       expect(body.upgradeUrl).toBe('https://waggle-os.ai/upgrade');
-      expect(body.message).toMatch(/requires the PRO tier/);
+      expect(body.message).toMatch(/requires the TEAMS tier/);
     });
   });
 });

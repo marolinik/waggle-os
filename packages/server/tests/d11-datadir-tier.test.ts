@@ -85,7 +85,7 @@ describe('startService honors WAGGLE_DATA_DIR (D11 integration)', () => {
         .map((c) => String(c[0]))
         .find((m) => m.includes('[waggle:service] Data dir:'));
       expect(dataDirLine).toContain(envDir);
-      expect(dataDirLine).toMatch(/· tier: (TRIAL|FREE|PRO|TEAMS|ENTERPRISE)$/);
+      expect(dataDirLine).toMatch(/· tier: (TRIAL|FREE|TEAMS|ENTERPRISE)$/);
     } finally {
       logSpy.mockRestore();
     }
@@ -103,13 +103,15 @@ describe('readTierFromDataDir (D11 startup log tier source)', () => {
   }
 
   it('reads a canonical tier', () => {
-    expect(readTierFromDataDir(writeConfig({ tier: 'PRO' }))).toBe('PRO');
+    expect(readTierFromDataDir(writeConfig({ tier: 'TEAMS' }))).toBe('TEAMS');
   });
 
-  it('migrates legacy names (solo→FREE, basic→PRO)', () => {
+  it('migrates legacy names (solo/basic/pro all → FREE after the Solo/Team collapse)', () => {
     expect(readTierFromDataDir(writeConfig({ tier: 'solo' }))).toBe('FREE');
     fs.rmSync(tmp, { recursive: true, force: true });
-    expect(readTierFromDataDir(writeConfig({ tier: 'basic' }))).toBe('PRO');
+    expect(readTierFromDataDir(writeConfig({ tier: 'basic' }))).toBe('FREE');
+    fs.rmSync(tmp, { recursive: true, force: true });
+    expect(readTierFromDataDir(writeConfig({ tier: 'pro' }))).toBe('FREE');
   });
 
   it('TRIAL downgrades to FREE when expired (effective tier, not raw)', () => {

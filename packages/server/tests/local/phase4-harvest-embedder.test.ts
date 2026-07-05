@@ -97,7 +97,7 @@ function makeEmbedderStub(activeProvider: 'mock' | 'voyage', marker: number): {
     },
     async reprobe() { return instance.getStatus(); },
     getQuotaStatus() {
-      return { tier: 'PRO', quota: -1, used: 0, remaining: -1, percentage: 0, resetsAt: new Date().toISOString() };
+      return { tier: 'FREE', quota: -1, used: 0, remaining: -1, percentage: 0, resetsAt: new Date().toISOString() };
     },
   };
   return { calls, instance };

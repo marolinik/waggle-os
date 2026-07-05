@@ -74,7 +74,7 @@ describe('command-registry — closed action registry', () => {
     });
   });
 
-  describe('install_mcp (side-effect, medium, PRO)', () => {
+  describe('install_mcp (side-effect, medium — free/Solo)', () => {
     it('builds a POST /api/mcps/install endpoint for a catalog id', () => {
       const a = validateAndBuildAction('install_mcp', { mcpId: 'postgres' }, ctx);
       expect(a).toMatchObject({
@@ -91,11 +91,9 @@ describe('command-registry — closed action registry', () => {
   });
 
   describe('checkTier', () => {
-    it('gates install_mcp on FREE → requires PRO', () => {
-      expect(checkTier('install_mcp', 'FREE')).toEqual({ gated: true, requiredTier: 'PRO' });
-    });
-    it('does not gate install_mcp on PRO', () => {
-      expect(checkTier('install_mcp', 'PRO')).toEqual({ gated: false });
+    it('never gates install_mcp — MCP install is free/Solo (PRO removed)', () => {
+      expect(checkTier('install_mcp', 'FREE')).toEqual({ gated: false });
+      expect(checkTier('install_mcp', 'TEAMS')).toEqual({ gated: false });
     });
     it('never gates a free/read action', () => {
       expect(checkTier('open_app', 'FREE')).toEqual({ gated: false });
@@ -110,6 +108,5 @@ describe('command-registry — closed action registry', () => {
     expect(catalog).toContain('memory');
     expect(catalog).toContain('POPULAR MCP SERVERS');
     expect(catalog).toContain('postgres');
-    expect(catalog).toContain('requires PRO');
   });
 });

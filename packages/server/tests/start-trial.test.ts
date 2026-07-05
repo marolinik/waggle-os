@@ -121,11 +121,11 @@ describe('POST /api/tier/start-trial', () => {
     expect(persisted.tier).toBe('TRIAL');
   });
 
-  it('does not overwrite an existing paid tier — 409 still fires when trialStartedAt is set on a PRO/TEAMS tier', async () => {
-    // Edge case: a PRO user who happens to have an old trial timestamp from
+  it('does not overwrite an existing paid tier — 409 still fires when trialStartedAt is set on a TEAMS tier', async () => {
+    // Edge case: a TEAMS user who happens to have an old trial timestamp from
     // before they upgraded. We must not downgrade them by re-applying TRIAL.
     const old = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    writeConfig(tmpDir, { tier: 'PRO', trialStartedAt: old });
+    writeConfig(tmpDir, { tier: 'TEAMS', trialStartedAt: old });
 
     const res = await server.inject(authInject(server, {
       method: 'POST',
@@ -133,18 +133,18 @@ describe('POST /api/tier/start-trial', () => {
     }));
 
     expect(res.statusCode).toBe(409);
-    // Disk must keep PRO.
+    // Disk must keep TEAMS.
     const persisted = readConfig(tmpDir);
-    expect(persisted.tier).toBe('PRO');
+    expect(persisted.tier).toBe('TEAMS');
   });
 
   it('applies a persisted paid tier to the runtime session cap on startup', async () => {
     await server.close();
-    writeConfig(tmpDir, { tier: 'PRO' });
+    writeConfig(tmpDir, { tier: 'TEAMS' });
     server = await buildLocalServer({ dataDir: tmpDir });
 
-    expect(server.localConfig.tier).toBe('PRO');
-    expect(server.sessionManager.getMaxSessions()).toBe(10);
+    expect(server.localConfig.tier).toBe('TEAMS');
+    expect(server.sessionManager.getMaxSessions()).toBe(25);
   });
 });
 
@@ -179,12 +179,12 @@ describe('PATCH /api/tier override gate (AV-3)', () => {
   it('allows PATCH /api/tier when WAGGLE_ALLOW_TIER_OVERRIDE=1 (dev/test)', async () => {
     process.env.WAGGLE_ALLOW_TIER_OVERRIDE = '1';
     const res = await server.inject(authInject(server, {
-      method: 'PATCH', url: '/api/tier', payload: { tier: 'PRO' },
+      method: 'PATCH', url: '/api/tier', payload: { tier: 'TEAMS' },
     }));
     expect(res.statusCode).toBe(200);
-    expect(readConfig(tmpDir).tier).toBe('PRO');
-    expect(server.localConfig.tier).toBe('PRO');
-    expect(server.sessionManager.getMaxSessions()).toBe(10);
+    expect(readConfig(tmpDir).tier).toBe('TEAMS');
+    expect(server.localConfig.tier).toBe('TEAMS');
+    expect(server.sessionManager.getMaxSessions()).toBe(25);
   });
 });
 

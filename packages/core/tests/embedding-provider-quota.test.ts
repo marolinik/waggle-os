@@ -21,13 +21,14 @@ describe('Embedding Provider — Tier & Quota Enforcement', () => {
   });
 
   describe('Tier enforcement on provider selection', () => {
-    it('FREE user requesting voyage throws TierError', async () => {
+    it('FREE user requesting litellm throws TierError (litellm stays Team-only)', async () => {
+      // Solo (FREE) unlocks BYO cloud embeddings (voyage/openai) but NOT the
+      // managed litellm router — that stays a paid-tier provider.
       await expect(
         createEmbeddingProvider({
-          provider: 'voyage',
+          provider: 'litellm',
           userTier: 'FREE',
           quotaDb: db,
-          voyage: { apiKey: 'test-key' },
         })
       ).rejects.toThrow(TierError);
     });
@@ -46,24 +47,26 @@ describe('Embedding Provider — Tier & Quota Enforcement', () => {
       }
     });
 
-    it('PRO user using voyage does not throw TierError', async () => {
-      // voyage will fail to connect (no real API), but should NOT throw TierError
+    it('FREE user requesting voyage does not throw TierError (Solo unlocks BYO cloud embeddings)', async () => {
+      // voyage will fail to connect (no real API), but should NOT throw TierError —
+      // Solo now allows the voyage/openai providers directly.
       const provider = await createEmbeddingProvider({
         provider: 'auto',
-        userTier: 'PRO',
+        userTier: 'FREE',
         quotaDb: db,
       });
       // Should fall back to mock (no real providers in test), but no TierError
       expect(provider.getActiveProvider()).toBeDefined();
     });
 
-    it('auto mode skips providers not allowed by FREE tier', async () => {
+    it('auto mode surfaces only key-backed providers for FREE tier', async () => {
       const provider = await createEmbeddingProvider({
         provider: 'auto',
         userTier: 'FREE',
         quotaDb: db,
       });
-      // FREE allows inprocess, mock, and ollama
+      // FREE allows inprocess, mock, ollama + cloud (voyage/openai); cloud is
+      // skipped here without API keys, so only local providers + mock surface.
       const status = provider.getStatus();
       for (const p of status.availableProviders) {
         expect(['inprocess', 'mock', 'ollama']).toContain(p);
@@ -187,28 +190,26 @@ describe('Embedding Provider — Tier & Quota Enforcement', () => {
     beforeEach(() => { delete process.env.WAGGLE_EVAL_MODE; });
     afterEach(() => { delete process.env.WAGGLE_EVAL_MODE; });
 
-    it('without WAGGLE_EVAL_MODE: FREE + voyage still throws TierError (control)', async () => {
+    it('without WAGGLE_EVAL_MODE: FREE + litellm still throws TierError (control)', async () => {
       // Explicit sanity check that the normal gate is still live — baseline
-      // for the bypass test below.
+      // for the bypass test below. litellm is the provider FREE still lacks.
       expect(process.env.WAGGLE_EVAL_MODE).toBeUndefined();
       await expect(
         createEmbeddingProvider({
-          provider: 'voyage',
+          provider: 'litellm',
           userTier: 'FREE',
           quotaDb: db,
-          voyage: { apiKey: 'test-key' },
         })
       ).rejects.toThrow(TierError);
     });
 
-    it('with WAGGLE_EVAL_MODE=1: FREE + voyage no longer throws TierError', async () => {
+    it('with WAGGLE_EVAL_MODE=1: FREE + litellm no longer throws TierError', async () => {
       process.env.WAGGLE_EVAL_MODE = '1';
       try {
         await createEmbeddingProvider({
-          provider: 'voyage',
+          provider: 'litellm',
           userTier: 'FREE',
           quotaDb: db,
-          voyage: { apiKey: 'test-key' },
         });
       } catch (err) {
         // Probe failure (no real voyage backend in tests) is fine — just not
@@ -234,10 +235,9 @@ describe('Embedding Provider — Tier & Quota Enforcement', () => {
         process.env.WAGGLE_EVAL_MODE = bad;
         await expect(
           createEmbeddingProvider({
-            provider: 'voyage',
+            provider: 'litellm',
             userTier: 'FREE',
             quotaDb: db,
-            voyage: { apiKey: 'test-key' },
           })
         ).rejects.toThrow(TierError);
         delete process.env.WAGGLE_EVAL_MODE;

@@ -36,14 +36,14 @@ describe('Stripe Webhook — tier update logic', () => {
   });
 
   describe('updateUserTier', () => {
-    it('creates config.json and sets tier to PRO on checkout complete', () => {
-      updateUserTier(tmpDir, 'PRO');
+    it('creates config.json and sets tier to TEAMS on checkout complete', () => {
+      updateUserTier(tmpDir, 'TEAMS');
 
       const configPath = path.join(tmpDir, 'config.json');
       expect(fs.existsSync(configPath)).toBe(true);
 
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      expect(raw.tier).toBe('PRO');
+      expect(raw.tier).toBe('TEAMS');
     });
 
     it('updates existing config.json without losing other fields', () => {
@@ -103,16 +103,17 @@ describe('Stripe Webhook — tier update logic', () => {
       expect(tierFromPriceId('price_abc123')).toBeNull();
     });
 
-    it('maps legacy BASIC price env to PRO tier', () => {
-      // BASIC was renamed to PRO; STRIPE_PRICE_BASIC is kept as a legacy
-      // alias that now resolves to the PRO tier (see stripe/index.ts).
+    it('maps legacy BASIC price env to FREE (Solo)', () => {
+      // BASIC/PRO were collapsed into Solo; STRIPE_PRICE_BASIC is kept as a legacy
+      // alias that now resolves to FREE so a legacy subscriber lands on Solo,
+      // never locked out (see stripe/index.ts).
       process.env['STRIPE_PRICE_BASIC'] = 'price_basic_test';
-      expect(tierFromPriceId('price_basic_test')).toBe('PRO');
+      expect(tierFromPriceId('price_basic_test')).toBe('FREE');
     });
 
-    it('maps legacy STRIPE_PRICE_PRO to PRO tier', () => {
+    it('maps legacy STRIPE_PRICE_PRO to FREE (Solo)', () => {
       process.env['STRIPE_PRICE_PRO'] = 'price_pro_test';
-      expect(tierFromPriceId('price_pro_test')).toBe('PRO');
+      expect(tierFromPriceId('price_pro_test')).toBe('FREE');
     });
 
     it('maps legacy STRIPE_PRICE_TEAMS to TEAMS tier', () => {
@@ -128,14 +129,14 @@ describe('Stripe Webhook — tier update logic', () => {
 
     // ── New 4-var contract (apps/www Next.js port) ──────────────────────
 
-    it('maps STRIPE_PRICE_PRO_MONTHLY to PRO tier', () => {
+    it('maps STRIPE_PRICE_PRO_MONTHLY to FREE (Solo — legacy PRO price)', () => {
       process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pro_monthly_test';
-      expect(tierFromPriceId('price_pro_monthly_test')).toBe('PRO');
+      expect(tierFromPriceId('price_pro_monthly_test')).toBe('FREE');
     });
 
-    it('maps STRIPE_PRICE_PRO_ANNUAL to PRO tier', () => {
+    it('maps STRIPE_PRICE_PRO_ANNUAL to FREE (Solo — legacy PRO price)', () => {
       process.env['STRIPE_PRICE_PRO_ANNUAL'] = 'price_pro_annual_test';
-      expect(tierFromPriceId('price_pro_annual_test')).toBe('PRO');
+      expect(tierFromPriceId('price_pro_annual_test')).toBe('FREE');
     });
 
     it('maps STRIPE_PRICE_TEAMS_MONTHLY to TEAMS tier', () => {
@@ -159,23 +160,23 @@ describe('Stripe Webhook — tier update logic', () => {
       process.env['STRIPE_PRICE_TEAMS_ANNUAL']  = 'price_landing_teams_y';
       process.env['STRIPE_PRICE_TEAMS']         = 'price_sidecar_teams';
 
-      // Every configured Pro price → PRO, every configured Teams price → TEAMS.
-      expect(tierFromPriceId('price_landing_pro_m')).toBe('PRO');
-      expect(tierFromPriceId('price_landing_pro_y')).toBe('PRO');
-      expect(tierFromPriceId('price_sidecar_pro')).toBe('PRO');
+      // Every configured legacy Pro price → FREE (Solo), every Teams price → TEAMS.
+      expect(tierFromPriceId('price_landing_pro_m')).toBe('FREE');
+      expect(tierFromPriceId('price_landing_pro_y')).toBe('FREE');
+      expect(tierFromPriceId('price_sidecar_pro')).toBe('FREE');
       expect(tierFromPriceId('price_landing_teams_m')).toBe('TEAMS');
       expect(tierFromPriceId('price_landing_teams_y')).toBe('TEAMS');
       expect(tierFromPriceId('price_sidecar_teams')).toBe('TEAMS');
     });
 
-    it('does not cross-pollute tiers (Teams price does not resolve to PRO)', () => {
+    it('does not cross-pollute tiers (Teams price stays TEAMS, legacy Pro price → FREE)', () => {
       process.env['STRIPE_PRICE_PRO_MONTHLY'] = 'price_pro_m';
       process.env['STRIPE_PRICE_TEAMS_MONTHLY'] = 'price_teams_m';
 
-      expect(tierFromPriceId('price_pro_m')).toBe('PRO');
+      expect(tierFromPriceId('price_pro_m')).toBe('FREE');
       expect(tierFromPriceId('price_teams_m')).toBe('TEAMS');
       // And the negative case explicitly:
-      expect(tierFromPriceId('price_teams_m')).not.toBe('PRO');
+      expect(tierFromPriceId('price_teams_m')).not.toBe('FREE');
       expect(tierFromPriceId('price_pro_m')).not.toBe('TEAMS');
     });
 
@@ -191,11 +192,11 @@ describe('Stripe Webhook — tier update logic', () => {
 
   describe('tier round-trip via parseTier', () => {
     it('tier written by updateUserTier is readable via parseTier', () => {
-      updateUserTier(tmpDir, 'PRO');
+      updateUserTier(tmpDir, 'TEAMS');
 
       const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
       const parsed = parseTier(String(raw.tier));
-      expect(parsed).toBe('PRO');
+      expect(parsed).toBe('TEAMS');
     });
   });
 
@@ -228,6 +229,8 @@ describe('Stripe Webhook — tier update logic', () => {
 
     it('writes valid config.json with no leftover *.tmp file after checkout.session.completed', async () => {
       process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
+      // Legacy PRO metadata collapses to FREE (Solo) via parseTier — the write
+      // still lands atomically; the granted tier is FREE.
       nextEvent = {
         id: 'evt_atomic_1',
         type: 'checkout.session.completed',
@@ -247,7 +250,7 @@ describe('Stripe Webhook — tier update logic', () => {
       const configPath = path.join(tmpDir, 'config.json');
       expect(fs.existsSync(configPath)).toBe(true);
       const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      expect(raw.tier).toBe('PRO');
+      expect(raw.tier).toBe('FREE');
       expect(raw.stripe_customer_id).toBe('cus_123');
 
       // No torn/leftover temp file remains in dataDir
@@ -275,7 +278,7 @@ describe('Stripe Webhook — tier update logic', () => {
         await app1.close();
       }
       const afterFirst = fs.readFileSync(configPath, 'utf-8');
-      expect(JSON.parse(afterFirst).tier).toBe('PRO');
+      expect(JSON.parse(afterFirst).tier).toBe('FREE');
 
       // Tamper with the config object the second event WOULD have produced,
       // so any non-idempotent re-processing would be observable.
@@ -297,7 +300,7 @@ describe('Stripe Webhook — tier update logic', () => {
       // Config must be byte-identical to the first write (TEAMS was NOT applied)
       const afterSecond = fs.readFileSync(configPath, 'utf-8');
       expect(afterSecond).toBe(afterFirst);
-      expect(JSON.parse(afterSecond).tier).toBe('PRO');
+      expect(JSON.parse(afterSecond).tier).toBe('FREE');
     });
 
     // ── R1-002 (webhook path): payment gate ─────────────────────────────
@@ -333,6 +336,7 @@ describe('Stripe Webhook — tier update logic', () => {
 
     it('grants a tier when payment_status is no_payment_required (100%-off coupon)', async () => {
       process.env['STRIPE_WEBHOOK_SECRET'] = 'whsec_test';
+      // Legacy PRO metadata collapses to FREE (Solo) via parseTier.
       nextEvent = {
         id: 'evt_free_1',
         type: 'checkout.session.completed',
@@ -348,7 +352,7 @@ describe('Stripe Webhook — tier update logic', () => {
       }
 
       const raw = JSON.parse(fs.readFileSync(path.join(tmpDir, 'config.json'), 'utf-8'));
-      expect(raw.tier).toBe('PRO');
+      expect(raw.tier).toBe('FREE');
     });
   });
 });

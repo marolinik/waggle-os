@@ -3,8 +3,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bot, Users, Loader2, Lock, Sparkles, ChevronDown, Eye } from 'lucide-react';
-import { useFeatureGate } from '@/hooks/useFeatureGate';
+import { Bot, Users, Loader2, Sparkles, ChevronDown, Eye } from 'lucide-react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   UNIVERSAL_MODE_IDS,
@@ -44,8 +43,6 @@ interface PersonaSwitcherProps {
   onSelectGroup?: (groupId: string) => void;
 }
 
-const FREE_PERSONA_IDS = ['researcher', 'writer', 'analyst'];
-
 type PersonaCard = {
   id: string;
   name: string;
@@ -63,9 +60,7 @@ interface PersonaAgentsListProps {
   currentTemplateId?: string;
   showAllSpecialists: boolean;
   onToggleShowAll: () => void;
-  allPersonasUnlocked: boolean;
-  renderPersonaCard: (p: PersonaCard, locked: boolean) => React.ReactNode;
-  isLocked: (id: string) => boolean;
+  renderPersonaCard: (p: PersonaCard) => React.ReactNode;
 }
 
 /**
@@ -76,7 +71,7 @@ interface PersonaAgentsListProps {
  */
 const PersonaAgentsList = ({
   personas, currentTemplateId, showAllSpecialists, onToggleShowAll,
-  allPersonasUnlocked, renderPersonaCard, isLocked,
+  renderPersonaCard,
 }: PersonaAgentsListProps) => {
   const personaById = useMemo(() => new Map(personas.map(p => [p.id, p])), [personas]);
   const universalCards = UNIVERSAL_MODE_IDS
@@ -101,7 +96,7 @@ const PersonaAgentsList = ({
           Universal Modes
         </h3>
         <div className="grid grid-cols-2 gap-2">
-          {universalCards.map(p => renderPersonaCard(p, isLocked(p.id)))}
+          {universalCards.map(p => renderPersonaCard(p))}
         </div>
       </div>
 
@@ -129,15 +124,9 @@ const PersonaAgentsList = ({
             )}
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {visibleSpecialists.map(p => renderPersonaCard(p, isLocked(p.id)))}
+            {visibleSpecialists.map(p => renderPersonaCard(p))}
           </div>
         </div>
-      )}
-
-      {!allPersonasUnlocked && (
-        <p className="text-[11px] text-muted-foreground text-center py-1">
-          Upgrade to Teams to unlock all personas
-        </p>
       )}
     </div>
   );
@@ -148,8 +137,6 @@ const PersonaSwitcher = ({
   onSelect, onSelectGroup,
 }: PersonaSwitcherProps) => {
   const [tab, setTab] = useState<'agents' | 'groups'>('agents');
-  const { isEnabled } = useFeatureGate();
-  const allPersonasUnlocked = isEnabled('all-personas');
   const [backendPersonas, setBackendPersonas] = useState<BackendPersona[] | null>(null);
   const [groups, setGroups] = useState<AgentGroupOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -182,8 +169,6 @@ const PersonaSwitcher = ({
 
   if (!open) return null;
 
-  const isLocked = (id: string) => !allPersonasUnlocked && !FREE_PERSONA_IDS.includes(id);
-
   // Use backend personas if available, fall back to local
   const personas: PersonaCard[] =
     backendPersonas
@@ -193,19 +178,15 @@ const PersonaSwitcher = ({
         })
       : PERSONAS.map(p => ({ id: p.id, name: p.name, description: p.description, avatar: p.avatar }));
 
-  const renderPersonaCard = (p: PersonaCard, locked: boolean) => {
+  const renderPersonaCard = (p: PersonaCard) => {
     const tooltip = buildPersonaTooltip(p);
     const card = (
       <button
         key={p.id}
-        onClick={() => { if (!locked) { onSelect(p.id); onClose(); } }}
-        disabled={locked}
-        aria-disabled={locked}
-        aria-label={locked ? `${p.name} — locked, upgrade to Teams to unlock` : p.name}
+        onClick={() => { onSelect(p.id); onClose(); }}
+        aria-label={p.name}
         className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
-          locked
-            ? 'bg-secondary/10 border border-transparent cursor-not-allowed grayscale'
-            : currentPersona === p.id && !currentGroupId
+          currentPersona === p.id && !currentGroupId
             ? 'bg-primary/20 border border-primary/50'
             : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
         }`}
@@ -220,14 +201,13 @@ const PersonaSwitcher = ({
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
-            <p className={`text-xs font-display font-medium truncate ${locked ? 'text-muted-foreground' : 'text-foreground'}`}>{p.name}</p>
-            {locked && <Lock className="w-3 h-3 text-muted-foreground shrink-0" aria-hidden="true" />}
-            {tooltip.isReadOnly && !locked && (
+            <p className="text-xs font-display font-medium truncate text-foreground">{p.name}</p>
+            {tooltip.isReadOnly && (
               <Eye className="w-3 h-3 text-sky-400/80 shrink-0" aria-label="Read-only persona" />
             )}
           </div>
           {/* A11y audit #5: bumped text-[11px] → text-xs for readability floor */}
-          <p className={`text-xs truncate ${locked ? 'text-muted-foreground/70' : 'text-muted-foreground'}`}>{p.description}</p>
+          <p className="text-xs truncate text-muted-foreground">{p.description}</p>
         </div>
       </button>
     );
@@ -325,9 +305,7 @@ const PersonaSwitcher = ({
               currentTemplateId={currentTemplateId}
               showAllSpecialists={showAllSpecialists}
               onToggleShowAll={() => setShowAllSpecialists(v => !v)}
-              allPersonasUnlocked={allPersonasUnlocked}
               renderPersonaCard={renderPersonaCard}
-              isLocked={isLocked}
             />
           ) : (
             <div className="space-y-2 max-h-[320px] overflow-y-auto scrollbar-thin">

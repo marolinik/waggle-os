@@ -1,13 +1,13 @@
 /**
  * Tier Architecture — canonical tier definitions, capabilities, and enforcement.
  *
- * CANONICAL TIER NAMES: TRIAL, FREE, PRO, TEAMS, ENTERPRISE
+ * CANONICAL TIER NAMES: TRIAL, FREE, TEAMS, ENTERPRISE (4-tier)
  * These are the only valid values for the Tier type.
+ * Note: FREE displays as "Solo" (see TIER_LABELS); the stored value stays `FREE`.
  *
- * Pricing (confirmed April 12, 2026):
+ * Pricing (confirmed July 5, 2026):
  *   TRIAL      — $0 / 15 days (all features unlocked)
- *   FREE       — $0 forever (5 workspaces, agents, built-in skills only)
- *   PRO        — $19/mo (unlimited, marketplace, all connectors)
+ *   FREE       — Solo — $0 forever (all personal features)
  *   TEAMS      — $49/mo per seat (shared workspaces, WaggleDance, governance)
  *   ENTERPRISE — Consultative (KVARK sovereign on-prem)
  *
@@ -17,7 +17,7 @@
  *           Trial → Free fallback after 15 days (painful but not destructive).
  */
 
-export const TIERS = ['TRIAL', 'FREE', 'PRO', 'TEAMS', 'ENTERPRISE'] as const;
+export const TIERS = ['TRIAL', 'FREE', 'TEAMS', 'ENTERPRISE'] as const;
 export type Tier = typeof TIERS[number];
 
 export const TRIAL_DURATION_DAYS = 15;
@@ -80,27 +80,6 @@ export const TIER_CAPABILITIES: Record<Tier, TierCapabilities> = {
     stripePriceId: null,
   },
   FREE: {
-    connectorLimit: 5,
-    workspaceLimit: 5,
-    embeddingProviders: ['inprocess', 'mock', 'ollama'],
-    embeddingQuotaPerMonth: -1,
-    messageHistoryLimit: -1,
-    spawnAgents: true,
-    customSkills: false,
-    teamSkillLibrary: false,
-    cloudSync: false,
-    exportFormats: ['txt', 'md'],
-    teamMembersLimit: 1,
-    sharedWorkspaces: false,
-    adminPanel: false,
-    auditLog: 'none',
-    selfHosted: false,
-    managedModelPool: false,
-    priorityModels: false,
-    kvarkCta: 'subtle',
-    stripePriceId: null,
-  },
-  PRO: {
     connectorLimit: -1,
     workspaceLimit: -1,
     embeddingProviders: ['inprocess', 'mock', 'ollama', 'voyage', 'openai'],
@@ -119,7 +98,7 @@ export const TIER_CAPABILITIES: Record<Tier, TierCapabilities> = {
     managedModelPool: false,
     priorityModels: false,
     kvarkCta: 'subtle',
-    stripePriceId: readEnv('STRIPE_PRICE_PRO'),
+    stripePriceId: null,
   },
   TEAMS: {
     connectorLimit: -1,
@@ -168,17 +147,31 @@ export const TIER_CAPABILITIES: Record<Tier, TierCapabilities> = {
 // Tier ordering — higher index = more capable
 // TRIAL has max capabilities but is time-limited, so it ranks above TEAMS
 const TIER_ORDER: Record<Tier, number> = {
-  FREE: 0, PRO: 1, TEAMS: 2, ENTERPRISE: 3, TRIAL: 3,
+  FREE: 0, TEAMS: 2, ENTERPRISE: 3, TRIAL: 3,
 };
 
 /** Map legacy tier names to new canonical names. */
 const LEGACY_TIER_MAP: Record<string, Tier> = {
   solo: 'FREE',
-  basic: 'PRO',
+  basic: 'FREE',
+  pro: 'FREE',
   business: 'TEAMS',
   enterprise: 'ENTERPRISE',
   trial: 'TRIAL',
 };
+
+/** Display names — single source of truth for user-facing tier labels. */
+export const TIER_LABELS: Record<Tier, string> = {
+  TRIAL: 'Trial',
+  FREE: 'Solo',
+  TEAMS: 'Team',
+  ENTERPRISE: 'Enterprise',
+};
+
+/** Get the user-facing display name for a tier. */
+export function tierLabel(t: Tier): string {
+  return TIER_LABELS[t];
+}
 
 /** Parse a tier string (handles both legacy and canonical names). */
 export function parseTier(raw: string): Tier | null {

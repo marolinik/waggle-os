@@ -62,7 +62,7 @@ import {
 } from '@waggle/agent';
 import { PluginRuntimeManager, getStarterSkillsDir, validatePluginManifest } from '@waggle/sdk';
 import { MarketplaceDB, MarketplaceSync, seedMcpServers, seedNewSources } from '@waggle/marketplace';
-import { parseTier, assertTierCapability, TierError } from '@waggle/shared';
+import { parseTier } from '@waggle/shared';
 import { readTierFromDataDir } from '../middleware/assert-tier.js';
 import { runConnectorFetch } from './connector-harvest.js';
 import { writeAutoSyncSummaryFrame } from './harvest-autosync-frame.js';
@@ -1973,18 +1973,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         break;
       }
       case 'connector_fetch': {
-        // PRO auto-fetch (§3.C): pull fresh data from opted-in connectors into
-        // the personal mind. Cost-free — raw frames, no LLM extraction.
-        const tier = readTierFromDataDir(fullConfig.dataDir);
-        try {
-          assertTierCapability(tier, 'PRO');
-        } catch (e) {
-          if (e instanceof TierError) {
-            log.info(`[cron] connector_fetch: requires PRO (on ${tier}) — skipping`);
-            break;
-          }
-          throw e;
-        }
+        // Auto-fetch (§3.C): pull fresh data from opted-in connectors into the
+        // personal mind. Cost-free — raw frames, no LLM extraction. Free (Solo).
         try {
           new SessionStore(multiMind.personal).ensure('harvest', 'harvest', 'Imported memory from external sources');
           const personalFrames = new FrameStore(multiMind.personal);

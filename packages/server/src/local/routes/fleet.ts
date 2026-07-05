@@ -56,7 +56,7 @@ export async function fleetRoutes(fastify: FastifyInstance) {
       };
     });
 
-    // Tier-based maxSessions: FREE=3, PRO=10, TEAMS=25, ENTERPRISE/TRIAL=100
+    // Tier-based maxSessions: FREE=10, TEAMS=25, ENTERPRISE/TRIAL=100
     const tierRaw = fastify.localConfig?.tier ?? '';
     const tier = parseTier(String(tierRaw)) ?? 'FREE';
     const maxSessions = maxWorkspaceSessionsForTier(tier);

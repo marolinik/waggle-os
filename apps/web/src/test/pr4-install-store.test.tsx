@@ -118,7 +118,7 @@ describe('InstallProvider — install dispatcher', () => {
 
   it('package install 403 TIER → reason tier, NOT installed, no destructive toast (adapter dispatches the event)', async () => {
     mocks.adapter.installMarketplacePackage.mockResolvedValue(
-      new Response(JSON.stringify({ error: 'TIER_INSUFFICIENT', required: 'PRO' }), { status: 403 }));
+      new Response(JSON.stringify({ error: 'TIER_INSUFFICIENT', required: 'TEAMS' }), { status: 403 }));
     const { result } = await mountStore();
 
     let outcome;

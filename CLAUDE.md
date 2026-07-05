@@ -22,18 +22,21 @@ Tauri 2.0 desktop binary for Windows and macOS, with a Vite-bundled web app and 
 **Strategic function:** Waggle is the demand-creation and qualification engine for KVARK —
 Egzakta Group's sovereign enterprise AI platform.
 
-### Tiers (verified from `packages/shared/src/tiers.ts`, April 2026)
+### Tiers (verified from `packages/shared/src/tiers.ts` — 4-tier: TRIAL/FREE(Solo)/TEAMS/ENTERPRISE, Solo-vs-Team collapse 2026-07-05)
 
 | Tier | Price | Purpose |
 |---|---|---|
-| TRIAL | $0 / 15 days | All features unlocked; falls back to FREE after 15 days |
-| FREE | $0 forever | 5 workspaces, agents, built-in skills only |
-| PRO | $19/mo | Unlimited, marketplace, all connectors |
+| TRIAL | $0 / 15 days | TEAM preview — 15 days of Team, then Solo |
+| FREE (Solo) | $0 forever | Everything personal: unlimited workspaces+connectors, marketplace/custom skills, cloud embeddings, PDF/JSON export, basic audit — free forever |
 | TEAMS | $49/mo per seat | Shared workspaces, WaggleDance, governance |
 | ENTERPRISE | Consultative | KVARK sovereign on-prem (www.kvark.ai) |
 
-**Moat strategy:** Memory + Harvest is free forever (lock-in moat). Agents are free
-(they generate memory). Skills and connectors are the upgrade trigger.
+> PRO ($19/mo) was removed in the Solo-vs-Team collapse (2026-07-05); its
+> capabilities folded into FREE (Solo). `TIER_LABELS` displays FREE as "Solo".
+
+**Moat strategy:** Memory + Harvest is free forever (lock-in moat). Agents, skills,
+and connectors are all free (they generate memory). Team collaboration (shared memory,
+WaggleDance, governance) is the upgrade trigger.
 
 ### Key Technology Facts (Verified April 2026)
 
@@ -162,7 +165,7 @@ For the deep-dive on what the mind/ substrate does, see [`docs/memory-architectu
 types.ts         User, Team, AgentDef, Task, WaggleMessage
 constants.ts     Team roles, job statuses
 schemas.ts       Zod schemas
-tiers.ts         TIERS + TierCapabilities (canonical 5-tier system)
+tiers.ts         TIERS + TierCapabilities (canonical 4-tier: TRIAL/FREE(Solo)/TEAMS/ENTERPRISE) + TIER_LABELS/tierLabel
 mcp-catalog.ts   MCP server catalog
 index.ts         Barrel
 ```
@@ -539,7 +542,7 @@ Do not recreate or expose outside gating.
 
 ### What Landed
 **April 2026 baseline:**
-- `tiers.ts` shipped with 5-tier system (TRIAL/FREE/PRO/TEAMS/ENTERPRISE).
+- `tiers.ts` shipped with a 5-tier system (TRIAL/FREE/PRO/TEAMS/ENTERPRISE). _Superseded 2026-07-05: PRO removed, now 4-tier TRIAL/FREE(Solo)/TEAMS/ENTERPRISE — see §1._
 - `feature-flags.ts` shipped.
 - Persona data/logic split (`persona-data.ts` ↔ `personas.ts`).
 - **All 4 new personas shipped** (general-purpose, planner, verifier, coordinator) — `persona-data.ts` verified.
@@ -579,8 +582,8 @@ End-to-end: detect → install hooks (reversible) → launch with `WAGGLE_WORKSP
 - ✅ P35 Spawn Agent "no models available" (`14942be`)
 - ✅ QW-1..QW-5 quick wins (all already shipped per `grep` verification)
 - ✅ CR-2 hive-950 → semantic tokens (only comment-level refs remain)
-- ✅ M7 Stripe products — both test (`acct_1SzHlbC0mmjh4oEM`) and live (`CNCrMQy1f7`) accounts hold the full 2 products × 2 prices (monthly + annual) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys. Verified via `stripe products list` + `stripe prices list`. Live price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md`.
-- ✅ E-10 Stripe tier-enforcement wiring — webhook handler was already complete (signature + idempotency + 3 event handlers in `packages/server/src/stripe/webhook.ts`); session closed the residual gap by extending `tierFromPriceId()` in `packages/server/src/stripe/index.ts` to resolve the full 4-var contract (`STRIPE_PRICE_PRO_MONTHLY` / `_ANNUAL` / `STRIPE_PRICE_TEAMS_MONTHLY` / `_ANNUAL`) alongside legacy single-vars + `STRIPE_PRICE_BASIC`. 17/17 webhook tests green; annual subscriptions now resolve through the webhook.
+- ✅ M7 Stripe products — both test (`acct_1SzHlbC0mmjh4oEM`) and live (`CNCrMQy1f7`) accounts hold the full 2 products × 2 prices (monthly + annual) with `pro_monthly` / `pro_annual` / `teams_monthly` / `teams_annual` lookup keys. Verified via `stripe products list` + `stripe prices list`. Live price IDs documented in `docs/launch/drafts/2026-05-12-apps-www-deployment-readiness.md`. _Note (Solo-vs-Team collapse 2026-07-05): the PRO products/prices are **retained in Stripe for legacy-sub servicing only** — no new PRO checkout is offered. Only TEAMS is an active checkout price._
+- ✅ E-10 Stripe tier-enforcement wiring — webhook handler was already complete (signature + idempotency + 3 event handlers in `packages/server/src/stripe/webhook.ts`); session closed the residual gap by extending `tierFromPriceId()` in `packages/server/src/stripe/index.ts` to resolve the full 4-var contract (`STRIPE_PRICE_PRO_MONTHLY` / `_ANNUAL` / `STRIPE_PRICE_TEAMS_MONTHLY` / `_ANNUAL`) alongside legacy single-vars + `STRIPE_PRICE_BASIC`. 17/17 webhook tests green; annual subscriptions now resolve through the webhook. _Note (Solo-vs-Team collapse 2026-07-05): `tierFromPriceId()` still reads the legacy PRO/BASIC price envs, but now maps them → `'FREE'` (Solo) so a legacy PRO subscriber lands on Solo rather than a removed tier. Only TEAMS resolves to a paid tier._
 - ✅ M2 Claude export — `data-ffbb9f0b-…batch-0000.zip` (30 MB) on Desktop\MEMORIES\Claude\, dated 2026-04-17. Ready for E-11 ingestion.
 - ✅ M3 Gemini export — `takeout-20260416T224803Z-3-001.zip` (437 MB) on Desktop\MEMORIES\Google\, dated 2026-04-17. Ready for E-11 ingestion.
 - ⏭️ M1 ChatGPT export — skipped by Marko 2026-05-21 (export emails never arrived after multiple requests).

@@ -8,11 +8,11 @@
  *
  * Ratified gates honoured:
  *  - A4  — real-where-substrate-exists: installs go through the EXISTING
- *          marketplace installer (SecurityGate + PRO tier + audit ride along);
+ *          marketplace installer (SecurityGate + audit ride along);
  *          the static catalog renders honest not-installed states.
- *  - B5  — install is PRO+ via @waggle/shared tiers (requireTier middleware);
- *          the custom-add route (POST /api/mcps) carries the same gate —
- *          registering an arbitrary stdio server IS an install.
+ *  - B5  — install is free (Solo): MCP install + custom-add are personal
+ *          features (PRO removed). SecurityGate + audit still ride along via
+ *          the marketplace installer.
  *  - C19 — scope = single workspaceId v1 (the runtime's native model).
  *  - C20 — stdio-only; no remote-registry transport.
  *  - C21 — /test runs a LIVE spawn + initialize/tools-list round-trip when the
@@ -33,7 +33,6 @@ import {
 } from '@waggle/shared';
 import type { McpRuntime, McpServerState } from '@waggle/agent';
 import { scanForInjection, type RecordAuditInput } from '@waggle/core';
-import { requireTier } from '../../middleware/assert-tier.js';
 import {
   loadMcpConfig,
   saveMcpServerEntry,
@@ -183,10 +182,10 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     return { mcps, total: mcps.length, installed: installedNames.size };
   });
 
-  // ── POST /api/mcps/install — PRO+ (B5), delegates to the marketplace ──
+  // ── POST /api/mcps/install — free (Solo), delegates to the marketplace ──
   // installer so SecurityGate + install_audit + .mcp.json write ride along
   // unchanged; then registers + starts the server in the live runtime.
-  fastify.post('/api/mcps/install', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
+  fastify.post('/api/mcps/install', async (request, reply) => {
     const body = request.body as {
       mcpId?: string;
       settings?: Record<string, string>;
@@ -325,10 +324,9 @@ export async function mcpRoutes(fastify: FastifyInstance) {
   });
 
   // ── POST /api/mcps — add a CUSTOM stdio server (C19 single workspaceId) ──
-  // B5: gated PRO+ like /api/mcps/install — registering + starting an
-  // arbitrary stdio server is functionally an install; an ungated custom path
-  // would let FREE replicate any catalog install (and skip SecurityGate).
-  fastify.post('/api/mcps', { preHandler: [requireTier('PRO')] }, async (request, reply) => {
+  // Free (Solo), like /api/mcps/install — registering + starting an arbitrary
+  // stdio server is a personal feature (PRO removed).
+  fastify.post('/api/mcps', async (request, reply) => {
     const body = request.body as {
       name?: string;
       command?: string;

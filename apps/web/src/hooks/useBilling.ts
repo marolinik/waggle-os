@@ -86,7 +86,7 @@ export function useBilling() {
   /** Open Stripe checkout for a tier upgrade. Returns the checkout URL.
    *  PR7a/D8: billingPeriod honors the Monthly/Annual toggle (annual → the real
    *  annual Stripe price, not a cosmetic client discount). */
-  const startCheckout = useCallback(async (tier: 'PRO' | 'TEAMS', billingPeriod?: 'monthly' | 'annual') => {
+  const startCheckout = useCallback(async (tier: 'TEAMS', billingPeriod?: 'monthly' | 'annual') => {
     try {
       const { url } = await adapter.createCheckoutSession(tier, billingPeriod);
       if (url) {

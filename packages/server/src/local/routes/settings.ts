@@ -351,8 +351,8 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
 
   // ── Tier detection ───────────────────────────────────────────────────
   // Tier is read from config.json → tier field (defaults to FREE).
-  // Canonical values: TRIAL | FREE | PRO | TEAMS | ENTERPRISE (@waggle/shared
-  // tiers.ts). Legacy names (SOLO/BASIC/lowercase) auto-migrate via parseTier().
+  // Canonical values: TRIAL | FREE | TEAMS | ENTERPRISE (@waggle/shared
+  // tiers.ts). Legacy names (PRO/BASIC/lowercase) auto-migrate via parseTier().
   // The Stripe webhook (packages/server/src/stripe/webhook.ts) writes this field.
 
   function readTierConfig(dataDir: string): { tier: Tier; trialStartedAt: string | null } {
@@ -392,15 +392,15 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       // Legacy shape — kept for backward compatibility with existing frontend
       limits: {
         maxWorkspaces: caps.workspaceLimit,
-        maxSessions: tier === 'FREE' ? 3 : tier === 'PRO' ? 10 : 25,
+        maxSessions: tier === 'FREE' ? 10 : 25,
         maxMembers: caps.teamMembersLimit,
         features: {
           teams: caps.sharedWorkspaces,
-          marketplace: tier !== 'FREE',
+          marketplace: true,
           budgetControls: caps.adminPanel,
           kvark: tier === 'ENTERPRISE',
           governance: tier === 'ENTERPRISE',
-          customModels: tier !== 'FREE',
+          customModels: true,
         },
       },
     };

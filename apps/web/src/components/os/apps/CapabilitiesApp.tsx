@@ -229,9 +229,9 @@ const CapabilitiesApp = () => {
     if (e.status === 403) {
       window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
         detail: {
-          required: e.body?.required ?? 'PRO',
+          required: e.body?.required ?? 'TEAMS',
           actual: e.body?.actual ?? 'FREE',
-          message: `Installing "${packName}" needs a Pro plan or active trial.`,
+          message: `Installing "${packName}" needs the Team plan or an active trial.`,
         },
       }));
       return true;

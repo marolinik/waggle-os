@@ -1,7 +1,7 @@
 /**
  * §D2 skill-audit: the "verified" badge renders on a skill row only when the
- * audit loop confirmed the skill, with confidence shown as a percentage. The
- * badge is the PRO upgrade-trigger artifact, so its presence must track the
+ * audit loop confirmed the skill, with confidence shown as a percentage. Skill
+ * audit is a free (Solo) feature, so the badge's presence must track the
  * verified flag exactly (never shown on an unverified skill).
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';

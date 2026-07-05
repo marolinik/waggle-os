@@ -260,9 +260,9 @@ describe('P1b auth gate', () => {
     const listener = (e: Event) => events.push((e as CustomEvent).detail);
     window.addEventListener('waggle:tier-insufficient', listener);
     try {
-      const tierBody = { error: 'TIER_INSUFFICIENT', message: 'Needs PRO', required: 'PRO', actual: 'FREE' };
+      const tierBody = { error: 'TIER_INSUFFICIENT', message: 'Needs TEAMS', required: 'TEAMS', actual: 'FREE' };
       routeMock(fetchSpy, [['/api/personas', () => jsonRes(tierBody, 403)]]);
-      await expect(a.getPersonas()).rejects.toThrow('Needs PRO');
+      await expect(a.getPersonas()).rejects.toThrow('Needs TEAMS');
       expect(events).toHaveLength(1);
 
       routeMock(fetchSpy, [['/api/mcps/install', () => jsonRes({ installed: false, ...tierBody }, 403)]]);
@@ -375,7 +375,7 @@ describe('P1b auth gate', () => {
     let wsCalls = 0;
     routeMock(fetchSpy, [
       [TOKEN_PATH, () => jsonRes({ token: 'tok-B' })],
-      ['/api/tier', () => (++tierCalls === 1 ? gate401 : jsonRes({ tier: 'PRO', capabilities: {}, usage: {} }))],
+      ['/api/tier', () => (++tierCalls === 1 ? gate401 : jsonRes({ tier: 'TEAMS', capabilities: {}, usage: {} }))],
       ['/api/workspaces', () => (++wsCalls === 1
         ? jsonRes({ error: 'Unauthorized', code: 'INVALID_TOKEN' }, 401)
         : jsonRes([]))],

@@ -167,7 +167,6 @@ export const ACTION_REGISTRY: readonly ActionDescriptor[] = [
     params: { mcpId: { type: 'string', required: true, description: 'MCP catalog id', enum: POPULAR_MCP_IDS } },
     sideEffect: true,
     riskLevel: 'medium',
-    requiredTier: 'PRO',
     build: (params) => {
       const mcpId = str(params.mcpId);
       if (!mcpId) return null;

@@ -193,7 +193,7 @@ describe('Agent entity routes (Phase 3)', () => {
 
   it('POST is NOT tier-gated — agents are free on every tier (CLAUDE.md §1 moat)', async () => {
     // FREE-tier config present: creation must still succeed — the executor
-    // (fleet spawn) is free for all tiers, so a PRO gate here would be
+    // (fleet spawn) is free for all tiers, so a paid-tier gate here would be
     // an incoherent surface.
     fs.writeFileSync(path.join(dataDir, 'config.json'), JSON.stringify({ tier: 'FREE' }), 'utf-8');
     const res = await server.inject({ method: 'POST', url: '/api/agents', payload: VALID_BODY });

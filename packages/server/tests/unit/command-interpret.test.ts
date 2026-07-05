@@ -38,20 +38,19 @@ describe('interpretCommand — Tier 1 resolver', () => {
     expect(res.action?.navigate).toEqual({ type: 'workspace', id: 'workspace:w1' });
   });
 
-  it('surfaces tier_gated for a PRO action on FREE', async () => {
+  it('resolves install_mcp to an action on FREE — MCP install is free/Solo (never tier_gated)', async () => {
     const res = await interpretCommand(deps({
       currentTier: 'FREE',
       text: 'install the postgres mcp server',
       llm: llmReturning('{"kind":"action","actionId":"install_mcp","params":{"mcpId":"postgres"}}'),
     }));
-    expect(res.kind).toBe('tier_gated');
-    expect(res.requiredTier).toBe('PRO');
-    expect(res.actualTier).toBe('FREE');
+    expect(res.kind).toBe('action');
+    expect(res.action?.id).toBe('install_mcp');
   });
 
-  it('passes the action through (not gated) when the tier is sufficient', async () => {
+  it('passes the action through on a paid tier as well', async () => {
     const res = await interpretCommand(deps({
-      currentTier: 'PRO',
+      currentTier: 'TEAMS',
       llm: llmReturning('{"kind":"action","actionId":"install_mcp","params":{"mcpId":"postgres"}}'),
     }));
     expect(res.kind).toBe('action');

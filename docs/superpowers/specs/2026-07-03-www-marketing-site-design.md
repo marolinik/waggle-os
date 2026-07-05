@@ -15,7 +15,7 @@ Only claims verifiable in this repository. Canonical sources:
 - **Benchmark:** LoCoMo 86.49% (N=1,540, GPT-4.1-mini answerer+judge — the prior leader's own protocol), +4.54pp over prior best 81.95, z=4.64. Reproducible offline (`benchmarks/results/locomo-sota-2026-06/`, `node recount.mjs`). **Never 87.66** (withdrawn).
 - **Open source:** memory substrate published as `hive-mind` (github.com/marolinik/hive-mind), Apache-2.0, npm packages.
 - **Model-agnostic:** LiteLLM routing; Claude, GPT, Gemini, Qwen/local models (`litellm-config.yaml`).
-- **Tiers:** TRIAL $0/15 days (all features) → FREE forever (5 workspaces, agents, built-in skills) → PRO $19/mo → TEAMS $49/seat/mo → ENTERPRISE (KVARK, consultative). Memory + Harvest free forever. (`packages/shared/src/tiers.ts`)
+- **Tiers:** TRIAL $0/15 days (all features) → FREE forever (5 workspaces, agents, built-in skills) → PRO $19/mo → TEAMS $49/seat/mo → ENTERPRISE (KVARK, consultative). Memory + Harvest free forever. (`packages/shared/src/tiers.ts`) _SUPERSEDED 2026-07-05: PRO removed (Solo-vs-Team collapse). Pricing is now **two-tier** — Solo (free forever, unlimited workspaces+connectors, marketplace/custom skills) → Team $49/seat + Enterprise. Any future www regen must NOT reintroduce a PRO tier._
 - **Sovereignty:** data local by default; Memory Center provenance ("view original source") + Art.17 erasure that survives re-import; audit trail; injection scanning on external input.
 - **Breadth:** 22 personas (8 universal modes + 14 specialists), 15 workspace templates, skills marketplace, connectors, MCP catalog, Loops (report-only + approval queue), launcher/hooks for external AI dev tools (7-tool cohort), WaggleDance team signals.
 
@@ -42,7 +42,7 @@ Only claims verifiable in this repository. Canonical sources:
 7. **Sovereignty band** — local-first SQLite, what leaves the machine (only model calls you configure), EU AI Act posture (Art. 17 erasure, audit), open substrate. Trust through specificity.
 8. **Personas strip** — the bee-mascot brand moment (assets exist), reframed with correct count (22 personas).
 9. **Open source section** — hive-mind: Apache-2.0, npm, reproduce-the-benchmark instructions in a code block (`git clone … node recount.mjs`). Developer-credibility anchor.
-10. **Pricing** — Free / Pro $19 / Teams $49-seat + KVARK enterprise line. Bullets rewritten from `tiers.ts` capabilities only. Trial framing: "15-day full trial, then free forever tier" per tiers.ts.
+10. **Pricing** — Free / Pro $19 / Teams $49-seat + KVARK enterprise line. Bullets rewritten from `tiers.ts` capabilities only. Trial framing: "15-day full trial, then free forever tier" per tiers.ts. _SUPERSEDED 2026-07-05: **two-tier** now — Solo (free) / Team $49-seat + KVARK enterprise line; no PRO column._
 11. **Final CTA** — echo hero promise, Download + GitHub.
 12. **Footer** — product/research/company/legal columns (keep, tidy).
 

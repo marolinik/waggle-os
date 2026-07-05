@@ -2,7 +2,7 @@
  * Stripe Checkout — creates a checkout session for tier upgrades.
  *
  * POST /api/stripe/create-checkout-session
- * Body: { tier: 'PRO' | 'TEAMS', billingPeriod?: 'monthly' | 'annual' }
+ * Body: { tier: 'TEAMS', billingPeriod?: 'monthly' | 'annual' }
  * Returns: { url: string }
  */
 
@@ -13,7 +13,7 @@ import { getStripe, priceIdForTier } from './index.js';
 import { validateBody } from '../validate-body.js';
 
 /** POST /api/stripe/create-checkout-session body — a billing action. `tier` is
- *  shape-validated here (required string); the PRO/TEAMS business rule stays in
+ *  shape-validated here (required string); the TEAMS-only business rule stays in
  *  the handler so it can return the specific INVALID_TIER envelope. */
 const createCheckoutSchema = z.object({
   tier: z.string().min(1),
@@ -31,9 +31,9 @@ export const checkoutRoutes: FastifyPluginAsync = async (server) => {
 
     const { tier, billingPeriod } = request.body ?? {};
 
-    // Only BASIC and TEAMS have Stripe prices
-    if (tier !== 'PRO' && tier !== 'TEAMS') {
-      return reply.code(400).send({ error: 'INVALID_TIER', message: 'Only PRO and TEAMS tiers support Stripe checkout.' });
+    // TEAMS is the only paid tier with a Stripe price (PRO removed — Solo is free).
+    if (tier !== 'TEAMS') {
+      return reply.code(400).send({ error: 'INVALID_TIER', message: 'Only the Team tier supports Stripe checkout.' });
     }
 
     const priceId = priceIdForTier(tier as Tier, billingPeriod);

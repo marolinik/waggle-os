@@ -1,5 +1,5 @@
 /**
- * PRO auto-fetch: pull fresh data from connectors into the personal mind
+ * Connector auto-fetch: pull fresh data from connectors into the personal mind
  * (docs/analysis/openhuman-adoption-2026-06-28.md §3.C — OpenHuman's auto-fetch).
  *
  * The connector SDK has no generic data-pull (`execute(action,…)` only, untyped

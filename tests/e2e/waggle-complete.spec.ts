@@ -118,7 +118,7 @@ test.describe('1. Core API Health', () => {
     expect(res.ok()).toBe(true);
     const data = await res.json();
     expect(data.tier).toBeDefined();
-    expect(['FREE','PRO','TEAMS','ENTERPRISE']).toContain(data.tier);
+    expect(['TRIAL','FREE','TEAMS','ENTERPRISE']).toContain(data.tier);
     expect(typeof data.teamsServerAvailable).toBe('boolean');
   });
 
@@ -172,41 +172,29 @@ test.describe('1. Core API Health', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('2. Tier Enforcement (requireTier middleware)', () => {
-  test('2.1 POST /api/personas requires PRO — FREE gets 403', async ({ request }) => {
+  test('2.1 POST /api/personas is free (Solo) — never a tier 403', async ({ request }) => {
     const res = await request.post(`${API}/api/personas`, {
       data: { name: 'Test', description: 'test', systemPrompt: 'test' },
     });
-    // If tier is FREE → 403 TIER_INSUFFICIENT
-    // If tier is PRO+ → 200/201
-    if (res.status() === 403) {
-      const data = await res.json();
-      expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('PRO');
-      expect(data.upgradeUrl).toContain('waggle-os.ai');
-    } else {
-      // Already on paid tier — route accessible
-      expect([200, 201, 400]).toContain(res.status());
-    }
+    // Custom personas are a free (Solo) feature — creation is accessible on any tier.
+    // 200/201 = created; 400 = validation. A tier 403 must never fire.
+    expect([200, 201, 400]).toContain(res.status());
   });
 
-  test('2.2 POST /api/fleet/spawn requires PRO — returns 403 or succeeds', async ({ request }) => {
+  test('2.2 POST /api/fleet/spawn is free (agents generate memory) — never a tier 403', async ({ request }) => {
     const res = await request.post(`${API}/api/fleet/spawn`, {
       data: { personaId: 'researcher' },
     });
-    if (res.status() === 403) {
-      const data = await res.json();
-      expect(data.error).toBe('TIER_INSUFFICIENT');
-    } else {
-      expect([200, 201, 400, 422]).toContain(res.status());
-    }
+    // Spawning agents is free for all tiers — no tier gate.
+    expect([200, 201, 400, 422]).toContain(res.status());
   });
 
-  test('2.3 GET /api/costs requires PRO', async ({ request }) => {
+  test('2.3 GET /api/costs requires TEAMS', async ({ request }) => {
     const res = await request.get(`${API}/api/costs`);
     if (res.status() === 403) {
       const data = await res.json();
       expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('PRO');
+      expect(data.required).toBe('TEAMS');
     } else {
       expect(res.ok()).toBe(true);
       const data = await res.json();
@@ -270,9 +258,9 @@ test.describe('2. Tier Enforcement (requireTier middleware)', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('3. Stripe Integration', () => {
-  test('3.1 POST /api/stripe/create-checkout-session — FREE tier returns URL or 503', async ({ request }) => {
+  test('3.1 POST /api/stripe/create-checkout-session — TEAMS tier returns URL or 503', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-checkout-session`, {
-      data: { tier: 'PRO', billingPeriod: 'monthly' },
+      data: { tier: 'TEAMS', billingPeriod: 'monthly' },
     });
     // 200 = Stripe configured, returns checkout URL
     // 503 = STRIPE_NOT_CONFIGURED (env not set)
@@ -309,20 +297,16 @@ test.describe('3. Stripe Integration', () => {
     expect([400, 503]).toContain(res.status());
   });
 
-  test('3.4 POST /api/stripe/create-portal-session requires PRO tier', async ({ request }) => {
+  test('3.4 POST /api/stripe/create-portal-session is ungated (any authed user)', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-portal-session`, {
       data: {},
     });
-    // FREE → 403 TIER_INSUFFICIENT
-    // PRO+ without Stripe customer → 400 NO_STRIPE_CUSTOMER
-    // PRO+ with Stripe → 200
-    // Stripe not configured → 503
-    expect([200, 400, 403, 503]).toContain(res.status());
-    if (res.status() === 403) {
-      const data = await res.json();
-      expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('PRO');
-    }
+    // Ungated (requireTier('FREE') no-op floor) so a legacy sub can self-cancel:
+    //   without a Stripe customer → 400 NO_STRIPE_CUSTOMER
+    //   with a Stripe customer → 200
+    //   Stripe not configured → 503
+    // A tier 403 must never fire here.
+    expect([200, 400, 503]).toContain(res.status());
   });
 });
 
@@ -392,17 +376,13 @@ test.describe('4. Marketplace', () => {
     expect(res.status()).toBe(400);
   });
 
-  test('4.8 POST /api/marketplace/install requires PRO tier', async ({ request }) => {
+  test('4.8 POST /api/marketplace/install is free (Solo) — never a tier 403', async ({ request }) => {
     const res = await request.post(`${API}/api/marketplace/install`, {
       data: { packageId: 9999 },
     });
-    // 403 = FREE tier
-    // 404 = package not found (PRO+ tier)
-    expect([403, 404]).toContain(res.status());
-    if (res.status() === 403) {
-      const data = await res.json();
-      expect(data.error).toBe('TIER_INSUFFICIENT');
-    }
+    // Personal marketplace install is a free (Solo) feature — no tier gate.
+    // 404 = package not found; 400 = bad request. A tier 403 must never fire.
+    expect([200, 400, 404]).toContain(res.status());
   });
 
   test('4.9 POST /api/marketplace/sync returns sync results', async ({ request }) => {
@@ -508,16 +488,12 @@ test.describe('6. Personas', () => {
     }
   });
 
-  test('6.5 POST /api/personas/generate requires PRO tier', async ({ request }) => {
+  test('6.5 POST /api/personas/generate is free (Solo) — never a tier 403', async ({ request }) => {
     const res = await request.post(`${API}/api/personas/generate`, {
       data: { description: 'A helpful assistant' },
     });
-    if (res.status() === 403) {
-      const data = await res.json();
-      expect(data.error).toBe('TIER_INSUFFICIENT');
-    } else {
-      expect([200, 201, 400, 422]).toContain(res.status());
-    }
+    // AI-generated personas are a free (Solo) feature — no tier gate.
+    expect([200, 201, 400, 422]).toContain(res.status());
   });
 });
 
@@ -635,14 +611,14 @@ test.describe('8. Hooks API', () => {
 // ══════════════════════════════════════════════════════════════════════════
 
 test.describe('9. Cost Dashboard', () => {
-  test('9.1 GET /api/costs — accessible on PRO+', async ({ request }) => {
+  test('9.1 GET /api/costs — accessible on TEAMS+', async ({ request }) => {
     const res = await request.get(`${API}/api/costs`);
     if (res.ok()) {
       const data = await res.json();
       expect(data.today ?? data.allTime).toBeDefined();
       expect(Array.isArray(data.daily)).toBe(true);
     } else {
-      expect(res.status()).toBe(403); // FREE tier
+      expect(res.status()).toBe(403); // below TEAMS
     }
   });
 

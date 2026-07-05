@@ -2,7 +2,7 @@
  * Tier enforcement middleware for Fastify routes.
  *
  * Usage:
- *   server.post('/api/personas', { preHandler: [requireTier('PRO')] }, handler)
+ *   server.post('/api/team/connect', { preHandler: [requireTier('TEAMS')] }, handler)
  *
  * Reads the current tier from config.json (same source as GET /api/tier).
  * Returns 403 with structured error when tier is insufficient.

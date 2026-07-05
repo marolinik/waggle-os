@@ -99,10 +99,10 @@ describe('useBilling (P1b D3-4)', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.tierResolved).toBe(false);
 
-    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TEAMS', capabilities: {}, usage: {} });
     settleConnect();
     await waitFor(() => expect(result.current.tierResolved).toBe(true));
-    expect(result.current.tier).toBe('PRO');
+    expect(result.current.tier).toBe('TEAMS');
   });
 });
 
@@ -147,20 +147,20 @@ describe('ShellContext tier (P1b D3-4)', () => {
   it('a paying user is not reset to FREE by a transient failure, and recovers on connect-settled', async () => {
     mocks.adapter.getWorkspaces.mockResolvedValue([]);
     mocks.adapter.getTier.mockResolvedValueOnce({
-      tier: 'PRO', trialDaysRemaining: undefined, trialExpired: false, capabilities: {}, usage: {},
+      tier: 'TEAMS', trialDaysRemaining: undefined, trialExpired: false, capabilities: {}, usage: {},
     });
     const { result } = await renderShell();
-    await waitFor(() => expect(result.current.billingTier).toBe('PRO'));
+    await waitFor(() => expect(result.current.billingTier).toBe('TEAMS'));
     expect(result.current.tierResolved).toBe(true);
 
     // Transient failure (e.g. sidecar restart mid-refresh): state must hold.
     mocks.adapter.getTier.mockRejectedValueOnce(httpError(401, {}, 'Unauthorized'));
     await act(async () => { await result.current.refreshTier(); });
-    expect(result.current.billingTier).toBe('PRO');
+    expect(result.current.billingTier).toBe('TEAMS');
     expect(result.current.tierError).toBe('Unauthorized');
 
     // Recovery: connect-settled revalidates while errored.
-    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TEAMS', capabilities: {}, usage: {} });
     settleConnect();
     await waitFor(() => expect(result.current.tierError).toBeNull());
   });
@@ -319,10 +319,10 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
     expect(screen.queryByText(/FREE plan/i)).toBeNull();
   }, 15000);
 
-  it('resolved PRO tier renders the real plan in the General tab', async () => {
-    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+  it('resolved TEAMS tier renders the real plan in the General tab', async () => {
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'TEAMS', capabilities: {}, usage: {} });
     const screen = await renderSettings();
-    await waitFor(() => expect(screen.getByText(/PRO plan/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Team plan/i)).toBeInTheDocument());
   }, 15000);
 });
 
@@ -356,7 +356,7 @@ describe('useChat error surfacing (P1b)', () => {
   });
 
   it('tier-403 copy defers to the UpgradeModal instead of duplicating the upsell', async () => {
-    const result = await sendFailing(httpError(403, { error: 'TIER_INSUFFICIENT', required: 'PRO' }, 'Needs PRO'));
+    const result = await sendFailing(httpError(403, { error: 'TIER_INSUFFICIENT', required: 'TEAMS' }, 'Needs TEAMS'));
     const last = result.current.messages[result.current.messages.length - 1];
     expect(last.content).toBe('This action needs a higher plan — see the upgrade window.');
   });

@@ -393,7 +393,7 @@ test.describe('B4 — Multi-Agent Concurrency (vs Claude Code / ChatGPT / OpenCl
 
   test('B4.2 — Agent groups exist [Claude Code: no group concept]', async ({ request }) => {
     const res = await request.get(`${API}/api/agent-groups`);
-    // Agent groups may be PRO+ gated — either 200 or 403 is valid
+    // Agent groups may be TEAMS-gated — either 200 or 403 is valid
     expect([200, 403, 404]).toContain(res.status());
     if (res.ok()) {
       const data = await res.json();
@@ -1065,7 +1065,7 @@ test.describe('B10 — Composite Competitive Score', () => {
           const r = await request.get(`${API}/api/tier`);
           if (!r.ok()) return false;
           const d = await r.json();
-          return ['FREE', 'PRO', 'TEAMS', 'ENTERPRISE'].includes(d.tier);
+          return ['TRIAL', 'FREE', 'TEAMS', 'ENTERPRISE'].includes(d.tier);
         },
       },
       {

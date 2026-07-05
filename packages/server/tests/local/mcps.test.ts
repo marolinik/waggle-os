@@ -121,7 +121,7 @@ describe('MCP Hub routes (Phase 4)', () => {
   let marketplaceRaw: Database.Database;
   let marketplaceFake: ReturnType<typeof createFakeMarketplace>['db'];
 
-  async function buildServer(opts?: { tier?: 'PRO' | null; marketplace?: boolean }) {
+  async function buildServer(opts?: { tier?: 'TEAMS' | null; marketplace?: boolean }) {
     const s = Fastify({ logger: false });
     if (opts?.tier) {
       fs.writeFileSync(path.join(tmpDir, 'config.json'), JSON.stringify({ tier: opts.tier }), 'utf-8');
@@ -150,7 +150,7 @@ describe('MCP Hub routes (Phase 4)', () => {
     db = new MindDB(':memory:');
     auditStore = new InstallAuditStore(db);
     runtime = new McpRuntime({ spawn: createMockSpawn() });
-    server = await buildServer({ tier: 'PRO' });
+    server = await buildServer({ tier: 'TEAMS' });
   });
 
   afterEach(async () => {
@@ -226,16 +226,16 @@ describe('MCP Hub routes (Phase 4)', () => {
     expect(audit[0]).toMatchObject({ capability_type: 'mcp', action: 'installed', initiator: 'user' });
   });
 
-  it('POST /api/mcps is tier-gated: FREE gets 403 (B5 — custom add IS an install)', async () => {
+  it('POST /api/mcps is free (Solo): FREE tier adds a custom server (B5 — PRO removed)', async () => {
     const freeServer = await buildServer({ tier: null }); // no config.json → FREE
     try {
       const res = await freeServer.inject({
         method: 'POST', url: '/api/mcps',
         payload: { name: 'free-tool', command: 'node' },
       });
-      expect(res.statusCode).toBe(403);
-      expect(res.json().error).toBe('TIER_INSUFFICIENT');
-      expect(loadMcpConfig(tmpDir).mcpServers['free-tool']).toBeUndefined();
+      expect(res.statusCode).toBe(201);
+      expect(res.json()).toMatchObject({ id: 'free-tool', registered: true });
+      expect(loadMcpConfig(tmpDir).mcpServers['free-tool']).toBeDefined();
     } finally {
       await freeServer.close();
     }
@@ -309,7 +309,7 @@ describe('MCP Hub routes (Phase 4)', () => {
   it('test answers 409 busy while a concurrent start is in flight (never kills it)', async () => {
     // Slow handshake so the 'starting' window is observable.
     runtime = new McpRuntime({ spawn: createMockSpawn({ initializeDelayMs: 500 }) });
-    const slowServer = await buildServer({ tier: 'PRO' });
+    const slowServer = await buildServer({ tier: 'TEAMS' });
     try {
       await slowServer.inject({ method: 'POST', url: '/api/mcps', payload: { name: 'slow', command: 'node' } });
       const instance = runtime.getServer('slow')!;
@@ -391,14 +391,14 @@ describe('MCP Hub routes (Phase 4)', () => {
     expect(missing.statusCode).toBe(404);
   });
 
-  // ── install (B5 PRO gate + marketplace delegation) ─────────────────────
+  // ── install (B5 free/Solo + marketplace delegation) ────────────────────
 
-  it('install is tier-gated: FREE gets 403 TIER_INSUFFICIENT (B5)', async () => {
+  it('install is free (Solo): FREE tier installs successfully (B5 — PRO removed)', async () => {
     const freeServer = await buildServer({ tier: null }); // no config.json → FREE
     try {
       const res = await freeServer.inject({ method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'mock-mcp' } });
-      expect(res.statusCode).toBe(403);
-      expect(res.json().error).toBe('TIER_INSUFFICIENT');
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ installed: true, mcpId: 'mock-mcp' });
     } finally {
       await freeServer.close();
     }
@@ -496,7 +496,7 @@ describe('MCP Hub routes (Phase 4)', () => {
     const notFound = await server.inject({ method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'nope' } });
     expect(notFound.statusCode).toBe(404);
 
-    const noDb = await buildServer({ tier: 'PRO', marketplace: false });
+    const noDb = await buildServer({ tier: 'TEAMS', marketplace: false });
     try {
       const res = await noDb.inject({ method: 'POST', url: '/api/mcps/install', payload: { mcpId: 'mock-mcp' } });
       expect(res.statusCode).toBe(503);

@@ -119,7 +119,7 @@ describe('MCPHubApp — MCP Hub (S08)', () => {
   const CATALOG_TIMEOUT = 20_000;
 
   it('B5: a TIER_INSUFFICIENT install routes through the upgrade event', { timeout: CATALOG_TIMEOUT }, async () => {
-    mocks.adapter.installMcp.mockResolvedValue({ error: 'TIER_INSUFFICIENT', required: 'PRO', actual: 'FREE' });
+    mocks.adapter.installMcp.mockResolvedValue({ error: 'TIER_INSUFFICIENT', required: 'TEAMS', actual: 'FREE' });
     const events: CustomEvent[] = [];
     const listener = (e: Event) => events.push(e as CustomEvent);
     window.addEventListener('waggle:tier-insufficient', listener);
@@ -130,7 +130,7 @@ describe('MCPHubApp — MCP Hub (S08)', () => {
       fireEvent.click(await screen.findByTestId('mcp-install-postgres'));
       await waitFor(() => expect(mocks.adapter.installMcp).toHaveBeenCalledWith('postgres', undefined));
       await waitFor(() => expect(events.length).toBeGreaterThan(0));
-      expect(events[0].detail.required).toBe('PRO');
+      expect(events[0].detail.required).toBe('TEAMS');
     } finally {
       window.removeEventListener('waggle:tier-insufficient', listener);
     }

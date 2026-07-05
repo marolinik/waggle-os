@@ -88,7 +88,10 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
     return estimateCost(input, output);
   }
 
-  // GET /api/cost/summary — total tokens, estimated cost, daily breakdown
+  // GET /api/cost/summary — total tokens, estimated cost, daily breakdown.
+  // Intentionally FREE for all tiers (P22): it powers the personal Telemetry
+  // dev-mode cost/budget view. The TEAM cost-visibility surface is the separate
+  // /api/cost/by-workspace + /api/costs alias (both requireTier('TEAMS')).
   server.get<{
     Querystring: { days?: string };
   }>('/api/cost/summary', async (request) => {
@@ -260,8 +263,8 @@ export const costRoutes: FastifyPluginAsync = async (server) => {
 
   // D2: Alias /api/costs → /api/cost/summary for API discoverability
   // Use internal routing instead of 302 redirect so clients get a direct 200 response
-  // P22 (PDF 2026-04-17): usage/telemetry info is free for all tiers.
-  server.get('/api/costs', async (request, reply) => {
+  // Cost visibility is a Team feature — gated identically to /api/cost/by-workspace.
+  server.get('/api/costs', { preHandler: [requireTier('TEAMS')] }, async (request, reply) => {
     const days = (request.query as Record<string, string>)?.days;
     const url = days ? `/api/cost/summary?days=${days}` : '/api/cost/summary';
     const response = await server.inject({ method: 'GET', url, headers: request.headers });

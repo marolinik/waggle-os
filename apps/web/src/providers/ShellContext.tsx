@@ -150,7 +150,11 @@ export const ShellProvider = ({ children }: { children: ReactNode }) => {
       const data = await adapter.getTier();
       setTrialInfo({ trialDaysRemaining: data.trialDaysRemaining, trialExpired: data.trialExpired });
       const t = String(data.tier ?? 'FREE').toUpperCase();
-      if (t === 'FREE' || t === 'TRIAL' || t === 'PRO' || t === 'TEAMS' || t === 'ENTERPRISE') {
+      // Legacy PRO subscriptions collapse to Solo (FREE) — decision 8: 'PRO'
+      // must never reach the dock's BillingTier union.
+      if (t === 'PRO') {
+        setBillingTier('FREE');
+      } else if (t === 'FREE' || t === 'TRIAL' || t === 'TEAMS' || t === 'ENTERPRISE') {
         setBillingTier(t);
       }
       setTierResolved(true);

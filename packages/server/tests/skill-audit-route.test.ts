@@ -1,7 +1,9 @@
 /**
  * Integration tests for the §D2 skill-audit routes (POST/GET /api/skills/audit).
  *
- * Gate order under test: PRO tier → vault key → @ax-llm/ax availability → run.
+ * Gate order under test: vault key → @ax-llm/ax availability → run. The audit is
+ * free (Solo) — PRO removed, so there is no tier gate; it still requires the
+ * user's own vault Anthropic key (zero Waggle proxy cost).
  * The run path is stubbed via the `__waggleSkillAuditLlmFactory` global hook so
  * the loop's synth/run/judge calls never touch the network — mirroring the
  * evolution-run-route test's factory-override pattern.
@@ -72,49 +74,37 @@ describe('skill-audit routes (§D2)', () => {
   beforeEach(() => {
     clearLLMFactory();
     if (!server.vault?.get('anthropic')) server.vault?.set('anthropic', KEY, { models: ['claude-haiku-4-5-20251001'] });
-    writeTier(tmpDir, 'PRO');
+    writeTier(tmpDir, 'FREE');
     try { fs.rmSync(path.join(tmpDir, 'skill-audit.json'), { force: true }); } catch { /* ignore */ }
   });
 
   const post = (payload?: unknown) => injectWithAuth(server, { method: 'POST', url: '/api/skills/audit', payload: payload ?? {} });
 
-  it('C1: FREE tier is rejected 403 TIER_INSUFFICIENT (tier gate fires before the key check)', async () => {
+  it('C1: FREE (Solo) is allowed past the (removed) tier gate — stops at the key check → 422', async () => {
+    // PRO removed: skill-audit is free/Solo. A FREE tier with no key must NOT
+    // 403 — it reaches the vault-key gate and 422s like any other tier.
     writeTier(tmpDir, 'FREE');
-    const res = await post();
-    expect(res.statusCode).toBe(403);
-    const body = JSON.parse(res.body);
-    expect(body).toMatchObject({ error: 'TIER_INSUFFICIENT', required: 'PRO', actual: 'FREE' });
-  });
-
-  it('C2: fresh TRIAL passes the tier gate (stops at the key check → 422)', async () => {
-    writeTier(tmpDir, 'TRIAL', new Date().toISOString());
-    server.vault?.delete('anthropic');
-    const res = await post();
-    expect(res.statusCode).toBe(422); // not 403 — TRIAL ranks ≥ PRO
-  });
-
-  it('C3: expired TRIAL falls back to FREE → 403', async () => {
-    writeTier(tmpDir, 'TRIAL', '2020-01-01T00:00:00.000Z');
-    const res = await post();
-    expect(res.statusCode).toBe(403);
-    expect(JSON.parse(res.body).actual).toBe('FREE');
-  });
-
-  it('C4: PRO with no Anthropic key → 422', async () => {
     server.vault?.delete('anthropic');
     const res = await post();
     expect(res.statusCode).toBe(422);
     expect(JSON.parse(res.body).error).toMatch(/Anthropic API key/i);
   });
 
-  it('C5: PRO + key but the LLM factory yields nothing → 503', async () => {
+  it('C4: Solo with no Anthropic key → 422', async () => {
+    server.vault?.delete('anthropic');
+    const res = await post();
+    expect(res.statusCode).toBe(422);
+    expect(JSON.parse(res.body).error).toMatch(/Anthropic API key/i);
+  });
+
+  it('C5: Solo + key but the LLM factory yields nothing → 503', async () => {
     installLLMFactory(() => null as unknown as EvolutionLLM); // simulate @ax-llm/ax unavailable
     const res = await post();
     expect(res.statusCode).toBe(503);
     expect(JSON.parse(res.body).error).toMatch(/ax-llm|not available/i);
   });
 
-  it('C6: PRO + key + stub factory + dryRun → report, writes nothing', async () => {
+  it('C6: Solo + key + stub factory + dryRun → report, writes nothing', async () => {
     installLLMFactory(() => stubLLM(FAIL_JUDGE));
     const res = await post({ dryRun: true });
     expect(res.statusCode).toBe(200);
@@ -124,7 +114,7 @@ describe('skill-audit routes (§D2)', () => {
     expect(fs.existsSync(path.join(tmpDir, 'skill-audit.json'))).toBe(false);
   });
 
-  it('C7: PRO + key + passing stub → verified badge persisted + GET surfaces it', async () => {
+  it('C7: Solo + key + passing stub → verified badge persisted + GET surfaces it', async () => {
     installLLMFactory(() => stubLLM(PASS_JUDGE));
     const res = await post({});
     expect(res.statusCode).toBe(200);

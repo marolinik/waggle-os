@@ -11,7 +11,7 @@ import Stripe from 'stripe';
  * Customer.metadata.clerkUserId mirrors the linkage in the other direction
  * so subscription webhooks can map back to a Clerk user.
  *
- * GET ?tier=pro|teams&billing=monthly|annual
+ * GET ?tier=teams&billing=monthly|annual
  *   - Canonical entrypoint (per §5.3 brief). Used by Clerk SignUp's
  *     `forceRedirectUrl` after sign-up completion.
  *   - Returns 303 redirect to the Stripe Checkout URL on success.
@@ -24,10 +24,12 @@ import Stripe from 'stripe';
  *   - Signed-out: 401 JSON { message }.
  */
 
-type Tier = 'pro' | 'teams';
+// New checkout is TEAMS-only (Solo is free). Legacy 'pro' is rejected here;
+// legacy pro subscription webhooks are still honored in the webhook route.
+type Tier = 'teams';
 type Billing = 'monthly' | 'annual';
 
-const TIERS: readonly Tier[] = ['pro', 'teams'];
+const TIERS: readonly Tier[] = ['teams'];
 const BILLINGS: readonly Billing[] = ['monthly', 'annual'];
 
 interface ClerkPublicMetadata {
@@ -216,7 +218,7 @@ export async function GET(req: Request): Promise<Response> {
     return NextResponse.json(
       {
         message:
-          'Invalid query. Expected ?tier=pro|teams&billing=monthly|annual.',
+          'Invalid query. Expected ?tier=teams&billing=monthly|annual.',
       },
       { status: 400 },
     );
@@ -257,7 +259,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     return NextResponse.json(
       {
         message:
-          'Invalid body. Expected { tier: "pro"|"teams", billingPeriod: "monthly"|"annual" }.',
+          'Invalid body. Expected { tier: "teams", billingPeriod: "monthly"|"annual" }.',
       },
       { status: 400 },
     );

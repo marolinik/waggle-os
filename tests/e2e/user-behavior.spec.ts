@@ -337,15 +337,17 @@ test.describe('Act 3 — Persona Bonding & Identity', () => {
 test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
 
   test('U4.1 — 403 response shows WHAT they are missing (not just "upgrade required")', async ({ request }) => {
-    // Hit a gated endpoint as FREE
-    const res = await request.post(`${API}/api/personas`, {
-      data: { name: 'Custom', description: 'test', systemPrompt: 'test' },
+    // Hit a genuinely gated (TEAMS) endpoint as a non-Team user — personal
+    // features (personas, spawn, install) are all free (Solo) now, so the only
+    // real wall left is a Team feature.
+    const res = await request.post(`${API}/api/cloud-sync/toggle`, {
+      data: { enabled: true },
     });
     if (res.status() === 403) {
       const data = await res.json();
       // Must tell user what tier they need — not just "forbidden"
       expect(data.required).toBeDefined();
-      expect(['PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.required);
+      expect(['TEAMS', 'ENTERPRISE']).toContain(data.required);
       // Must give them a direct path to upgrade — no dead ends
       expect(data.upgradeUrl).toBeDefined();
       expect(data.upgradeUrl).toMatch(/https?:\/\//);
@@ -353,9 +355,7 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
   });
 
   test('U4.2 — Upgrade URL leads to valid domain (not 404)', async ({ request }) => {
-    const res = await request.post(`${API}/api/fleet/spawn`, {
-      data: { personaId: 'researcher' },
-    });
+    const res = await request.get(`${API}/api/costs`);
     if (res.status() === 403) {
       const data = await res.json();
       if (data.upgradeUrl) {
@@ -365,12 +365,12 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
     }
   });
 
-  test('U4.3 — Tier ladder is coherent (FREE < PRO < TEAMS < ENTERPRISE)', async ({ request }) => {
+  test('U4.3 — Tier ladder is coherent (FREE < TEAMS < ENTERPRISE)', async ({ request }) => {
     const res = await request.get(`${API}/api/tier`);
     expect(res.ok()).toBe(true);
     const data = await res.json();
     // Tier must be a known value — no typos in production
-    expect(['FREE', 'PRO', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
+    expect(['TRIAL', 'FREE', 'TEAMS', 'ENTERPRISE']).toContain(data.tier);
     // Capabilities object must exist
     expect(data.capabilities).toBeDefined();
   });
@@ -393,7 +393,7 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
 
   test('U4.5 — Stripe checkout session has a valid URL format', async ({ request }) => {
     const res = await request.post(`${API}/api/stripe/create-checkout-session`, {
-      data: { tier: 'PRO', billingPeriod: 'monthly' },
+      data: { tier: 'TEAMS', billingPeriod: 'monthly' },
     });
     if (res.status() === 200) {
       const data = await res.json();
@@ -414,7 +414,7 @@ test.describe('Act 4 — Tier Wall: FOMO & Upgrade Pressure', () => {
     if (res.status() === 403) {
       const data = await res.json();
       expect(data.error).toBe('TIER_INSUFFICIENT');
-      expect(data.required).toBe('PRO');
+      expect(data.required).toBe('TEAMS');
     } else if (res.ok()) {
       const data = await res.json();
       expect(data.today ?? data.allTime).toBeDefined();

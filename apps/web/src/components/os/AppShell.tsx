@@ -42,7 +42,8 @@ import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '
 import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
-import { getDockForTier, type AppId, type DockEntry } from '@/lib/dock-tiers';
+import { getDockForTier, BILLING_TIER_ORDER, type AppId, type DockEntry } from '@/lib/dock-tiers';
+import { TIER_LABELS } from '@waggle/shared';
 import { buildCommandCatalog, type CatalogCommand } from '@/lib/command-catalog';
 import { ShellProvider, useShell } from '@/providers/ShellContext';
 import { seedChat, useChatWidgetState } from '@/hooks/useChatWidgetState';
@@ -287,7 +288,7 @@ const ShellLayout = () => {
   // Agents & tasks badge surfaces unacknowledged coordination signals for now;
   // PR3 refines it to the real pending-approvals/tasks count.
   const isPro = currentTier === 'power' || currentTier === 'admin';
-  const billingRank = { FREE: 0, TRIAL: 1, PRO: 2, TEAMS: 3, ENTERPRISE: 4 }[billingTier] ?? 0;
+  const billingRank = BILLING_TIER_ORDER[billingTier] ?? 0;
   const spine: SidebarNavItem[] = useMemo(() => [
     { key: 'home', label: 'Home', icon: Home, to: '/home', match: ['/home'] },
     // Chat resolves to the active workspace's chat tab; with no real workspace,
@@ -314,16 +315,16 @@ const ShellLayout = () => {
       { key: 'connectors', label: 'Connectors', icon: Plug, to: '/connectors', match: ['/connectors'] },
     ];
     // Approvals is a TEAMS-tier surface (parity with dock-tiers minBillingTier).
-    if (billingRank >= 3) items.push({ key: 'approvals', label: 'Approvals', icon: Shield, to: '/approvals', match: ['/approvals'] });
+    if (billingRank >= BILLING_TIER_ORDER.TEAMS) items.push({ key: 'approvals', label: 'Approvals', icon: Shield, to: '/approvals', match: ['/approvals'] });
     return items;
   }, [isPro, billingRank]);
 
-  // Plan label for the user row (e.g. "Trial · 9d", "Pro").
+  // Plan label for the user row (e.g. "Trial · 9d", "Solo", "Team").
   const tierLabel = useMemo(() => {
     if (billingTier === 'TRIAL' || (trialInfo.trialDaysRemaining > 0 && !trialInfo.trialExpired)) {
       return trialInfo.trialDaysRemaining > 0 ? `Trial · ${trialInfo.trialDaysRemaining}d` : 'Trial';
     }
-    return billingTier.charAt(0) + billingTier.slice(1).toLowerCase();
+    return TIER_LABELS[billingTier];
   }, [billingTier, trialInfo.trialDaysRemaining, trialInfo.trialExpired]);
 
   // ⌘K curated catalog (Jump to / Do / Power tools + Pro "Pinned") → real routes.
@@ -488,7 +489,7 @@ const ShellLayout = () => {
           // window.open: the open happens after an awaited round-trip, outside the
           // user-gesture window, so a popup blocker / Tauri WebView could swallow it.
           // Hosted Checkout redirects back to /payment-success on completion.
-          adapter.createCheckoutSession(tier === 'TEAMS' ? 'TEAMS' : 'PRO')
+          adapter.createCheckoutSession(tier)
             .then(({ url }) => { if (url) window.location.assign(url); })
             .catch(() => { navigate('/settings?tab=billing'); });
         }}

@@ -32,7 +32,7 @@ function renderAt(pathname: string) {
         onOpenCommand={() => {}}
         onSpawnAgent={() => {}}
         userName="Marko"
-        tierLabel="Pro"
+        tierLabel="Solo"
       />
     </MemoryRouter>,
   );

@@ -67,10 +67,10 @@ export default function TermsPage() {
 
       <h2 style={h2Style}>4. Subscription and billing</h2>
       <p style={paragraphStyle}>
-        Free tier: available at no cost, subject to documented usage limits.
-        Pro tier (USD 19/month): unlocks advanced features and unlimited
-        memory. Teams tier (USD 49/seat/month): adds shared workspaces and
-        team collaboration.
+        Solo tier: free, forever, for all personal use — full memory,
+        Harvest import, unlimited workspaces, and any model with your own
+        keys. Team tier (USD 49/seat/month): adds shared workspaces and team
+        collaboration.
       </p>
       <p style={paragraphStyle}>
         Subscriptions are billed in advance through Stripe. Auto-renewal is

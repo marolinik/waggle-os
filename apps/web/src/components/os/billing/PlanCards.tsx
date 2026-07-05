@@ -1,7 +1,7 @@
 /**
  * PlanCards — warm-Hive PR7a Billing (design screen 14 "Plans" state).
  *
- * The 3-card Plans grid (Free / Pro · most-popular / Teams) + the Monthly|Annual
+ * The 2-card Plans grid (Solo · free / Team · most-popular) + the Monthly|Annual
  * −20% cycle toggle, themed to the warm tokens (PR1). Prices are DISPLAY COPY from
  * `tiers.ts` (D10) — the *charged* amount is whatever Stripe renders on the hosted
  * Checkout page; this UI never asserts the real charge. Choosing a plan hands off to
@@ -13,7 +13,7 @@
 import { useState } from 'react';
 import { Check } from 'lucide-react';
 
-type CheckoutTier = 'PRO' | 'TEAMS';
+type CheckoutTier = 'TEAMS';
 type BillingPeriod = 'monthly' | 'annual';
 
 interface PlanDef {
@@ -33,39 +33,30 @@ interface PlanDef {
 const PLANS: readonly PlanDef[] = [
   {
     tier: 'FREE',
-    name: 'Free',
+    name: 'Solo',
     priceMonthly: '$0',
     priceAnnual: '$0',
     unitMonthly: '/ forever',
     unitAnnual: '/ forever',
-    tagline: 'For individuals exploring an AI workspace.',
-    features: ['Personal memory graph', 'All major LLMs + local', 'Local-first by default'],
-  },
-  {
-    tier: 'PRO',
-    name: 'Pro',
-    priceMonthly: '$19',
-    priceAnnual: '$15',
-    unitMonthly: '/ month',
-    unitAnnual: '/ mo · billed yearly',
-    tagline: 'For power users compounding across projects.',
-    features: ['Everything in Free', 'Sync across devices', 'Marketplace skills & connectors', 'Self-evolving skills'],
-    popular: true,
+    tagline: 'Everything one person needs — free, forever.',
+    features: ['Personal memory graph', 'Unlimited workspaces & connectors', 'Marketplace skills & connectors', 'Self-evolving skills', 'All major LLMs + local'],
   },
   {
     tier: 'TEAMS',
-    name: 'Teams',
+    name: 'Team',
     priceMonthly: '$49',
     priceAnnual: '$39',
     unitMonthly: '/ seat / mo',
     unitAnnual: '/ seat · yearly',
     tagline: 'Shared memory without losing privacy.',
-    features: ['Everything in Pro', 'Shared team memory', 'WaggleDance multi-agent', 'SSO & role-based access'],
+    features: ['Everything in Solo', 'Sync across devices', 'Shared team memory', 'WaggleDance multi-agent', 'SSO & role-based access'],
+    popular: true,
   },
 ];
 
-/** Upgrade ordering. TRIAL collapses to the FREE entry-point for the "current" marker. */
-const RANK: Record<string, number> = { FREE: 0, TRIAL: 0, PRO: 1, TEAMS: 2, ENTERPRISE: 3 };
+/** Upgrade ordering. TRIAL collapses to the Solo (FREE) entry-point for the "current"
+ *  marker; a legacy PRO value maps to 0 so it reads as the Solo tier. */
+const RANK: Record<string, number> = { FREE: 0, TRIAL: 0, PRO: 0, TEAMS: 1, ENTERPRISE: 2 };
 
 interface PlanCardsProps {
   /** Resolved current tier (caller must only render this on a resolved tier — F7). */
@@ -110,8 +101,8 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
         </div>
       </div>
 
-      {/* 3-card plans grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
+      {/* 2-card plans grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
         {PLANS.map((plan) => {
           const planRank = RANK[plan.tier];
           // A TRIAL user is not on the Free plan — the honest "Trial — everything

@@ -159,8 +159,8 @@ export const metadata: Metadata = {
 };
 
 /**
- * JSON-LD structured data. Facts only: free tier at $0, Pro $19/mo, Teams
- * $49/seat/mo (packages/shared/src/tiers.ts); Windows + macOS desktop app.
+ * JSON-LD structured data. Facts only: Solo tier at $0, Team $49/seat/mo
+ * (packages/shared/src/tiers.ts); Windows + macOS desktop app.
  */
 const JSON_LD = {
   '@context': 'https://schema.org',
@@ -174,9 +174,8 @@ const JSON_LD = {
       url: META_CANONICAL,
       image: META_OG_IMAGE,
       offers: [
-        { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Free' },
-        { '@type': 'Offer', price: '19', priceCurrency: 'USD', name: 'Pro (monthly)' },
-        { '@type': 'Offer', price: '49', priceCurrency: 'USD', name: 'Teams (per seat, monthly)' },
+        { '@type': 'Offer', price: '0', priceCurrency: 'USD', name: 'Solo' },
+        { '@type': 'Offer', price: '49', priceCurrency: 'USD', name: 'Team (per seat, monthly)' },
       ],
       publisher: { '@id': 'https://waggle-os.ai/#org' },
     },

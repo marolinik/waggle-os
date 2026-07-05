@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, X, Check, Crown, Users } from 'lucide-react';
+import { Zap, X, Check, Users } from 'lucide-react';
 import { TIER_CAPABILITIES } from '@waggle/shared';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 
@@ -12,17 +12,14 @@ interface TierEvent {
 
 type CapKey = keyof typeof TIER_CAPABILITIES.FREE;
 
+// Trimmed to the caps that DIFFER between Solo (free) and Team — an honest
+// "what Team adds" comparison, not a full feature dump (decision 11). Every
+// personal capability is already free on Solo, so it doesn't belong here.
 const FEATURE_ROWS: Array<{ label: string; key: CapKey; format: (v: unknown) => string }> = [
-  { label: 'Workspaces', key: 'workspaceLimit', format: v => (v as number) === -1 ? 'Unlimited' : String(v) },
-  { label: 'Agents', key: 'spawnAgents', format: v => v ? 'Yes' : '—' },
-  { label: 'Connectors', key: 'connectorLimit', format: v => (v as number) === -1 ? 'Unlimited' : String(v) },
-  { label: 'Custom Skills', key: 'customSkills', format: v => v ? 'Yes' : '—' },
-  { label: 'Export Formats', key: 'exportFormats', format: v => {
-    const fmts = v as string[];
-    if (fmts.length <= 2) return fmts.join(', ');
-    return `All (${fmts.length})`;
-  }},
   { label: 'Shared Workspaces', key: 'sharedWorkspaces', format: v => v ? 'Yes' : '—' },
+  { label: 'Team Members', key: 'teamMembersLimit', format: v => (v as number) === -1 ? 'Unlimited' : String(v) },
+  { label: 'Sync Across Devices', key: 'cloudSync', format: v => v ? 'Yes' : '—' },
+  { label: 'Team Skill Library', key: 'teamSkillLibrary', format: v => v ? 'Yes' : '—' },
   { label: 'Team Governance', key: 'adminPanel', format: v => v ? 'Yes' : '—' },
   { label: 'Audit Log', key: 'auditLog', format: v => {
     if (v === 'none') return '—';
@@ -38,7 +35,7 @@ function CellValue({ value, isBool }: { value: string; isBool: boolean }) {
 
 interface UpgradeModalProps {
   onStartTrial?: () => void;
-  onUpgrade?: (tier: 'PRO' | 'TEAMS') => void;
+  onUpgrade?: (tier: 'TEAMS') => void;
   /** F5: report open/close so the shell can suppress coach-marks while this
    *  event-driven modal (invisible to AppShell otherwise) is up. */
   onOpenChange?: (open: boolean) => void;
@@ -65,7 +62,6 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
   const dialogRef = useFocusTrap<HTMLDivElement>(!!event, close);
 
   const free = TIER_CAPABILITIES.FREE;
-  const pro = TIER_CAPABILITIES.PRO;
   const teams = TIER_CAPABILITIES.TEAMS;
 
   return (
@@ -115,15 +111,10 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
                   <thead>
                     <tr className="border-b border-border/50">
                       <th className="text-left p-3 text-muted-foreground font-medium">Feature</th>
-                      <th className="text-center p-3 text-muted-foreground font-medium w-24">Free</th>
-                      <th className="text-center p-3 font-medium w-28">
-                        <span className="text-primary flex items-center justify-center gap-1">
-                          <Crown className="w-3.5 h-3.5" /> Pro
-                        </span>
-                      </th>
+                      <th className="text-center p-3 text-muted-foreground font-medium w-28">Solo</th>
                       <th className="text-center p-3 font-medium w-28">
                         <span className="text-accent-foreground flex items-center justify-center gap-1">
-                          <Users className="w-3.5 h-3.5" /> Teams
+                          <Users className="w-3.5 h-3.5" /> Team
                         </span>
                       </th>
                     </tr>
@@ -131,14 +122,12 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
                   <tbody>
                     {FEATURE_ROWS.map(row => {
                       const freeVal = row.format(free[row.key]);
-                      const proVal = row.format(pro[row.key]);
                       const teamsVal = row.format(teams[row.key]);
                       const isBool = typeof free[row.key] === 'boolean';
                       return (
                         <tr key={row.key} className="border-b border-border/30 last:border-0">
                           <td className="p-3 text-foreground">{row.label}</td>
-                          <td className="p-3 text-center text-muted-foreground">{freeVal}</td>
-                          <td className="p-3 text-center"><CellValue value={proVal} isBool={isBool} /></td>
+                          <td className="p-3 text-center text-muted-foreground"><CellValue value={freeVal} isBool={isBool} /></td>
                           <td className="p-3 text-center"><CellValue value={teamsVal} isBool={isBool} /></td>
                         </tr>
                       );
@@ -147,7 +136,6 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
                     <tr className="border-b border-border/30 last:border-0">
                       <td className="p-3 text-foreground">Memory & Harvest</td>
                       <td className="p-3 text-center text-muted-foreground">Unlimited</td>
-                      <td className="p-3 text-center"><span className="text-foreground">Unlimited</span></td>
                       <td className="p-3 text-center"><span className="text-foreground">Unlimited</span></td>
                     </tr>
                   </tbody>
@@ -160,13 +148,13 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
                 onClick={() => { onStartTrial?.(); close(); }}
                 className="flex-1 px-4 py-2.5 rounded-xl border border-primary/30 text-primary font-display text-sm font-semibold hover:bg-primary/10 transition-colors"
               >
-                Start 15-day free trial
+                Start 15-day Team trial
               </button>
               <button
-                onClick={() => { onUpgrade?.(event.required === 'TEAMS' ? 'TEAMS' : 'PRO'); close(); }}
+                onClick={() => { onUpgrade?.('TEAMS'); close(); }}
                 className="flex-1 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/90 transition-colors"
               >
-                Upgrade to {event.required === 'TEAMS' ? 'Teams — $49/seat' : 'Pro — $19/mo'}
+                Upgrade to Team — $49/seat
               </button>
             </div>
           </motion.div>

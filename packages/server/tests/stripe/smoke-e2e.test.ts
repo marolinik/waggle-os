@@ -19,7 +19,6 @@
  *
  * ```sh
  * STRIPE_SECRET_KEY=sk_test_... \
- * STRIPE_PRICE_PRO=price_... \
  * STRIPE_PRICE_TEAMS=price_... \
  * WAGGLE_STRIPE_SMOKE=1 \
  * npx vitest run packages/server/tests/stripe/smoke-e2e.test.ts
@@ -39,7 +38,6 @@ import type { FastifyInstance } from 'fastify';
 
 const ENABLED = process.env.WAGGLE_STRIPE_SMOKE === '1' || process.env.WAGGLE_STRIPE_SMOKE === 'true';
 const STRIPE_KEY = process.env.STRIPE_SECRET_KEY ?? '';
-const PRICE_PRO = process.env.STRIPE_PRICE_PRO ?? '';
 const PRICE_TEAMS = process.env.STRIPE_PRICE_TEAMS ?? '';
 
 // Generate a webhook secret fresh for this run — the sidecar would read
@@ -51,7 +49,6 @@ process.env.STRIPE_WEBHOOK_SECRET = WEBHOOK_SECRET;
 const SHOULD_RUN =
   ENABLED &&
   STRIPE_KEY.startsWith('sk_test_') &&
-  PRICE_PRO.startsWith('price_') &&
   PRICE_TEAMS.startsWith('price_');
 
 // ── Skip block that emits a visible reason in test output ──────
@@ -142,20 +139,20 @@ if (!SHOULD_RUN) {
       return { id, type, data: { object } };
     }
 
-    it('[1] checkout.session.completed → tier=PRO + stripe_customer_id set', async () => {
+    it('[1] checkout.session.completed → tier=TEAMS + stripe_customer_id set', async () => {
       const event = makeEvent('evt_smoke_checkout_1', 'checkout.session.completed', {
-        metadata: { tier: 'PRO' },
+        metadata: { tier: 'TEAMS' },
         customer: 'cus_smoke_1',
       });
       const res = await postWebhook(event);
       expect(res.statusCode).toBe(200);
 
       const cfg = readConfig();
-      expect(cfg.tier).toBe('PRO');
+      expect(cfg.tier).toBe('TEAMS');
       expect(cfg.stripe_customer_id).toBe('cus_smoke_1');
       checklist['1. checkout.session.completed'] = {
         passed: true,
-        detail: `tier=PRO + customer=cus_smoke_1`,
+        detail: `tier=TEAMS + customer=cus_smoke_1`,
       };
     });
 
@@ -201,7 +198,7 @@ if (!SHOULD_RUN) {
 
       // Now mutate state would-be: send a dedup-checking event, then resend.
       const event = makeEvent('evt_smoke_checkout_1', 'checkout.session.completed', {
-        metadata: { tier: 'PRO' },  // would downgrade if re-processed
+        metadata: { tier: 'FREE' },  // would downgrade if re-processed
         customer: 'cus_smoke_1',
       });
       const res = await postWebhook(event);
@@ -219,7 +216,7 @@ if (!SHOULD_RUN) {
 
     it('[5] invalid signature → 400 INVALID_SIGNATURE', async () => {
       const event = makeEvent('evt_smoke_badsig', 'checkout.session.completed', {
-        metadata: { tier: 'PRO' },
+        metadata: { tier: 'TEAMS' },
       });
       const res = await postWebhook(event, 't=0,v1=bogus');
       expect(res.statusCode).toBe(400);
@@ -237,11 +234,11 @@ if (!SHOULD_RUN) {
         method: 'POST',
         url: '/api/stripe/create-checkout-session',
         headers: { 'content-type': 'application/json' },
-        payload: { tier: 'PRO' },
+        payload: { tier: 'TEAMS' },
       }));
 
-      // Current tier is TEAMS (leftover from step 4). The checkout route is
-      // tier-agnostic — it only needs STRIPE_PRICE_PRO to be configured.
+      // TEAMS is the only paid checkout tier (PRO removed). The route needs
+      // STRIPE_PRICE_TEAMS to be configured.
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body) as { url: string };
       expect(body.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
@@ -260,13 +257,14 @@ if (!SHOULD_RUN) {
         metadata: { smoke_run: new Date().toISOString() },
       });
 
-      // Update config.json to point at the real customer (also keep the
-      // tier as something that clears requireTier('PRO')).
+      // Update config.json to point at the real customer. The portal is now
+      // gated at FREE (any authenticated user) so the tier value is immaterial;
+      // use TEAMS as a representative paid state.
       const cfgPath = path.join(tmpDir, 'config.json');
       const current = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
       fs.writeFileSync(cfgPath, JSON.stringify({
         ...current,
-        tier: 'PRO',
+        tier: 'TEAMS',
         stripe_customer_id: customer.id,
       }, null, 2));
 

@@ -2,9 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs';
 import type { FastifyPluginAsync } from 'fastify';
-import { assertTierCapability, TierError } from '@waggle/shared';
 import { computeSkillHash } from '@waggle/core';
-import { readTierFromDataDir } from '../../middleware/assert-tier.js';
 import {
   loadActiveSkills,
   loadSkillAudit,
@@ -32,13 +30,13 @@ async function buildAuditLLM(apiKey: string): Promise<EvolutionLLM | null> {
 
 /**
  * Skill-audit routes (Odysseus §D2) — the run-and-grade verification loop that
- * mints the "verified" badge (the PRO upgrade-trigger artifact). Split from
- * skills.ts (over the 800-LOC cap), sibling of skills-hygiene.ts.
+ * mints the "verified" badge. Split from skills.ts (over the 800-LOC cap),
+ * sibling of skills-hygiene.ts.
  *
- * Double-gated: PRO tier (the loop fires multiple LLM calls per skill, so it is
- * a paid feature) AND a configured vault Anthropic key (run on the user's own
- * key — zero Waggle proxy cost, mirroring the D1 hygiene route). Gate order is
- * PRO → key → availability → run so each failure mode is independently surfaced.
+ * Free (Solo): the run is a personal feature (PRO removed). It still requires a
+ * configured vault Anthropic key (run on the user's own key — zero Waggle proxy
+ * cost, mirroring the D1 hygiene route). Gate order is key → availability → run
+ * so each failure mode is independently surfaced.
  *
  * Defaults are advisory: autoRewrite/autoDemote are OFF unless explicitly opted
  * in. When autoRewrite is on, a VERIFIED rewrite is applied through the single
@@ -50,10 +48,8 @@ export const skillsAuditRoutes: FastifyPluginAsync = async (server) => {
   const skillsDir = path.join(waggleHome, 'skills');
 
   // GET /api/skills/audit — badge index (Skills Hub card source for the verified badge).
-  // Intentionally NOT tier-gated: the badge is read by the local single-user UI on
-  // every Skills Hub render, holds no secrets/PII, and mirrors GET /api/skills which
-  // already surfaces verified/confidence to all tiers. MINTING a badge (POST) is the
-  // PRO-gated, cost-bearing action; reading what was already earned is not.
+  // Reads the local single-user UI on every Skills Hub render, holds no secrets/PII,
+  // and mirrors GET /api/skills which already surfaces verified/confidence.
   server.get('/api/skills/audit', async () => ({ audit: loadSkillAudit(waggleHome) }));
 
   // POST /api/skills/audit — run the verification loop.
@@ -66,24 +62,7 @@ export const skillsAuditRoutes: FastifyPluginAsync = async (server) => {
       autoDemote?: boolean;
     };
   }>('/api/skills/audit', async (request, reply) => {
-    // 1) PRO gate (mirrors the connector-harvest tier gate, local/index.ts).
-    const tier = readTierFromDataDir(server.localConfig.dataDir);
-    try {
-      assertTierCapability(tier, 'PRO');
-    } catch (e) {
-      if (e instanceof TierError) {
-        return reply.status(403).send({
-          error: 'TIER_INSUFFICIENT',
-          message: `Skill verification requires the PRO tier. You are on ${tier}.`,
-          required: e.required,
-          actual: e.actual,
-          upgradeUrl: 'https://waggle-os.ai/upgrade',
-        });
-      }
-      throw e;
-    }
-
-    // 2) Vault key gate (user's own key — zero Waggle proxy cost, like the D1 route).
+    // Vault key gate (user's own key — zero Waggle proxy cost, like the D1 route).
     const apiKey = server.vault?.get('anthropic')?.value;
     if (!apiKey) {
       return reply.status(422).send({ error: 'No Anthropic API key configured. Add one in Settings → Vault.' });
