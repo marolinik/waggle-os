@@ -200,7 +200,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-8"
+        className="fixed inset-0 z-[100] bg-black/45 backdrop-blur-[3px] flex items-center justify-center p-8"
         onClick={() => onDismiss()}
       >
         <motion.div
@@ -304,7 +304,9 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                   <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider flex items-center gap-1.5">
                     <Lightbulb className="w-3 h-3" /> I remember
                   </p>
-                  {highlights.map((h, i) => (
+                  {/* Cap to 2 on first paint so the briefing greets rather than
+                      walls — the full memory list lives in the Memory app. */}
+                  {highlights.slice(0, 2).map((h, i) => (
                     <motion.div
                       key={i}
                       initial={{ opacity: 0, x: -8 }}

@@ -360,14 +360,20 @@ const ModelPilotCard = ({
           (chat.ts guards resolvedModel !== fallbackModel). Warn + one-click clear. */}
       {!singleMode && fallbackModel && fallbackModel === defaultModel && (
         <div
-          className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-2 text-[11px] text-amber-300"
+          className="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px]"
+          style={{
+            background: 'color-mix(in srgb, var(--status-warning) 12%, transparent)',
+            borderColor: 'color-mix(in srgb, var(--status-warning) 40%, transparent)',
+            color: 'var(--status-warning)',
+          }}
           data-testid="model-pilot-fallback-equals-primary"
         >
           <Shield className="w-3.5 h-3.5 shrink-0" />
           <span className="flex-1">Fallback equals Primary — failover will never trigger.</span>
           <button
             onClick={() => onUpdate({ fallbackModel: null })}
-            className="shrink-0 font-display font-semibold text-amber-200 hover:text-amber-100 transition-colors"
+            className="shrink-0 font-display font-semibold transition-opacity hover:opacity-80"
+            style={{ color: 'var(--status-warning)' }}
           >
             Clear
           </button>
