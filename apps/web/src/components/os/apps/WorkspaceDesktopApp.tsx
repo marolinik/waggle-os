@@ -720,7 +720,17 @@ const WorkspaceDesktopApp = ({
               <TabPlaceholder
                 icon={FileText}
                 title="No files yet"
-                body="Files in this workspace appear here as you and your agents create them."
+                body="Your agents create files here as you work in chat, and Harvest brings your existing documents in as they're ingested."
+                cta={onOpenChat ? (
+                  <button
+                    type="button"
+                    onClick={openChat}
+                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    data-testid="ws-files-tab-open-chat"
+                  >
+                    Open chat
+                  </button>
+                ) : undefined}
               />
             ) : (
               <div className="h-full overflow-auto p-5" data-testid="ws-files-tab">

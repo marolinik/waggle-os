@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Network, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -13,11 +13,15 @@ import {
   agentKpis,
   formatSuccessRate,
   workspaceAmbiguityIds,
+  shouldSuggestAgents,
+  SUGGESTED_PERSONA_IDS,
 } from '@/lib/agent-center-display';
+import { getPersonaById, type PersonaConfig } from '@/lib/personas';
 import AgentCenterRow from './agents/AgentCenterRow';
 import AgentCenterDetail from './agents/AgentCenterDetail';
 import WorkspacePickerDialog from './agents/WorkspacePickerDialog';
 import AgentBuilder, { type AgentBuilderInput } from './agents/AgentBuilder';
+import SuggestedAgentCards from './agents/SuggestedAgentCards';
 import TemplatesView from './agents/TemplatesView';
 import type { BackendPersona } from './agents/types';
 
@@ -150,17 +154,31 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
     }
   };
 
-  const useTemplate = (persona: BackendPersona) => {
+  // Single create seam shared by the Templates side affordance and the F-W5C
+  // sparse suggestion cards, so the two entry points can't drift.
+  const startFromPersona = useCallback((p: { id: string; name: string; description: string }) => {
     setView('center');
-    setCreateInitial({ personaId: persona.id, name: persona.name, goal: persona.description });
+    setCreateInitial({ personaId: p.id, name: p.name, goal: p.description });
     setCreateOpen(true);
-  };
+  }, []);
+  const useTemplate = (persona: BackendPersona) => startFromPersona(persona);
+
+  // F-W5C: curated personas offered when the fleet is near-empty (resolved once).
+  const suggestedPersonas = useMemo(
+    () => SUGGESTED_PERSONA_IDS
+      .map(getPersonaById)
+      .filter((p): p is PersonaConfig => !!p),
+    [],
+  );
 
   const q = search.trim().toLowerCase();
   const visible = filterAgentsByTab(agents, tab).filter(
     (a) => !q || a.name.toLowerCase().includes(q) || a.goal.toLowerCase().includes(q),
   );
   const kpis = agentKpis(agents);
+  // F-W5C: show the suggestion block only on the unfiltered 'all' tab with a
+  // near-empty fleet — never while searching/filtering or once it grows.
+  const sparse = shouldSuggestAgents({ loading, error: !!error, tab, query: search, agentCount: agents.length });
 
   return (
     <div className="flex flex-col h-full">
@@ -344,6 +362,9 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                   />
                 ))}
               </ul>
+            )}
+            {sparse && (
+              <SuggestedAgentCards personas={suggestedPersonas} onPick={startFromPersona} />
             )}
           </div>
         </>

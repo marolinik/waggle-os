@@ -722,7 +722,13 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
             className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="p-6">
-              <LockedFeature featureName="Multiple Workspaces" upgradePrompt="Upgrade to Teams for unlimited workspaces. Free plan includes one workspace." />
+              {/* Deliberately number-free: canonical tiers.ts says FREE=5 /
+                  PRO=unlimited, but the legacy feature-gates.ts `multi-workspace`
+                  gate (minTier:'teams') blocks earlier. Asserting either "1" or
+                  "5" here would contradict one source and create a broken promise
+                  in the same dialog that paywalls you. Resolve the gate↔config
+                  contradiction (a monetization decision) before quoting a count. */}
+              <LockedFeature featureName="Multiple Workspaces" upgradePrompt="Upgrade to add more workspaces — each keeps its own separate memory." />
             </div>
           </motion.div>
         </motion.div>

@@ -54,6 +54,19 @@ import { useToast } from '@/hooks/use-toast';
 
 const BOOT_KEY = 'waggle-booted';
 
+/**
+ * F32: workspace sub-tab → breadcrumb label. Mirrors WorkspaceRoute.WS_TABS +
+ * WorkspaceDesktopApp.TABS so the StatusBar crumb reflects the ACTIVE tab
+ * instead of collapsing every /workspaces/:id/* path to the dock's 'Chat'
+ * entry (the only dock route that prefix-matches them). A tab absent from this
+ * map falls back to 'Overview' (fail-safe, never a wrong crumb) — keep it in
+ * sync if a tab is added to those two lists.
+ */
+const WORKSPACE_TAB_LABELS: Record<string, string> = {
+  overview: 'Overview', chat: 'Chat', memory: 'Memory',
+  artifacts: 'Artifacts', files: 'Files', team: 'Team', tasks: 'Tasks',
+};
+
 /** Flatten zone-parents so nav active-state/title lookups see every app entry. */
 function flattenAppEntries(entries: DockEntry[]): DockEntry[] {
   const out: DockEntry[] = [];
@@ -250,7 +263,24 @@ const ShellLayout = () => {
     () => matchNavRoute(location.pathname, labelEntries.map(e => e.route).filter((r): r is string => !!r)),
     [location.pathname, labelEntries],
   );
-  const surfaceLabel = labelEntries.find(e => e.route === activeRoute)?.label ?? null;
+  // F32: on a workspace sub-route the breadcrumb reflects the active tab (read
+  // straight from the pathname — the URL is the tab-state authority, see
+  // WorkspaceRoute). Every other route keeps the dock-route lookup. The regex
+  // requires an :id segment, so the bare /workspaces grid falls through to the
+  // dock entry (a pre-existing 'Chat' label, out of F32 scope).
+  const surfaceLabel = useMemo(() => {
+    const wsMatch = /^\/workspaces\/([^/]+)(?:\/([^/]+))?/.exec(location.pathname);
+    if (wsMatch) return WORKSPACE_TAB_LABELS[wsMatch[2] ?? 'overview'] ?? 'Overview';
+    return labelEntries.find(e => e.route === activeRoute)?.label ?? null;
+  }, [location.pathname, activeRoute, labelEntries]);
+
+  // F32: close any shell-level detail rail on a real route change, so a rail
+  // opened from a memory frame/entity, file, or chat message can't pin over the
+  // next page. Keyed on pathname (not search) so it survives same-surface
+  // sub-tab switches (e.g. /memory ?tab=timeline→graph).
+  useEffect(() => {
+    setContextRailTarget(null);
+  }, [location.pathname, setContextRailTarget]);
 
   // Five-place spine + a power-tier "Pinned" group. Chat resolves to the active
   // workspace's chat tab (routeFor falls back to /home with no workspace). The

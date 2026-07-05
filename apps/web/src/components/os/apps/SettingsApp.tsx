@@ -27,6 +27,7 @@ import {
   getSettingsTabsForTier,
   resolveActiveSettingsTab,
 } from '@/lib/settings-tier-filter';
+import { requiresYoloConfirm } from '@/lib/autonomy-confirm';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
 import { ModelGate } from '@/components/os/model-gate/ModelGate';
@@ -374,15 +375,20 @@ const SettingsApp = () => {
             )}
 
             {/* Phase 4.1: Erase All Data — visible at ALL tiers (GDPR Art. 17
-                cannot be tier-gated). Closes the only "roadmap NOT implemented"
-                gap from docs/pilot/data-handling-policy.md § 7. Marker-file
-                pattern means the click writes <dataDir>/.erase-pending.json
-                and the destructive wipe runs at next service startup before
-                any DB opens — see packages/server/src/local/data-erase-helpers.ts. */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-display font-semibold text-foreground flex items-center gap-2">
-                <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                Erase All Data
+                cannot be tier-gated, so this stays on General rather than
+                moving to the Everything-only Advanced tab). Closes the only
+                "roadmap NOT implemented" gap from
+                docs/pilot/data-handling-policy.md § 7. Marker-file pattern
+                means the click writes <dataDir>/.erase-pending.json and the
+                destructive wipe runs at next service startup before any DB
+                opens — see packages/server/src/local/data-erase-helpers.ts.
+                F17: set apart in a bordered danger zone (the last thing in
+                General) so it no longer reads as just another setting sitting
+                directly under the theme picker. */}
+            <section className="mt-1 p-3 rounded-xl border border-destructive/40 bg-destructive/5 space-y-3" data-testid="settings-danger-zone">
+              <h3 className="text-xs font-display font-semibold text-destructive flex items-center gap-2">
+                <Trash2 className="w-3.5 h-3.5" />
+                Danger Zone · Erase All Data
               </h3>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
                 Schedule a complete wipe of every memory frame, workspace, session, vault entry, and config file in your data dir. The wipe runs at next launch and is unrecoverable from the app — keep a recent <span className="font-mono">.waggle-backup</span> if you might want to restore. Data already sent to cloud providers or Teams servers is not erased — handle those separately per the data-handling policy.
@@ -395,7 +401,7 @@ const SettingsApp = () => {
                 <Trash2 className="w-3 h-3" />
                 Erase all my data…
               </button>
-            </div>
+            </section>
           </div>
         )}
 
@@ -677,6 +683,10 @@ const SettingsApp = () => {
                   { value: 'yolo',    label: 'Never ask',           copy: 'Auto-pass everything except a hardcoded critical blacklist' },
                 ] as const).map(opt => {
                   const active = defaultAutonomy === opt.value;
+                  // F18: `yolo` ("Never ask") auto-passes every mutating tool
+                  // call — flag it so it gets danger styling when active and a
+                  // one-time confirmation on the transition into it.
+                  const isDanger = opt.value === 'yolo';
                   return (
                     <button
                       key={opt.value}
@@ -684,19 +694,23 @@ const SettingsApp = () => {
                       role="radio"
                       aria-checked={active}
                       onClick={() => {
+                        if (
+                          requiresYoloConfirm(defaultAutonomy, opt.value) &&
+                          !confirm('“Never ask” lets agents auto-run every write, edit, and mutating tool call — including deletes — with no prompt (only a hardcoded critical blacklist still blocks). You can switch back any time. Turn it on?')
+                        ) return;
                         setDefaultAutonomy(opt.value);
                         handleSavePermissions({ defaultAutonomy: opt.value, externalGates });
                       }}
                       data-testid={`default-autonomy-${opt.value}`}
                       className={`w-full text-left flex items-start gap-2 px-2.5 py-2 rounded-lg border transition-colors ${
                         active
-                          ? 'bg-primary/15 border-primary/50'
+                          ? (isDanger ? 'bg-amber-500/15 border-amber-500/60' : 'bg-primary/15 border-primary/50')
                           : 'bg-muted/20 border-border/20 hover:border-border/40'
                       }`}
                     >
-                      <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border shrink-0 ${active ? 'bg-primary border-primary' : 'border-muted-foreground/40'}`} />
+                      <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border shrink-0 ${active ? (isDanger ? 'bg-amber-500 border-amber-500' : 'bg-primary border-primary') : 'border-muted-foreground/40'}`} />
                       <div className="flex-1 min-w-0">
-                        <p className={`text-xs font-display ${active ? 'text-foreground' : 'text-foreground/80'}`}>{opt.label}</p>
+                        <p className={`text-xs font-display ${active ? (isDanger ? 'text-amber-300' : 'text-foreground') : 'text-foreground/80'}`}>{opt.label}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{opt.copy}</p>
                       </div>
                     </button>

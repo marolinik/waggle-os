@@ -86,6 +86,33 @@ export function agentKpis(agents: Agent[]): {
   };
 }
 
+/**
+ * F-W5C sparse-state suggestions: the curated persona ids offered as
+ * click-to-create cards when the fleet is near-empty. Ids are the canonical
+ * persona ids (packages/agent/src/persona-data.ts, mirrored in lib/personas).
+ */
+export const SUGGESTED_PERSONA_IDS: readonly string[] = ['researcher', 'writer', 'analyst'];
+
+/**
+ * Whether to surface the "Suggested agents" block: only on the unfiltered
+ * 'all' tab with no active search and a near-empty fleet (≤2 agents, archived
+ * included). Never renders while loading/errored or during any filter/search,
+ * and disappears once the fleet grows past two.
+ */
+export function shouldSuggestAgents(params: {
+  loading: boolean;
+  error: boolean;
+  tab: AgentCenterTab;
+  query: string;
+  agentCount: number;
+}): boolean {
+  return !params.loading
+    && !params.error
+    && params.tab === 'all'
+    && params.query.trim() === ''
+    && params.agentCount <= 2;
+}
+
 /** C23: shape of the runAgent ambiguity error the FE branches on. */
 export function workspaceAmbiguityIds(err: unknown): string[] | null {
   const e = err as { status?: number; body?: { error?: string; workspaceIds?: unknown } } | null;

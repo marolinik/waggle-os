@@ -16,6 +16,9 @@ import {
   formatRelativeTime,
   agentKpis,
   workspaceAmbiguityIds,
+  shouldSuggestAgents,
+  SUGGESTED_PERSONA_IDS,
+  type AgentCenterTab,
 } from './agent-center-display';
 
 function makeAgent(over: Partial<Agent> = {}): Agent {
@@ -109,6 +112,33 @@ describe('agentKpis — C27', () => {
 
   it('exposes no "hours saved" figure (C27 — no data source)', () => {
     expect(Object.keys(agentKpis([]))).toEqual(['total', 'running', 'avgSuccessRate']);
+  });
+});
+
+describe('shouldSuggestAgents — F-W5C sparse state', () => {
+  const base = { loading: false, error: false, tab: 'all' as AgentCenterTab, query: '', agentCount: 0 };
+
+  it('shows on the unfiltered "all" tab with a near-empty fleet (0-2 agents)', () => {
+    expect(shouldSuggestAgents({ ...base, agentCount: 0 })).toBe(true);
+    expect(shouldSuggestAgents({ ...base, agentCount: 2 })).toBe(true);
+  });
+
+  it('hides once the fleet grows past two', () => {
+    expect(shouldSuggestAgents({ ...base, agentCount: 3 })).toBe(false);
+  });
+
+  it('hides while loading, errored, searching, or on a non-"all" tab', () => {
+    expect(shouldSuggestAgents({ ...base, loading: true })).toBe(false);
+    expect(shouldSuggestAgents({ ...base, error: true })).toBe(false);
+    expect(shouldSuggestAgents({ ...base, query: 'scout' })).toBe(false);
+    expect(shouldSuggestAgents({ ...base, query: '   ' })).toBe(true); // whitespace-only = no search
+    expect(shouldSuggestAgents({ ...base, tab: 'workspace' })).toBe(false);
+    expect(shouldSuggestAgents({ ...base, tab: 'archive' })).toBe(false);
+  });
+
+  it('curates 2-3 persona ids', () => {
+    expect(SUGGESTED_PERSONA_IDS.length).toBeGreaterThanOrEqual(2);
+    expect(SUGGESTED_PERSONA_IDS.length).toBeLessThanOrEqual(3);
   });
 });
 

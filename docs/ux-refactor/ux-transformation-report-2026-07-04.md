@@ -7,9 +7,9 @@ core journey), fix what breaks the experience, iterate until marginal. Benchmark
 wave 4 (this update).
 **Evidence:** `ux-audit-2026-07-04.md` (F1–F12), `ux-audit-2026-07-04-part2.md` (F13–F32),
 `ux-wave2-plan-2026-07-04.md` (plan + deferred + incidental defects).
-**Gates at close:** web tsc 0 · server tsc 0 · build:packages clean · web vitest 1308/1308 ·
+**Gates at close:** web tsc 0 · server tsc 0 · build:packages clean · web vitest 1323/1323 ·
 every wave browser-verified by an independent QA agent (wave 1: 8/8, wave 2: 7/7 + regressions,
-wave 4: 3 clean PASS + 4 patched post-QA — see below).
+wave 4: 3 clean PASS + 4 patched post-QA, wave 5: verified — see below).
 
 ## Shipped
 
@@ -85,6 +85,38 @@ plus two partial misses. Root-caused and fixed all three directly (no new workfl
   files (`workspace-context.ts` + `workspaces.ts`, 4 near-identical string templates
   each) — fixed all 8 occurrences.
 
+**Wave 5 — final polish (F32, F17/F18, F12, F23):**
+- F32: top-bar breadcrumb now reflects the active workspace sub-tab (was stuck on
+  "Chat" for every tab — root cause: dock-tiers chat entry `route:'/workspaces'` was
+  the only longest-prefix match); context-rail/detail-drawer cleared on real route
+  change so it can't pin over the next page.
+- F17 (safety posture, revertable): "Erase All Data" wrapped in a bordered all-tier
+  "Danger Zone" section at the bottom of General. **The implementer correctly refused
+  the literal "move to Advanced" plan** — Advanced is tier-gated (`settings-tier-filter.ts`
+  POWER_SETTINGS_TAB_IDS), so moving a GDPR Art.17 erase control there would hide it
+  from FREE/PRO tiers = a real compliance regression. Danger-zone framing resolves the
+  actual complaint (plain 4th item under the theme picker) without tier-gating.
+- F18 (safety posture, revertable): "Never ask" (auto-pass-everything) autonomy level
+  now fires a one-time confirm on the transition INTO it + amber danger styling only
+  while selected. Default stays 'normal'; safe levels never gated/restyled.
+- F12: Agent Center sparse state — 2-3 suggested-agent template cards render under the
+  list when ≤2 agents exist on the unfiltered tab (fills the honeycomb void).
+- F23: Wiki tab display-level quality floor (hide entity pages with name <3 chars OR
+  <2 sources), all counts derive from the floored set. Conservative — catches genuinely
+  thin entities in clean data; a no-op on the benchmark-polluted dev corpus (whose junk
+  all reports "30 sources"). A fragment heuristic for those was deliberately NOT shipped
+  blind (false-positive-prone).
+- Files-tab empty state: copy + "Open chat" CTA only — NO upload button, because
+  `getWorkspaceFiles` (ingest registry) and `uploadFile` (storage-provider fs) are
+  provably disjoint stores; an upload button would succeed yet leave the tab empty.
+- W5D **surfaced a real contradiction, resolved conservatively**: the CreateWorkspaceDialog
+  "Free plan includes one workspace" copy — canonical `tiers.ts` says FREE=5 / PRO=unlimited,
+  but the legacy `feature-gates.ts` gates `multi-workspace` behind `minTier:'teams'`, so
+  the runtime blocks FREE (and PRO-as-'solo') at workspace #2. Quoting either "1" or "5"
+  contradicts a source and (for "5") creates a broken promise in the paywall's own dialog.
+  Made the copy number-free ("Upgrade to add more workspaces — each keeps its own separate
+  memory") pending a founder decision on the gate↔config mismatch (see below).
+
 ## Remaining high-impact issues (fix next, no decisions needed)
 
 1. **DB-flake real fix** — now fully diagnosed (see Wave 4 above); needs a substrate
@@ -108,16 +140,26 @@ plus two partial misses. Root-caused and fixed all three directly (no new workfl
 
 ## Needs a product decision
 
+- **Workspace-limit gate ↔ config contradiction (NEW, wave 5, monetization):** three
+  founder-touched sources disagree on how many workspaces FREE gets. Canonical
+  `packages/shared/src/tiers.ts` = **5** (and PRO = unlimited); the trial-ended modal
+  advertises "Up to 5 workspaces"; but the legacy `apps/web/src/lib/feature-gates.ts`
+  gates `multi-workspace` behind `minTier:'teams'` (using an *outdated* tier vocabulary
+  — 'solo'/'business' — that predates the canonical 5-tier system), so the runtime
+  paywall actually blocks FREE **and PRO** at workspace #2. The honest fix is to align
+  `feature-gates.ts` + the CreateWorkspaceDialog gate (`workspaces.length < 1`) to
+  `tiers.ts`, but that's a monetization-enforcement change. **Decide: does FREE get 1
+  or 5?** Then align the legacy gate to the canonical config (this also subsumes F31
+  Solo→Free naming — feature-gates.ts is where the "solo" vocabulary still lives).
 - **Model-gate truth-gap:** the gate verifies a provider key, not the workspace
   chat's configured model (QA saw "Anthropic verified" while the chat's model 401'd).
   Should the gate probe the actual default model instead?
 - **F20 marketplace:** same integration listed 3× from three catalogs with three
   verbs (Add/Connect/Enable) — needs a catalog-merge design, not a patch.
-- **F17/F18 safety UX:** "Erase All Data" sits 4th on the default settings tab;
-  "Never ask" permission mode has zero friction/danger styling. Both easy to change,
-  both posture decisions — deferred twice now (wave 3 candidate, wave-4 scout sized
-  them as sizable edits to an 800+-line SettingsApp.tsx, lower confidence than the
-  rest of the batch).
+- ~~**F17/F18 safety UX**~~ — SHIPPED in wave 5 as a revertable posture change
+  (Danger Zone + "Never ask" confirm). If a stronger posture is wanted (e.g. move
+  Erase fully into Advanced *and* accept tier-gating it, or a higher-polish inline
+  amber confirm-row instead of a native `confirm()`), that's the remaining decision.
 - **F29 locale:** Serbian date fragments inside an all-English UI — localize fully
   or pin dates to UI language.
 - **F26 Team tab:** dead end ("You — Online") that misses the Teams-tier upsell moment.

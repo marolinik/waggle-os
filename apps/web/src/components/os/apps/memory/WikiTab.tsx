@@ -14,7 +14,7 @@ import { adapter } from '@/lib/adapter';
 import { renderChatMarkdown } from '@/lib/render-markdown';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 
-interface WikiPage {
+export interface WikiPage {
   slug: string;
   pageType: string;
   name: string;
@@ -23,6 +23,20 @@ interface WikiPage {
   frameIds: string;
   compiledAt: string;
   sourceCount: number;
+}
+
+/**
+ * Display-only quality floor for wiki pages. Entity pages with a too-short name
+ * (1–2 chars — noise fragments) or thin provenance (<2 sources) are hidden from
+ * the list and its counts. Scoped to `entity` only so concept/synthesis/index/
+ * health pages always show. The <3 name threshold preserves 3-char tech acronyms
+ * (AWS/GPT/SQL/API). On clean data this is a no-op.
+ */
+export function passesQualityFloor(p: WikiPage): boolean {
+  if (p.pageType !== 'entity') return true;
+  if (p.name.trim().length < 3) return false;
+  if (p.sourceCount < 2) return false;
+  return true;
 }
 
 interface HealthReport {
@@ -204,8 +218,12 @@ export default function WikiTab() {
     }
   }, []);
 
+  // Quality-floored base list — the single source for the list, its type counts,
+  // and the header total, so no surface disagrees on what's shown.
+  const visiblePages = pages.filter(passesQualityFloor);
+
   // Filter pages
-  const filtered = pages.filter(p => {
+  const filtered = visiblePages.filter(p => {
     if (filterType && p.pageType !== filterType) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -214,9 +232,9 @@ export default function WikiTab() {
     return true;
   });
 
-  const entityCount = pages.filter(p => p.pageType === 'entity').length;
-  const conceptCount = pages.filter(p => p.pageType === 'concept').length;
-  const synthesisCount = pages.filter(p => p.pageType === 'synthesis').length;
+  const entityCount = visiblePages.filter(p => p.pageType === 'entity').length;
+  const conceptCount = visiblePages.filter(p => p.pageType === 'concept').length;
+  const synthesisCount = visiblePages.filter(p => p.pageType === 'synthesis').length;
 
   return (
     <div className="flex h-full">
@@ -228,7 +246,7 @@ export default function WikiTab() {
             <div className="flex items-center gap-1.5">
               <BookOpen className="w-4 h-4 text-primary" />
               <span className="text-xs font-display font-semibold">Wiki</span>
-              <span className="text-[11px] text-muted-foreground">({pages.length})</span>
+              <span className="text-[11px] text-muted-foreground">({visiblePages.length})</span>
             </div>
             <div className="flex gap-1">
               <HintTooltip content="Health Report">
