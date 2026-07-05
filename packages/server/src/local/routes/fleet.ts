@@ -114,10 +114,13 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     try {
       session = sessionManager.getOrCreate(
         wsId,
-        () => mind,
+        // Pin the shared cache handle for this session's lifetime so an LRU
+        // eviction elsewhere cannot close this spawn's mind out from under it.
+        () => fastify.mindCache.acquire(wsId),
         (m) => fastify.agentState.createSessionOrchestrator(m),
         (m, o) => fastify.agentState.buildToolsForSession(o, wsId, wsId),
         persona ?? fastify.workspaceManager?.get(wsId)?.personaId ?? undefined,
+        () => fastify.mindCache.release(wsId),
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

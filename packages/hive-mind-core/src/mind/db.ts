@@ -660,6 +660,15 @@ export class MindDB {
     throw lastErr;
   }
 
+  /**
+   * True while the underlying better-sqlite3 handle is open. Used by
+   * MultiMindCache's reopen-guard to detect a handle that was closed
+   * out-of-band before handing it back.
+   */
+  isOpen(): boolean {
+    return this.db.open;
+  }
+
   close(): void {
     this.db.close();
   }

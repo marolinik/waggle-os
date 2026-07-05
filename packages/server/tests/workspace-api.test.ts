@@ -707,6 +707,102 @@ describe('Workspace & Session API', () => {
     await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${ws.id}` });
   });
 
+  it('surfaces a storage-provider file that is not in the ingest registry (union)', async () => {
+    const wsRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Files Union Storage', group: 'Test' },
+    });
+    const ws = JSON.parse(wsRes.body);
+
+    // Write a file straight to the virtual storage root (bypasses the registry,
+    // simulating an upload that lands on the provider fs).
+    const filesRoot = path.join(dataDir, 'workspaces', ws.id, 'files');
+    fs.mkdirSync(filesRoot, { recursive: true });
+    fs.writeFileSync(path.join(filesRoot, 'uploaded.txt'), 'uploaded content', 'utf-8');
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/workspaces/${ws.id}/files`,
+    });
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    const names = body.files.map((f: { name: string }) => f.name);
+    expect(names).toContain('uploaded.txt');
+
+    await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${ws.id}` });
+  });
+
+  it('unions ingested (registry) and uploaded (storage) files', async () => {
+    const wsRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Files Union Both', group: 'Test' },
+    });
+    const ws = JSON.parse(wsRes.body);
+
+    // Registry side: ingest a file.
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/ingest',
+      payload: {
+        files: [{ name: 'ingested.txt', content: Buffer.from('ingested').toString('base64') }],
+        workspaceId: ws.id,
+      },
+    });
+
+    // Storage side: write a file to the provider fs directly.
+    const filesRoot = path.join(dataDir, 'workspaces', ws.id, 'files');
+    fs.mkdirSync(filesRoot, { recursive: true });
+    fs.writeFileSync(path.join(filesRoot, 'stored.txt'), 'stored', 'utf-8');
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/workspaces/${ws.id}/files`,
+    });
+    const body = JSON.parse(res.body);
+    const names = body.files.map((f: { name: string }) => f.name);
+    expect(names).toContain('ingested.txt');
+    expect(names).toContain('stored.txt');
+
+    await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${ws.id}` });
+  });
+
+  it('dedupes union by name — registry entry wins on collision', async () => {
+    const wsRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Files Union Dedup', group: 'Test' },
+    });
+    const ws = JSON.parse(wsRes.body);
+
+    // Same name on both sides.
+    await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/ingest',
+      payload: {
+        files: [{ name: 'dup.txt', content: Buffer.from('registry copy').toString('base64') }],
+        workspaceId: ws.id,
+      },
+    });
+    const filesRoot = path.join(dataDir, 'workspaces', ws.id, 'files');
+    fs.mkdirSync(filesRoot, { recursive: true });
+    fs.writeFileSync(path.join(filesRoot, 'dup.txt'), 'storage copy', 'utf-8');
+
+    const res = await injectWithAuth(server, {
+      method: 'GET',
+      url: `/api/workspaces/${ws.id}/files`,
+    });
+    const body = JSON.parse(res.body);
+    const dupRows = body.files.filter((f: { name: string }) => f.name === 'dup.txt');
+    expect(dupRows).toHaveLength(1);
+    // Registry wins — its entry carries the ingest 'text' type + a summary.
+    expect(dupRows[0].type).toBe('text');
+    expect(dupRows[0].summary).not.toBe('');
+
+    await injectWithAuth(server, { method: 'DELETE', url: `/api/workspaces/${ws.id}` });
+  });
+
   // ── F3: Session export tests ─────────────────────────────────────
 
   it('exports a session as markdown with title and messages', async () => {

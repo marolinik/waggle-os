@@ -7,6 +7,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 
 /**
  * Persist a chat message to the session's .jsonl file on disk.
@@ -32,6 +33,47 @@ export function persistMessage(
 
   const line = JSON.stringify({ role: msg.role, content: msg.content, timestamp: new Date().toISOString() });
   fs.appendFileSync(filePath, line + '\n', 'utf-8');
+}
+
+/**
+ * Strip a trailing failed user+assistant pair from a session's .jsonl file.
+ *
+ * A chat error persists the user turn followed by an assistant turn whose
+ * content begins with GENERATION_FAILED_PREFIX. A client Retry re-issues the
+ * same user message, which would leave the old failed pair duplicated on
+ * reload. Call this before persisting the retried turn to drop that pair.
+ *
+ * Only rewrites when the tail is exactly a failed pair (assistant-failure line
+ * preceded by a user line). Idempotent and safe otherwise. Returns whether it
+ * stripped anything.
+ */
+export function stripTrailingFailedPair(
+  dataDir: string,
+  workspaceId: string,
+  sessionId: string,
+): boolean {
+  const filePath = path.join(dataDir, 'workspaces', workspaceId, 'sessions', `${sessionId}.jsonl`);
+  if (!fs.existsSync(filePath)) return false;
+
+  const lines = fs.readFileSync(filePath, 'utf-8').split('\n').filter((l) => l.trim() !== '');
+  if (lines.length < 2) return false;
+
+  const parse = (line: string): { role?: unknown; content?: unknown; type?: unknown } | null => {
+    try { return JSON.parse(line); } catch { return null; }
+  };
+
+  const lastIdx = lines.length - 1;
+  const last = parse(lines[lastIdx]);
+  if (!last || last.type === 'meta' || last.role !== 'assistant'
+    || typeof last.content !== 'string' || !last.content.startsWith(GENERATION_FAILED_PREFIX)) {
+    return false;
+  }
+  const prev = parse(lines[lastIdx - 1]);
+  if (!prev || prev.type === 'meta' || prev.role !== 'user') return false;
+
+  const kept = lines.slice(0, lastIdx - 1);
+  fs.writeFileSync(filePath, kept.length ? kept.join('\n') + '\n' : '', 'utf-8');
+  return true;
 }
 
 /**

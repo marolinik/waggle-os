@@ -72,6 +72,37 @@ describe('WorkspaceSessionManager', () => {
     expect(mind.close).toHaveBeenCalled();
   });
 
+  it('releases the cache pin instead of closing a borrowed mind', () => {
+    const manager = new WorkspaceSessionManager(3);
+    const mind = createMockMind();
+    const release = vi.fn();
+    // Session borrows a cache-owned handle: close() must drop the pin, NOT
+    // close the shared MindDB (closing it would poison other borrows).
+    manager.create('ws-1', mind, createMockOrchestrator(), createMockTools(), undefined, release);
+
+    expect(manager.close('ws-1')).toBe(true);
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(mind.close).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the pin when getOrCreate fails after the mindFactory pins', () => {
+    const manager = new WorkspaceSessionManager(1);
+    manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());
+
+    // ws-1 fills the single slot; creating ws-2 hits the max-sessions cap in
+    // create() AFTER the mindFactory ran, so getOrCreate must release the pin.
+    const release = vi.fn();
+    expect(() => manager.getOrCreate(
+      'ws-2',
+      () => createMockMind(),
+      createMockOrchestrator,
+      createMockTools,
+      undefined,
+      release,
+    )).toThrow('Max concurrent sessions reached (1)');
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
   it('closes idle sessions past threshold', () => {
     const manager = new WorkspaceSessionManager(3);
     const s1 = manager.create('ws-1', createMockMind(), createMockOrchestrator(), createMockTools());

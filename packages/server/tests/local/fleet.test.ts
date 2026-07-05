@@ -61,7 +61,7 @@ describe('Fleet Routes', () => {
       const body = res.json();
       expect(body.sessions).toEqual([]);
       expect(body.count).toBe(0);
-      expect(body.maxSessions).toBe(3);
+      expect(body.maxSessions).toBe(10); // FREE (Solo) session cap — raised from 3 in the 2026-07-05 Solo-vs-Team migration
     });
 
     it('returns agent status when sessions exist', async () => {
@@ -90,7 +90,7 @@ describe('Fleet Routes', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json();
       expect(body.count).toBe(2);
-      expect(body.maxSessions).toBe(3);
+      expect(body.maxSessions).toBe(10); // FREE (Solo) session cap — raised from 3 in the 2026-07-05 Solo-vs-Team migration
       expect(body.sessions).toHaveLength(2);
 
       // First session

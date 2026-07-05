@@ -27,15 +27,35 @@ export interface WikiPage {
 
 /**
  * Display-only quality floor for wiki pages. Entity pages with a too-short name
- * (1–2 chars — noise fragments) or thin provenance (<2 sources) are hidden from
- * the list and its counts. Scoped to `entity` only so concept/synthesis/index/
- * health pages always show. The <3 name threshold preserves 3-char tech acronyms
- * (AWS/GPT/SQL/API). On clean data this is a no-op.
+ * (1–2 chars — noise fragments), thin provenance (<2 sources), or a bare
+ * date-fragment name (a whole token that is an unambiguous month abbreviation or
+ * a lone 4-digit year) are hidden from the list and its counts. Scoped to
+ * `entity` only so concept/synthesis/index/health pages always show. The <3 name
+ * threshold preserves 3-char tech acronyms (AWS/GPT/SQL/API). The date-fragment
+ * check is whole-token (not substring) so 'August'/'September'/'Theresa May'
+ * survive, and excludes jan/mar/may/jun (they collide with names/words). On clean
+ * data this is a no-op.
  */
+const DATE_FRAGMENT_MONTHS = new Set([
+  'feb', 'apr', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+]);
+
+function looksLikeDateFragment(name: string): boolean {
+  return name
+    .trim()
+    .split(/\s+/)
+    .some(
+      (token) =>
+        DATE_FRAGMENT_MONTHS.has(token.toLowerCase()) ||
+        /^(19|20)\d{2}$/.test(token),
+    );
+}
+
 export function passesQualityFloor(p: WikiPage): boolean {
   if (p.pageType !== 'entity') return true;
   if (p.name.trim().length < 3) return false;
   if (p.sourceCount < 2) return false;
+  if (looksLikeDateFragment(p.name)) return false;
   return true;
 }
 

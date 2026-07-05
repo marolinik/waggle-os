@@ -1412,6 +1412,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Helper: get a cached workspace MindDB (opens on demand)
   // A6: Close and remove workspace mind DB from cache before deletion
   const closeWorkspaceMind = (workspaceId: string): void => {
+    // Pin-aware: close any live session first so it drops its cache pin (and
+    // stops referencing a handle we're about to force-close). Then force-close
+    // the cache entry — on deletion the workspace is authoritative, so we close
+    // regardless of remaining pins to release the file lock before FS deletion
+    // (A6 EBUSY). Ordering avoids the old double-close where both the session
+    // and this seam closed the same MindDB.
+    sessionManager.close(workspaceId);
     mindCache.close(workspaceId);
     if (activeWorkspaceId === workspaceId) {
       orchestrator.clearWorkspaceMind();

@@ -48,4 +48,17 @@ describe('passesQualityFloor', () => {
       expect(passesQualityFloor(page({ pageType, name: 'A', sourceCount: 0 }))).toBe(true);
     }
   });
+
+  it('hides entity date-fragment names (month abbrev or bare year token)', () => {
+    expect(passesQualityFloor(page({ name: 'Act Aug', sourceCount: 30 }))).toBe(false);
+    expect(passesQualityFloor(page({ name: 'Roadmap 2026', sourceCount: 30 }))).toBe(false);
+  });
+
+  it('preserves names where a date-like string is only a substring or a full month word', () => {
+    expect(passesQualityFloor(page({ name: 'August Company', sourceCount: 30 }))).toBe(true);
+    expect(passesQualityFloor(page({ name: 'AI Act', sourceCount: 30 }))).toBe(true);
+    expect(passesQualityFloor(page({ name: 'EU AI Act', sourceCount: 30 }))).toBe(true);
+    expect(passesQualityFloor(page({ name: 'GPT API', sourceCount: 30 }))).toBe(true);
+    expect(passesQualityFloor(page({ name: 'New York', sourceCount: 30 }))).toBe(true);
+  });
 });

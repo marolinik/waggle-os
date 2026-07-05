@@ -776,9 +776,41 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (!ws) {
       return reply.status(404).send({ error: 'Workspace not found' });
     }
-    const files = readFileRegistry(server.localConfig.dataDir, id);
-    // Return newest first
-    files.reverse();
+    // The ingest registry (files.jsonl) and the storage-provider filesystem are
+    // two disjoint stores: Harvest/ingest appends to the registry, while uploads
+    // write to the provider fs. Union both so uploaded files also appear here.
+    // Registry wins on a name collision.
+    const registry = readFileRegistry(server.localConfig.dataDir, id);
+    const registryNames = new Set(registry.map((f) => f.name));
+    const storageRows: FileRegistryEntry[] = [];
+    try {
+      const { getStorageProvider } = await import('../storage/index.js');
+      const provider = getStorageProvider(
+        {
+          id,
+          storageType: ws.storageType ?? 'virtual',
+          storagePath: ws.storagePath,
+          storageConfig: (ws as unknown as { storageConfig?: Record<string, unknown> }).storageConfig,
+        },
+        server.localConfig.dataDir,
+      );
+      const entries = await provider.list('/');
+      for (const e of entries) {
+        if (e.type !== 'file') continue;
+        if (registryNames.has(e.name)) continue;
+        storageRows.push({
+          name: e.name,
+          type: e.mimeType ?? 'file',
+          summary: '',
+          sizeBytes: e.size ?? 0,
+          ingestedAt: e.modifiedAt ?? e.createdAt ?? '',
+        });
+      }
+    } catch {
+      // Non-blocking — a missing/unreadable storage root degrades to registry-only.
+    }
+    // Registry newest-first, then storage-only rows.
+    const files = [...registry].reverse().concat(storageRows);
     return { files };
   });
 

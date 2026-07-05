@@ -14,7 +14,9 @@ import path from 'node:path';
 import {
   persistMessage,
   loadSessionMessages,
+  stripTrailingFailedPair,
 } from '../../src/local/routes/chat-persistence.js';
+import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -236,5 +238,47 @@ describe('loadSessionMessages', () => {
 
     const loaded = loadSessionMessages(dataDir, 'ws-1', 'sess-1');
     expect(loaded).toEqual([{ role: 'user', content }]);
+  });
+});
+
+// ─── stripTrailingFailedPair ────────────────────────────────────────
+
+describe('stripTrailingFailedPair', () => {
+  it('strips a trailing failed user+assistant pair', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'ok turn' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'sure' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'reproduce this' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: `${GENERATION_FAILED_PREFIX}boom` });
+
+    const stripped = stripTrailingFailedPair(dataDir, 'ws-1', 'sess-1');
+    expect(stripped).toBe(true);
+
+    // Only the failed pair is dropped; the earlier successful pair survives.
+    const loaded = loadSessionMessages(dataDir, 'ws-1', 'sess-1');
+    expect(loaded).toEqual([
+      { role: 'user', content: 'ok turn' },
+      { role: 'assistant', content: 'sure' },
+    ]);
+  });
+
+  it('is a no-op on a normal (non-failed) tail', () => {
+    const dataDir = makeTempDir();
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'user', content: 'hi' });
+    persistMessage(dataDir, 'ws-1', 'sess-1', { role: 'assistant', content: 'hello' });
+
+    const stripped = stripTrailingFailedPair(dataDir, 'ws-1', 'sess-1');
+    expect(stripped).toBe(false);
+
+    const loaded = loadSessionMessages(dataDir, 'ws-1', 'sess-1');
+    expect(loaded).toEqual([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello' },
+    ]);
+  });
+
+  it('returns false when the session file does not exist', () => {
+    const dataDir = makeTempDir();
+    expect(stripTrailingFailedPair(dataDir, 'ws-1', 'missing')).toBe(false);
   });
 });

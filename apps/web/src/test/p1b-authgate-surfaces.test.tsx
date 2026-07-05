@@ -414,6 +414,7 @@ describe('useChat error surfacing (P1b)', () => {
     const users = result.current.messages.filter(m => m.role === 'user');
     expect(users).toHaveLength(1);
     expect(users[0].content).toBe('hello');
-    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith('ws-1', 'hello', 'sess-1', undefined, undefined);
+    // retryLastFailed threads { retry: true } so the server strips the persisted failed pair.
+    expect(mocks.adapter.sendMessage).toHaveBeenLastCalledWith('ws-1', 'hello', 'sess-1', undefined, undefined, true);
   });
 });

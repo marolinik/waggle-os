@@ -36,7 +36,7 @@ import { TeamSync, WaggleConfig } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
 import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse } from './chat-helpers.js';
-import { persistMessage, loadSessionMessages } from './chat-persistence.js';
+import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
@@ -502,6 +502,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        * the server falls back to 'normal' for safety.
        */
       autonomy?: { level: AutonomyLevel; expiresAt?: number };
+      /**
+       * F4: set by a client Retry after a failed turn. Drops the previously
+       * persisted failed user+assistant pair (RAM + disk) before re-issuing so
+       * a reload doesn't show a duplicate.
+       */
+      retry?: boolean;
     };
   }>('/api/chat', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
@@ -510,7 +516,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const {
       message, workspace: _ws, workspaceId: _wsId, model, session,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
-      autonomy: autonomyRaw,
+      autonomy: autonomyRaw, retry: retryTurn,
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
 
@@ -722,6 +728,21 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       const history = sessionHistories.get(sessionId)!;
       activeHistory = history;
 
+      // F4 retry-dedup: a retried turn re-issues the failed user message. Drop
+      // the previously persisted failed user+assistant pair (RAM + disk) so a
+      // reload doesn't render it duplicated alongside the fresh turn.
+      if (retryTurn) {
+        const n = history.length;
+        if (n >= 2
+          && history[n - 1].role === 'assistant'
+          && typeof history[n - 1].content === 'string'
+          && history[n - 1].content.startsWith(GENERATION_FAILED_PREFIX)
+          && history[n - 2].role === 'user') {
+          history.splice(n - 2, 2);
+        }
+        stripTrailingFailedPair(server.localConfig.dataDir, effectiveWorkspace, sessionId);
+      }
+
       // Add user message to history and persist to disk
       history.push({ role: 'user', content: message });
       persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'user', content: message });
@@ -740,12 +761,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           if (mind) {
             wsSession = server.sessionManager.getOrCreate(
               effectiveWorkspace,
-              () => mind,
+              // Pin the shared cache handle for this session's lifetime so a
+              // fan-out over many workspaces cannot evict (and close) this mind
+              // mid-turn while we hold it across the LLM await.
+              () => server.mindCache.acquire(effectiveWorkspace),
               (m) => server.agentState.createSessionOrchestrator(m),
               // Phase B.2: pass effectiveWorkspace as the source workspace ID
               // so cross-workspace read tools scope their grants correctly.
               (m, o) => server.agentState.buildToolsForSession(o, workspacePath ?? effectiveWorkspace, effectiveWorkspace),
               server.workspaceManager?.get(effectiveWorkspace)?.personaId ?? undefined,
+              () => server.mindCache.release(effectiveWorkspace),
             );
             sessionOrch = wsSession.orchestrator;
           }

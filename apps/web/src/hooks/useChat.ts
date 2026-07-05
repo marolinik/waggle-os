@@ -112,7 +112,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     }
   }, [workspaceId, sessionId]);
 
-  const sendMessage = useCallback(async (content: string): Promise<boolean> => {
+  const sendMessage = useCallback(async (content: string, opts?: { retry?: boolean }): Promise<boolean> => {
     if (!workspaceId || !content.trim()) return false;
     // F2: report send success so the wizard auto-send knows whether to clear
     // the composer or leave the text for a manual retry. Error handling below
@@ -148,7 +148,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
       const autonomyPayload = autonomy && autonomy.level !== 'normal'
         ? { level: autonomy.level, expiresAt: autonomy.expiresAt ?? undefined }
         : undefined;
-      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona, autonomyPayload)) {
+      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona, autonomyPayload, opts?.retry)) {
         if (abortRef.current?.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
@@ -345,7 +345,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     if (idx === -1) return;
     const content = messages[idx].content;
     setMessages(prev => prev.slice(0, idx));
-    void sendMessage(content);
+    void sendMessage(content, { retry: true });
   }, [messages, isLoading, sendMessage]);
 
   const clearHistory = useCallback(async () => {

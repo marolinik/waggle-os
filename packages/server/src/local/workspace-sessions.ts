@@ -30,6 +30,14 @@ export interface WorkspaceSession {
   status: 'active' | 'paused' | 'error';
   /** L-17 C3: cumulative LLM tokens (prompt + completion) for this session. */
   tokensUsed: number;
+  /**
+   * Optional pin-release callback. When a session borrows its mind from the
+   * shared MultiMindCache via `acquire()`, the cache owns the handle's lifecycle
+   * and the session must NOT close it. Instead `close()` calls this to drop the
+   * refcount pin. Absent for standalone/test sessions that own their own handle
+   * — those fall back to `mind.close()`.
+   */
+  release?: () => void;
 }
 
 export class WorkspaceSessionManager {
@@ -94,6 +102,7 @@ export class WorkspaceSessionManager {
     orchestrator: Orchestrator,
     tools: ToolDefinition[],
     personaId?: string,
+    release?: () => void,
   ): WorkspaceSession {
     if (this.sessions.has(workspaceId)) {
       throw new Error(`Session already exists for workspace ${workspaceId}`);
@@ -112,6 +121,7 @@ export class WorkspaceSessionManager {
       personaId: personaId ?? null,
       status: 'active',
       tokensUsed: 0,
+      release,
     };
     this.sessions.set(workspaceId, session);
     return session;
@@ -143,16 +153,28 @@ export class WorkspaceSessionManager {
     orchestratorFactory: (mind: MindDB) => Orchestrator,
     toolsFactory: (mind: MindDB, orchestrator: Orchestrator) => ToolDefinition[],
     personaId?: string,
+    release?: () => void,
   ): WorkspaceSession {
     const existing = this.sessions.get(workspaceId);
     if (existing) {
       existing.lastActivity = Date.now();
       return existing;
     }
+    // `mindFactory` may pin the shared cache handle (session-lifetime refcount).
+    // If anything downstream throws before the session is registered (e.g. the
+    // max-sessions cap in create()), roll the pin back via `release` so a failed
+    // create never leaks a pin and blocks eviction forever.
     const mind = mindFactory();
-    const orchestrator = orchestratorFactory(mind);
-    const tools = toolsFactory(mind, orchestrator);
-    return this.create(workspaceId, mind, orchestrator, tools, personaId);
+    try {
+      const orchestrator = orchestratorFactory(mind);
+      const tools = toolsFactory(mind, orchestrator);
+      return this.create(workspaceId, mind, orchestrator, tools, personaId, release);
+    } catch (err) {
+      if (release) {
+        try { release(); } catch { /* pin already released */ }
+      }
+      throw err;
+    }
   }
 
   /** Touch a session to update its activity timestamp */
@@ -192,7 +214,15 @@ export class WorkspaceSessionManager {
     if (!session) return false;
 
     session.abortController.abort();
-    try { session.mind.close(); } catch { /* already closed */ }
+    // The MultiMindCache owns the MindDB lifecycle for pinned sessions — drop the
+    // pin instead of closing the shared handle (closing it would poison other
+    // borrows of the same workspace mind). Standalone/test sessions that own
+    // their handle have no `release` and fall back to closing it directly.
+    if (session.release) {
+      try { session.release(); } catch { /* pin already released */ }
+    } else {
+      try { session.mind.close(); } catch { /* already closed */ }
+    }
     this.sessions.delete(workspaceId);
     return true;
   }

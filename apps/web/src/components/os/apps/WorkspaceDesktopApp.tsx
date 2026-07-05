@@ -30,7 +30,7 @@
  * live composer here). Tasks seeded from WorkspaceState pending+blocked (C7).
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   LayoutGrid, MessageSquare, FileBox, Brain,
   Loader2, Users, WifiOff, ShieldAlert, ChevronRight,
@@ -370,6 +370,28 @@ const WorkspaceDesktopApp = ({
   const openChat = useCallback(() => {
     onOpenChat?.(workspaceId);
   }, [onOpenChat, workspaceId]);
+
+  // Files tab upload: writes to the storage provider, then re-reads the union
+  // (registry + provider fs) so the new file surfaces immediately.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const handleUploadFiles = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const list = e.target.files;
+    if (!list || list.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of Array.from(list)) {
+        await adapter.uploadFile(workspaceId, '/', file);
+      }
+      const files = await adapter.getWorkspaceFiles(workspaceId);
+      setArtifacts(normalizeArtifacts(files));
+    } catch (err) {
+      console.error('[WorkspaceDesktopApp] file upload failed:', err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, [workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -716,35 +738,69 @@ const WorkspaceDesktopApp = ({
               distinct artifact entity is a later phase, so both surfaces read
               the same registry today. */}
           {activeTab === 'files' && (
-            artifacts.length === 0 ? (
-              <TabPlaceholder
-                icon={FileText}
-                title="No files yet"
-                body="Your agents create files here as you work in chat, and Harvest brings your existing documents in as they're ingested."
-                cta={onOpenChat ? (
-                  <button
-                    type="button"
-                    onClick={openChat}
-                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
-                    data-testid="ws-files-tab-open-chat"
-                  >
-                    Open chat
-                  </button>
-                ) : undefined}
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleUploadFiles}
+                data-testid="ws-files-upload-input"
               />
-            ) : (
-              <div className="h-full overflow-auto p-5" data-testid="ws-files-tab">
-                <ul className="divide-y divide-[var(--line-soft)] overflow-hidden rounded-[14px] border border-[var(--line-soft)]">
-                  {artifacts.map(a => (
-                    <li key={a.id} className="flex items-center gap-3 bg-card px-4 py-2.5">
-                      <FileText className="h-4 w-4 shrink-0 text-[var(--text-dim)]" />
-                      <span className="flex-1 truncate text-[13.5px] text-[var(--text)]">{a.name}</span>
-                      {a.subtitle && <span className="shrink-0 font-mono text-[11px] text-[var(--text-dim)]">{a.subtitle}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
+              {artifacts.length === 0 ? (
+                <TabPlaceholder
+                  icon={FileText}
+                  title="No files yet"
+                  body="Your agents create files here as you work in chat, and Harvest brings your existing documents in as they're ingested. You can also upload files directly."
+                  cta={
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploading}
+                        className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
+                        data-testid="ws-files-upload"
+                      >
+                        {uploading ? 'Uploading…' : 'Upload file'}
+                      </button>
+                      {onOpenChat && (
+                        <button
+                          type="button"
+                          onClick={openChat}
+                          className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                          data-testid="ws-files-tab-open-chat"
+                        >
+                          Open chat
+                        </button>
+                      )}
+                    </div>
+                  }
+                />
+              ) : (
+                <div className="h-full overflow-auto p-5" data-testid="ws-files-tab">
+                  <div className="mb-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
+                      data-testid="ws-files-upload"
+                    >
+                      {uploading ? 'Uploading…' : 'Upload file'}
+                    </button>
+                  </div>
+                  <ul className="divide-y divide-[var(--line-soft)] overflow-hidden rounded-[14px] border border-[var(--line-soft)]">
+                    {artifacts.map(a => (
+                      <li key={a.id} className="flex items-center gap-3 bg-card px-4 py-2.5">
+                        <FileText className="h-4 w-4 shrink-0 text-[var(--text-dim)]" />
+                        <span className="flex-1 truncate text-[13.5px] text-[var(--text)]">{a.name}</span>
+                        {a.subtitle && <span className="shrink-0 font-mono text-[11px] text-[var(--text-dim)]">{a.subtitle}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </>
           )}
 
           {/* Team — global roster today (TODO: workspace-scoped membership). */}
