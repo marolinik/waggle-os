@@ -141,17 +141,16 @@ plus two partial misses. Root-caused and fixed all three directly (no new workfl
 
 ## Needs a product decision
 
-- **Workspace-limit gate ↔ config contradiction (NEW, wave 5, monetization):** three
-  founder-touched sources disagree on how many workspaces FREE gets. Canonical
-  `packages/shared/src/tiers.ts` = **5** (and PRO = unlimited); the trial-ended modal
-  advertises "Up to 5 workspaces"; but the legacy `apps/web/src/lib/feature-gates.ts`
-  gates `multi-workspace` behind `minTier:'teams'` (using an *outdated* tier vocabulary
-  — 'solo'/'business' — that predates the canonical 5-tier system), so the runtime
-  paywall actually blocks FREE **and PRO** at workspace #2. The honest fix is to align
-  `feature-gates.ts` + the CreateWorkspaceDialog gate (`workspaces.length < 1`) to
-  `tiers.ts`, but that's a monetization-enforcement change. **Decide: does FREE get 1
-  or 5?** Then align the legacy gate to the canonical config (this also subsumes F31
-  Solo→Free naming — feature-gates.ts is where the "solo" vocabulary still lives).
+- ~~**Workspace-limit gate ↔ config contradiction**~~ — RESOLVED (`593e6b40`). It
+  turned out to be a client↔server *sync bug*, not a business decision: the server
+  already enforces the canonical `tiers.ts` limit (FREE=5 / PRO=unlimited), only the
+  client dialog gated off the stale `feature-gates.ts` `multi-workspace` flag and
+  blocked at #2. Aligned the client to the same rule (new pure `canCreateWorkspaceAtTier`
+  mirroring the server, boundary property-tested); paywall copy now truthfully quotes
+  "The Free plan includes 5." **Still open (a real product decision, not this bug):**
+  the legacy `feature-gates.ts` still carries the outdated 'solo'/'business' tier
+  vocabulary (F31's deeper root) and the now-unreferenced `multi-workspace` entry — a
+  broader migration of that whole file onto the canonical 5-tier system is worth doing.
 - **Model-gate truth-gap:** the gate verifies a provider key, not the workspace
   chat's configured model (QA saw "Anthropic verified" while the chat's model 401'd).
   Should the gate probe the actual default model instead?
