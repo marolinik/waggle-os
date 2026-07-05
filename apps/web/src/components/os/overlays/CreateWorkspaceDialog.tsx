@@ -12,12 +12,13 @@ import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { PERSONAS } from '@/lib/personas';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { adapter } from '@/lib/adapter';
-import { useFeatureGate } from '@/hooks/useFeatureGate';
 import { useWorkspaces } from '@/hooks/useWorkspaces';
+import { useShell } from '@/providers/ShellContext';
+import { canCreateWorkspaceAtTier } from '@/lib/workspace-limit';
 import LockedFeature from '@/components/os/LockedFeature';
 import { buildBreadcrumbs } from '@/lib/browse-breadcrumbs';
 import type { StorageType, WorkspaceTemplate, TemplateCategory } from '@/lib/types';
-import type { ConnectorDefinition } from '@waggle/shared';
+import { TIER_CAPABILITIES, type ConnectorDefinition } from '@waggle/shared';
 
 /** Use native OS folder picker when running inside Tauri, falls back to custom browse modal. */
 async function pickFolderNative(): Promise<string | null> {
@@ -623,9 +624,13 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
 /* ── Main Dialog ──────────────────────────────────────────────────── */
 
 const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialogProps) => {
-  const { isEnabled: isFeatureEnabled } = useFeatureGate();
   const { workspaces } = useWorkspaces();
-  const canCreateWorkspace = isFeatureEnabled('multi-workspace') || workspaces.length < 1;
+  const { billingTier } = useShell();
+  // Gate off the SAME canonical rule the server enforces (tiers.ts
+  // workspaceLimit), not the stale feature-gates.ts 'multi-workspace' flag that
+  // blocked FREE/PRO at workspace #2 while the backend would have allowed 5 /
+  // unlimited. Client and server now agree by construction.
+  const canCreateWorkspace = canCreateWorkspaceAtTier(billingTier, workspaces.length);
 
   const [name, setName] = useState('');
   const [group, setGroup] = useState('Personal');
@@ -722,13 +727,10 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
             className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
             onClick={e => e.stopPropagation()}>
             <div className="p-6">
-              {/* Deliberately number-free: canonical tiers.ts says FREE=5 /
-                  PRO=unlimited, but the legacy feature-gates.ts `multi-workspace`
-                  gate (minTier:'teams') blocks earlier. Asserting either "1" or
-                  "5" here would contradict one source and create a broken promise
-                  in the same dialog that paywalls you. Resolve the gate↔config
-                  contradiction (a monetization decision) before quoting a count. */}
-              <LockedFeature featureName="Multiple Workspaces" upgradePrompt="Upgrade to add more workspaces — each keeps its own separate memory." />
+              {/* The gate now matches the server (tiers.ts workspaceLimit), so
+                  the count is finally safe to quote: this paywall only fires once
+                  a FREE user has actually reached the limit. */}
+              <LockedFeature featureName="Multiple Workspaces" upgradePrompt={`Upgrade for unlimited workspaces. The Free plan includes ${TIER_CAPABILITIES.FREE.workspaceLimit}.`} />
             </div>
           </motion.div>
         </motion.div>
