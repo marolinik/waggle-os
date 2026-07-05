@@ -15,6 +15,7 @@ import {
   Hexagon, ShieldCheck,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -169,7 +170,7 @@ function formatDate(iso: string): string {
   if (diff < 60_000) return 'just now';
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
-  return d.toLocaleDateString();
+  return d.toLocaleDateString(DATE_LOCALE);
 }
 
 // ── Skill aggregation (D12 version ladder) ────────────────────────

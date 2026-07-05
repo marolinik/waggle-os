@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Clock, Loader2, ChevronRight, Filter } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import type { TimelineEvent } from '@/lib/types';
 import {
   iconForEvent,
@@ -45,7 +46,7 @@ function getSinceDate(range: TimeRange): string | undefined {
 function formatTime(ts: string): string {
   try {
     const d = new Date(typeof ts === 'number' ? ts : ts);
-    return d.toLocaleString([], {
+    return d.toLocaleString(DATE_LOCALE, {
       month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
@@ -56,7 +57,7 @@ function groupByDay(events: TimelineEvent[]): Map<string, TimelineEvent[]> {
   const groups = new Map<string, TimelineEvent[]>();
   for (const event of events) {
     const day = new Date(typeof event.timestamp === 'number' ? event.timestamp : event.timestamp)
-      .toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+      .toLocaleDateString(DATE_LOCALE, { weekday: 'short', month: 'short', day: 'numeric' });
     const list = groups.get(day) ?? [];
     list.push(event);
     groups.set(day, list);

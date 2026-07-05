@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, Loader2, ShieldAlert, X } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { RISK_LABELS, RISK_TEXT_CLASSES, isKnownRiskLevel } from '@/lib/risk-display';
 
 export type ExtendAuditType = 'skill' | 'plugin' | 'mcp' | 'connector' | 'marketplace' | 'native';
@@ -153,7 +154,7 @@ const InstallAuditPanel = ({ type, capability, limit = 20, showFilter = false }:
                 {entry.detail && <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{entry.detail}</p>}
               </div>
               <span className="text-[10px] text-muted-foreground shrink-0">
-                {entry.timestamp ? new Date(entry.timestamp).toLocaleDateString() : ''}
+                {entry.timestamp ? new Date(entry.timestamp).toLocaleDateString(DATE_LOCALE) : ''}
               </span>
             </div>
           );

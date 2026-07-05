@@ -60,9 +60,13 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   const [probe, setProbe] = useState<{
     status: 'idle' | 'probing' | 'verified' | 'failed' | 'unverified';
     failedProvider?: string;
-    // The probe verifies a PROVIDER KEY, not the model the chat will use — the
-    // banner names which provider confirmed so the copy stays honest.
+    // The provider-fallback probe verifies a PROVIDER KEY, not the model the
+    // chat will use — the banner names which provider confirmed so the copy
+    // stays honest.
     verifiedProvider?: string;
+    // MODEL-GATE: when we probe the workspace's actual default model, the banner
+    // can name the model itself rather than just the provider.
+    verifiedModel?: string;
   }>({ status: 'idle' });
 
   // Local models
@@ -85,21 +89,38 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   const localReady = (local?.totalLocalModels ?? 0) > 0;
   const ready = cloudReady || localReady;
 
-  // F3: on mount (once providers land), live-probe the stored cloud key(s). If
-  // only local models exist, skip — totalLocalModels is already a live query.
+  // MODEL-GATE: on mount, first live-probe the workspace's ACTUAL default model
+  // (not just a provider key). Only when no default model is configured do we
+  // fall back to the F3 per-provider stored-key probes. If only local models
+  // exist and no default model, skip — totalLocalModels is already a live query.
   const activeProviderIds = activeProviders.map((p) => p.id).join(',');
   useEffect(() => {
-    if (providersLoading || activeProviders.length === 0) return;
+    if (providersLoading) return;
     let cancelled = false;
     setProbe({ status: 'probing' });
     const ids = activeProviders.map((p) => p.id);
-    const run = Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
-    // Client-side guard on top of the server's 5s AbortSignal so a hung sidecar
-    // can't strand the banner on 'probing'.
-    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
-    void Promise.race([run, timeout]).then((outcome) => {
+
+    const run = (async (): Promise<void> => {
+      // 1) Probe the actual default model.
+      const modelRes = await adapter.probeModel().catch(() => null);
       if (cancelled) return;
-      if (outcome === 'timeout') { setProbe({ status: 'unverified' }); return; }
+      if (modelRes?.configured) {
+        if (modelRes.verified) { setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined }); return; }
+        if (modelRes.rejected) {
+          setProbe({ status: 'failed' });
+          // Open the provider grid/key input so the user can fix the key now.
+          setTab('cloud');
+          if (ids[0]) setSelected(ids[0]);
+          return;
+        }
+        setProbe({ status: 'unverified' });
+        return;
+      }
+
+      // 2) No default model → F3 per-provider stored-key fallback.
+      if (ids.length === 0) { setProbe({ status: 'idle' }); return; }
+      const outcome = await Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
+      if (cancelled) return;
       // outcome[i] ↔ ids[i] ↔ activeProviders[i], so the display name lines up.
       let verifiedProvider: string | undefined;
       let failedProvider: string | undefined;
@@ -118,6 +139,14 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       } else {
         setProbe({ status: 'unverified' });
       }
+    })();
+
+    // Client-side guard on top of the server's 5s AbortSignal so a hung sidecar
+    // can't strand the banner on 'probing'.
+    const timeout = new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 6000));
+    void Promise.race([run, timeout]).then((outcome) => {
+      if (cancelled) return;
+      if (outcome === 'timeout') setProbe({ status: 'unverified' });
     });
     return () => { cancelled = true; };
     // probe.status must NOT be a dep: setting 'probing' inside would re-run the
@@ -197,7 +226,9 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
         <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-foreground">
           <Check className="size-4 shrink-0 text-primary" aria-hidden />
           <span>
-            {probe.verifiedProvider
+            {probe.verifiedModel
+              ? `Model verified (${probe.verifiedModel}) — you’re ready to go.`
+              : probe.verifiedProvider
               ? `${probe.verifiedProvider} key verified — you’re ready to go.`
               : 'Model verified — you’re ready to go.'}
           </span>

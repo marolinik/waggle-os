@@ -23,6 +23,7 @@ import {
   Lightbulb, Calendar, ListTodo, WifiOff, RefreshCw,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -86,13 +87,13 @@ function formatRelative(iso?: string): string {
 function formatBriefingDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  return d.toLocaleDateString(DATE_LOCALE, { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
 function formatClock(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return d.toLocaleTimeString(DATE_LOCALE, { hour: 'numeric', minute: '2-digit' });
 }
 
 /** Honey-accented key number inside a composed sentence. */

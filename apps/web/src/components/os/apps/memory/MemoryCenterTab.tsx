@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle, ShieldOff } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
 import { MEMORY_KIND_META, memoryKindLabel } from '@/lib/harvest-kind-map';
@@ -628,8 +629,8 @@ export default function MemoryCenterTab({
             )}
 
             <p className="text-[11px] text-muted-foreground">
-              Created {new Date(selected.createdAt).toLocaleString()}
-              {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString()}`}
+              Created {new Date(selected.createdAt).toLocaleString(DATE_LOCALE)}
+              {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString(DATE_LOCALE)}`}
             </p>
           </>
         )}

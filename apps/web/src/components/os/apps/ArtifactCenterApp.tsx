@@ -4,6 +4,7 @@ import {
   Code2, Image as ImageIcon, Palette, File, Archive, Trash2, RotateCcw, Save, Plus, Link2,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import type { Artifact, ArtifactKind, ArtifactStatus, RelatedSearchResult } from '@/lib/types';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -297,7 +298,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
                     <div className="min-w-0">
                       <span className="block text-xs font-medium truncate">{a.title}</span>
                       <span className="block text-[10px] text-muted-foreground truncate">
-                        {label} · {new Date(a.updatedAt).toLocaleDateString()}
+                        {label} · {new Date(a.updatedAt).toLocaleDateString(DATE_LOCALE)}
                       </span>
                     </div>
                     {/* Provenance — gated: render the real source string the
@@ -404,8 +405,8 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
             </div>
 
             <p className="text-[11px] text-muted-foreground">
-              Created {new Date(selected.createdAt).toLocaleString()}
-              {` · updated ${new Date(selected.updatedAt).toLocaleString()}`}
+              Created {new Date(selected.createdAt).toLocaleString(DATE_LOCALE)}
+              {` · updated ${new Date(selected.updatedAt).toLocaleString(DATE_LOCALE)}`}
             </p>
           </>
         )}

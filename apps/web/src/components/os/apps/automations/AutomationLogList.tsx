@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import type { AutomationLog } from '@/lib/types';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 /**
  * Execution-history rows (UX-Refactor Phase 3B, S11 — History/Logs tabs).
@@ -45,7 +46,7 @@ const AutomationLogList = ({ logs, loading, error, emptyText }: AutomationLogLis
               {l.automationName ? `${l.automationName} — ` : ''}{l.success ? (l.resultSummary ?? 'Completed') : (l.error ?? 'Failed')}
             </span>
             <span className="block text-[10px] text-muted-foreground">
-              {new Date(l.executedAt).toLocaleString()}
+              {new Date(l.executedAt).toLocaleString(DATE_LOCALE)}
               {typeof l.durationMs === 'number' ? ` · ${(l.durationMs / 1000).toFixed(1)}s` : ''}
             </span>
           </span>

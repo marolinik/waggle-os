@@ -113,7 +113,7 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
         id: `memory:${frame.id}`,
         type: 'memory',
         title: toSubtitle(frame.content, 80),
-        subtitle: frame.created_at ? new Date(frame.created_at).toLocaleString() : undefined,
+        subtitle: frame.created_at ? new Date(frame.created_at).toLocaleString('en-US') : undefined,
         category: 'search',
         action: { route: `/memory?frame=${encodeURIComponent(frame.id)}` },
       }));

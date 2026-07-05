@@ -8,6 +8,7 @@ import { useDeveloperMode } from "@/hooks/useDeveloperMode";
 import { useProviders } from "@/hooks/useProviders";
 import { formatModelLabel } from "@/lib/model-label";
 import { adapter } from "@/lib/adapter";
+import { DATE_LOCALE } from "@/lib/date-locale";
 
 interface StatusBarProps {
   workspaceName?: string;
@@ -71,9 +72,9 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
   }, []);
 
   const formatTime = (d: Date) =>
-    d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+    d.toLocaleTimeString(DATE_LOCALE, { hour: "2-digit", minute: "2-digit", hour12: false });
   const formatDate = (d: Date) =>
-    d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    d.toLocaleDateString(DATE_LOCALE, { weekday: "short", month: "short", day: "numeric" });
 
   return (
     <div className="fixed top-0 left-0 right-0 z-50 h-8 glass-strong flex items-center justify-between px-4 select-none">

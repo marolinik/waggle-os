@@ -999,13 +999,13 @@ export function exportSessionToMarkdown(filePath: string, sessionId: string): st
 
   const parts: string[] = [];
   parts.push(`# ${title}`);
-  if (created) parts.push(`\n*${new Date(created).toLocaleString()}*`);
+  if (created) parts.push(`\n*${new Date(created).toLocaleString('en-US')}*`);
   if (summary) parts.push(`\n> ${summary}`);
   parts.push('');
 
   for (const msg of messages) {
     const label = msg.role === 'user' ? '**You**' : '**Assistant**';
-    const time = msg.timestamp ? ` *(${new Date(msg.timestamp).toLocaleTimeString()})*` : '';
+    const time = msg.timestamp ? ` *(${new Date(msg.timestamp).toLocaleTimeString('en-US')})*` : '';
     parts.push(`### ${label}${time}\n`);
     parts.push(msg.content);
     parts.push('');

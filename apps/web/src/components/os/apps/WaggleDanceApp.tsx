@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WaggleSignal } from '@/lib/types';
 import { sortSignalsForDisplay } from '@/lib/waggle-signals';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 type TypeConfigEntry = { icon: React.ElementType; color: string; label: string };
 
@@ -133,7 +134,7 @@ const WaggleDanceApp = () => {
                           <span className="text-[11px] text-muted-foreground/70">· {signal.sourceUser}</span>
                         )}
                         <span className="text-[11px] text-muted-foreground/50 ml-auto">
-                          {new Date(signal.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(signal.timestamp).toLocaleTimeString(DATE_LOCALE, { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>
                     </div>
@@ -169,7 +170,7 @@ const WaggleDanceApp = () => {
                 {selectedSignal.sourceUser && <div><span className="text-foreground/70">User:</span> {selectedSignal.sourceUser}</div>}
                 {selectedSignal.sourceAgentId && <div><span className="text-foreground/70">Agent:</span> {selectedSignal.sourceAgentId}</div>}
                 {selectedSignal.targetWorkspaceId && <div><span className="text-foreground/70">Target:</span> {selectedSignal.targetWorkspaceId}</div>}
-                <div><span className="text-foreground/70">Time:</span> {new Date(selectedSignal.timestamp).toLocaleString()}</div>
+                <div><span className="text-foreground/70">Time:</span> {new Date(selectedSignal.timestamp).toLocaleString(DATE_LOCALE)}</div>
               </div>
 
               {selectedSignal.metadata && Object.keys(selectedSignal.metadata).length > 0 && (

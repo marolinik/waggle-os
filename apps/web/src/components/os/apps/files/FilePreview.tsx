@@ -7,6 +7,7 @@ import { Eye, X as XIcon, Download, RefreshCw, Image } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { FileEntry } from '@/lib/types';
 import { formatSize } from './file-utils';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { SyntaxPreview } from './SyntaxPreview';
 
 interface FilePreviewProps {
@@ -75,7 +76,7 @@ const FilePreview = ({ file, content, loading, isImage, onClose, onDownload }: F
         {file.modifiedAt && (
           <div className="flex justify-between text-[11px]">
             <span className="text-muted-foreground">Modified</span>
-            <span className="text-foreground">{new Date(file.modifiedAt).toLocaleString()}</span>
+            <span className="text-foreground">{new Date(file.modifiedAt).toLocaleString(DATE_LOCALE)}</span>
           </div>
         )}
         <div className="pt-1.5 flex gap-1">

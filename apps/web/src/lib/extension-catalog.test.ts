@@ -7,11 +7,17 @@ import { describe, it, expect } from 'vitest';
 import type { ConnectorDefinition } from '@waggle/shared';
 import type { SkillPack } from './types';
 import {
-  filterExtensions, sortExtensions,
+  filterExtensions, sortExtensions, dedupeExtensions,
   fromConnector, fromMarketplacePackage, fromMcpCatalogRow, fromModel,
   fromPersona, fromSkillPack, fromTemplate,
   type Extension,
 } from './extension-catalog';
+
+const airtableConnector: ConnectorDefinition = {
+  id: 'airtable', name: 'Airtable', description: 'Bases', service: 'airtable',
+  authType: 'api_key', status: 'disconnected', capabilities: ['read'],
+  substrate: 'waggle', tools: [], category: 'productivity',
+};
 
 describe('extension-catalog normalizers', () => {
   it('marketplace packages are installable with a namespaced id + scan status', () => {
@@ -125,5 +131,79 @@ describe('filterExtensions / sortExtensions', () => {
     expect(() => sortExtensions(broken)).not.toThrow();
     expect(() => filterExtensions(broken, 'b')).not.toThrow();
     expect(filterExtensions(broken, 'b-model')).toHaveLength(1);
+  });
+});
+
+describe('dedupeExtensions', () => {
+  it('collapses connector + catalog-mcp + package for one integration into a single winner (connector)', () => {
+    const list = [
+      fromMcpCatalogRow({ id: 'airtable-mcp', name: 'Airtable', description: 'MCP', category: 'productivity', installed: false }),
+      fromConnector(airtableConnector),
+      fromMarketplacePackage({ id: 7, name: 'airtable-mcp', description: 'pkg', waggle_install_type: 'mcp', installed: false }),
+    ];
+    const out = dedupeExtensions(list);
+    expect(out).toHaveLength(1);
+    const [winner] = out;
+    // Winner is the connector — richest install UX (highest precedence).
+    expect(winner.id).toBe('connector:airtable');
+    expect(winner.kind).toBe('federated');
+    expect(winner.type).toBe('connector');
+    // The other two forms fold into altIds…
+    expect(winner.altIds).toEqual(expect.arrayContaining(['mcp:airtable-mcp', 'pkg:7']));
+    expect(winner.altIds).toHaveLength(2);
+    // …and the distinct forms surface (precedence-ordered) for the badge.
+    expect(winner.sources).toEqual(['connector', 'mcp', 'package']);
+  });
+
+  it('is installed if ANY form is installed (OR across the group)', () => {
+    const list = [
+      fromConnector(airtableConnector), // disconnected → not installed
+      fromMcpCatalogRow({ id: 'airtable-mcp', name: 'Airtable', description: '', category: 'productivity', installed: true }),
+    ];
+    const [winner] = dedupeExtensions(list);
+    expect(winner.id).toBe('connector:airtable');
+    expect(winner.installed).toBe(true);
+    expect(winner.lifecycle).toBe('installed');
+  });
+
+  it('passes a unique-key entry through untouched (no altIds/sources added)', () => {
+    const solo = fromConnector({
+      id: 'github', name: 'GitHub', description: 'Code', service: 'github',
+      authType: 'bearer', status: 'connected', capabilities: ['read'],
+      substrate: 'waggle', tools: [], category: 'development',
+    });
+    const out = dedupeExtensions([solo]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toBe(solo); // same reference — untouched
+    expect(out[0].altIds).toBeUndefined();
+    expect(out[0].sources).toBeUndefined();
+  });
+
+  it('collapses the within-mcp catalog + package double into one (winner = catalog-mcp)', () => {
+    // Same server surfaced twice in the mcp facet: the catalog row ("Postgres")
+    // and its registry package ("postgres-mcp") — both normalize to "postgres".
+    const list = [
+      fromMcpCatalogRow({ id: 'postgres', name: 'Postgres', description: 'db', category: 'Database', installed: true }),
+      fromMarketplacePackage({ id: 9, name: 'postgres-mcp', description: 'pkg', waggle_install_type: 'mcp', installed: false }),
+    ];
+    const out = dedupeExtensions(list);
+    expect(out).toHaveLength(1);
+    const [winner] = out;
+    expect(winner.id).toBe('mcp:postgres'); // catalog-mcp outranks the package
+    expect(winner.altIds).toEqual(['pkg:9']);
+    expect(winner.sources).toEqual(['mcp', 'package']);
+    expect(winner.installed).toBe(true); // catalog form was installed
+  });
+
+  it('leaves genuinely distinct integrations as separate rows', () => {
+    const list = [
+      fromConnector(airtableConnector),
+      fromConnector({
+        id: 'slack', name: 'Slack', description: 'Chat', service: 'slack',
+        authType: 'oauth2', status: 'disconnected', capabilities: ['read'],
+        substrate: 'waggle', tools: [], category: 'communication',
+      }),
+    ];
+    expect(dedupeExtensions(list)).toHaveLength(2);
   });
 });

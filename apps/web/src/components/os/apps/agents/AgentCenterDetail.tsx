@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Play, Pause, Archive, RotateCcw } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import type { Agent, AgentTrace, Workspace } from '@/lib/types';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -146,7 +147,7 @@ const AgentCenterDetail = ({ agent, workspaces, busy, onOpenChange, onRun, onPau
                   <li key={t.id} className="flex items-center gap-2 rounded-md bg-muted/30 px-2 py-1">
                     <StatusBadge tone={TRACE_OUTCOME_TONE[t.outcome]} label={t.outcome} />
                     <span className="flex-1 min-w-0 text-[10px] text-muted-foreground truncate">
-                      {new Date(t.ts).toLocaleString()}{t.model ? ` · ${t.model}` : ''}{t.workspaceId ? ` · ${wsName(t.workspaceId)}` : ''}
+                      {new Date(t.ts).toLocaleString(DATE_LOCALE)}{t.model ? ` · ${t.model}` : ''}{t.workspaceId ? ` · ${wsName(t.workspaceId)}` : ''}
                     </span>
                     <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">
                       {(t.durationMs / 1000).toFixed(1)}s · ${t.cost.toFixed(3)}
@@ -158,7 +159,7 @@ const AgentCenterDetail = ({ agent, workspaces, busy, onOpenChange, onRun, onPau
           </div>
 
           <p className="text-[11px] text-muted-foreground">
-            Created {new Date(agent.createdAt).toLocaleString()} · updated {new Date(agent.updatedAt).toLocaleString()}
+            Created {new Date(agent.createdAt).toLocaleString(DATE_LOCALE)} · updated {new Date(agent.updatedAt).toLocaleString(DATE_LOCALE)}
           </p>
         </>
       )}

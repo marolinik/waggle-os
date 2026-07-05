@@ -18,7 +18,13 @@
  */
 import type { ExtensionType } from '@waggle/shared';
 import type { ConnectorDefinition } from '@waggle/shared';
+import { normalizeMcpId } from '@waggle/shared';
 import type { Persona, WorkspaceTemplate } from './types';
+
+// Re-exported so the dedup key can be computed by any caller (and tested) from
+// one place. Same canonical normalizer the MCP catalog uses to collapse
+// "Airtable" / "airtable-mcp" / "@scope/server-airtable" to one key.
+export { normalizeMcpId };
 
 /** §14.7 lifecycle subset derivable from today's backends. */
 export type ExtensionLifecycle = 'available' | 'installed';
@@ -48,6 +54,15 @@ export interface Extension {
   /** Connector auth method — drives token-paste (bearer/api_key/basic) vs
    *  OAuth-redirect (the Hub) in the grid's in-place Connect flow (PR4 D3). */
   authType?: ConnectorDefinition['authType'];
+  /** Namespaced ids of the alternate forms this winner absorbed at dedup
+   *  (`dedupeExtensions`) — e.g. a connector winner records its `mcp:` and
+   *  `pkg:` twins. Used to resolve installed-state across every form. */
+  altIds?: string[];
+  /** Distinct provenance forms this row represents ('connector' | 'mcp' |
+   *  'package', precedence-ordered). `length > 1` ⇒ a genuinely multi-form
+   *  integration — the card renders a "Connector + MCP" badge so it reads as
+   *  merged, not silently dropped. Distinct from the singular `source` label. */
+  sources?: string[];
 }
 
 /** Marketplace registry row (numeric-id /api/marketplace search envelope).
@@ -242,4 +257,83 @@ export function sortExtensions(list: Extension[]): Extension[] {
     if (a.installed !== b.installed) return a.installed ? 1 : -1;
     return (a.name ?? '').localeCompare(b.name ?? '');
   });
+}
+
+/** Collapsible provenance forms in winner-precedence order — the connector's
+ *  vault-connect UX is the richest, then the catalog-mcp enable, then the
+ *  marketplace package. Any other form (pack) never wins over these three. */
+const SOURCE_PRECEDENCE = ['connector', 'mcp', 'package'] as const;
+
+/** The provenance form of an extension, keyed off its namespaced-id prefix. */
+function sourceForm(ext: Extension): string {
+  if (ext.id.startsWith('connector:')) return 'connector';
+  if (ext.id.startsWith('mcp:')) return 'mcp';
+  if (ext.id.startsWith('pkg:')) return 'package';
+  return ext.kind; // 'pack' / other — outranked by all three above
+}
+
+function precedenceRank(form: string): number {
+  const i = (SOURCE_PRECEDENCE as readonly string[]).indexOf(form);
+  return i === -1 ? SOURCE_PRECEDENCE.length : i;
+}
+
+/**
+ * Collapse the three catalog sources (native connector / local MCP catalog /
+ * marketplace package) into ONE deduped entry per integration — display-layer
+ * only, no server/db change. The same integration otherwise appears up to 3×
+ * with distinct namespaced ids (connector:airtable 'Connect' /
+ * mcp:airtable-mcp 'Enable' / pkg:… 'Add'), and every installed MCP appears
+ * twice within the mcp facet (catalog `mcp:` row + package `pkg:` row).
+ *
+ * Identity key = `normalizeMcpId(name)`. Within a colliding group the WINNER is
+ * the highest-precedence form (connector > catalog-mcp > package); the losers'
+ * ids fold into `altIds` and their forms into `sources`. Installed-state is
+ * OR-ed across every form (installed if ANY form is). Entries whose key is
+ * unique pass through untouched (no altIds/sources added).
+ */
+export function dedupeExtensions(list: Extension[]): Extension[] {
+  const groups = new Map<string, Extension[]>();
+  const order: string[] = [];
+  for (const ext of list) {
+    const key = normalizeMcpId(ext.name ?? '');
+    const group = groups.get(key);
+    if (group) {
+      group.push(ext);
+    } else {
+      groups.set(key, [ext]);
+      order.push(key);
+    }
+  }
+
+  const out: Extension[] = [];
+  for (const key of order) {
+    const group = groups.get(key)!;
+    if (group.length === 1) {
+      out.push(group[0]);
+      continue;
+    }
+    // Winner = lowest precedence rank; stable (first-seen) on a tie.
+    let winner = group[0];
+    for (let i = 1; i < group.length; i++) {
+      if (precedenceRank(sourceForm(group[i])) < precedenceRank(sourceForm(winner))) {
+        winner = group[i];
+      }
+    }
+    const installedAny = group.some(e => e.installed);
+    // Distinct forms present, precedence-ordered, with any non-standard form
+    // (pack) appended so the "N + M" badge stays deterministic.
+    const forms = new Set(group.map(sourceForm));
+    const sources = [
+      ...SOURCE_PRECEDENCE.filter(f => forms.has(f)),
+      ...[...forms].filter(f => !(SOURCE_PRECEDENCE as readonly string[]).includes(f)),
+    ];
+    out.push({
+      ...winner,
+      installed: installedAny,
+      lifecycle: installedAny ? 'installed' : winner.lifecycle,
+      altIds: group.filter(e => e !== winner).map(e => e.id),
+      sources,
+    });
+  }
+  return out;
 }

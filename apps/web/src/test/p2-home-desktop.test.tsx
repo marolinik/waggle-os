@@ -16,6 +16,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { stashDeepLink } from '@/lib/app-deeplink';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 const mocks = vi.hoisted(() => ({
   adapter: {
@@ -136,7 +137,7 @@ describe('HomeCockpit (P2)', () => {
     await renderHome(briefing());
     expect(screen.queryByText(RAW_ISO)).toBeNull();
     // Locale-agnostic: assert the exact formatting call the component makes.
-    const expected = new Date(RAW_ISO).toLocaleDateString(undefined, {
+    const expected = new Date(RAW_ISO).toLocaleDateString(DATE_LOCALE, {
       weekday: 'long', month: 'long', day: 'numeric',
     });
     expect(screen.getByText(expected)).toBeTruthy();

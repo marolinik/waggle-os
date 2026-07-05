@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     setProviderKey: vi.fn(),
     pullLocalModel: vi.fn(),
     probeProvider: vi.fn(),
+    probeModel: vi.fn(),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -47,6 +48,9 @@ beforeEach(() => {
   // F3: default probe = network-degrade neutral (valid, not verified) so the
   // key-presence tests keep their "You have a working model" wording.
   mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
+  // MODEL-GATE: default = no default model configured, so the mount probe falls
+  // back to the F3 per-provider path the existing cases assert against.
+  mocks.adapter.probeModel.mockResolvedValue({ model: null, configured: false, verified: false });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -145,6 +149,35 @@ describe('ModelGate', () => {
     render(<ModelGate />);
     expect(await screen.findByText(/you have a working model/i)).toBeInTheDocument();
     expect(screen.queryByText(/key verified/i)).toBeNull();
+  });
+
+  // ── MODEL-GATE: probe the workspace's actual default model ──
+  it('probes the default model on mount and names it when verified', async () => {
+    mocks.adapter.probeModel.mockResolvedValue({ model: 'claude-sonnet-4-6', configured: true, verified: true });
+    render(<ModelGate />);
+    expect(await screen.findByText(/model verified \(claude-sonnet-4-6\)/i)).toBeInTheDocument();
+    expect(mocks.adapter.probeModel).toHaveBeenCalled();
+    // The default-model probe short-circuits the per-provider fallback.
+    expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
+  it('a rejected default model shows the "not responding" banner and opens the key input', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    mocks.adapter.probeModel.mockResolvedValue({ model: 'claude-sonnet-4-6', configured: true, verified: false, rejected: true });
+    render(<ModelGate />);
+    expect(await screen.findByText(/not responding/i)).toBeInTheDocument();
+    // Grid auto-opened on the keyed provider → its key input is visible.
+    expect(await screen.findByLabelText(/api key for anthropic/i)).toBeInTheDocument();
+  });
+
+  it('falls back to the per-provider key probe when no default model is configured', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
+    // probeModel default → configured:false. The stored anthropic key verifies.
+    mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: true });
+    render(<ModelGate />);
+    expect(await screen.findByText(/anthropic key verified/i)).toBeInTheDocument();
+    expect(mocks.adapter.probeModel).toHaveBeenCalled();
+    expect(mocks.adapter.probeProvider).toHaveBeenCalledWith('anthropic');
   });
 
   it('the local tab pulls a model and fires onModelReady', async () => {

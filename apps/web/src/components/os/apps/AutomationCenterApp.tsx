@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Clock, Plus, Loader2, AlertTriangle, RefreshCw, Check, X, ShieldAlert } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import type { Automation } from '@waggle/shared';
@@ -518,7 +519,7 @@ const AutomationCenterApp = () => {
                             {upcoming.map(a => (
                               <li key={a.id} className="flex items-center justify-between gap-2 text-[11px]">
                                 <span className="text-foreground truncate">{a.name}</span>
-                                <span className="text-muted-foreground shrink-0">{new Date(a.nextRun as string).toLocaleString()}</span>
+                                <span className="text-muted-foreground shrink-0">{new Date(a.nextRun as string).toLocaleString(DATE_LOCALE)}</span>
                               </li>
                             ))}
                           </ul>
@@ -541,7 +542,7 @@ const AutomationCenterApp = () => {
                               <li key={a.id} className="flex items-center justify-between gap-2 text-[11px]">
                                 <span className="text-foreground truncate">{a.name}</span>
                                 <span className={`shrink-0 ${log.success ? 'text-[var(--healthy)]' : 'text-[var(--risk)]'}`}>
-                                  {log.success ? 'OK' : 'failed'} · {new Date(log.executedAt).toLocaleString()}
+                                  {log.success ? 'OK' : 'failed'} · {new Date(log.executedAt).toLocaleString(DATE_LOCALE)}
                                 </span>
                               </li>
                             ))}
@@ -639,7 +640,7 @@ const AutomationCenterApp = () => {
                           <span className="block text-[10px] text-muted-foreground" title={a.triggerType === 'manual' ? undefined : (a.schedule ?? undefined)}>{describeTrigger(a)}</span>
                         </span>
                         {a.nextRun && (a.status === 'active' || a.status === 'running') && (
-                          <span className="text-[10px] text-muted-foreground shrink-0">Next: {new Date(a.nextRun).toLocaleString()}</span>
+                          <span className="text-[10px] text-muted-foreground shrink-0">Next: {new Date(a.nextRun).toLocaleString(DATE_LOCALE)}</span>
                         )}
                       </li>
                     ))}

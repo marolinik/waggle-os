@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Play, Pause, Square, Radio, Clock, Zap, RefreshCw, Users, Plus, Rocket, AlertCircle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import type { FleetSession, Workspace } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 
@@ -268,7 +269,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
             <div key={a.id} className="flex items-center gap-3 p-2 rounded-lg bg-secondary/20 border border-border/20">
               <span className="text-xs text-foreground font-display">{a.user}</span>
               <span className="text-xs text-muted-foreground flex-1">{a.action}</span>
-              <span className="text-[11px] text-muted-foreground">{new Date(a.timestamp).toLocaleTimeString()}</span>
+              <span className="text-[11px] text-muted-foreground">{new Date(a.timestamp).toLocaleTimeString(DATE_LOCALE)}</span>
             </div>
           ))}
         </div>

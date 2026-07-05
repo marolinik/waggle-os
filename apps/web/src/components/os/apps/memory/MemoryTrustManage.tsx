@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Search, Loader2, Brain, Pencil, Trash2, Clock, Check, Save } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryStatus } from '@/lib/types';
 import { frameSourceLabel } from '@/lib/frame-source';
@@ -514,8 +515,8 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
             </div>
             <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} />
             <p className="text-[11px] text-[var(--text-muted)]">
-              Created {new Date(selected.createdAt).toLocaleString()}
-              {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString()}`}
+              Created {new Date(selected.createdAt).toLocaleString(DATE_LOCALE)}
+              {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString(DATE_LOCALE)}`}
             </p>
           </>
         )}

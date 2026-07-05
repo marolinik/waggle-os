@@ -36,7 +36,9 @@ import {
   Loader2, Users, WifiOff, ShieldAlert, ChevronRight,
   FileText, SearchX, RefreshCw,
 } from 'lucide-react';
+import { tierSatisfies, TIER_LABELS } from '@waggle/shared';
 import { adapter } from '@/lib/adapter';
+import { useShell } from '@/providers/ShellContext';
 import { useRoomState } from '@/hooks/useRoomState';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import MemoryCenterTab from './memory/MemoryCenterTab';
@@ -359,6 +361,12 @@ const WorkspaceDesktopApp = ({
   const [reloadKey, setReloadKey] = useState(0);
   const retry = useCallback(() => setReloadKey((k) => k + 1), []);
   useRevalidateOnError(errorKind === 'offline', retry);
+
+  // Team tab tier gate: Solo users see the upsell, Team users the real roster.
+  // `?? 'FREE'` keeps existing useShell test mocks (which don't stub billingTier)
+  // green and fail-closed to the upsell.
+  const { billingTier, tierResolved } = useShell();
+  const isTeam = tierSatisfies(billingTier ?? 'FREE', 'TEAMS');
 
   // Live agents-running indicator for THIS workspace (reuse Room SSE state).
   const { workspaceMap } = useRoomState();
@@ -803,10 +811,35 @@ const WorkspaceDesktopApp = ({
             </>
           )}
 
-          {/* Team — global roster today (TODO: workspace-scoped membership). */}
+          {/* Team — Solo users see a Team-tier upsell; Team users the roster.
+              While the tier is unresolved, render the neutral roster so a real
+              Team user never flashes the upsell during the getTier round-trip. */}
           {activeTab === 'team' && (
             <div className="h-full overflow-auto p-5" data-testid="ws-team-tab">
-              {members.length === 0 ? (
+              {tierResolved && !isTeam ? (
+                <div className="flex h-full flex-col items-center justify-center text-center p-8" data-testid="ws-team-upsell">
+                  <Users className="mb-3 h-10 w-10 text-violet-400/60" />
+                  <p className="text-sm font-display text-foreground">Invite your team</p>
+                  <p className="mt-1 max-w-sm text-[11px] text-muted-foreground">
+                    Shared memory, WaggleDance multi-agent coordination, and governance —
+                    turn this workspace into a shared surface for your whole team.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => window.dispatchEvent(new CustomEvent('waggle:tier-insufficient', {
+                      detail: {
+                        required: 'TEAMS',
+                        actual: billingTier ?? 'FREE',
+                        message: 'Team plan required for shared workspaces and collaboration.',
+                      },
+                    }))}
+                    className="mt-4 rounded-xl border border-violet-400/20 bg-violet-400/10 px-4 py-2 text-xs text-violet-300 transition-colors hover:bg-violet-400/20"
+                    data-testid="ws-team-upgrade"
+                  >
+                    Upgrade to {TIER_LABELS.TEAMS} — $49/seat
+                  </button>
+                </div>
+              ) : members.length === 0 ? (
                 <TabPlaceholder icon={Users} title="Just you for now" body="Team members with access to this workspace will appear here." />
               ) : (
                 <ul className="space-y-2">

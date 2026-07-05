@@ -24,6 +24,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface EraseDataDialogProps {
@@ -135,7 +136,7 @@ export default function EraseDataDialog({ open, onClose }: EraseDataDialogProps)
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Requested at</span>
                     <span className="text-foreground font-mono text-[11px]">
-                      {new Date(receipt.requestedAt).toLocaleString()}
+                      {new Date(receipt.requestedAt).toLocaleString(DATE_LOCALE)}
                     </span>
                   </div>
                   <div className="flex justify-between">

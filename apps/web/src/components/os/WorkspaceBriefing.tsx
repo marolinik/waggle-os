@@ -10,6 +10,7 @@ import {
   Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp, Wrench,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import type { WorkspaceContext } from '@/lib/types';
 import {
@@ -153,7 +154,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
             <span><MessageSquare className="w-3 h-3 inline mr-1" />{ctx.stats.sessionCount} sessions</span>
           )}
           {ctx.lastActive && (
-            <span><Clock className="w-3 h-3 inline mr-1" />Last active: {new Date(ctx.lastActive).toLocaleDateString()}</span>
+            <span><Clock className="w-3 h-3 inline mr-1" />Last active: {new Date(ctx.lastActive).toLocaleDateString(DATE_LOCALE)}</span>
           )}
         </div>
       )}
@@ -184,7 +185,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
             {ctx.recentDecisions.slice(0, 3).map((d, i) => (
               <li key={i} className="text-xs text-muted-foreground">
                 <span className="text-foreground">{d.content}</span>
-                {d.date && <span className="text-[11px] text-muted-foreground/60 ml-2">{new Date(d.date).toLocaleDateString()}</span>}
+                {d.date && <span className="text-[11px] text-muted-foreground/60 ml-2">{new Date(d.date).toLocaleDateString(DATE_LOCALE)}</span>}
               </li>
             ))}
           </ul>

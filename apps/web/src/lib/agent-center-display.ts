@@ -13,6 +13,7 @@
 import type { AgentRunState, AgentType } from '@waggle/shared';
 import type { Agent } from '@/lib/types';
 import type { StatusTone } from '@/components/ui/status-badge';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 export const AGENT_STATE_META: Record<AgentRunState, { label: string; tone: StatusTone }> = {
   draft: { label: 'Draft', tone: 'neutral' },
@@ -64,7 +65,7 @@ export function formatRelativeTime(iso?: string, now: number = Date.now()): stri
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
   if (diff < 30 * 86_400_000) return `${Math.floor(diff / 86_400_000)}d ago`;
-  return new Date(t).toLocaleDateString();
+  return new Date(t).toLocaleDateString(DATE_LOCALE);
 }
 
 /** KPI row inputs (C27: success-rate yes, hours-saved no). Archived agents

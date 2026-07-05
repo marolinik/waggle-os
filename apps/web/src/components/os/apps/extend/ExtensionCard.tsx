@@ -37,6 +37,9 @@ function actionKey(ext: Extension): ActionKey | null {
   return null;
 }
 
+/** Human labels for the dedup provenance forms (`ext.sources`). */
+const SOURCE_LABELS: Record<string, string> = { connector: 'Connector', mcp: 'MCP', package: 'Package', pack: 'Pack' };
+
 interface ExtensionCardProps {
   ext: Extension;
   /** Destructive uninstall — opens the parent's consequence dialog. */
@@ -53,8 +56,12 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   const scan = ext.scanStatus ? SCAN_LABELS[ext.scanStatus] : null;
   const key = actionKey(ext);
   // The store is authoritative for togglable kinds (so an install done in any
-  // view reflects here); packs fall back to their loaded row.
-  const installed = isTogglable(ext) ? isInstalled(ext.id) : ext.installed;
+  // view reflects here); packs fall back to their loaded row. A deduped winner
+  // resolves installed across its own id AND its absorbed alt forms (altIds),
+  // so enabling the MCP twin elsewhere lights up the merged connector row too.
+  const installed = isTogglable(ext)
+    ? isInstalled(ext.id) || (ext.altIds ?? []).some(isInstalled)
+    : ext.installed;
   const busy = isInstalling(ext.id);
   const verb = key ? VERBS[key] : null;
   const isOAuthConnector = ext.type === 'connector' && ext.authType === 'oauth2';
@@ -93,6 +100,13 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
           <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{ext.type}</span>
           {ext.category && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{ext.category}</span>}
           {ext.trust && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground capitalize">{ext.trust}</span>}
+          {/* Genuinely multi-form integration (dedup winner absorbed ≥1 twin) —
+              name the forms so the merge is legible, not silently hidden. */}
+          {ext.sources && ext.sources.length > 1 && (
+            <span data-testid="extension-sources" className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+              {ext.sources.map(s => SOURCE_LABELS[s] ?? s).join(' + ')}
+            </span>
+          )}
           <span className="text-[11px] text-muted-foreground/60">{ext.source}</span>
         </div>
 

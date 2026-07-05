@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { useToast } from '@/hooks/use-toast';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 
@@ -283,7 +284,7 @@ const VaultApp = () => {
                         <p className="text-xs text-foreground truncate">{s.name}</p>
                         <div className="flex items-center gap-1.5">
                           <span className={`px-1.5 py-0 rounded text-[11px] font-medium ${badge.color}`}>{badge.label}</span>
-                          {s.updatedAt && <span className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleDateString()}</span>}
+                          {s.updatedAt && <span className="text-[11px] text-muted-foreground">{new Date(s.updatedAt).toLocaleDateString(DATE_LOCALE)}</span>}
                         </div>
                       </div>
                     </div>

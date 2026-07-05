@@ -1,6 +1,7 @@
 import { useState, useEffect, type ChangeEvent } from 'react';
 import { Archive, Download, Upload, Loader2, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 interface BackupMeta {
   timestamp: string;
@@ -170,7 +171,7 @@ const BackupApp = () => {
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-foreground font-display">
-                    {new Date(b.timestamp).toLocaleString()}
+                    {new Date(b.timestamp).toLocaleString(DATE_LOCALE)}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     {b.workspaces} workspace{b.workspaces !== 1 ? 's' : ''} · {b.frames} frames · {formatSize(b.sizeBytes)}

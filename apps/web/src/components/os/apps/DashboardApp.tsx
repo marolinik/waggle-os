@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Activity, Clock, Brain, ChevronRight, Users, Sparkles, CheckCircle2, Circle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { getPersonaById } from '@/lib/personas';
@@ -259,7 +260,7 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                           <span className="flex items-center gap-0.5"><Brain className="w-2.5 h-2.5" />{ws.memoryCount}</span>
                         )}
                         {ws.lastActive && (
-                          <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(ws.lastActive).toLocaleDateString()}</span>
+                          <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(ws.lastActive).toLocaleDateString(DATE_LOCALE)}</span>
                         )}
                       </div>
                     </div>

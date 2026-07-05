@@ -8,6 +8,7 @@ import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { validateBody } from '../../validate-body.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
+import { resolveUsableModel } from '../model-availability.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 
 const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
@@ -267,6 +268,65 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       if (!key) return { configured: false, valid: false, verified: false };
       // probeProviderKey brings its own 5s timeout + 60s TTL cache.
       return { configured: true, ...(await probeProviderKey(provider, key)) };
+    },
+  );
+
+  // POST /api/settings/probe-model — live-probe the WORKSPACE'S ACTUAL DEFAULT
+  // MODEL (MODEL-GATE). probe-provider only confirms a provider KEY works; this
+  // resolves the default model server-side (the SAME resolver chat.ts uses) and
+  // fires a 1-token completion to prove the model actually answers. Only booleans
+  // + the resolved model string come back — no key crosses the wire.
+  const probeModelSchema = z.object({ model: z.string().min(1).optional() });
+  server.post<{ Body: { model?: string } }>(
+    '/api/settings/probe-model',
+    { preHandler: validateBody(probeModelSchema) },
+    async (request) => {
+      const preferred = (
+        request.body.model ??
+        new WaggleConfig(server.localConfig.dataDir).getDefaultModel() ??
+        ''
+      ).trim();
+      if (!preferred) return { model: null, configured: false, verified: false };
+
+      const model = await resolveUsableModel(server, preferred);
+
+      // Endpoint selection mirrors chat.ts: Ollama models go direct to Ollama's
+      // OpenAI-compatible endpoint (strip the 'ollama/' prefix); everything else
+      // through the built-in proxy on this same sidecar (port from the address
+      // info, harvest.ts pattern).
+      const isOllama = model.startsWith('ollama/');
+      const addr = server.server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : server.localConfig.port;
+      const url = isOllama
+        ? (process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434') + '/v1/chat/completions'
+        : `http://127.0.0.1:${port}/v1/chat/completions`;
+      const sendModel = isOllama ? model.slice('ollama/'.length) : model;
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({ model: sendModel, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }),
+        });
+        if (res.ok) return { model, configured: true, verified: true };
+        // Hard rejection (bad/absent key or unknown model) → client maps to
+        // 'failed'. Check status + body so a 401/403 or a model_not_found body
+        // both classify as rejected.
+        const detail = `${res.status} ${await res.text().catch(() => '')}`;
+        if (/401|403|authentication|model_not_found/i.test(detail)) {
+          return { model, configured: true, verified: false, rejected: true };
+        }
+        // Other non-2xx → transient (client maps to 'unverified').
+        return { model, configured: true, verified: false };
+      } catch {
+        // Timeout / network → transient.
+        return { model, configured: true, verified: false };
+      } finally {
+        clearTimeout(timeoutId);
+      }
     },
   );
 

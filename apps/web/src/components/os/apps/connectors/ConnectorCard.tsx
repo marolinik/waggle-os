@@ -21,6 +21,7 @@ import { Input } from '@/components/ui/input';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import BrandTile from './BrandTile';
 import { getBrandIdentity } from './brand-identity';
 import InstallAuditPanel from '../extend/InstallAuditPanel';
@@ -122,7 +123,7 @@ const ConnectorCard = ({
               {conn.description && <p className="text-[11px] text-muted-foreground line-clamp-1">{conn.description}</p>}
               {conn.lastSyncAt && (
                 <span className="text-[10px] text-muted-foreground/80 shrink-0">
-                  Last sync {new Date(conn.lastSyncAt).toLocaleString()}
+                  Last sync {new Date(conn.lastSyncAt).toLocaleString(DATE_LOCALE)}
                 </span>
               )}
             </div>
@@ -149,8 +150,8 @@ const ConnectorCard = ({
           {health && (
             <p className="text-[11px] text-muted-foreground">
               Health: {health.status}
-              {health.tokenExpiresAt && <> · token expires {new Date(health.tokenExpiresAt).toLocaleString()}</>}
-              {health.lastChecked && <> · checked {new Date(health.lastChecked).toLocaleString()}</>}
+              {health.tokenExpiresAt && <> · token expires {new Date(health.tokenExpiresAt).toLocaleString(DATE_LOCALE)}</>}
+              {health.lastChecked && <> · checked {new Date(health.lastChecked).toLocaleString(DATE_LOCALE)}</>}
             </p>
           )}
 

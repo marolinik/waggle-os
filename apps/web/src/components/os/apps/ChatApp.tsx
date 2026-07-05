@@ -5,6 +5,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { cmdKLabel } from '@/lib/platform';
 import { formatModelLabel } from '@/lib/model-label';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
@@ -784,7 +785,7 @@ const ChatApp = ({
                   <span className="text-[11px] text-muted-foreground/60">
                     {s.messageCount != null && `${s.messageCount} msgs`}
                     {s.messageCount != null && s.lastActive && ' · '}
-                    {s.lastActive && new Date(s.lastActive).toLocaleDateString()}
+                    {s.lastActive && new Date(s.lastActive).toLocaleDateString(DATE_LOCALE)}
                   </span>
                 )}
               </button>

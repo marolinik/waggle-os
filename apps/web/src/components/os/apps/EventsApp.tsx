@@ -3,6 +3,7 @@ import { Activity, Loader2, CheckCircle2, XCircle, Zap, MessageSquare, Clock, Ch
 import type { AgentStep } from '@/lib/types';
 import { decodeHtmlEntities } from '@/lib/decode-entities';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 const stepIcons: Record<string, React.ElementType> = {
   think: Activity,
@@ -25,7 +26,7 @@ function formatType(type: string | null | undefined): string {
 function formatTimestamp(ts: string | number | null | undefined): string {
   if (ts === null || ts === undefined || ts === '') return 'just now';
   const d = new Date(ts);
-  return Number.isNaN(d.getTime()) ? 'just now' : d.toLocaleTimeString();
+  return Number.isNaN(d.getTime()) ? 'just now' : d.toLocaleTimeString(DATE_LOCALE);
 }
 
 function formatDescription(
@@ -309,7 +310,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
     // under the literal "Invalid Date" key. Bucket them under "Earlier"
     // so the day-grouped replay panel still reads cleanly.
     const d = step.timestamp ? new Date(step.timestamp) : null;
-    const timeKey = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString() : 'Earlier';
+    const timeKey = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString(DATE_LOCALE) : 'Earlier';
     if (!acc[timeKey]) acc[timeKey] = [];
     acc[timeKey].push(step);
     return acc;

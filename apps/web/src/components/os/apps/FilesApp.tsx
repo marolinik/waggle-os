@@ -14,6 +14,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import type { FileEntry, StorageType, Workspace } from '@/lib/types';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { getFileIcon, formatSize, STORAGE_LABELS, normalizeWorkspacePath } from './files/file-utils';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import { useToast } from '@/hooks/use-toast';
@@ -46,7 +47,7 @@ const VersionHistory = ({ workspaceId, fileName }: { workspaceId: string; fileNa
             <div key={v.version} className="flex items-center justify-between text-xs">
               <span className="text-foreground">v{v.version}</span>
               <span className="text-muted-foreground">{formatSize(v.sizeBytes)}</span>
-              <span className="text-muted-foreground/60 text-[11px]">{new Date(v.createdAt).toLocaleDateString()}</span>
+              <span className="text-muted-foreground/60 text-[11px]">{new Date(v.createdAt).toLocaleDateString(DATE_LOCALE)}</span>
             </div>
           ))}
         </div>
@@ -583,7 +584,7 @@ const FilesApp = ({
                       {/* D11: no provenance in the file metadata \u2192 honest "\u2014". */}
                       <td className="py-1 text-left text-muted-foreground/60 text-[11px]" data-testid="file-source">{'\u2014'}</td>
                       <td className="py-1 text-right text-muted-foreground text-[11px]">{file.type === 'file' ? formatSize(file.size) : '\u2014'}</td>
-                      <td className="py-1 text-right text-muted-foreground text-[11px] pr-1">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString() : '\u2014'}</td>
+                      <td className="py-1 text-right text-muted-foreground text-[11px] pr-1">{file.modifiedAt ? new Date(file.modifiedAt).toLocaleDateString(DATE_LOCALE) : '\u2014'}</td>
                     </tr>
                   );
                 })}
@@ -762,8 +763,8 @@ const FilesApp = ({
                 <div>
                   <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Dates</h4>
                   <div className="space-y-2">
-                    {propertiesFile.modifiedAt && <div className="flex items-center gap-2 text-xs"><Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Modified</span><span className="text-foreground">{new Date(propertiesFile.modifiedAt).toLocaleString()}</span></div>}
-                    {propertiesFile.createdAt && <div className="flex items-center gap-2 text-xs"><Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Created</span><span className="text-foreground">{new Date(propertiesFile.createdAt).toLocaleString()}</span></div>}
+                    {propertiesFile.modifiedAt && <div className="flex items-center gap-2 text-xs"><Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Modified</span><span className="text-foreground">{new Date(propertiesFile.modifiedAt).toLocaleString(DATE_LOCALE)}</span></div>}
+                    {propertiesFile.createdAt && <div className="flex items-center gap-2 text-xs"><Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground w-20">Created</span><span className="text-foreground">{new Date(propertiesFile.createdAt).toLocaleString(DATE_LOCALE)}</span></div>}
                     {!propertiesFile.modifiedAt && !propertiesFile.createdAt && <p className="text-[11px] text-muted-foreground/60 italic">No date information available</p>}
                   </div>
                 </div>

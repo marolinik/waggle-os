@@ -2033,6 +2033,25 @@ class LocalAdapter {
   }
 
   /**
+   * MODEL-GATE: live-probe the workspace's ACTUAL default model (resolved
+   * server-side from config, then fired through the same endpoint chat uses).
+   * probe-provider only checks a provider KEY; this proves the default model
+   * itself answers. Returns booleans + the resolved model string — no key
+   * crosses the wire. `configured:false` ⇒ no default model (fall back to
+   * per-provider probes); `rejected:true` ⇒ a hard rejection (401/403/unknown
+   * model) the caller maps to a "failed" state.
+   */
+  async probeModel(
+    model?: string,
+  ): Promise<{ model: string | null; configured: boolean; verified: boolean; rejected?: boolean; error?: string }> {
+    const res = await this.fetch('/api/settings/probe-model', {
+      method: 'POST',
+      body: JSON.stringify(model ? { model } : {}),
+    });
+    return res.json();
+  }
+
+  /**
    * Write a provider API key to the Vault via PUT /api/settings (keyed by provider id —
    * the same name GET /api/providers reads `hasKey` from — which also invalidates the
    * server's key-validation cache). This is the canonical key→vault path; do NOT use the

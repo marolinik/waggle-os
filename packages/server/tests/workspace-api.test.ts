@@ -460,6 +460,57 @@ describe('Workspace & Session API', () => {
     }
   });
 
+  // --- MODEL-GATE: probe-model (live-probe the resolved default model) ---
+
+  it('probe-model reports verified when the model endpoint answers 200', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'test/model' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toMatchObject({ model: 'test/model', configured: true, verified: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('probe-model reports rejected on a 401 from the model endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('unauthorized', { status: 401 })));
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'test/model' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toMatchObject({ configured: true, verified: false, rejected: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('probe-model reports unverified (transient) when the model endpoint times out', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('aborted')));
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: 'test/model' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body).toMatchObject({ configured: true, verified: false });
+      expect(body.rejected).toBeUndefined();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   // --- E3: Progress extraction tests ---
 
   it('extracts progress items from session content', async () => {

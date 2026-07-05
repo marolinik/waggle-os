@@ -12,6 +12,7 @@ import {
   Loader2, X, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { useService } from '@/providers/ServiceProvider';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import type { Workspace } from '@/lib/types';
@@ -376,7 +377,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                             work, so "Last active 5/1/2026" reads as if the user
                             already worked there when they haven't. */}
                         {ws.lastActive && (ws.memoryCount > 0 || ws.sessionCount > 0) && (
-                          <span><Clock className="w-2.5 h-2.5 inline mr-0.5" />{new Date(ws.lastActive).toLocaleDateString()}</span>
+                          <span><Clock className="w-2.5 h-2.5 inline mr-0.5" />{new Date(ws.lastActive).toLocaleDateString(DATE_LOCALE)}</span>
                         )}
                         {ws.pendingTasks && ws.pendingTasks.length > 0 && (
                           <span className="text-amber-400"><AlertTriangle className="w-2.5 h-2.5 inline mr-0.5" />{ws.pendingTasks.length} pending</span>

@@ -4,6 +4,7 @@ import type { AutomationLog } from '@/lib/types';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { AUTOMATION_STATE_META, deriveAutomationStatus, describeTrigger } from '@/lib/automation-display';
+import { DATE_LOCALE } from '@/lib/date-locale';
 
 /**
  * Automation list row (UX-Refactor Phase 3B, S11 — the "AutomationRunRow" DS
@@ -47,8 +48,8 @@ const AutomationRow = ({ automation: a, lastLog, runningNow, busy, onToggle, onR
         </div>
         <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-[11px] text-muted-foreground">{describeTrigger(a)}</span>
-          {a.lastRun && <span className="text-[11px] text-muted-foreground/60">Last: {new Date(a.lastRun).toLocaleDateString()}</span>}
-          {a.nextRun && enabled && <span className="text-[11px] text-muted-foreground/60">Next: {new Date(a.nextRun).toLocaleString()}</span>}
+          {a.lastRun && <span className="text-[11px] text-muted-foreground/60">Last: {new Date(a.lastRun).toLocaleDateString(DATE_LOCALE)}</span>}
+          {a.nextRun && enabled && <span className="text-[11px] text-muted-foreground/60">Next: {new Date(a.nextRun).toLocaleString(DATE_LOCALE)}</span>}
         </div>
         {a.condition && (
           <p className="text-[10px] text-muted-foreground/70 mt-0.5 truncate" title={a.condition}>

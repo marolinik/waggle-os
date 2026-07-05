@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Activity, Server, DollarSign, Clock, Plug, RefreshCw, Timer, Brain, Shield, Network, FileText, ChevronDown, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import type { CronJob } from '@/lib/types';
 import { describeCronExpr } from '@/lib/cron-presets';
 import ComplianceDashboard from './cockpit/ComplianceDashboard';
@@ -155,7 +156,7 @@ const CockpitApp = () => {
             </p>
             {data.weaver.personalMind?.lastConsolidation && (
               <p className="text-[11px] text-muted-foreground">
-                Last consolidation: {new Date(data.weaver.personalMind.lastConsolidation).toLocaleDateString()}
+                Last consolidation: {new Date(data.weaver.personalMind.lastConsolidation).toLocaleDateString(DATE_LOCALE)}
               </p>
             )}
           </div>

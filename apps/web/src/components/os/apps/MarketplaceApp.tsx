@@ -22,7 +22,7 @@ import { useInstallStore } from '@/providers/InstallProvider';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { dedupePacks } from '@/lib/dedupe-packs';
 import {
-  filterExtensions, sortExtensions,
+  filterExtensions, sortExtensions, dedupeExtensions,
   fromConnector, fromMarketplacePackage, fromMcpCatalogRow, fromSkillPack,
   type Extension, type MarketplacePackageRow, type McpCatalogRow,
 } from '@/lib/extension-catalog';
@@ -145,7 +145,10 @@ const MarketplaceApp = () => {
       const settled = await Promise.allSettled(jobs);
       if (seq !== requestSeq.current) return; // stale — a newer request owns the state
       const merged = settled.flatMap(s => (s.status === 'fulfilled' ? s.value : []));
-      setExtensions(sortExtensions(merged));
+      // Collapse the 3 catalog sources (connector / catalog-mcp / package) into
+      // ONE entry per integration before sorting, so the grid shows one row +
+      // one action instead of the same integration up to 3×.
+      setExtensions(sortExtensions(dedupeExtensions(merged)));
       setShelfNote(f !== 'all' ? SHELF_NOTES[f] ?? null : null);
       setLoadError(settled.length > 0 && settled.every(s => s.status === 'rejected')
         ? 'Could not load extensions — the server may be unreachable.'

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2, AlertTriangle } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import type { MemoryFrame } from '@/lib/types';
 import { renderChatMarkdown } from '@/lib/render-markdown';
 import ContextMenu, { type ContextMenuItem } from '@/components/os/ContextMenu';
@@ -176,7 +177,7 @@ const TimelineTab = ({
                   aria-label={`Importance ${Math.min(f.importance, 5)} of 5`}
                   role="img"
                 > {'●'.repeat(Math.min(f.importance, 5))}</span>
-                <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(f.timestamp).toLocaleDateString()}</span>
+                <span className="flex items-center gap-0.5"><Clock className="w-2.5 h-2.5" />{new Date(f.timestamp).toLocaleDateString(DATE_LOCALE)}</span>
                 {(() => {
                   const provenance = readFrameProvenanceTool(f);
                   return provenance ? (
@@ -238,7 +239,7 @@ const TimelineTab = ({
             <div className="flex items-center gap-3 mb-3 text-xs text-muted-foreground">
               <span className="px-2 py-0.5 rounded bg-secondary text-secondary-foreground capitalize">{selectedFrame.type}</span>
               <span>Importance: {selectedFrame.importance}/5</span>
-              <span>{new Date(selectedFrame.timestamp).toLocaleString()}</span>
+              <span>{new Date(selectedFrame.timestamp).toLocaleString(DATE_LOCALE)}</span>
             </div>
             {/* Safe: renderChatMarkdown escapes HTML entities before applying formatting */}
             <div
