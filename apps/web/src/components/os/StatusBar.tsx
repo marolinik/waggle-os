@@ -150,8 +150,8 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           </span>
         )}
         {trialExpired && (
-          <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-destructive/20 text-destructive whitespace-nowrap">
-            Trial expired
+          <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-honey whitespace-nowrap" title="Your trial ended — you're on the free Solo plan. Upgrade anytime.">
+            Trial ended
           </span>
         )}
         <HintTooltip content="Search (Ctrl+K)">

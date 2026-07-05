@@ -492,9 +492,9 @@ function composeOvernightStory(o: OvernightSummary): ReactNode {
 
 function buildRunChips(o: OvernightSummary): RunChipProps[] {
   const chips: RunChipProps[] = [];
-  if (o.consolidated > 0) chips.push({ label: `${o.consolidated} memories consolidated`, tone: 'intel' });
-  if (o.artifactsCreated > 0) chips.push({ label: `${o.artifactsCreated} artifacts created`, tone: 'work' });
-  if (o.automationsCompleted > 0) chips.push({ label: `${o.automationsCompleted} automations completed`, tone: 'healthy' });
+  if (o.consolidated > 0) chips.push({ label: `${o.consolidated} ${o.consolidated === 1 ? 'memory' : 'memories'} consolidated`, tone: 'intel' });
+  if (o.artifactsCreated > 0) chips.push({ label: `${o.artifactsCreated} ${o.artifactsCreated === 1 ? 'artifact' : 'artifacts'} created`, tone: 'work' });
+  if (o.automationsCompleted > 0) chips.push({ label: `${o.automationsCompleted} ${o.automationsCompleted === 1 ? 'automation' : 'automations'} completed`, tone: 'healthy' });
   if (o.failures.length > 0) chips.push({ label: `${o.failures.length} ${o.failures.length === 1 ? 'run' : 'runs'} failed`, tone: 'risk' });
   return chips;
 }

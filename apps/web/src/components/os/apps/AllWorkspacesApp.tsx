@@ -22,6 +22,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Plus, Hexagon, AlertTriangle, ChevronRight } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
+import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import CreateWorkspaceDialog from '../overlays/CreateWorkspaceDialog';
 import { HexAvatar, SectionLabel, DotLive } from '../warm';
@@ -218,32 +219,43 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
   const [showCreate, setShowCreate] = useState(false);
 
+  // The shelf hides dev/test artefacts (ai-os-audit-*, StressTest-*, E2E-Audit-*…)
+  // so it reads as the user's real work — matching the switcher/home visible
+  // count. (Previously the grid was the deliberately-unfiltered "full shelf"; the
+  // 2026-07 5-judge UX review found the leaked test slugs were the single worst
+  // in-app frame, so the grid now filters too. Real installs carry no dev noise,
+  // so a real user sees no change; it also makes the shelf count agree with home.)
+  const shelfWorkspaces = useMemo(
+    () => workspaces.filter(w => !isDevNoiseWorkspace(w.name)),
+    [workspaces],
+  );
+
   // W2B: storageType is persisted only when explicitly set at create (0/56 live
   // today); the runtime treats absent as 'virtual' (storage/index.ts default), so
   // classify the same way here — otherwise Virtual/Local/Team all read 0.
   const counts = useMemo<Record<StorageFilter, number>>(() => {
-    const base: Record<StorageFilter, number> = { all: workspaces.length, virtual: 0, local: 0, team: 0 };
-    for (const w of workspaces) {
+    const base: Record<StorageFilter, number> = { all: shelfWorkspaces.length, virtual: 0, local: 0, team: 0 };
+    for (const w of shelfWorkspaces) {
       base[w.storageType ?? 'virtual'] += 1;
     }
     return base;
-  }, [workspaces]);
+  }, [shelfWorkspaces]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return workspaces.filter(w => {
+    return shelfWorkspaces.filter(w => {
       if (storageFilter !== 'all' && (w.storageType ?? 'virtual') !== storageFilter) return false;
       if (!q) return true;
       const haystack = `${w.name} ${w.group ?? ''} ${w.description ?? ''}`.toLowerCase();
       return haystack.includes(q);
     });
-  }, [workspaces, query, storageFilter]);
+  }, [shelfWorkspaces, query, storageFilter]);
 
   // Names shared by more than one workspace — those cards show their group so
   // two identically-named workspaces aren't indistinguishable (issue 2b).
   const duplicateNames = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const w of workspaces) {
+    for (const w of shelfWorkspaces) {
       const k = w.name.trim().toLowerCase();
       counts.set(k, (counts.get(k) ?? 0) + 1);
     }
@@ -256,7 +268,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   };
 
   // Empty state (D16): a zero-workspace visit gets a create CTA, never a dead end.
-  if (workspaces.length === 0) {
+  if (shelfWorkspaces.length === 0) {
     return (
       <div className="mx-auto h-full max-w-[1000px] overflow-auto px-8 pb-16 pt-7" data-testid="all-workspaces-empty">
         <h1 className="mb-1.5 text-[28px] font-semibold tracking-[-0.02em] text-[var(--text)]">Workspaces</h1>
