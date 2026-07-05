@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { MindDB } from '../../src/mind/db.js';
 import { FrameStore, type MemoryFrame, type FrameType, type Importance } from '../../src/mind/frames.js';
 import { SessionStore, type Session } from '../../src/mind/sessions.js';
+import { HybridSearch } from '../../src/mind/search.js';
+import { MockEmbedder } from './helpers/mock-embedder.js';
 
 describe('Memory Frames (Layer 2 - The Codec)', () => {
   let db: MindDB;
@@ -371,5 +373,56 @@ describe('Memory Frames (Layer 2 - The Codec)', () => {
       const avgMs = (performance.now() - start) / iterations;
       expect(avgMs).toBeLessThan(100);
     });
+  });
+
+  it('compact() P-frame merge routes removal through delete(), leaving no orphan chunk-vec rows', async () => {
+    // Regression: the merge branch used inline DELETEs that purged FTS + the
+    // whole-frame vec but NOT memory_frame_chunks_vec (no FK cascade), orphaning
+    // chunk-embedding rows. Routing through delete(id) purges them.
+    // (Ported from hive-mind 2d0abc5, adapted to MockEmbedder + a real session
+    // gop since the monorepo enforces the memory_frames.gop_id → sessions FK.)
+    const embedder = new MockEmbedder();
+    const search = new HybridSearch(db, embedder);
+    const session = sessions.create();
+
+    const base = frames.createIFrame(session.gop_id, 'base state for chunk-orphan compaction', 'important');
+    // >10 P-frames on one GOP triggers the merge branch (keeps 5, merges the rest).
+    const pframes: MemoryFrame[] = [];
+    for (let i = 0; i < 11; i++) {
+      pframes.push(
+        frames.createPFrame(session.gop_id, `partial update number ${i} with enough words to chunk cleanly`, base.id),
+      );
+    }
+    // Chunk-index the FIRST P-frame — it falls in the merge set (slice(0, 6)).
+    const victim = pframes[0];
+    await search.indexChunksForFrame(victim.id, victim.content);
+    const chunkIds = (db
+      .getDatabase()
+      .prepare('SELECT id FROM memory_frame_chunks WHERE frame_id = ?')
+      .all(victim.id) as Array<{ id: number }>).map((r) => r.id);
+    expect(chunkIds.length).toBeGreaterThan(0);
+
+    const placeholders = chunkIds.map(() => '?').join(',');
+    const vecBefore = db
+      .getDatabase()
+      .prepare(`SELECT COUNT(*) AS n FROM memory_frame_chunks_vec WHERE rowid IN (${placeholders})`)
+      .get(...chunkIds) as { n: number };
+    expect(vecBefore.n).toBe(chunkIds.length);
+
+    const result = frames.compact(30, 90);
+    expect(result.pframesMerged).toBe(6);
+    expect(frames.getById(victim.id)).toBeUndefined();
+
+    // Chunk table rows gone (FK cascade) AND their vec rows gone (delete() sweep).
+    const chunkRowsAfter = db
+      .getDatabase()
+      .prepare('SELECT COUNT(*) AS n FROM memory_frame_chunks WHERE frame_id = ?')
+      .get(victim.id) as { n: number };
+    expect(chunkRowsAfter.n).toBe(0);
+    const vecAfter = db
+      .getDatabase()
+      .prepare(`SELECT COUNT(*) AS n FROM memory_frame_chunks_vec WHERE rowid IN (${placeholders})`)
+      .get(...chunkIds) as { n: number };
+    expect(vecAfter.n).toBe(0);
   });
 });

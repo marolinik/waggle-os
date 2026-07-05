@@ -83,6 +83,27 @@ export {
   renderReferenceDateLine,
 } from './mind/recall-context.js';
 export { resolveRelativeDate, type ResolvedDate } from './mind/resolve-relative-date.js';
+// Supersession (P) + bridge (B) frame PRODUCER — detects supersession chains +
+// enumerable groups in unstructured observations and emits P/B frames. The
+// downstream CONSUMERS of those frames (FrameStore.compact() merge, and the
+// upstream MemoryWeaver in packages/weaver) live elsewhere. Provider-agnostic
+// (caller injects the LLM); applyConsolidation returns the new frames so the
+// caller can vec-index them (createPFrame/createBFrame index FTS only).
+export {
+  detectSupersessionChains,
+  detectEntityGroups,
+  applyConsolidation,
+  collectObservations,
+  getCurrentValues,
+} from './mind/supersede.js';
+export type {
+  ConsolidationLlm,
+  Observation,
+  SupersessionChain,
+  EntityGroup,
+  ConsolidationResult,
+  CollectObservationsOptions,
+} from './mind/supersede.js';
 export { parseDateWindow, type DateWindow } from './mind/parse-date-window.js';
 export { createInProcessReranker, type Reranker, type InProcessRerankerConfig } from './mind/inprocess-reranker.js';
 

@@ -5,6 +5,7 @@
  * cleanup_entities: Delete misclassified KG entities, dedup, retire orphans.
  */
 
+import { spawn } from 'node:child_process';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
@@ -12,11 +13,20 @@ import {
   getFrameStore,
   getKnowledgeGraph,
   getEmbedder,
+  getSearch,
   getWorkspaceMind,
 } from '../core/setup.js';
 import {
   reconcileIndexes,
   normalizeEntityName,
+  collectObservations,
+  detectSupersessionChains,
+  detectEntityGroups,
+  applyConsolidation,
+  type MindDB,
+  type FrameStore,
+  type HybridSearch,
+  type ConsolidationLlm,
 } from '@waggle/core';
 
 // Common nouns that get misclassified as person/project entities
@@ -60,6 +70,151 @@ function isNoiseEntity(name: string, entityType: string): boolean {
   return false;
 }
 
+// ── P/B consolidation executor ─────────────────────────────────────
+// The core supersede.ts module is provider-agnostic (pure) — the LLM transport
+// lives here at the call site. Default: zero-key `claude -p` subprocess. An
+// OpenAI-style model id + OPENAI_API_KEY routes to the OpenAI chat API — the
+// executor the benchmark validated with.
+
+function spawnClaudeText(prompt: string, timeoutMs = 120_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('claude', ['-p', '--output-format=text'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      shell: process.platform === 'win32',
+      env: { ...process.env, HIVE_MIND_NO_SYNTH: '1' },
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      try { proc.kill('SIGKILL'); } catch { /* noop */ }
+      reject(new Error(`claude -p timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    proc.stdout.on('data', (d: Buffer) => { stdout += d.toString('utf8'); });
+    proc.stderr.on('data', (d: Buffer) => { stderr += d.toString('utf8'); });
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`spawn claude failed: ${err.message}`));
+    });
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(`claude -p exited ${code}: ${stderr.slice(0, 300)}`));
+    });
+    proc.stdin.write(prompt);
+    proc.stdin.end();
+  });
+}
+
+async function callOpenAIChat(model: string, system: string, user: string, timeoutMs = 120_000): Promise<string> {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('consolidation consolidate_model requires OPENAI_API_KEY');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+        temperature: 0,
+        response_format: { type: 'json_object' },
+      }),
+      signal: ctrl.signal,
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`openai ${res.status}: ${text.slice(0, 200)}`);
+    return (JSON.parse(text).choices?.[0]?.message?.content ?? '').trim();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildConsolidationLlm(model?: string): ConsolidationLlm {
+  if (model && /^(gpt-|o[0-9])/.test(model)) {
+    return (system, user) => callOpenAIChat(model, system, user);
+  }
+  return (system, user) => spawnClaudeText(`${system}\n\n${user}`);
+}
+
+function bridgeIndexText(frame: { content: string }): string {
+  try {
+    const parsed = JSON.parse(frame.content) as { description?: string; references?: unknown[] };
+    const n = Array.isArray(parsed.references) ? parsed.references.length : 0;
+    return `${parsed.description ?? 'group'}: bridge of ${n} items`;
+  } catch {
+    return frame.content;
+  }
+}
+
+interface ConsolidationCounts {
+  chains: number;
+  groups: number;
+  pframes: number;
+  bframes: number;
+  deprecated: number;
+}
+
+/**
+ * Run the P/B consolidation pass on a mind: gather I-frame observations,
+ * LLM-detect chains + groups, apply (deprecate stale + emit P/B frames), then
+ * frames anchor to the newest observation's gop.
+ */
+async function runConsolidation(
+  db: MindDB,
+  frameStore: FrameStore,
+  search: HybridSearch,
+  model?: string,
+  limit = 400,
+): Promise<ConsolidationCounts> {
+  const empty: ConsolidationCounts = { chains: 0, groups: 0, pframes: 0, bframes: 0, deprecated: 0 };
+  const observations = collectObservations(db, { limit });
+  if (observations.length < 2) return empty;
+
+  const anchor = db
+    .getDatabase()
+    .prepare(
+      "SELECT gop_id FROM memory_frames WHERE frame_type = 'I' AND importance != 'deprecated' ORDER BY created_at DESC, id DESC LIMIT 1",
+    )
+    .get() as { gop_id: string } | undefined;
+  if (!anchor) return empty;
+
+  const llm = buildConsolidationLlm(model);
+  const [chains, groups] = await Promise.all([
+    detectSupersessionChains(observations, llm),
+    detectEntityGroups(observations, llm),
+  ]);
+  const { pframes, bframes, deprecated } = applyConsolidation(frameStore, chains, groups, anchor.gop_id);
+
+  const toIndex = [
+    ...pframes.map((f) => ({ id: f.id, content: f.content })),
+    ...bframes.map((f) => ({ id: f.id, content: bridgeIndexText(f) })),
+  ];
+  if (toIndex.length > 0) {
+    try {
+      await search.indexFramesBatch(toIndex);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`[consolidate] vec-index failed (frames remain FTS-searchable): ${msg}\n`);
+    }
+  }
+
+  return {
+    chains: chains.length,
+    groups: groups.length,
+    pframes: pframes.length,
+    bframes: bframes.length,
+    deprecated: deprecated.length,
+  };
+}
+
 export function registerCleanupTools(server: McpServer): void {
 
   // ── cleanup_frames ─────────────────────────────────────────────
@@ -75,8 +230,12 @@ export function registerCleanupTools(server: McpServer): void {
         .describe('For compact mode: delete temporary frames older than N days (default 30)'),
       max_deprecated_age_days: z.number().optional()
         .describe('For compact mode: delete deprecated frames older than N days (default 90)'),
+      consolidate: z.boolean().optional()
+        .describe('For compact mode: additionally run P/B consolidation — LLM-detect supersession chains (deprecate stale I-frames + emit a current-value P-frame) and enumerable entity groups (emit a B-frame per group), then vec-index the new frames. Requires an LLM (see consolidate_model).'),
+      consolidate_model: z.string().optional()
+        .describe('LLM for consolidate: an OpenAI-style id (e.g. gpt-4o-mini, needs OPENAI_API_KEY) uses the OpenAI API; otherwise the zero-key `claude -p` subprocess.'),
     },
-    async ({ mode, workspace, max_temp_age_days, max_deprecated_age_days }) => {
+    async ({ mode, workspace, max_temp_age_days, max_deprecated_age_days, consolidate, consolidate_model }) => {
       const db = workspace
         ? getWorkspaceMind(workspace)?.db ?? null
         : getPersonalDb();
@@ -98,6 +257,14 @@ export function registerCleanupTools(server: McpServer): void {
           max_temp_age_days ?? 30,
           max_deprecated_age_days ?? 90,
         );
+        // Optional P/B consolidation pass, additive to compaction.
+        let consolidation: ConsolidationCounts | undefined;
+        if (consolidate) {
+          const search = workspace
+            ? getWorkspaceMind(workspace)!.search
+            : getSearch();
+          consolidation = await runConsolidation(db, frameStore, search, consolidate_model);
+        }
         return {
           content: [{
             type: 'text' as const,
@@ -106,6 +273,7 @@ export function registerCleanupTools(server: McpServer): void {
               temporary_pruned: result.temporaryPruned,
               deprecated_pruned: result.deprecatedPruned,
               pframes_merged: result.pframesMerged,
+              ...(consolidation ? { consolidation } : {}),
             }, null, 2),
           }],
         };

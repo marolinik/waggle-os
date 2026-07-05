@@ -338,6 +338,30 @@ describe('Hybrid Search (FTS5 + sqlite-vec + RRF + Relevance)', () => {
       await expect(search.indexFrame(frame.id, 'valid content')).resolves.toBeUndefined();
     });
   });
+
+  it('search() with excludeDeprecated hard-drops deprecated frames (default keeps them)', async () => {
+    // Ported test used a bare 'gop-a'; the monorepo enforces the
+    // memory_frames.gop_id → sessions FK, so anchor to a real session.
+    const session = sessions.create();
+    const stale = frames.createIFrame(session.gop_id, 'the launch date is March 1st');
+    const fresh = frames.createIFrame(session.gop_id, 'the launch date is April 15th');
+    await search.indexFramesBatch([
+      { id: stale.id, content: stale.content },
+      { id: fresh.id, content: fresh.content },
+    ]);
+    // Supersession would mark the stale mention deprecated.
+    frames.update(stale.id, stale.content, 'deprecated');
+
+    // Default: deprecated frame still surfaces (merely down-weighted by scoring).
+    const withDeprecated = await search.search('launch date', { limit: 10 });
+    expect(withDeprecated.map((r) => r.frame.id)).toContain(stale.id);
+
+    // excludeDeprecated: the stale frame must never appear.
+    const withoutDeprecated = await search.search('launch date', { limit: 10, excludeDeprecated: true });
+    const ids = withoutDeprecated.map((r) => r.frame.id);
+    expect(ids).not.toContain(stale.id);
+    expect(ids).toContain(fresh.id);
+  });
 });
 
 function getTopicContent(i: number): string {

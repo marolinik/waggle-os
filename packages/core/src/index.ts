@@ -106,6 +106,11 @@ export {
   MultiMind, type MultiMindSearchResult, type MindSource, type SearchScope,
   MultiMindCache, type MultiMindCacheConfig,
   WorkspaceManager, type WorkspaceConfig, type CreateWorkspaceOptions,
+  // Supersession (P) + bridge (B) frame producer (mono-parity 2026-07-05)
+  detectSupersessionChains, detectEntityGroups, applyConsolidation,
+  collectObservations, getCurrentValues,
+  type ConsolidationLlm, type Observation, type SupersessionChain,
+  type EntityGroup, type ConsolidationResult, type CollectObservationsOptions,
 } from '@waggle/hive-mind-core';
 
 // ── Waggle-specific orchestration (stays in @waggle/core) ──

@@ -32,6 +32,14 @@ export interface SearchOptions {
   reranker?: Reranker;
   /** How many candidates to send to the reranker (default 30). */
   rerankPoolSize?: number;
+  /**
+   * Hard-exclude frames with importance='deprecated' from results. Default OFF
+   * for back-compat: deprecated frames still surface, merely down-weighted 0.3×
+   * by the scoring layer. Turn ON where a superseded value must NEVER leak into
+   * the read context — e.g. after supersession consolidation (see supersede.ts),
+   * where a 0.3× multiplier still let stale values surface via the focus lane.
+   */
+  excludeDeprecated?: boolean;
 }
 
 export interface SearchResult {
@@ -192,9 +200,13 @@ export class HybridSearch {
     const whereExtra = temporalConditions.length > 0
       ? ` AND ${temporalConditions.join(' AND ')}`
       : '';
+    // Hard-exclude deprecated frames when requested (no param needed — literal
+    // condition). Dropping them from `frames` removes them from frameMap, so
+    // they never enter the result set OR the reranker pool.
+    const deprecatedExtra = options.excludeDeprecated ? " AND importance != 'deprecated'" : '';
 
     const frames = raw.prepare(
-      `SELECT * FROM memory_frames WHERE id IN (${placeholders})${whereExtra}`
+      `SELECT * FROM memory_frames WHERE id IN (${placeholders})${whereExtra}${deprecatedExtra}`
     ).all(...temporalParams) as MemoryFrame[];
 
     const frameMap = new Map(frames.map(f => [f.id, f]));
