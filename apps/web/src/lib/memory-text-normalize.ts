@@ -21,6 +21,18 @@ export const MIN_NORMALIZED_KEY_CHARS = 8;
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
 
 /**
+ * "Audit run <id>" harvest-provenance suffix as a WHOLE PHRASE, e.g.
+ *   "Audit run audit-1782648502308." / "benchmark run 20260704".
+ * The label words ("audit run") AND the id must be stripped together — stripping
+ * only the id (RUN_ID_RE/AUDIT_NUMERIC_ID_RE) leaves "audit run" behind, which
+ * produced two distinct dedup keys ("…account" vs "…account audit run") so the
+ * SAME fact showed twice in the login briefing (live wave-5 QA finding). Runs
+ * BEFORE RUN_ID_RE so the label isn't half-consumed. The optional `audit[-_]`
+ * lets it also swallow the doubled "audit run audit-<digits>" live shape.
+ */
+const AUDIT_RUN_PHRASE_RE = /\b(?:audit|benchmark)[-_ ]?run\b\s*[:=#-]?\s*(?:audit[-_])?\d{3,}/gi;
+
+/**
  * Explicit run/audit/benchmark id tokens, e.g.
  *   "audit-run-id: 3f9a2b", "run_id=abc123", "benchmark run 20260704",
  *   "auditRunId:00ab". The value can be hex/alphanumeric of length >= 3.
@@ -67,6 +79,7 @@ export function normalizeMemoryKey(text: string | null | undefined): string {
   if (typeof text !== 'string') return '';
   return text
     .toLowerCase()
+    .replace(AUDIT_RUN_PHRASE_RE, ' ')
     .replace(RUN_ID_RE, ' ')
     .replace(AUDIT_NUMERIC_ID_RE, ' ')
     .replace(RAW_TIMESTAMP_LABEL_RE, ' ')

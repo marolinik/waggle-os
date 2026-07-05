@@ -24,6 +24,26 @@ describe('normalizeMemoryKey', () => {
     expect(key).toContain('audit trail');
   });
 
+  it('strips the whole "Audit run audit-<id>" phrase, label words included (live wave-5 QA)', () => {
+    // The exact live shape: label "Audit run" + a doubled "audit-<digits>" id.
+    // Stripping only the id left "audit run" behind -> two dedup keys
+    // ("…account" vs "…account audit run") -> the SAME fact showed twice in the
+    // login briefing. The label words must go too.
+    const withRun = normalizeMemoryKey('Imran uses 2x2 frameworks and wants every client decision remembered by account. Audit run audit-1782648502308.');
+    const without = normalizeMemoryKey('Imran uses 2x2 frameworks and wants every client decision remembered by account.');
+    expect(withRun).toBe(without);
+    expect(withRun).not.toContain('audit');
+    expect(withRun).not.toContain('1782648502308');
+  });
+
+  it('strips "benchmark run <date>" as a phrase but keeps "audit trail" prose', () => {
+    const a = normalizeMemoryKey('Deploy uses a benchmark run 20260704 marker');
+    const b = normalizeMemoryKey('Deploy uses a benchmark run 20260812 marker');
+    expect(a).toBe(b);
+    // ordinary prose containing "audit" (no run/id) is untouched
+    expect(normalizeMemoryKey('an audit trail requirement')).toContain('audit trail');
+  });
+
   it('strips a raw epoch-ms "Timestamp: …" label (not just ISO-8601)', () => {
     const a = normalizeMemoryKey('BENCHMARK anchor fact. Timestamp: 1782400441971');
     const b = normalizeMemoryKey('BENCHMARK anchor fact. Timestamp: 1782639999999');
