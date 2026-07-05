@@ -275,3 +275,6 @@ bun.lock
 # /understand tool trash — regenerable deleted-graph JSON, not for the public repo
 .understand-anything/.trash*
 .gstack/
+
+# Local plaintext API keys — never commit
+AI API KEYS.txt

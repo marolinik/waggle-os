@@ -6,6 +6,22 @@ import publisherAvatar from '@/assets/personas/publisher.jpeg';
 import researcherAvatar from '@/assets/personas/researcher.jpeg';
 import synthesizerAvatar from '@/assets/personas/synthesizer.jpeg';
 import trendDetectorAvatar from '@/assets/personas/trend-detector.jpeg';
+// 14 dedicated avatars (2026-07-06) so all 22 personas are unique — same
+// nano-banana "Warm-Hive bee" style family (see assets/personas/README.md).
+import consultantAvatar from '@/assets/personas/consultant.jpeg';
+import creativeDirectorAvatar from '@/assets/personas/creative-director.jpeg';
+import dataEngineerAvatar from '@/assets/personas/data-engineer.jpeg';
+import executiveAssistantAvatar from '@/assets/personas/executive-assistant.jpeg';
+import financeOwnerAvatar from '@/assets/personas/finance-owner.jpeg';
+import hrManagerAvatar from '@/assets/personas/hr-manager.jpeg';
+import legalProfessionalAvatar from '@/assets/personas/legal-professional.jpeg';
+import marketerAvatar from '@/assets/personas/marketer.jpeg';
+import opsManagerAvatar from '@/assets/personas/ops-manager.jpeg';
+import productManagerSeniorAvatar from '@/assets/personas/product-manager-senior.jpeg';
+import projectManagerAvatar from '@/assets/personas/project-manager.jpeg';
+import recruiterAvatar from '@/assets/personas/recruiter.jpeg';
+import supportAgentAvatar from '@/assets/personas/support-agent.jpeg';
+import verifierAvatar from '@/assets/personas/verifier.jpeg';
 
 export interface PersonaConfig {
   id: string;
@@ -17,13 +33,14 @@ export interface PersonaConfig {
 
 /**
  * Map all 22 real agent persona IDs (from packages/agent/src/persona-data.ts)
- * to the 8 available bee avatars. Best-fit mapping by domain affinity.
+ * to a UNIQUE bee avatar each (2026-07-06). Every persona carries a distinct
+ * cluster prop so the picker/switcher never shows two identical mascots.
  */
 const AVATAR_MAP: Record<string, string> = {
   // Universal modes
   'general-purpose': synthesizerAvatar,
   'planner': forecasterAvatar,
-  'verifier': hookAnalyzerAvatar,
+  'verifier': verifierAvatar,
   'coordinator': publisherAvatar,
   // Knowledge workers
   'researcher': researcherAvatar,
@@ -31,20 +48,20 @@ const AVATAR_MAP: Record<string, string> = {
   'analyst': analyticsAvatar,
   'coder': hookAnalyzerAvatar,
   // Domain specialists
-  'project-manager': forecasterAvatar,
-  'executive-assistant': publisherAvatar,
+  'project-manager': projectManagerAvatar,
+  'executive-assistant': executiveAssistantAvatar,
   'sales-rep': trendDetectorAvatar,
-  'marketer': contentWriterAvatar,
-  'product-manager-senior': forecasterAvatar,
-  'hr-manager': publisherAvatar,
-  'legal-professional': analyticsAvatar,
-  'finance-owner': analyticsAvatar,
-  'consultant': synthesizerAvatar,
-  'support-agent': publisherAvatar,
-  'ops-manager': forecasterAvatar,
-  'data-engineer': analyticsAvatar,
-  'recruiter': trendDetectorAvatar,
-  'creative-director': contentWriterAvatar,
+  'marketer': marketerAvatar,
+  'product-manager-senior': productManagerSeniorAvatar,
+  'hr-manager': hrManagerAvatar,
+  'legal-professional': legalProfessionalAvatar,
+  'finance-owner': financeOwnerAvatar,
+  'consultant': consultantAvatar,
+  'support-agent': supportAgentAvatar,
+  'ops-manager': opsManagerAvatar,
+  'data-engineer': dataEngineerAvatar,
+  'recruiter': recruiterAvatar,
+  'creative-director': creativeDirectorAvatar,
 };
 
 /** Default avatar for any unmapped persona (e.g. custom personas) */
