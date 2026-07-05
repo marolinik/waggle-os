@@ -4,7 +4,8 @@ Mission: experience Waggle OS as a real user (headless-Chromium walkthroughs of 
 core journey), fix what breaks the experience, iterate until marginal. Benchmark: Apple.
 
 **Commits:** `c03ca816` (wave 1) · `ad885d49` (wave 2) · `3091b04a` + `c04d049e` (wave 3) ·
-wave 4 (this update).
+`1e27933a` + `60616f8a` (wave 4) · `27e94077` (wave 5) · `8a4d2549` (wave-5 QA follow-up:
+briefing dedup phrase-strip). All on local `main`, NOT pushed.
 **Evidence:** `ux-audit-2026-07-04.md` (F1–F12), `ux-audit-2026-07-04-part2.md` (F13–F32),
 `ux-wave2-plan-2026-07-04.md` (plan + deferred + incidental defects).
 **Gates at close:** web tsc 0 · server tsc 0 · build:packages clean · web vitest 1323/1323 ·
