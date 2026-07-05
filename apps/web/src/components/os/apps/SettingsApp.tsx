@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
-  RotateCcw, GraduationCap, HelpCircle,
+  RotateCcw, GraduationCap, HelpCircle, AlertTriangle,
 } from 'lucide-react';
 import PlanCards from '@/components/os/billing/PlanCards';
 import { useToast } from '@/hooks/use-toast';
@@ -128,6 +128,10 @@ const SettingsApp = () => {
   const [defaultAutonomy, setDefaultAutonomy] = useState<AutonomyLevel>('normal');
   const [externalGates, setExternalGates] = useState<string[]>([]);
   const [newGate, setNewGate] = useState('');
+  // F18: pending in-app confirmation for the transition into `yolo` ("Never
+  // ask"). Replaces the native window.confirm() with an inline confirm-row that
+  // matches the app's visual language and is focus-trapped/testable in-idiom.
+  const [pendingYolo, setPendingYolo] = useState(false);
 
   // Team state
   const [teamUrl, setTeamUrl] = useState('');
@@ -693,10 +697,13 @@ const SettingsApp = () => {
                       role="radio"
                       aria-checked={active}
                       onClick={() => {
-                        if (
-                          requiresYoloConfirm(defaultAutonomy, opt.value) &&
-                          !confirm('“Never ask” lets agents auto-run every write, edit, and mutating tool call — including deletes — with no prompt (only a hardcoded critical blacklist still blocks). You can switch back any time. Turn it on?')
-                        ) return;
+                        // F18: route the into-yolo transition through the inline
+                        // confirm-row below instead of applying immediately.
+                        if (requiresYoloConfirm(defaultAutonomy, opt.value)) {
+                          setPendingYolo(true);
+                          return;
+                        }
+                        setPendingYolo(false); // a safe selection cancels a pending Never-ask confirm
                         setDefaultAutonomy(opt.value);
                         handleSavePermissions({ defaultAutonomy: opt.value, externalGates });
                       }}
@@ -716,6 +723,47 @@ const SettingsApp = () => {
                   );
                 })}
               </div>
+              {/* F18: inline confirm-row for the into-"Never ask" transition —
+                  replaces window.confirm() with an in-idiom, focus-visible,
+                  testable step. Only the yolo path routes here (see onClick). */}
+              {pendingYolo && (
+                <div
+                  role="alertdialog"
+                  aria-labelledby="yolo-confirm-title"
+                  className="mt-2 p-3 rounded-xl border border-amber-500/50 bg-amber-500/10 space-y-2"
+                  data-testid="yolo-confirm-row"
+                >
+                  <p id="yolo-confirm-title" className="text-xs font-display font-semibold text-amber-300 flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    Turn on “Never ask”?
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Agents will auto-run every write, edit, and mutating tool call — including deletes — with no prompt (only a hardcoded critical blacklist still blocks). You can switch back any time.
+                  </p>
+                  <div className="flex items-center justify-end gap-2 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setPendingYolo(false)}
+                      className="px-3 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                      data-testid="yolo-confirm-cancel"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDefaultAutonomy('yolo');
+                        handleSavePermissions({ defaultAutonomy: 'yolo', externalGates });
+                        setPendingYolo(false);
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/60 text-amber-200 text-[11px] font-display font-semibold hover:bg-amber-500/30 transition-colors"
+                      data-testid="yolo-confirm-accept"
+                    >
+                      Turn on Never ask
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* External gates */}
