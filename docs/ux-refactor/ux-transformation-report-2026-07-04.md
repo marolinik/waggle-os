@@ -118,26 +118,37 @@ plus two partial misses. Root-caused and fixed all three directly (no new workfl
   Made the copy number-free ("Upgrade to add more workspaces — each keeps its own separate
   memory") pending a founder decision on the gate↔config mismatch (see below).
 
-## Remaining high-impact issues (fix next, no decisions needed)
+## Remaining high-impact issues (no product decision needed — just work)
 
-1. **DB-flake real fix** — now fully diagnosed (see Wave 4 above); needs a substrate
-   change in `packages/hive-mind-core` (pin-aware eviction or reopen guard), which is
-   a separate arc per the repo's OSS-sync policy, not a UI-sprint side quest.
-2. F19/F12 leftovers: Files-tab Upload CTA (needs registry/storage merge — see wave-2
-   concerns), Agents sparse-state template cards.
-3. W2G part C: server-side retry-dedup strip (failed pair can duplicate after
-   local Retry + reload) — deferred again in wave 4 (4-file server-side change).
-4. F32 stale memory-detail drawer + breadcrumb stuck on "Chat" on non-chat tabs —
-   deferred (scope/budget).
-5. F23 wiki junk-entity pages; onboarding slug-collision 409 still logs (cosmetic;
-   wave-4 scout could not reproduce a real 409 — current create path auto-suffixes).
-6. CreateWorkspaceDialog still says "Free plan includes one workspace" — FREE is
-   actually 5 workspaces per `tiers.ts` (pre-existing inaccuracy, out of F31's
-   naming-only scope — flag for a copy pass).
-7. If more growing-composite "anchor" memories exist beyond the benchmark harness
-   pattern found this session, the wave-4 dedup prefix-collapse pass should catch
-   them automatically (same-title + content-is-a-prefix), but it's only been
-   observed against this one live family — watch for false negatives on other shapes.
+_Reconciled 2026-07-05 after wave 5 + the workspace-limit resolve; several items
+originally listed here shipped in wave 5 (F32 drawer/breadcrumb, Agents sparse-state
+cards, wiki floor, workspace copy) and were removed._
+
+1. **DB-flake real fix** — fully diagnosed (Wave 4): `MultiMindCache` LRU closes an
+   in-use `MindDB` mid-turn. Needs a substrate change in `packages/hive-mind-core`
+   (pin/refcount-aware eviction, or a reopen-on-closed-handle guard in `db.ts`) — a
+   separate arc per the OSS-sync policy (§7.5), not a UI-sprint side quest. Also wire
+   up the dead `WorkspaceSessionManager.closeIdleSessions()` while there. **Highest
+   real-user impact of anything remaining** (it silently drops post-turn memory writes).
+2. **Files-tab Upload** — blocked on a design step: `getWorkspaceFiles` (ingest
+   registry, `files.jsonl`) and `uploadFile` (storage-provider fs) are disjoint stores,
+   so an upload button would succeed yet leave the tab empty. Needs the registry↔storage
+   merge first; until then the empty state is copy + "Open chat" only (shipped wave 5).
+3. **W2G part C — server-side retry-dedup** — after a chat error, a local Retry can
+   leave a duplicated failed user+assistant pair on reload. ~4-file server-side change
+   (chat-persistence strip + retry-body handling). Cosmetic-on-reload only.
+4. **F23 wiki fragment heuristic** — the conservative quality floor (name<3 / <2 sources)
+   shipped, but the named junk pages ("Act Aug", "Abu Dhabi Airport") are ≥4-char,
+   multi-word, all "30 sources" in the polluted dev corpus, so nothing catches them.
+   A fragment heuristic (all-words-≤3-chars, standalone month tokens) is false-positive
+   -prone — needs a clean corpus to tune against. Low value.
+5. **Watch, not a task:** the wave-4 growing-composite dedup pass (same-title +
+   content-is-a-prefix) has only been validated against the one benchmark "anchor"
+   family. Watch for false negatives on other real duplicate shapes.
+
+_Cosmetic tail: onboarding slug-collision still logs a single 409 (create path
+auto-suffixes, so no user-visible break); cached workspace summaries keep old
+"1 memories" text until regenerated (the generator is fixed)._
 
 ## Needs a product decision
 
