@@ -380,7 +380,7 @@ export default function MemoryCenterTab({
               aria-pressed={status === s.value}
               className={cn(
                 'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
-                status === s.value ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
+                status === s.value ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
               )}
             >
               {s.label}
@@ -392,7 +392,7 @@ export default function MemoryCenterTab({
           <button
             onClick={() => setKind('')}
             aria-pressed={kind === ''}
-            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
           >
             All kinds
           </button>
@@ -401,7 +401,7 @@ export default function MemoryCenterTab({
               key={k}
               onClick={() => setKind(kind === k ? '' : k)}
               aria-pressed={kind === k}
-              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
             >
               {memoryKindLabel(k)}
             </button>
@@ -422,7 +422,7 @@ export default function MemoryCenterTab({
       {/* #7 P1 GDPR erasure receipt — dismissible confirmation of what was purged. */}
       {eraseNotice && (
         <div role="status" aria-live="polite" className="mx-2.5 mt-2 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-foreground">
-          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-honey" />
           <span className="flex-1">{eraseNotice}</span>
           <button onClick={() => setEraseNotice(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">×</button>
         </div>
@@ -471,7 +471,7 @@ export default function MemoryCenterTab({
         ) : error ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-honey hover:underline">Retry</button>
           </div>
         ) : memories.length === 0 ? (
           <div role="status" aria-live="polite" className="text-center py-12">

@@ -39,7 +39,7 @@ export default function AuthBrandPanel() {
       {/* pitch (verbatim, recon 03 §2e) */}
       <div className="relative max-w-[420px]">
         <h2 className="text-[30px] leading-tight font-display font-semibold text-foreground tracking-[-0.02em]">
-          Your work follows you, <em className="not-italic text-primary">everywhere.</em>
+          Your work follows you, <em className="not-italic text-honey">everywhere.</em>
         </h2>
         <p className="mt-4 text-[15px] leading-relaxed text-[var(--text-2)]">
           Sign in to sync your hive across devices, collaborate with a team, and pick up any
@@ -50,11 +50,11 @@ export default function AuthBrandPanel() {
       {/* trust lines (verbatim, recon 03 §2e) */}
       <div className="relative grid gap-3">
         <div className="flex items-center gap-2.5 text-[13.5px] text-[var(--text-muted)]">
-          <Shield className="w-4 h-4 shrink-0 text-primary" strokeWidth={2} />
+          <Shield className="w-4 h-4 shrink-0 text-honey" strokeWidth={2} />
           An account is optional — Waggle runs fully local without one
         </div>
         <div className="flex items-center gap-2.5 text-[13.5px] text-[var(--text-muted)]">
-          <ArrowRight className="w-4 h-4 shrink-0 text-primary" strokeWidth={2} />
+          <ArrowRight className="w-4 h-4 shrink-0 text-honey" strokeWidth={2} />
           Your memory stays yours; sign-in only adds sync
         </div>
       </div>

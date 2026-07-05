@@ -158,7 +158,7 @@ interface SectionHeadProps {
 function SectionHead({ eyebrow, title, blurb }: SectionHeadProps) {
   return (
     <div className="mb-6 text-center">
-      <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-primary">{eyebrow}</div>
+      <div className="mb-3 font-mono text-[11px] uppercase tracking-[0.14em] text-honey">{eyebrow}</div>
       <h1 className="mb-2.5 font-display text-[28px] font-semibold leading-tight tracking-[-0.02em]">{title}</h1>
       <p className="mx-auto max-w-[54ch] text-[15px] leading-relaxed text-[var(--text-muted)]">{blurb}</p>
     </div>
@@ -174,7 +174,7 @@ function DesktopView({ os, onOsChange }: DesktopViewProps) {
     <div role="tabpanel" aria-label="Desktop (now)" className="mx-auto max-w-[920px] px-8 pb-14 pt-7">
       <SectionHead
         eyebrow="Ships now · Tauri"
-        title={<>A real <em className="not-italic text-primary">desktop app.</em></>}
+        title={<>A real <em className="not-italic text-honey">desktop app.</em></>}
         blurb={
           <>
             Waggle ships as a native app for <b className="text-[var(--text-2)]">Windows &amp; macOS</b> — built on
@@ -195,7 +195,7 @@ function DesktopView({ os, onOsChange }: DesktopViewProps) {
               onClick={() => onOsChange(value)}
               className={`rounded-[9px] border px-3.5 py-1.5 text-[12.5px] font-semibold transition-colors ${
                 os === value
-                  ? 'border-[var(--honey-line)] bg-[var(--honey-wash)] text-primary'
+                  ? 'border-[var(--honey-line)] bg-[var(--honey-wash)] text-honey'
                   : 'border-[var(--line-soft)] bg-[var(--surface)] text-[var(--text-muted)] hover:text-foreground'
               }`}
             >
@@ -250,7 +250,7 @@ function DesktopView({ os, onOsChange }: DesktopViewProps) {
             </div>
             {/* Mini main */}
             <div className="flex-1 bg-background p-[22px]" aria-hidden>
-              <div className="font-mono text-[10px] tracking-[0.08em] text-primary">FRIDAY · 8:42</div>
+              <div className="font-mono text-[10px] tracking-[0.08em] text-honey">FRIDAY · 8:42</div>
               <h3 className="mb-3.5 mt-2 font-display text-xl font-semibold tracking-[-0.02em]">Good morning, Mara.</h3>
               <div className="mb-2.5 h-[9px] rounded bg-[var(--surface-2)]" />
               <div className="mb-2.5 h-[9px] rounded bg-[var(--surface-2)]" />
@@ -302,7 +302,7 @@ function BootView() {
             >
               <span className="flex size-4 flex-none items-center justify-center" aria-hidden>
                 {step.state === 'done' && <Check className="size-4 text-[var(--healthy)]" strokeWidth={2.4} />}
-                {step.state === 'active' && <Loader2 className="size-[13px] animate-spin text-primary" />}
+                {step.state === 'active' && <Loader2 className="size-[13px] animate-spin text-honey" />}
               </span>
               {step.text}
             </li>
@@ -318,7 +318,7 @@ function RoadmapView() {
     <div role="tabpanel" aria-label="Coming next" className="mx-auto max-w-[920px] px-8 pb-14 pt-7">
       <SectionHead
         eyebrow="Where Waggle goes"
-        title={<>One hive, <em className="not-italic text-primary">everywhere you work.</em></>}
+        title={<>One hive, <em className="not-italic text-honey">everywhere you work.</em></>}
         blurb="Your memory is the constant; the surfaces multiply. Desktop today — your phone and your messaging apps next."
       />
       <div className="grid gap-3">
@@ -332,7 +332,7 @@ function RoadmapView() {
               }`}
             >
               <div className="grid size-11 flex-none place-items-center rounded-[var(--r)]" style={{ background: ch.tint }}>
-                <Icon className="size-[22px] text-primary" strokeWidth={1.7} aria-hidden />
+                <Icon className="size-[22px] text-honey" strokeWidth={1.7} aria-hidden />
               </div>
               <div className="flex-1">
                 <b className="text-[15.5px] font-semibold">{ch.title}</b>

@@ -264,7 +264,7 @@ export default function WikiTab() {
         <div className="p-3 border-b border-border/30 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <BookOpen className="w-4 h-4 text-primary" />
+              <BookOpen className="w-4 h-4 text-honey" />
               <span className="text-xs font-display font-semibold">Wiki</span>
               <span className="text-[11px] text-muted-foreground">({visiblePages.length})</span>
             </div>
@@ -281,7 +281,7 @@ export default function WikiTab() {
                 <button
                   onClick={handleCompile}
                   disabled={compiling}
-                  className="p-1 rounded text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
+                  className="p-1 rounded text-muted-foreground hover:text-honey transition-colors disabled:opacity-50"
                 >
                   {compiling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
                 </button>
@@ -330,7 +330,7 @@ export default function WikiTab() {
           <div className="flex gap-1 text-[11px]">
             <button
               onClick={() => setFilterType(null)}
-              className={`px-1.5 py-0.5 rounded transition-colors ${!filterType ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`px-1.5 py-0.5 rounded transition-colors ${!filterType ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground'}`}
             >
               All
             </button>
@@ -364,7 +364,7 @@ export default function WikiTab() {
           ) : loadError ? (
             <div role="alert" className="text-center py-8">
               <p className="text-xs text-destructive mb-2">{loadError}</p>
-              <button type="button" onClick={loadPages} className="text-xs text-primary hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
+              <button type="button" onClick={loadPages} className="text-xs text-honey hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-8">
@@ -471,8 +471,8 @@ export default function WikiTab() {
                 prose-headings:font-display prose-headings:text-foreground
                 prose-h1:text-lg prose-h2:text-base prose-h3:text-sm
                 prose-p:text-foreground/90 prose-li:text-foreground/90
-                prose-strong:text-foreground prose-code:text-primary
-                prose-a:text-primary prose-a:no-underline hover:prose-a:underline
+                prose-strong:text-foreground prose-code:text-honey
+                prose-a:text-honey prose-a:no-underline hover:prose-a:underline
                 prose-table:text-xs prose-th:text-left prose-th:p-2 prose-td:p-2
                 prose-blockquote:border-primary/30 prose-blockquote:text-muted-foreground"
               dangerouslySetInnerHTML={{ __html: renderChatMarkdown(pageContent) }}

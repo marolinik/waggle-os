@@ -52,7 +52,7 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                   <AlertTriangle className="w-2.5 h-2.5" /> No key
                 </span>
               )}
-              {provider.badge && <span className="text-[11px] text-primary/70">({provider.badge})</span>}
+              {provider.badge && <span className="text-[11px] text-honey/70">({provider.badge})</span>}
             </div>
             <div className="flex flex-wrap gap-1.5">
               {provider.models.map(m => (
@@ -110,7 +110,7 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                   </span>
                 )}
                 {provider.hasKey && <span className="text-[11px] text-emerald-400">✓</span>}
-                {provider.badge && <span className="text-[11px] text-primary/60">{provider.badge}</span>}
+                {provider.badge && <span className="text-[11px] text-honey/60">{provider.badge}</span>}
               </div>
               {provider.models.map(m => (
                 <button key={m.id}
@@ -118,7 +118,7 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                   disabled={!provider.hasKey && provider.requiresKey}
                   className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between ${
                     value === m.id
-                      ? 'bg-primary/10 text-primary'
+                      ? 'bg-primary/10 text-honey'
                       : provider.hasKey || !provider.requiresKey
                         ? 'text-foreground hover:bg-muted/50'
                         : 'text-muted-foreground/40 cursor-not-allowed'

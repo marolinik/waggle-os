@@ -31,7 +31,7 @@ function applyInline(escaped: string): string {
       const u = String(url).trim();
       const safe = /^https?:\/\//i.test(u) || u.startsWith('/') || u.startsWith('#');
       return safe
-        ? `<a href="${u}" class="text-primary underline" target="_blank" rel="noopener noreferrer">${label}</a>`
+        ? `<a href="${u}" class="text-honey underline" target="_blank" rel="noopener noreferrer">${label}</a>`
         : `${label} (${u})`;
     });
 }

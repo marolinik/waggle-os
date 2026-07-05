@@ -49,7 +49,7 @@ const ImportStep = ({
 }: ImportStepProps) => (
   <motion.div key="step-memory-import" {...fadeSlide}>
     <div className="text-center mb-6">
-      <Brain className="w-10 h-10 text-primary mx-auto mb-3" />
+      <Brain className="w-10 h-10 text-honey mx-auto mb-3" />
       <h2 className="text-2xl font-display font-bold text-foreground mb-2">
         Where do you use AI today?
       </h2>
@@ -63,7 +63,7 @@ const ImportStep = ({
       <div className="mb-5 p-3 rounded-xl bg-primary/10 border border-primary/30">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
-            <Zap className="w-4 h-4 text-primary shrink-0" />
+            <Zap className="w-4 h-4 text-honey shrink-0" />
             <div className="min-w-0">
               <p className="text-xs font-display font-medium text-foreground">Claude Code detected</p>
               <p className="text-[11px] text-muted-foreground truncate" title={claudeCodeDetected.path}>
@@ -101,7 +101,7 @@ const ImportStep = ({
             <h3 className="text-xs font-display font-semibold text-foreground">{src.name}</h3>
             <p className="text-[11px] text-muted-foreground">{src.desc}</p>
             <p className="text-[10px] text-muted-foreground/70">{src.hint}</p>
-            <div className="flex items-center gap-1 text-[11px] text-primary group-hover:text-primary/80 mt-0.5">
+            <div className="flex items-center gap-1 text-[11px] text-honey group-hover:text-honey/80 mt-0.5">
               <Upload className="w-3 h-3" /> Choose file
             </div>
             <input
@@ -162,7 +162,7 @@ const ImportStep = ({
 
     {importDone && (
       <div className="glass-strong rounded-xl p-4 mb-4 text-center">
-        <Check className="w-6 h-6 text-primary mx-auto mb-2" />
+        <Check className="w-6 h-6 text-honey mx-auto mb-2" />
         <p className="text-sm text-foreground font-display">Memories imported!</p>
         <p className="text-[11px] text-muted-foreground mt-1">
           Find them under Memory → Needs review to curate.

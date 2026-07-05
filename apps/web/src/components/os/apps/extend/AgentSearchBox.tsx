@@ -97,7 +97,7 @@ const AgentSearchBox = () => {
         onClick={() => void act(s)}
         disabled={Boolean(busy)}
         data-testid={`agent-search-act-${s.name}`}
-        className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+        className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50"
       >
         {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Icon className="w-3 h-3" />}
         {label}

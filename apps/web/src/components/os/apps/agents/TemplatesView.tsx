@@ -172,7 +172,7 @@ const TemplatesView = ({ onUseTemplate }: TemplatesViewProps) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+        <Loader2 className="w-5 h-5 animate-spin text-honey" />
       </div>
     );
   }
@@ -182,7 +182,7 @@ const TemplatesView = ({ onUseTemplate }: TemplatesViewProps) => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Bot className="w-4 h-4 text-primary" />
+          <Bot className="w-4 h-4 text-honey" />
           <h2 className="text-sm font-display font-bold text-foreground">Templates</h2>
           {/* Both tabs stay in the Tab order (FilesAppTabs pattern) — a roving
               tabIndex without arrow-key handling makes the inactive tab
@@ -241,7 +241,7 @@ const TemplatesView = ({ onUseTemplate }: TemplatesViewProps) => {
         <div className="flex items-center gap-2 p-2 rounded-lg bg-destructive/10 text-destructive text-xs">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           {error}
-          <button onClick={() => { setError(null); loadData(); }} className="ml-auto flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 mr-2">
+          <button onClick={() => { setError(null); loadData(); }} className="ml-auto flex items-center gap-1 text-[11px] text-honey hover:text-honey/80 mr-2">
             <RefreshCw className="w-3 h-3" /> Retry
           </button>
           <button onClick={() => setError(null)}><X className="w-3 h-3" /></button>
@@ -314,7 +314,7 @@ const TemplatesView = ({ onUseTemplate }: TemplatesViewProps) => {
                 {onUseTemplate && (
                   <button
                     onClick={() => onUseTemplate(selectedAgent)}
-                    className="self-start flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+                    className="self-start flex items-center gap-1 px-2.5 py-1 text-[11px] font-medium rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors"
                   >
                     <Copy className="w-3 h-3" /> Create agent from this persona
                   </button>

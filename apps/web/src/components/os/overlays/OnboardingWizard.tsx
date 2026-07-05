@@ -287,9 +287,8 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       exit={{ opacity: 0 }}
       role="region"
       aria-label="Waggle onboarding"
-      className="fixed inset-0 z-[9999] flex flex-col"
+      className="onboarding-scrim fixed inset-0 z-[9999] flex flex-col"
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
       }}

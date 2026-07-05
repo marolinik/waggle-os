@@ -53,7 +53,7 @@ const ArtifactBlock = memo(({ block }: { block: ToolUseContentBlock }) => {
       data-testid="chat-artifact-block"
     >
       <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-        <Icon className="w-4.5 h-4.5 text-primary" style={{ width: 18, height: 18 }} />
+        <Icon className="w-4.5 h-4.5 text-honey" style={{ width: 18, height: 18 }} />
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-display font-medium text-foreground truncate">{name}</p>
@@ -66,7 +66,7 @@ const ArtifactBlock = memo(({ block }: { block: ToolUseContentBlock }) => {
         type="button"
         onClick={openInFiles}
         data-testid="chat-artifact-open"
-        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary/10 text-primary text-[11px] font-display hover:bg-primary/20 transition-colors shrink-0"
+        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-primary/10 text-honey text-[11px] font-display hover:bg-primary/20 transition-colors shrink-0"
       >
         Open in Files <ArrowUpRight className="w-3 h-3" />
       </button>

@@ -101,7 +101,7 @@ const SLASH_COMMANDS = [
 
 const ToolStatusIcon = ({ status }: { status: ToolExecution['status'] }) => {
   switch (status) {
-    case 'running': return <Loader2 className="w-3 h-3 text-primary animate-spin" />;
+    case 'running': return <Loader2 className="w-3 h-3 text-honey animate-spin" />;
     case 'done': return <CheckCircle2 className="w-3 h-3 text-emerald-400" />;
     case 'error': return <XCircle className="w-3 h-3 text-destructive" />;
     case 'denied': return <XCircle className="w-3 h-3 text-muted-foreground" />;
@@ -128,7 +128,7 @@ const ToolCard = ({ tool }: { tool: ToolExecution }) => {
             <div className="space-y-0.5">
               {Object.entries(tool.output as Record<string, unknown>).slice(0, 5).map(([k, v]) => (
                 <div key={k} className="flex gap-1">
-                  <span className="text-primary/60">{k}:</span>
+                  <span className="text-honey/60">{k}:</span>
                   <span className="truncate">{String(v)}</span>
                 </div>
               ))}
@@ -453,8 +453,8 @@ const FileDropZone = ({ onDrop, active }: { onDrop: (files: File[]) => void; act
   return (
     <div className="absolute inset-0 z-10 flex items-center justify-center bg-primary/10 border-2 border-dashed border-primary/50 rounded-xl backdrop-blur-sm">
       <div className="text-center">
-        <Upload className="w-8 h-8 text-primary mx-auto mb-2" />
-        <p className="text-sm font-display text-primary">Drop files here</p>
+        <Upload className="w-8 h-8 text-honey mx-auto mb-2" />
+        <p className="text-sm font-display text-honey">Drop files here</p>
         <p className="text-[11px] text-muted-foreground">PDF, CSV, TXT, images</p>
       </div>
     </div>
@@ -767,7 +767,7 @@ const ChatApp = ({
       {sessions && sessions.length > 0 && (
         <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-all overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
           <div className="p-2 space-y-1">
-            <button onClick={onNewSession} className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 mb-2 w-full">
+            <button onClick={onNewSession} className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full">
               <Plus className="w-3 h-3" /> New Session
             </button>
             {sessions.map(s => (
@@ -778,7 +778,7 @@ const ChatApp = ({
                   activeSessionId === s.id ? 'bg-primary/20' : 'hover:bg-muted/50'
                 }`}
               >
-                <span className={`text-xs truncate block ${activeSessionId === s.id ? 'text-primary' : 'text-foreground'}`}>
+                <span className={`text-xs truncate block ${activeSessionId === s.id ? 'text-honey' : 'text-foreground'}`}>
                   {s.title}
                 </span>
                 {(s.messageCount != null || s.lastActive) && (
@@ -868,7 +868,7 @@ const ChatApp = ({
           <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
             <span
               data-testid="chat-header-memory-active"
-              className="text-[10px] px-1.5 py-0.5 rounded font-display bg-primary/10 text-primary border border-primary/30 inline-flex items-center gap-1 cursor-help"
+              className="text-[10px] px-1.5 py-0.5 rounded font-display bg-primary/10 text-honey border border-primary/30 inline-flex items-center gap-1 cursor-help"
             >
               <Brain className="w-2.5 h-2.5" aria-hidden="true" />
               Memory
@@ -1003,7 +1003,7 @@ const ChatApp = ({
                       currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
                     }`}
                   >
-                    <Cpu className="w-3 h-3 text-primary shrink-0" />
+                    <Cpu className="w-3 h-3 text-honey shrink-0" />
                     <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
                   </button>
                 ))}
@@ -1021,7 +1021,7 @@ const ChatApp = ({
             onClick={() => setShowAgentProfile(p => !p)}
             className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-b border-border/20"
           >
-            <Layers className="w-3 h-3 text-primary" />
+            <Layers className="w-3 h-3 text-honey" />
             <span className="font-display font-medium">Agent Profile</span>
             {showAgentProfile ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
           </button>
@@ -1041,7 +1041,7 @@ const ChatApp = ({
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {templateId && templateId !== 'blank' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-display">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-honey text-[11px] font-display">
                     <Sparkles className="w-2.5 h-2.5" />
                     {TEMPLATE_DISPLAY[templateId]?.label || templateId}
                   </span>
@@ -1198,7 +1198,7 @@ const ChatApp = ({
                         onClick={(e) => { e.stopPropagation(); handlePin(msg); }}
                         className={`absolute top-1 right-7 p-1 rounded transition-opacity bg-background/50 ${
                           pins.some(p => p.messageContent === msg.content)
-                            ? 'opacity-80 text-primary'
+                            ? 'opacity-80 text-honey'
                             : 'opacity-0 group-hover/msg:opacity-60 hover:!opacity-100'
                         }`}
                       >
@@ -1261,7 +1261,7 @@ const ChatApp = ({
                   onClick={() => { setInput(c.cmd + ' '); setShowSlash(false); setSlashIndex(0); inputRef.current?.focus(); }}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${idx === slashIndex ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'}`}
                 >
-                  <Slash className="w-3 h-3 text-primary" />
+                  <Slash className="w-3 h-3 text-honey" />
                   <span className="font-display text-foreground">{c.cmd}</span>
                   <span className="text-muted-foreground ml-auto">{c.desc}</span>
                 </button>

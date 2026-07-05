@@ -63,7 +63,7 @@ const AutomationRow = ({ automation: a, lastLog, runningNow, busy, onToggle, onR
           onClick={() => onRunNow(a)}
           disabled={busy || runningNow}
           aria-label={`Run ${a.name} now`}
-          className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+          className="p-1.5 rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50"
         >
           {runningNow ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
         </button>

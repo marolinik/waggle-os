@@ -185,7 +185,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
       {/* Header: title + Templates side affordance + create */}
       <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <Bot className="w-4 h-4 text-primary shrink-0" />
+          <Bot className="w-4 h-4 text-honey shrink-0" />
           <h2 className="text-sm font-display font-bold text-foreground">Agents</h2>
         </div>
         <div className="flex items-center gap-1.5">
@@ -193,7 +193,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
             onClick={() => setView(view === 'templates' ? 'center' : 'templates')}
             aria-pressed={view === 'templates'}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg transition-colors ${
-              view === 'templates' ? 'bg-primary/20 text-primary' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
+              view === 'templates' ? 'bg-primary/20 text-honey' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
             }`}
           >
             <LibraryBig className="w-3 h-3" /> Templates
@@ -227,7 +227,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                   aria-selected={tab === t.id}
                   aria-controls="agent-center-tab-panel"
                   className={`px-2 py-0.5 rounded-full text-[11px] transition-colors border ${
-                    tab === t.id ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
+                    tab === t.id ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {t.label}
@@ -290,7 +290,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
             {error && agents.length > 0 && (
               <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
                 <span className="text-[11px] text-destructive">Refresh failed — this list may be stale. {error}</span>
-                <button onClick={() => void load()} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline shrink-0">
+                <button onClick={() => void load()} className="inline-flex items-center gap-1 text-[11px] text-honey hover:underline shrink-0">
                   <RefreshCw className="w-3 h-3" /> Retry
                 </button>
               </div>
@@ -304,7 +304,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               <div role="alert" className="text-center py-12">
                 <AlertCircle className="w-6 h-6 text-destructive/60 mx-auto mb-2" />
                 <p className="text-xs text-destructive mb-2">{error}</p>
-                <button onClick={() => load()} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                <button onClick={() => load()} className="inline-flex items-center gap-1 text-xs text-honey hover:underline">
                   <RefreshCw className="w-3 h-3" /> Retry
                 </button>
               </div>
@@ -319,7 +319,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                         not read as "nothing is working for you". */}
                     {workspaces && workspaces.length > 0 && (
                       <div>
-                        <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider mb-1.5">
+                        <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider mb-1.5">
                           Already working for you
                         </p>
                         <ul className="space-y-1">

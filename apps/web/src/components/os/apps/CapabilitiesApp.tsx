@@ -286,7 +286,7 @@ const CapabilitiesApp = () => {
       >
         <div className="flex items-start justify-between mb-1.5">
           <div className="flex items-center gap-2">
-            <Package className="w-4 h-4 text-primary" />
+            <Package className="w-4 h-4 text-honey" />
             <span className="text-sm font-display font-medium text-foreground">{pack.name}</span>
           </div>
           <TrustIcon className={`w-3 h-3 ${trust.color}`} />
@@ -300,7 +300,7 @@ const CapabilitiesApp = () => {
                   type="button"
                   onClick={(e) => { e.stopPropagation(); handleTestSkill(s); }}
                   disabled={testing === s}
-                  className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                  className="px-1.5 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-honey transition-colors"
                 >
                   {testing === s ? '...' : s}
                 </button>
@@ -320,7 +320,7 @@ const CapabilitiesApp = () => {
               type="button"
               onClick={(e) => { e.stopPropagation(); onInstall(pack); }}
               disabled={installing === (pack.id || pack.name)}
-              className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg bg-primary/20 text-primary hover:bg-primary/30 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg bg-primary/20 text-honey hover:bg-primary/30 disabled:opacity-50 transition-colors"
             >
               {installing === pack.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
               Install
@@ -348,7 +348,7 @@ const CapabilitiesApp = () => {
         >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              <Package className="w-5 h-5 text-primary shrink-0" />
+              <Package className="w-5 h-5 text-honey shrink-0" />
               <h3 className="text-base font-display font-semibold text-foreground truncate">{pack.name}</h3>
             </div>
             <button
@@ -386,7 +386,7 @@ const CapabilitiesApp = () => {
                       type="button"
                       onClick={() => { handleTestSkill(s); }}
                       disabled={testing === s}
-                      className="px-2 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-primary transition-colors"
+                      className="px-2 py-0.5 rounded text-[11px] bg-muted text-muted-foreground hover:bg-primary/20 hover:text-honey transition-colors"
                     >
                       {testing === s ? '...' : s}
                     </button>
@@ -433,14 +433,14 @@ const CapabilitiesApp = () => {
           <button
             onClick={() => setViewMode('grid')}
             aria-label="Grid view"
-            className={`p-1 rounded transition-colors ${viewMode === 'grid' ? 'text-primary' : 'text-muted-foreground'}`}
+            className={`p-1 rounded transition-colors ${viewMode === 'grid' ? 'text-honey' : 'text-muted-foreground'}`}
           >
             <Grid3X3 className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={() => setViewMode('list')}
             aria-label="List view"
-            className={`p-1 rounded transition-colors ${viewMode === 'list' ? 'text-primary' : 'text-muted-foreground'}`}
+            className={`p-1 rounded transition-colors ${viewMode === 'list' ? 'text-honey' : 'text-muted-foreground'}`}
           >
             <List className="w-3.5 h-3.5" />
           </button>
@@ -486,7 +486,7 @@ const CapabilitiesApp = () => {
 
       {loading && (
         <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
-          <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          <Loader2 className="w-6 h-6 text-honey animate-spin" />
         </div>
       )}
 
@@ -504,7 +504,7 @@ const CapabilitiesApp = () => {
         ) : error && skillRows.length === 0 ? (
           <div role="alert" className="text-center py-8">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-honey hover:underline">Retry</button>
           </div>
         ) : skillRows.length === 0 ? (
           <div className="text-center py-8" role="status">
@@ -645,7 +645,7 @@ const CapabilitiesApp = () => {
         <div className="border-t border-border/30 p-3 max-h-48 overflow-auto bg-muted/30" data-testid="skill-test-preview">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
-              <FlaskConical className="w-3.5 h-3.5 text-primary" />
+              <FlaskConical className="w-3.5 h-3.5 text-honey" />
               <span className="text-xs font-display font-medium text-foreground">Test: {testResult.name}</span>
               <span className="text-[10px] text-muted-foreground">Preview only — nothing was executed</span>
             </div>

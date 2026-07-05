@@ -67,7 +67,7 @@ const WaggleDanceApp = () => {
               key={t}
               onClick={() => setFilter(t)}
               className={`flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap
-                ${filter === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:bg-muted/50'}`}
+                ${filter === t ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:bg-muted/50'}`}
             >
               {Icon && <Icon className={`w-3 h-3 ${cfg!.color}`} />}
               {t === 'all' ? 'All' : cfg!.label}
@@ -91,7 +91,7 @@ const WaggleDanceApp = () => {
                 <Zap className="w-8 h-8 text-destructive/50" />
                 <p className="text-xs text-foreground">Couldn't load signals</p>
                 <p className="text-[11px] opacity-70 max-w-xs text-center">The Waggle Dance feed is unreachable — this is a load error, not an empty feed.</p>
-                <button onClick={refresh} className="mt-1 text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">Retry</button>
+                <button onClick={refresh} className="mt-1 text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-honey hover:bg-primary/20 transition-colors">Retry</button>
               </div>
             )}
             {!loading && !error && signals.length === 0 && (

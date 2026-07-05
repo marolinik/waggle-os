@@ -28,7 +28,7 @@ const FEATURE_ROWS: Array<{ label: string; key: CapKey; format: (v: unknown) => 
 ];
 
 function CellValue({ value, isBool }: { value: string; isBool: boolean }) {
-  if (value === 'Yes' && isBool) return <Check className="w-4 h-4 text-primary mx-auto" />;
+  if (value === 'Yes' && isBool) return <Check className="w-4 h-4 text-honey mx-auto" />;
   if (value === '—') return <span className="text-muted-foreground/40">—</span>;
   return <span className="text-foreground">{value}</span>;
 }
@@ -94,7 +94,7 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
             <div className="p-6 pb-4">
               <div className="flex items-center gap-3 mb-1">
                 <div className="p-2 rounded-xl bg-primary/10">
-                  <Zap className="w-5 h-5 text-primary" />
+                  <Zap className="w-5 h-5 text-honey" />
                 </div>
                 <h2 id="upgrade-modal-title" className="text-lg font-display font-bold text-foreground">
                   Upgrade to unlock this feature
@@ -146,7 +146,7 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
             <div className="px-6 pb-6 flex items-center gap-3">
               <button
                 onClick={() => { onStartTrial?.(); close(); }}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-primary/30 text-primary font-display text-sm font-semibold hover:bg-primary/10 transition-colors"
+                className="flex-1 px-4 py-2.5 rounded-xl border border-primary/30 text-honey font-display text-sm font-semibold hover:bg-primary/10 transition-colors"
               >
                 Start 15-day Team trial
               </button>

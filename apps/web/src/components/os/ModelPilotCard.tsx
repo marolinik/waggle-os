@@ -140,7 +140,7 @@ const LaneDropdown = ({
                 disabled={disabled}
                 className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between ${
                   value === m.id
-                    ? 'bg-primary/10 text-primary'
+                    ? 'bg-primary/10 text-honey'
                     : disabled
                       ? 'text-muted-foreground/40 cursor-not-allowed'
                       : 'text-foreground hover:bg-muted/50'
@@ -246,7 +246,7 @@ const ModelPilotCard = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-primary" />
+          <Zap className="w-4 h-4 text-honey" />
           <h3 className="text-sm font-display font-semibold text-foreground">Model Pilot</h3>
           <HintTooltip content="What is Model Pilot?">
             <button
@@ -265,7 +265,7 @@ const ModelPilotCard = ({
             {singleMode ? (
               <ToggleLeft className="w-4 h-4" />
             ) : (
-              <ToggleRight className="w-4 h-4 text-primary" />
+              <ToggleRight className="w-4 h-4 text-honey" />
             )}
             {singleMode ? 'Single model' : 'Fallback chain'}
           </button>

@@ -44,7 +44,7 @@ export default function ClerkAuthForm() {
         <button
           type="button"
           onClick={() => setMode((m) => (m === 'signin' ? 'signup' : 'signin'))}
-          className="font-[650] text-primary hover:text-[var(--honey-bright)] transition-colors"
+          className="font-[650] text-honey hover:text-[var(--honey-bright)] transition-colors"
         >
           {mode === 'signin' ? 'Create an account' : 'Sign in'}
         </button>

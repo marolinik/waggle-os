@@ -127,7 +127,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
               onClick={() => void submitToken()}
               disabled={busy || token.trim() === ''}
               data-testid="connector-token-submit"
-              className="px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+              className="px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50"
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Connect'}
             </button>
@@ -170,7 +170,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
             onClick={() => void runPrimary()}
             disabled={busy || showToken}
             data-testid={`extension-install-${ext.id}`}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50"
           >
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <verb.Icon className="w-3 h-3" />}
             {busy ? verb.busy : verb.idle}

@@ -68,7 +68,7 @@ const KeyboardShortcutsHelp = ({ open, onClose }: KeyboardShortcutsHelpProps) =>
         >
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-2">
-              <Keyboard className="w-5 h-5 text-primary" />
+              <Keyboard className="w-5 h-5 text-honey" />
               <h2 id="keyboard-shortcuts-title" className="text-lg font-display font-semibold text-foreground">Keyboard Shortcuts</h2>
             </div>
             <button onClick={onClose} aria-label="Close keyboard shortcuts" className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors">

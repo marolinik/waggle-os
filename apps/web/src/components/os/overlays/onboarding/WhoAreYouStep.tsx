@@ -37,7 +37,7 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
   return (
     <motion.div key="step-who-are-you" {...fadeSlide}>
       <div className="text-center mb-6">
-        <UserRound className="w-10 h-10 text-primary mx-auto mb-3" />
+        <UserRound className="w-10 h-10 text-honey mx-auto mb-3" />
         <h2 className="text-2xl font-display font-bold text-foreground mb-2">
           Tell us who you are
         </h2>

@@ -44,6 +44,7 @@ export default {
         },
         /* ── Hive DS: Honey scale ────────────────────────────────────── */
         honey: {
+          DEFAULT: "var(--honey-text)",
           50: "var(--honey-50)",
           100: "var(--honey-100)",
           200: "var(--honey-200)",

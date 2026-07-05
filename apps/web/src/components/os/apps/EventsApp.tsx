@@ -40,7 +40,7 @@ function formatDescription(
 }
 
 const stepColors: Record<string, string> = {
-  running: 'text-primary border-primary/30',
+  running: 'text-honey border-primary/30',
   complete: 'text-emerald-400 border-emerald-400/30',
   error: 'text-destructive border-destructive/30',
 };
@@ -227,7 +227,7 @@ const TreeNode = ({ node, depth = 0 }: { node: AgentNode; depth?: number }) => {
           <div className="flex items-center gap-2">
             <span className="text-xs font-display font-medium text-foreground truncate">{node.name}</span>
             {node.persona && (
-              <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{node.persona}</span>
+              <span className="text-[11px] px-1.5 py-0.5 rounded bg-primary/10 text-honey shrink-0">{node.persona}</span>
             )}
           </div>
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
@@ -242,7 +242,7 @@ const TreeNode = ({ node, depth = 0 }: { node: AgentNode; depth?: number }) => {
 
         {/* Status badge */}
         <span className={`text-[11px] capitalize shrink-0 ${
-          node.status === 'running' ? 'text-primary' : node.status === 'error' ? 'text-destructive' : 'text-emerald-400'
+          node.status === 'running' ? 'text-honey' : node.status === 'error' ? 'text-destructive' : 'text-emerald-400'
         }`}>
           {node.status}
         </span>
@@ -282,7 +282,7 @@ const AgentTreeView = ({ steps }: { steps: AgentStep[] }) => {
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2 mb-3 px-2">
-        <GitBranch className="w-3.5 h-3.5 text-primary" />
+        <GitBranch className="w-3.5 h-3.5 text-honey" />
         <span className="text-[11px] font-display text-muted-foreground uppercase">
           Agent Hierarchy
         </span>
@@ -349,7 +349,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
             <button
               onClick={() => onFilterChange(null)}
               className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors ${
-                !filter ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                !filter ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground'
               }`}
             >All events</button>
             {types.map(t => (
@@ -357,7 +357,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
                 key={t}
                 onClick={() => onFilterChange(t)}
                 className={`w-full text-left text-xs px-2 py-1.5 rounded-lg transition-colors capitalize ${
-                  filter === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                  filter === t ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >{t.replace('_', ' ')}</button>
             ))}
@@ -365,7 +365,7 @@ const EventsApp = ({ steps, autoScroll, onToggleAutoScroll, filter, onFilterChan
               <button
                 onClick={onToggleAutoScroll}
                 className={`w-full text-xs px-2 py-1.5 rounded-lg transition-colors ${
-                  autoScroll ? 'bg-primary/20 text-primary' : 'text-muted-foreground'
+                  autoScroll ? 'bg-primary/20 text-honey' : 'text-muted-foreground'
                 }`}
               >Auto-scroll {autoScroll ? 'ON' : 'OFF'}</button>
             </div>

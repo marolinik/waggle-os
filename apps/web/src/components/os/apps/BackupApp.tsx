@@ -120,12 +120,12 @@ const BackupApp = () => {
       <div className="shrink-0 px-4 py-3 border-b border-border/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Archive className="w-4 h-4 text-primary" />
+            <Archive className="w-4 h-4 text-honey" />
             <h2 className="text-sm font-display font-semibold text-foreground">Backup & Restore</h2>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={handleBackup} disabled={creating || restoring}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors disabled:opacity-50 font-display">
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors disabled:opacity-50 font-display">
               {creating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
               {creating ? 'Creating...' : 'Create Backup'}
             </button>
@@ -146,7 +146,7 @@ const BackupApp = () => {
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <Loader2 className="w-5 h-5 animate-spin text-honey" />
           </div>
         ) : loadError ? (
           <div className="flex flex-col items-center justify-center h-32 text-center">
@@ -154,7 +154,7 @@ const BackupApp = () => {
             <p className="text-sm text-foreground">Couldn't load backup history.</p>
             <p className="text-xs text-muted-foreground mt-1">The backend may be offline or returned an error.</p>
             <button onClick={loadMetadata}
-              className="mt-3 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors font-display">
+              className="mt-3 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors font-display">
               Retry
             </button>
           </div>
@@ -177,7 +177,7 @@ const BackupApp = () => {
                     {b.workspaces} workspace{b.workspaces !== 1 ? 's' : ''} · {b.frames} frames · {formatSize(b.sizeBytes)}
                   </p>
                 </div>
-                <label className={`text-[11px] text-primary hover:text-primary/80 font-display cursor-pointer ${creating || restoring ? 'opacity-50 pointer-events-none' : ''}`}>
+                <label className={`text-[11px] text-honey hover:text-honey/80 font-display cursor-pointer ${creating || restoring ? 'opacity-50 pointer-events-none' : ''}`}>
                   Restore
                   <input type="file" accept=".waggle-backup" className="hidden" disabled={creating || restoring} onChange={handleRestore} />
                 </label>

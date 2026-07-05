@@ -33,7 +33,7 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
         }}
       />
     </div>
-    <span className="inline-block text-xs font-display font-semibold tracking-[0.3em] uppercase text-primary mb-4">
+    <span className="inline-block text-xs font-display font-semibold tracking-[0.3em] uppercase text-honey mb-4">
       Personal AI Workspace
     </span>
     <h1 className="text-4xl font-display font-bold text-foreground mb-3">
@@ -64,7 +64,7 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
 
     {/* Local-first / privacy note (C28 companion). */}
     <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70 mt-5 max-w-md mx-auto">
-      <ShieldCheck className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+      <ShieldCheck className="w-3.5 h-3.5 text-honey/70 shrink-0" />
       Your memory and data stay on your device. Nothing leaves unless you say so.
     </p>
     {offline && (

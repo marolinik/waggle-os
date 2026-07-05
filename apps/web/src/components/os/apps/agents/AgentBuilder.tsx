@@ -66,7 +66,7 @@ function TogglePill({ active, label, onToggle }: { active: boolean; label: strin
       onClick={onToggle}
       aria-pressed={active}
       className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors capitalize ${
-        active ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
+        active ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
       }`}
     >
       {label}

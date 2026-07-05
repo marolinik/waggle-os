@@ -64,7 +64,7 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
 
             <div className="p-6 pb-2 text-center">
               <div className="inline-flex p-3 rounded-2xl bg-primary/10 mb-4">
-                <Crown className="w-8 h-8 text-primary" />
+                <Crown className="w-8 h-8 text-honey" />
               </div>
               <h2 id="trial-expired-title" className="text-xl font-display font-bold text-foreground">
                 Your 15-day trial has ended

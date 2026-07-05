@@ -141,7 +141,7 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.2 }}
             className={`text-xs font-mono ${
-              phase === PHASES.length - 1 ? "text-primary" : "text-muted-foreground"
+              phase === PHASES.length - 1 ? "text-honey" : "text-muted-foreground"
             }`}
           >
             {PHASES[phase]}

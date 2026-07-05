@@ -18,7 +18,7 @@ const NotFound = () => {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
       <div className="flex flex-col items-center text-center">
-        <div className="font-display text-[88px] font-bold leading-none tracking-[-0.04em] text-primary">
+        <div className="font-display text-[88px] font-bold leading-none tracking-[-0.04em] text-honey">
           404
         </div>
         <h1 className="mb-2 mt-3 font-display text-2xl font-semibold">This cell of the hive is empty.</h1>

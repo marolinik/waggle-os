@@ -663,7 +663,7 @@ const WorkspaceDesktopApp = ({
               && (state?.pending?.length ?? 0) === 0 && (state?.blocked?.length ?? 0) === 0 ? (
               <FullScreenState
                 icon={Brain}
-                iconClass="text-primary/50"
+                iconClass="text-honey/50"
                 title="This workspace is empty"
                 body="Nothing has happened here yet. Open chat to start working — memory, tasks, and artifacts will fill in as you go."
                 testId="ws-overview-no-memory"
@@ -671,7 +671,7 @@ const WorkspaceDesktopApp = ({
                   <button
                     type="button"
                     onClick={openChat}
-                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20"
                   >
                     Open chat
                   </button>
@@ -701,7 +701,7 @@ const WorkspaceDesktopApp = ({
                   <button
                     type="button"
                     onClick={openChat}
-                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20"
                     data-testid="ws-chat-tab-open"
                   >
                     Open chat
@@ -766,7 +766,7 @@ const WorkspaceDesktopApp = ({
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
-                        className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
+                        className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
                         data-testid="ws-files-upload"
                       >
                         {uploading ? 'Uploading…' : 'Upload file'}
@@ -775,7 +775,7 @@ const WorkspaceDesktopApp = ({
                         <button
                           type="button"
                           onClick={openChat}
-                          className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                          className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20"
                           data-testid="ws-files-tab-open-chat"
                         >
                           Open chat
@@ -791,7 +791,7 @@ const WorkspaceDesktopApp = ({
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
-                      className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
+                      className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
                       data-testid="ws-files-upload"
                     >
                       {uploading ? 'Uploading…' : 'Upload file'}

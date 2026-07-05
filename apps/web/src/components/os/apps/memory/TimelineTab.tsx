@@ -22,7 +22,7 @@ const frameTypeIcons: Record<string, string> = {
 
 const FRAME_TYPES = ['fact', 'event', 'insight', 'decision', 'task', 'entity'];
 
-const importanceColors = ['text-muted-foreground', 'text-muted-foreground', 'text-foreground', 'text-primary', 'text-amber-400', 'text-destructive'];
+const importanceColors = ['text-muted-foreground', 'text-muted-foreground', 'text-foreground', 'text-honey', 'text-amber-400', 'text-destructive'];
 
 /**
  * AI-OS Phase 4 polish — read the cross-tool provenance off a frame's
@@ -114,7 +114,7 @@ const TimelineTab = ({
               <HintTooltip content="Filter timeline">
                 <button
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`p-1 rounded transition-colors ${showFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}`}
+                  className={`p-1 rounded transition-colors ${showFilters ? 'text-honey' : 'text-muted-foreground hover:text-foreground'}`}
                 >
                   <Filter className="w-3 h-3" />
                 </button>
@@ -131,7 +131,7 @@ const TimelineTab = ({
                       key={t}
                       onClick={() => toggleTypeFilter(t)}
                       className={`px-1.5 py-0.5 rounded text-[11px] transition-colors ${
-                        typeFilters.includes(t) ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+                        typeFilters.includes(t) ? 'bg-primary/20 text-honey' : 'bg-muted text-muted-foreground'
                       }`}
                     >
                       {frameTypeIcons[t]} {t}

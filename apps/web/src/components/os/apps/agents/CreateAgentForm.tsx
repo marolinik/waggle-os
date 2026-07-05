@@ -58,8 +58,8 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
       {/* AI Generation */}
       <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
         <div className="flex items-center gap-2 mb-2">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-          <span className="text-[11px] font-display font-semibold text-primary uppercase tracking-wider">Generate with AI</span>
+          <Sparkles className="w-3.5 h-3.5 text-honey" />
+          <span className="text-[11px] font-display font-semibold text-honey uppercase tracking-wider">Generate with AI</span>
         </div>
         <div className="flex gap-2">
           <Input

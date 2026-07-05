@@ -241,7 +241,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <Loader2 className="w-5 h-5 animate-spin text-honey" />
             </div>
           ) : errored ? (
             // P1b D3: failure state — distinct from the Day-0 empty hook.
@@ -272,7 +272,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
             // /api/workspaces?templateId, tracked in FEATURE-REQUESTS.md.)
             <div className="py-2 space-y-3" data-testid="login-briefing-empty-hook">
               <div className="space-y-1.5">
-                <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider flex items-center gap-1.5">
                   <Lightbulb className="w-3 h-3" /> Here's what I'll remember for you
                 </p>
                 {[
@@ -287,7 +287,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                     transition={{ delay: 0.2 + i * 0.12 }}
                     className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10 border-dashed"
                   >
-                    <Sparkles className="w-3 h-3 text-primary/60 mt-0.5 shrink-0" />
+                    <Sparkles className="w-3 h-3 text-honey/60 mt-0.5 shrink-0" />
                     <p className="text-[12px] text-foreground/70 italic leading-relaxed">{demo}</p>
                   </motion.div>
                 ))}
@@ -301,7 +301,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               {/* Memory highlights — "I remember..." */}
               {highlights.length > 0 && (
                 <div className="mb-4 space-y-1.5">
-                  <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider flex items-center gap-1.5">
+                  <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider flex items-center gap-1.5">
                     <Lightbulb className="w-3 h-3" /> I remember
                   </p>
                   {highlights.map((h, i) => (
@@ -312,7 +312,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       transition={{ delay: 0.3 + i * 0.15 }}
                       className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10"
                     >
-                      <Sparkles className="w-3 h-3 text-primary/60 mt-0.5 shrink-0" />
+                      <Sparkles className="w-3 h-3 text-honey/60 mt-0.5 shrink-0" />
                       <div className="min-w-0">
                         <p className="text-[12px] text-foreground leading-relaxed">{h.content}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -328,7 +328,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               {/* Workspace list */}
               {summaries.length === 0 ? (
                 <div className="text-center py-6">
-                  <Sparkles className="w-8 h-8 text-primary/50 mx-auto mb-2" />
+                  <Sparkles className="w-8 h-8 text-honey/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No active workspaces yet. Create one to get started!</p>
                 </div>
               ) : (
@@ -357,7 +357,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                             <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground cursor-help">{ws.group}</span>
                           </HintTooltip>
                         </div>
-                        <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:text-honey transition-colors" />
                       </div>
 
                       {/* An empty workspace gets an honest nudge, not the

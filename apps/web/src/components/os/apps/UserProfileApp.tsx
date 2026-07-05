@@ -216,7 +216,7 @@ const UserProfileApp = () => {
     finally { setResearching(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+  if (loading) return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-honey" /></div>;
 
   const ws = profile?.writingStyle;
 
@@ -244,7 +244,7 @@ const UserProfileApp = () => {
             aria-selected={tab === t.id}
             tabIndex={tab === t.id ? 0 : -1}
             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-              tab === t.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              tab === t.id ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             }`}>
             <t.icon className="w-3.5 h-3.5" /> {t.label}
           </button>
@@ -513,7 +513,7 @@ const UserProfileApp = () => {
                 ].map(d => (
                   <div key={d.label} className="p-2.5 rounded-lg bg-secondary/30 border border-border/30">
                     <div className="flex items-center gap-1.5 mb-1">
-                      <d.icon className="w-3 h-3 text-primary" />
+                      <d.icon className="w-3 h-3 text-honey" />
                       <span className="text-[11px] font-display font-medium text-foreground">{d.label}</span>
                     </div>
                     <p className="text-[11px] text-muted-foreground">{d.desc}</p>

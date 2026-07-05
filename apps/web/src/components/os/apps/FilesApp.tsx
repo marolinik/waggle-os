@@ -523,7 +523,7 @@ const FilesApp = ({
               <AlertTriangle className="w-8 h-8 text-destructive/60" />
               <p className="text-xs text-foreground">Couldn't load files</p>
               <p className="text-[11px] max-w-xs text-center">The file service is unreachable — this is a load error, not an empty folder.</p>
-              <button onClick={refreshFiles} className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+              <button onClick={refreshFiles} className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-honey hover:bg-primary/20 transition-colors">
                 Retry
               </button>
             </div>
@@ -531,7 +531,7 @@ const FilesApp = ({
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
               <Folder className="w-10 h-10 opacity-30" />
               <p className="text-xs">Empty directory</p>
-              <button onClick={() => fileInputRef.current?.click()} className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+              <button onClick={() => fileInputRef.current?.click()} className="text-[11px] px-3 py-1 rounded-lg bg-primary/10 text-honey hover:bg-primary/20 transition-colors">
                 Upload files
               </button>
             </div>
@@ -622,8 +622,8 @@ const FilesApp = ({
             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="overflow-hidden border-t border-primary/20">
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/5">
                 <div className="flex items-center gap-1.5 mr-2">
-                  <CheckSquare className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[11px] font-medium text-primary">{selectedFileCount} selected</span>
+                  <CheckSquare className="w-3.5 h-3.5 text-honey" />
+                  <span className="text-[11px] font-medium text-honey">{selectedFileCount} selected</span>
                   <span className="text-[11px] text-muted-foreground">({formatSize(selectedTotalSize)})</span>
                 </div>
                 <div className="h-4 w-px bg-border/30" />
@@ -740,7 +740,7 @@ const FilesApp = ({
               <div className="flex items-center gap-3 px-5 py-4 border-b border-border/20 bg-muted/20">
                 {(() => {
                   const Icon = propertiesFile.type === 'directory' ? Folder : getFileIcon(propertiesFile.name);
-                  return <Icon className={`w-8 h-8 ${propertiesFile.type === 'directory' ? '' : 'text-primary'}`} style={propertiesFile.type === 'directory' ? { color: 'var(--honey)' } : undefined} />;
+                  return <Icon className={`w-8 h-8 ${propertiesFile.type === 'directory' ? '' : 'text-honey'}`} style={propertiesFile.type === 'directory' ? { color: 'var(--honey)' } : undefined} />;
                 })()}
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold text-foreground truncate">{propertiesFile.name}</h3>

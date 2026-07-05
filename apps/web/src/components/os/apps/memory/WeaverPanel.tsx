@@ -85,13 +85,13 @@ export default function WeaverPanel() {
     <div className="p-4 space-y-4 overflow-y-auto h-full">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-display font-semibold text-foreground flex items-center gap-2">
-          <Activity className="w-4 h-4 text-primary" />
+          <Activity className="w-4 h-4 text-honey" />
           Memory Weaver
         </h3>
         <button
           onClick={triggerConsolidation}
           disabled={triggering}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-display font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-display font-medium bg-primary/10 text-honey hover:bg-primary/20 transition-colors disabled:opacity-50"
         >
           {triggering ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
           {triggering ? 'Running...' : 'Run Now'}
@@ -154,7 +154,7 @@ export default function WeaverPanel() {
 
       {lastResult && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
-          <h4 className="text-xs font-display font-medium text-primary mb-2 flex items-center gap-1.5">
+          <h4 className="text-xs font-display font-medium text-honey mb-2 flex items-center gap-1.5">
             <TrendingUp className="w-3 h-3" /> Last Run Results
           </h4>
           {lastResult.results.map(r => (
@@ -162,7 +162,7 @@ export default function WeaverPanel() {
               <span className="text-muted-foreground truncate">{wsNames[r.target] ?? r.target}</span>
               <span className="text-emerald-400">+{r.framesConsolidated} consolidated</span>
               <span className="text-amber-400">{r.framesDecayed} decayed</span>
-              <span className="text-primary">{r.framesStrengthened} strengthened</span>
+              <span className="text-honey">{r.framesStrengthened} strengthened</span>
             </div>
           ))}
         </div>

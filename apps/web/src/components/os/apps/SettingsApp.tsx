@@ -230,7 +230,7 @@ const SettingsApp = () => {
               aria-selected={activeTab === tab.id}
               tabIndex={activeTab === tab.id ? 0 : -1}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-                activeTab === tab.id ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                activeTab === tab.id ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
               <tab.icon className="w-3.5 h-3.5" />
@@ -289,7 +289,7 @@ const SettingsApp = () => {
                     {billing.tierResolved ? `${TIER_LABELS[tier]} plan` : 'Confirming plan…'}
                   </p>
                 </div>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-primary">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-display bg-primary/20 text-honey">
                   {billing.tierResolved ? TIER_LABELS[tier] : '…'}
                 </span>
               </div>
@@ -488,9 +488,9 @@ const SettingsApp = () => {
               <h4 className="text-xs font-display font-semibold text-foreground mb-3">Provider API Keys</h4>
 
               <div className="flex items-start gap-2.5 p-3 mb-3 rounded-lg bg-primary/10 border border-primary/30">
-                <Lock className="w-4 h-4 mt-0.5 text-primary shrink-0" />
+                <Lock className="w-4 h-4 mt-0.5 text-honey shrink-0" />
                 <p className="text-xs text-foreground leading-relaxed">
-                  Keys are encrypted in the <strong className="text-primary">Vault</strong>. Add or replace a key above, or manage every secret in the <strong className="text-primary">Vault</strong> app from the dock.
+                  Keys are encrypted in the <strong className="text-honey">Vault</strong>. Add or replace a key above, or manage every secret in the <strong className="text-honey">Vault</strong> app from the dock.
                 </p>
               </div>
 
@@ -500,12 +500,12 @@ const SettingsApp = () => {
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${p.hasKey ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
                       <span className="text-xs text-foreground">{p.name}</span>
-                      {p.badge && <span className="text-[11px] text-primary/60">({p.badge})</span>}
+                      {p.badge && <span className="text-[11px] text-honey/60">({p.badge})</span>}
                       <span className="text-[11px] text-muted-foreground">{p.models.length} models</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       {p.hasKey ? (
-                        <span className="text-[11px] text-primary">✓ Key configured</span>
+                        <span className="text-[11px] text-honey">✓ Key configured</span>
                       ) : (
                         <span className="text-[11px] text-muted-foreground">No key</span>
                       )}
@@ -582,7 +582,7 @@ const SettingsApp = () => {
                 </div>
                 <span className={`px-3 py-1 rounded-full text-xs font-display font-semibold ${
                   billing.tier === 'FREE' ? 'bg-muted text-muted-foreground' :
-                  billing.tier === 'TRIAL' ? 'bg-[var(--honey-wash)] text-primary' :
+                  billing.tier === 'TRIAL' ? 'bg-[var(--honey-wash)] text-honey' :
                   billing.tier === 'TEAMS' ? 'bg-[var(--intel-wash)] text-[var(--intel)]' :
                   'bg-[var(--work-wash)] text-[var(--work)]'
                 }`}>
@@ -602,8 +602,8 @@ const SettingsApp = () => {
             {/* Syncing indicator */}
             {billing.syncing && (
               <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/10 border border-primary/20">
-                <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                <p className="text-[11px] text-primary">Confirming your payment...</p>
+                <Loader2 className="w-3 h-3 animate-spin text-honey" />
+                <p className="text-[11px] text-honey">Confirming your payment...</p>
               </div>
             )}
 
@@ -630,12 +630,12 @@ const SettingsApp = () => {
                     <p className="text-[15px] font-display font-semibold text-foreground">Waggle {billing.tier === 'PRO' ? 'Pro (legacy)' : 'Team'}</p>
                     <p className="text-[12px] text-[var(--text-muted)] mt-0.5">Subscription managed securely via Stripe.</p>
                   </div>
-                  <span className="text-[11.5px] font-[650] text-primary bg-[var(--honey-wash)] border border-[var(--honey-line)] px-3 py-1.5 rounded-full whitespace-nowrap">● Active</span>
+                  <span className="text-[11.5px] font-[650] text-honey bg-[var(--honey-wash)] border border-[var(--honey-line)] px-3 py-1.5 rounded-full whitespace-nowrap">● Active</span>
                 </div>
                 <div className="mt-4 pt-4 border-t border-[var(--line-soft)]">
                   <button
                     onClick={() => billing.openPortal()}
-                    className="flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-[650] rounded-[10px] bg-[var(--surface-2)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-primary transition-colors"
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-[650] rounded-[10px] bg-[var(--surface-2)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-honey transition-colors"
                   >
                     <DollarSign className="w-3.5 h-3.5" />
                     Manage subscription
@@ -658,7 +658,7 @@ const SettingsApp = () => {
                   href="https://www.kvark.ai"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-block mt-2 text-[11px] text-[var(--work)] hover:text-primary underline"
+                  className="inline-block mt-2 text-[11px] text-[var(--work)] hover:text-honey underline"
                 >
                   Contact sales at kvark.ai
                 </a>
@@ -856,14 +856,14 @@ const SettingsApp = () => {
               } catch { /* ignore */ }
             }}
               className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
-              <Download className="w-4 h-4 text-primary" />
+              <Download className="w-4 h-4 text-honey" />
               <div>
                 <p className="text-xs font-display font-medium text-foreground">Export Data</p>
                 <p className="text-[11px] text-muted-foreground">Download all workspaces, sessions, and memory as a zip</p>
               </div>
             </button>
             <button className="flex items-center gap-2 w-full p-3 rounded-xl bg-secondary/30 border border-border/30 text-left hover:bg-secondary/50 transition-colors">
-              <Upload className="w-4 h-4 text-primary" />
+              <Upload className="w-4 h-4 text-honey" />
               <div>
                 <p className="text-xs font-display font-medium text-foreground">Import Data</p>
                 <p className="text-[11px] text-muted-foreground">Import from ChatGPT or Claude export</p>
@@ -890,7 +890,7 @@ const SettingsApp = () => {
                     URL.revokeObjectURL(url);
                   } catch { alert('Backup failed — server unreachable'); }
                 }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors">
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors">
                   <Download className="w-3 h-3" /> Create Backup
                 </button>
                 <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors cursor-pointer">
@@ -1026,7 +1026,7 @@ const SettingsApp = () => {
                 <p className="text-xs font-display font-medium text-foreground mb-2">Help & Tutorials</p>
 
                 <div className="flex items-start gap-3 mb-3">
-                  <GraduationCap className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <GraduationCap className="w-4 h-4 text-honey shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-[11px] font-display font-medium text-foreground">Replay onboarding tour</p>
                     <p className="text-[11px] text-muted-foreground mb-2">
@@ -1134,7 +1134,7 @@ const SettingsApp = () => {
 
         {/* Save status toast */}
         {saveMsg && (
-          <div className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-primary inline-block">
+          <div className="mt-3 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-[11px] text-honey inline-block">
             {saveMsg}
           </div>
         )}

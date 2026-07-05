@@ -103,7 +103,7 @@ const MemoryCenterApp = ({
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 text-xs font-display border-b-2 transition-colors',
                     active
-                      ? 'border-primary text-primary bg-primary/5'
+                      ? 'border-primary text-honey bg-primary/5'
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30',
                   )}
                 >
@@ -129,7 +129,7 @@ const MemoryCenterApp = ({
             className={cn(
               'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-display transition-colors border',
               mind === 'personal'
-                ? 'border-primary/40 bg-primary/15 text-primary'
+                ? 'border-primary/40 bg-primary/15 text-honey'
                 : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
             )}
           >
@@ -145,7 +145,7 @@ const MemoryCenterApp = ({
                 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-display transition-colors border',
                 !workspaceId && 'opacity-50 cursor-not-allowed',
                 mind === 'workspace' && workspaceId
-                  ? 'border-primary/40 bg-primary/15 text-primary'
+                  ? 'border-primary/40 bg-primary/15 text-honey'
                   : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
               )}
             >

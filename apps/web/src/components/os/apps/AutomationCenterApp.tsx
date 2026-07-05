@@ -347,7 +347,7 @@ const AutomationCenterApp = () => {
     <div className="flex flex-col h-full">
       <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Clock className="w-5 h-5 text-primary" />
+          <Clock className="w-5 h-5 text-honey" />
           <h2 className="text-sm font-display font-semibold text-foreground">Automation Center</h2>
           <span className="text-[11px] text-muted-foreground">{automations.length} automation{automations.length === 1 ? '' : 's'}</span>
           {/* Loops-engine sovereignty pill: automations only run while this
@@ -372,7 +372,7 @@ const AutomationCenterApp = () => {
         </div>
         <button
           onClick={() => { setCreating(true); setEditing(null); }}
-          className="flex items-center gap-1 px-2 py-1 text-[11px] font-display rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors"
+          className="flex items-center gap-1 px-2 py-1 text-[11px] font-display rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors"
         >
           <Plus className="w-3 h-3" /> New
         </button>
@@ -391,7 +391,7 @@ const AutomationCenterApp = () => {
             aria-selected={tab === t.id}
             aria-controls="automation-tab-panel"
             className={`px-2 py-0.5 rounded-full text-[11px] transition-colors border ${
-              tab === t.id ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
+              tab === t.id ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
             }`}
           >
             {t.label}
@@ -411,7 +411,7 @@ const AutomationCenterApp = () => {
         ) : error && automations.length === 0 ? (
           <div role="alert" className="text-center py-8">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => refresh()} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+            <button onClick={() => refresh()} className="inline-flex items-center gap-1 text-xs text-honey hover:underline">
               <RefreshCw className="w-3 h-3" /> Retry
             </button>
           </div>
@@ -422,7 +422,7 @@ const AutomationCenterApp = () => {
             {error && automations.length > 0 && (
               <div role="alert" className="flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
                 <span className="text-[11px] text-destructive">Refresh failed — this list may be stale. {error}</span>
-                <button onClick={() => void refresh()} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline shrink-0">
+                <button onClick={() => void refresh()} className="inline-flex items-center gap-1 text-[11px] text-honey hover:underline shrink-0">
                   <RefreshCw className="w-3 h-3" /> Retry
                 </button>
               </div>
@@ -491,7 +491,7 @@ const AutomationCenterApp = () => {
                       <AlertTriangle className="w-3 h-3" /> Attention required — last run failed
                     </p>
                     {failedAutomations.map(a => (
-                      <button key={a.id} onClick={() => openLogs(a)} className="block text-left text-[11px] text-foreground hover:text-primary">
+                      <button key={a.id} onClick={() => openLogs(a)} className="block text-left text-[11px] text-foreground hover:text-honey">
                         {a.name} — {lastLog(a.id)?.error ?? 'failed'}
                       </button>
                     ))}
@@ -662,7 +662,7 @@ const AutomationCenterApp = () => {
                       onClick={() => setLogsTarget(a.id)}
                       aria-pressed={logsTarget === a.id}
                       className={`px-2 py-0.5 rounded-full text-[11px] transition-colors border ${
-                        logsTarget === a.id ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
+                        logsTarget === a.id ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
                       }`}
                     >
                       {a.name}
@@ -678,7 +678,7 @@ const AutomationCenterApp = () => {
                       <button
                         onClick={() => void runNow(logsTargetAutomation)}
                         disabled={runningIds.has(logsTargetAutomation.id)}
-                        className="text-[11px] text-primary hover:underline disabled:opacity-50"
+                        className="text-[11px] text-honey hover:underline disabled:opacity-50"
                       >
                         Retry / run now
                       </button>

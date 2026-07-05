@@ -224,7 +224,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
         </div>
       ) : probe.status === 'verified' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-foreground">
-          <Check className="size-4 shrink-0 text-primary" aria-hidden />
+          <Check className="size-4 shrink-0 text-honey" aria-hidden />
           <span>
             {probe.verifiedModel
               ? `Model verified (${probe.verifiedModel}) — you’re ready to go.`
@@ -254,7 +254,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
         >
           {ready ? (
             <>
-              <Check className="size-4 shrink-0 text-primary" aria-hidden />
+              <Check className="size-4 shrink-0 text-honey" aria-hidden />
               <span>You have a working model — you’re ready to go.</span>
             </>
           ) : (
@@ -313,7 +313,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                       : 'border-border bg-card text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {p.hasKey && <Check className="size-3.5 text-primary" aria-label="key configured" />}
+                  {p.hasKey && <Check className="size-3.5 text-honey" aria-label="key configured" />}
                   {p.name}
                 </button>
               ))
@@ -339,7 +339,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                     href={selectedProvider.keyUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    className="inline-flex items-center gap-1 text-xs text-honey hover:underline"
                   >
                     Get a key <ExternalLink className="size-3" aria-hidden />
                   </a>
@@ -357,7 +357,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                 </button>
               </div>
               {validate.status === 'saved' && (
-                <p role="status" className="flex items-center gap-1.5 text-sm text-primary">
+                <p role="status" className="flex items-center gap-1.5 text-sm text-honey">
                   <Check className="size-4" aria-hidden />
                   {validate.verified
                     ? 'Verified and saved.'
@@ -406,7 +406,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
             {pullMsg && (
               <p
                 role={pullMsg.kind === 'err' ? 'alert' : 'status'}
-                className={`text-sm ${pullMsg.kind === 'err' ? 'text-destructive' : 'text-primary'}`}
+                className={`text-sm ${pullMsg.kind === 'err' ? 'text-destructive' : 'text-honey'}`}
               >
                 {pullMsg.text}
               </p>

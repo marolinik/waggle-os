@@ -79,7 +79,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
   if (!ctx) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
-        <Brain className="w-8 h-8 text-primary/50" />
+        <Brain className="w-8 h-8 text-honey/50" />
         <p className="text-sm">Ready to chat</p>
       </div>
     );
@@ -179,7 +179,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       {ctx.recentDecisions && ctx.recentDecisions.length > 0 && (
         <div className="mb-4 p-3 rounded-xl bg-secondary/30 border border-border/30">
           <h3 className="text-xs font-display font-semibold text-foreground mb-2">
-            <Lightbulb className="w-3 h-3 inline mr-1 text-primary" />Recent Decisions
+            <Lightbulb className="w-3 h-3 inline mr-1 text-honey" />Recent Decisions
           </h3>
           <ul className="space-y-1.5">
             {ctx.recentDecisions.slice(0, 3).map((d, i) => (
@@ -203,7 +203,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
               <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                 <span className={`mt-0.5 text-[11px] px-1 rounded ${
                   m.importance === 'critical' ? 'bg-rose-500/20 text-rose-400' :
-                  m.importance === 'important' ? 'bg-primary/20 text-primary' :
+                  m.importance === 'important' ? 'bg-primary/20 text-honey' :
                   'bg-muted text-muted-foreground'
                 }`}>{m.importance === 'critical' ? '!' : m.importance === 'important' ? '★' : '·'}</span>
                 <span className="text-foreground">{m.content.slice(0, 120)}{m.content.length > 120 ? '...' : ''}</span>
@@ -250,7 +250,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       {personaId && onPrefill && skillChips.length > 0 && (
         <div className="mt-6" data-testid="briefing-skill-chips">
           <h3 className="text-xs font-display font-semibold text-muted-foreground mb-2">
-            <Wrench className="w-3 h-3 inline mr-1 text-primary" />
+            <Wrench className="w-3 h-3 inline mr-1 text-honey" />
             {personaLabel ? `Skills for ${personaLabel}` : 'Try a skill'}
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -258,7 +258,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
               <button
                 key={chip.id}
                 onClick={() => onPrefill(chip.starter)}
-                className="px-3 py-1.5 text-xs rounded-xl bg-secondary/40 text-foreground hover:bg-secondary/60 hover:text-primary transition-colors border border-border/30"
+                className="px-3 py-1.5 text-xs rounded-xl bg-secondary/40 text-foreground hover:bg-secondary/60 hover:text-honey transition-colors border border-border/30"
                 title={chip.starter}
                 data-testid={`briefing-skill-chip-${chip.id}`}
               >
@@ -276,7 +276,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
           <div className="flex flex-wrap gap-2">
             {ctx.suggestedPrompts.slice(0, 5).map((p, i) => (
               <button key={i} onClick={() => onSendMessage?.(p)}
-                className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20">
+                className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20">
                 {p}
               </button>
             ))}

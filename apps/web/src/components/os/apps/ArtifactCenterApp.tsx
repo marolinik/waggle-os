@@ -192,7 +192,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               aria-pressed={status === s.value}
               className={cn(
                 'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
-                status === s.value ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
+                status === s.value ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
               )}
             >
               {s.label}
@@ -204,7 +204,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
           <button
             onClick={() => setKind('')}
             aria-pressed={kind === ''}
-            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
           >
             All kinds
           </button>
@@ -213,7 +213,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               key={k}
               onClick={() => setKind(kind === k ? '' : k)}
               aria-pressed={kind === k}
-              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
             >
               {KIND_META[k].label}
             </button>
@@ -255,7 +255,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
         ) : error && artifacts.length === 0 ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-honey hover:underline">Retry</button>
           </div>
         ) : artifacts.length === 0 ? (
           <div role="status" aria-live="polite" className="text-center py-12">
@@ -271,7 +271,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
             {error && (
               <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
                 <span className="text-[11px] text-destructive">{error}</span>
-                <button onClick={() => load()} className="text-[11px] text-primary hover:underline shrink-0">Retry</button>
+                <button onClick={() => load()} className="text-[11px] text-honey hover:underline shrink-0">Retry</button>
               </div>
             )}
             {/* 3-column card grid (PR6b §16) — provenance-forward outcome

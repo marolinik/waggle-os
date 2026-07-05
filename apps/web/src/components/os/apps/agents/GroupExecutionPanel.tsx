@@ -8,7 +8,7 @@ import type { BackendPersona, GroupExecState, MemberExecStatus, AgentGroup } fro
 
 const STATUS_ICON: Record<MemberExecStatus, React.ReactNode> = {
   pending: <Clock className="w-3.5 h-3.5 text-muted-foreground" />,
-  running: <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />,
+  running: <Loader2 className="w-3.5 h-3.5 text-honey animate-spin" />,
   done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
   failed: <XCircle className="w-3.5 h-3.5 text-destructive" />,
 };
@@ -45,7 +45,7 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
     >
       {/* Header */}
       <div className="px-3 py-2.5 border-b border-border/20 flex items-center gap-2">
-        <Activity className="w-4 h-4 text-primary" />
+        <Activity className="w-4 h-4 text-honey" />
         <span className="text-[11px] font-display font-bold text-foreground flex-1">
           {exec.status === 'cancelled' ? 'Cancelled' : isFinished ? 'Execution Complete' : 'Running…'}
         </span>

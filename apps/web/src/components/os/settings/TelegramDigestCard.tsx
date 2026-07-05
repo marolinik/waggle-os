@@ -102,7 +102,7 @@ const TelegramDigestCard = () => {
     >
       <div className="flex items-center justify-between">
         <p className="text-xs font-display font-medium text-foreground flex items-center gap-1.5">
-          <Send className="w-3.5 h-3.5 text-primary" /> Telegram digest
+          <Send className="w-3.5 h-3.5 text-honey" /> Telegram digest
         </p>
         <span
           data-testid="telegram-status-badge"
@@ -122,7 +122,7 @@ const TelegramDigestCard = () => {
         <a
           href="https://t.me/BotFather"
           target="_blank" rel="noreferrer noopener"
-          className="text-primary hover:underline"
+          className="text-honey hover:underline"
         >
           @BotFather
         </a>{' '}

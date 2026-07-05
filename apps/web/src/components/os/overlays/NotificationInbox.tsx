@@ -47,7 +47,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
             <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-primary" />
+              <Bell className="w-4 h-4 text-honey" />
               <span className="text-sm font-display font-semibold text-foreground">Notifications</span>
             </div>
             <div className="flex items-center gap-1">
@@ -87,14 +87,14 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                     {href && (
                       <button
                         onClick={() => openAction(n, href)}
-                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-honey hover:underline"
                       >
                         Open <ArrowRight className="w-3 h-3" />
                       </button>
                     )}
                   </div>
                   {!n.read && (
-                    <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-primary transition-colors" aria-label="Mark as read">
+                    <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-honey transition-colors" aria-label="Mark as read">
                       <Check className="w-3 h-3" />
                     </button>
                   )}

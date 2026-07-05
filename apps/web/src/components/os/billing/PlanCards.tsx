@@ -161,7 +161,7 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
                   className={`py-2.5 rounded-[10px] text-[14px] font-[650] text-center border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                     plan.popular
                       ? 'bg-primary text-primary-foreground border-transparent hover:bg-[var(--honey-bright)]'
-                      : 'bg-[var(--surface-2)] text-[var(--text-2)] border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-primary'
+                      : 'bg-[var(--surface-2)] text-[var(--text-2)] border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-honey'
                   }`}
                 >
                   {disabled ? 'Unavailable' : `Choose ${plan.name}`}

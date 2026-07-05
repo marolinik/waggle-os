@@ -63,7 +63,7 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
           onClick={() => onRun(agent)}
           disabled={busy || agent.status === 'archived'}
           aria-label={`Run ${agent.name}`}
-          className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 shrink-0"
+          className="p-1.5 rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50 shrink-0"
         >
           {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
         </button>

@@ -15,7 +15,7 @@ const SuggestedAgentCards = ({ personas, onPick }: SuggestedAgentCardsProps) => 
   if (personas.length === 0) return null;
   return (
     <div className="mt-4 max-w-md mx-auto">
-      <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider mb-1.5">
+      <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider mb-1.5">
         Suggested agents
       </p>
       <ul className="space-y-1">

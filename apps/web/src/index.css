@@ -91,6 +91,7 @@
     /* ── Honey scale — the warm accent ────────────────────────────────── */
     --honey-600: #c07e16;  /* deep   */
     --honey-500: #e9a52c;  /* honey (the accent) */
+    --honey-text: #e9a52c; /* honey-as-TEXT (text-honey) — vibrant on dark; decoupled from the --primary fill so light can darken it for AA */
     --honey-400: #f6c45a;  /* bright */
     --honey-300: #f9d27e;
     --honey-200: #fbe0a8;
@@ -196,8 +197,8 @@
     --popover: 43 80% 99%;
     --popover-foreground: 38 32% 10%;
 
-    --primary: 39 82% 39%;            /* --honey     #b57d12 */
-    --primary-foreground: 41 58% 6%;  /* #1a1407 — dark ink on honey (design §3.2; AA 5.15:1) */
+    --primary: 42 88% 47%;            /* honey CTA fill #e5a512 — vibrant on ivory (2026-07-06); text-honey stays --honey-500 */
+    --primary-foreground: 41 58% 6%;  /* #1a1407 — dark ink on honey (design §3.2; dark-on-honey ≈ 8:1 AA) */
 
     --secondary: 41 55% 92%;          /* --surface-2 #f6efe0 */
     --secondary-foreground: 38 32% 10%;
@@ -238,6 +239,7 @@
     /* ── Honey (warm light) ───────────────────────────────────────────── */
     --honey-600: #92620a;  /* deep   */
     --honey-500: #b57d12;  /* honey  */
+    --honey-text: #9a6408; /* honey-as-TEXT on ivory — darkened for AA (4.64:1 on --background); the --primary fill stays vibrant */
     --honey-400: #cf932a;  /* bright */
     --honey-300: #e0b25e;
     --honey-200: #ecd09a;
@@ -363,6 +365,16 @@
   }
   :root[data-theme="light"] .desktop-overlay {
     background: hsl(var(--background) / 0.15);
+  }
+
+  /* ── Onboarding full-screen scrim — theme-aware (was hard-coded black,
+        which left the light-mode welcome dark-on-dark). Warm near-black in
+        dark, warm ivory in light, so the first-run screen matches the theme. */
+  .onboarding-scrim {
+    background-color: rgba(8, 9, 12, 0.92);
+  }
+  :root[data-theme="light"] .onboarding-scrim {
+    background-color: rgba(250, 247, 240, 0.95);
   }
 
   /* ── Honeycomb background pattern (the hex mesh) ────────────────────── */

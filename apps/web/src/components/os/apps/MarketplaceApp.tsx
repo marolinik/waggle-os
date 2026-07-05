@@ -220,7 +220,7 @@ const MarketplaceApp = () => {
               role="tab"
               aria-selected={tab === t}
               className={`px-3 py-1 text-xs font-display rounded-lg transition-colors ${
-                tab === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                tab === t ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {t === 'browse' ? 'Browse' : 'Audit'}
@@ -291,7 +291,7 @@ const MarketplaceApp = () => {
                 <p className="text-xs text-destructive mb-2">{loadError}</p>
                 <button
                   onClick={() => void loadFacet(facet, query)}
-                  className="text-xs text-primary hover:underline"
+                  className="text-xs text-honey hover:underline"
                 >
                   Retry
                 </button>

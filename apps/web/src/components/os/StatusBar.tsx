@@ -108,7 +108,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={`${modelLabel} (${model}) — model this workspace's chat will use. Change it in the chat header; the global default lives in Settings → Models.`}>
               <span
-                className="text-[11px] text-primary/80 font-display hidden lg:inline cursor-help"
+                className="text-[11px] text-honey/80 font-display hidden lg:inline cursor-help"
                 data-testid="statusbar-model"
                 tabIndex={0}
               >
@@ -122,7 +122,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across all minds (personal + every workspace). This grows every time you chat — it's why Waggle gets better the more you use it.`}>
               <span
-                className="text-[11px] text-primary/80 font-display hidden lg:inline-flex items-center gap-1 cursor-help"
+                className="text-[11px] text-honey/80 font-display hidden lg:inline-flex items-center gap-1 cursor-help"
                 data-testid="statusbar-memory-count"
                 aria-label={`${memoryFrameCount.toLocaleString()} memory frames across all minds`}
               >
@@ -145,7 +145,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
 
       <div className="flex items-center gap-2 lg:gap-4 shrink-0">
         {trialDays !== undefined && trialDays > 0 && (
-          <span className={`text-[10px] font-display font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${trialDays <= 3 ? 'bg-destructive/20 text-destructive' : 'bg-primary/15 text-primary'}`}>
+          <span className={`text-[10px] font-display font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${trialDays <= 3 ? 'bg-destructive/20 text-destructive' : 'bg-primary/15 text-honey'}`}>
             Trial: {trialDays}d left
           </span>
         )}
@@ -157,7 +157,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         <HintTooltip content="Search (Ctrl+K)">
           <button
             onClick={onSearchClick}
-            className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/40 bg-secondary/40 text-muted-foreground hover:text-primary hover:border-primary/40 transition-colors"
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-md border border-border/40 bg-secondary/40 text-muted-foreground hover:text-honey hover:border-primary/40 transition-colors"
             aria-label="Search"
           >
             <Search className="w-3 h-3" />
@@ -165,7 +165,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             <kbd className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
           </button>
         </HintTooltip>
-        <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-primary transition-colors" aria-label="Notifications">
+        <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-honey transition-colors" aria-label="Notifications">
           <Bell className="w-3.5 h-3.5" />
           {unreadNotifications > 0 && (
             <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] rounded-full bg-destructive text-[9px] leading-none text-destructive-foreground flex items-center justify-center font-bold px-0.5">
