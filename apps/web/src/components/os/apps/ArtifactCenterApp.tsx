@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, FileText, Presentation, Table2, LayoutDashboard, Microscope,
   Code2, Image as ImageIcon, Palette, File, Archive, Trash2, RotateCcw, Save, Plus, Link2,
@@ -71,6 +72,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'' | ArtifactKind>('');
   const [status, setStatus] = useState<'' | ArtifactStatus>('');
@@ -263,6 +265,28 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
             <p className="text-xs text-muted-foreground">
               {q || kind || status ? 'No artifacts match these filters.' : 'No artifacts yet — outcomes your agents produce will appear here.'}
             </p>
+            {/* Teach-and-invite (5-judge finding: "all mood, no sell — no CTA").
+                Ghost tiles show WHAT will appear; the CTA routes to a chat. */}
+            {!q && !kind && !status && (
+              <>
+                <div className="mt-5 flex items-center justify-center gap-2.5" aria-hidden>
+                  {(['document', 'presentation', 'spreadsheet'] as ArtifactKind[]).map(k => {
+                    const { label, Icon } = KIND_META[k];
+                    return (
+                      <span key={k} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground/70">
+                        <Icon className="w-3.5 h-3.5" /> {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => navigate('/workspaces')}
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-display font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  Ask Waggle to make something →
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <>
