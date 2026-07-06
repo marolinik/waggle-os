@@ -172,13 +172,16 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           </span>
         )}
         {trialExpired && (
+          /* R9 Lane D: the amber pill "screamed" on every screen for a benign
+             steady state (you're on the free Solo plan). Demoted to a quiet
+             neutral text-chip — still a button that routes to plans. */
           <button
             type="button"
             onClick={() => navigate('/settings?tab=billing')}
-            className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-honey whitespace-nowrap transition-colors hover:bg-primary/25"
-            title="Your trial ended — you're on the free Solo plan. See plans."
+            className="text-[10px] font-display px-1.5 py-0.5 rounded-md text-muted-foreground whitespace-nowrap transition-colors hover:text-honey"
+            title="You're on the free Solo plan (your trial ended). See plans."
           >
-            Trial ended · Solo
+            Solo plan
           </button>
         )}
         <HintTooltip content="Search (Ctrl+K)">

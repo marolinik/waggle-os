@@ -461,9 +461,13 @@ const ShellLayout = () => {
       {/* FR #45: one post-onboarding overlay at a time — Tour first, then the
           briefing once Tour is dismissed (gating relocated from Desktop.tsx:621-637).
           Home-only: the greeting belongs to the cockpit — overlaying Memory or
-          Skills hides the very surfaces that prove the product's claims. */}
+          Skills hides the very surfaces that prove the product's claims.
+          Wave Q Lane A (item 2 — one problem, one voice): when the sidecar is
+          unreachable the SAME root cause already surfaces as Home's own error
+          state + the NoModelBanner, so suppress the briefing entirely rather than
+          stack a third symptom on top. The connection problem is announced once. */}
       {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing
-        && location.pathname.startsWith('/home') && (
+        && location.pathname.startsWith('/home') && !offline && (
         <LoginBriefing
           onDismiss={(permanent) => {
             if (permanent) writeLoginBriefingDismissed(true);

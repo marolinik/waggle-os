@@ -141,6 +141,9 @@ export interface MemoryPreview {
   title: string;
   /** Remaining lines joined, sentence-truncated near the clamp budget. */
   excerpt: string;
+  /** Provenance (handoff label + date + session) lifted out of the title's
+   *  lead into a quiet meta chip. Absent when the title had no such prefix. */
+  titleMeta?: string;
 }
 
 /** Bare machine-provenance line: 'Timestamp: 1782400441971' and nothing else. */
@@ -204,7 +207,54 @@ export function sentenceTruncate(text: string, cap = EXCERPT_SENTENCE_CAP): stri
   return text;
 }
 
-/** Split memory content into a humanized {title, excerpt} for row previews. */
+// ── Display-layer handoff-title humanization (round-9 Lane C fix 1) ──────────
+//
+// Harvested session-handoff notes lead with a machine filename slug —
+// "session handoff 2026 06 24 s2 warm hive pr8 landing shipped roadmap
+// complete" — which reads as log output and punctures the "memory you can
+// trust" promise. Lift the provenance prefix (handoff label + date + optional
+// session) out of the title into a quiet meta chip and leave the human
+// remainder as the title. Deterministic string transforms only — no content is
+// invented (the em-dash/comma phrasing a human editor might add is deliberately
+// NOT synthesized); nothing here touches the stored content.
+
+const HANDOFF_PREFIX_RE =
+  /^(?:project[\s-]+)?(?:session[\s-]+)?handoff[\s-]+(\d{4})[\s-]+(\d{2})[\s-]+(\d{2})(?:[\s-]+s(\d+))?[\s-]+/i;
+
+/** Uppercase the first alphabetic character; leave the rest as-is. */
+function capitalizeFirst(s: string): string {
+  return s.replace(/\p{L}/u, (c) => c.toUpperCase());
+}
+
+/** "pr8" → "PR8" (the PR abbreviation only, digits required). Display polish. */
+function upperPrTokens(s: string): string {
+  return s.replace(/\bpr(\d+)\b/gi, (_m, n: string) => `PR${n}`);
+}
+
+export interface HumanizedTitle {
+  title: string;
+  /** Provenance lifted out of the title lead, e.g.
+   *  "session handoff · 2026-06-24 · s2". Undefined when no prefix matched. */
+  meta?: string;
+}
+
+/**
+ * Lift a leading "session handoff <date> [sN]" provenance slug out of a memory
+ * title into a compact meta string, humanizing the remainder. Returns the title
+ * untouched (no meta) when no handoff prefix is present, or when nothing
+ * readable would remain after the strip (never strip down to an empty title).
+ */
+export function humanizeMemoryTitle(title: string): HumanizedTitle {
+  const m = HANDOFF_PREFIX_RE.exec(title);
+  if (!m) return { title };
+  const remainder = title.slice(m[0].length).trim();
+  if (remainder === '') return { title };
+  const [, y, mo, d, s] = m;
+  const meta = `session handoff · ${y}-${mo}-${d}${s ? ` · s${s}` : ''}`;
+  return { title: capitalizeFirst(upperPrTokens(remainder)), meta };
+}
+
+/** Split memory content into a humanized {title, excerpt, titleMeta} for row previews. */
 export function buildMemoryPreview(content: string): MemoryPreview {
   const lines = content.split('\n').map(stripMarkdownTokens).filter((l) => l !== '');
   if (lines.length === 0) return { title: stripMarkdownTokens(content), excerpt: '' };
@@ -212,5 +262,8 @@ export function buildMemoryPreview(content: string): MemoryPreview {
   // Machine-provenance lines BEFORE the picked title are dropped from the
   // preview entirely (they're still in the stored content and the drawer).
   const excerpt = sentenceTruncate(lines.slice(picked.index + 1).join(' ').trim());
-  return { title: picked.title, excerpt };
+  const humanized = humanizeMemoryTitle(picked.title);
+  return humanized.meta
+    ? { title: humanized.title, excerpt, titleMeta: humanized.meta }
+    : { title: humanized.title, excerpt };
 }

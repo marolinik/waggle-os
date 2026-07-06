@@ -159,6 +159,10 @@
     --honey-wash:   rgba(233, 165, 44, 0.10);
     --honey-line:   rgba(233, 165, 44, 0.28);
 
+    /* User chat bubble (dark = current honey-wash feel, unchanged). */
+    --user-bubble:      rgba(233, 165, 44, 0.10);
+    --user-bubble-line: rgba(233, 165, 44, 0.28);
+
     --work:      #7aa6d6;   /* dusty blue   — tasks / workspaces */
     --intel:     #b196dd;   /* muted violet — intelligence / memory / provenance */
     --healthy:   #6cb78c;   /* sage         — complete / healthy */
@@ -281,7 +285,7 @@
     --shadow-card: 0 1px 3px rgba(60,45,20,0.06), 0 1px 2px rgba(60,45,20,0.04);
     --shadow-elevated: 0 4px 12px rgba(60,45,20,0.08), 0 2px 4px rgba(60,45,20,0.04);
     --shadow-overlay: 0 8px 32px rgba(60,45,20,0.15);
-    --shadow-honey: 0 0 0 1px rgba(181,125,18,0.22), 0 8px 30px -12px rgba(181,125,18,0.30);
+    --shadow-honey: 0 0 0 1px rgba(192,127,0,0.22), 0 8px 30px -12px rgba(192,127,0,0.30);
 
     /* ── Warm-Hive named tokens (light) ───────────────────────────────── */
     --bg-2:        #f1e9d8;
@@ -290,11 +294,21 @@
     --line-strong: #d2c3a2;
     --text-2:      #5a5140;
 
-    --honey:        #b57d12;
-    --honey-bright: #cf932a;
+    /* R9 a11y+design judges: 85%-sat #b57d12 read as muddy mustard/olive next to
+       dark's #e5a000. Full-saturation #c07f00 at the same ~40° hue keeps BOTH
+       gates (5.47:1 vs the #1a1407 CTA label, 3.18:1 vs the ivory page) while
+       killing the olive cast. --honey-text stays untouched (its own AA story). */
+    --honey:        #c07f00;
+    --honey-bright: #d99a00;
     --honey-deep:   #92620a;
-    --honey-wash:   rgba(181, 125, 18, 0.10);
-    --honey-line:   rgba(181, 125, 18, 0.30);
+    --honey-wash:   rgba(192, 127, 0, 0.10);
+    --honey-line:   rgba(192, 127, 0, 0.32);
+
+    /* R9 Lane D user chat bubble: the 0.10 honey-wash over warm ivory
+       desaturated to a cold green-grey. Brighter #d99a00 at a firmer alpha
+       reads as an unmistakable warm ivory-honey. */
+    --user-bubble:      rgba(217, 154, 0, 0.16);
+    --user-bubble-line: rgba(192, 127, 0, 0.34);
 
     --work:      #3f72b0;
     --intel:     #7d57b8;

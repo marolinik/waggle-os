@@ -4,6 +4,7 @@ import {
   isGroupableKey,
   MIN_NORMALIZED_KEY_CHARS,
   buildMemoryPreview,
+  humanizeMemoryTitle,
   sentenceTruncate,
 } from './memory-text-normalize';
 
@@ -117,11 +118,28 @@ describe('buildMemoryPreview (round-7 fix 3 — humanized row titles)', () => {
     expect(excerpt).toBe('');
   });
 
-  it('de-slugifies a "[Harvest:…] <slug>" lead line into a readable title', () => {
-    const { title } = buildMemoryPreview(
+  it('de-slugifies AND lifts the handoff prefix out of a "[Harvest:…] <slug>" lead', () => {
+    // round-9 Lane C fix 1: the de-slugged "session handoff 2026 06 24 s2 final"
+    // now humanizes to a clean title + a provenance meta chip.
+    const { title, titleMeta } = buildMemoryPreview(
       '[Harvest:claude-code] session-handoff-2026-06-24-s2-final\nBody of the harvested note follows here.',
     );
-    expect(title).toBe('session handoff 2026 06 24 s2 final');
+    expect(title).toBe('Final');
+    expect(titleMeta).toBe('session handoff · 2026-06-24 · s2');
+  });
+
+  it('lifts a "session handoff <date> sN" prefix into titleMeta and humanizes the remainder', () => {
+    const { title, titleMeta } = buildMemoryPreview(
+      'session handoff 2026 06 24 s2 warm hive pr8 landing shipped roadmap complete\nStart here next session.',
+    );
+    expect(title).toBe('Warm hive PR8 landing shipped roadmap complete');
+    expect(titleMeta).toBe('session handoff · 2026-06-24 · s2');
+  });
+
+  it('leaves a non-handoff title untouched with no titleMeta', () => {
+    const { title, titleMeta } = buildMemoryPreview('The launch plan needs a review\nbody');
+    expect(title).toBe('The launch plan needs a review');
+    expect(titleMeta).toBeUndefined();
   });
 
   it('keeps the remainder as the title when the harvest prefix wraps human text', () => {
@@ -162,6 +180,39 @@ describe('buildMemoryPreview (round-7 fix 3 — humanized row titles)', () => {
 
   it('handles empty content without throwing', () => {
     expect(buildMemoryPreview('')).toEqual({ title: '', excerpt: '' });
+  });
+});
+
+describe('humanizeMemoryTitle (round-9 Lane C fix 1)', () => {
+  it('lifts a full "session handoff YYYY MM DD sN" prefix and uppercases PR tokens', () => {
+    const { title, meta } = humanizeMemoryTitle(
+      'session handoff 2026 06 24 s2 warm hive pr8 landing shipped roadmap complete',
+    );
+    expect(title).toBe('Warm hive PR8 landing shipped roadmap complete');
+    expect(meta).toBe('session handoff · 2026-06-24 · s2');
+  });
+
+  it('matches dash-separated handoff slugs and a missing session number', () => {
+    const { title, meta } = humanizeMemoryTitle('handoff 2026-07-01-billing auth shipped');
+    expect(title).toBe('Billing auth shipped');
+    expect(meta).toBe('session handoff · 2026-07-01');
+  });
+
+  it('is case-insensitive and matches a "project session handoff" label', () => {
+    const { title, meta } = humanizeMemoryTitle('Project Session Handoff 2026 05 20 s1 AI-OS phases landed');
+    expect(title).toBe('AI-OS phases landed');
+    expect(meta).toBe('session handoff · 2026-05-20 · s1');
+  });
+
+  it('leaves ordinary titles untouched with no meta', () => {
+    expect(humanizeMemoryTitle('Marko prefers dark mode')).toEqual({ title: 'Marko prefers dark mode' });
+  });
+
+  it('does not strip a handoff prefix down to an empty title', () => {
+    // The prefix consumes the whole string (trailing separator, no body) —
+    // rather than emit an empty title, humanize returns the input untouched.
+    const input = 'session handoff 2026 06 24 s2 ';
+    expect(humanizeMemoryTitle(input)).toEqual({ title: input });
   });
 });
 

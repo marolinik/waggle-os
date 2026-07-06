@@ -230,21 +230,31 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     const failing = probe.status === 'failed' && probe.failedProvider === p.id;
     const isSelected = selected === p.id;
     const stateWord = failing ? 'not responding' : p.hasKey ? 'Key in Vault' : 'No key yet';
-    // Fill trio: keyed = honey wash · failing = risk wash · unkeyed = transparent outline.
+    // R9: amber is reserved for the SELECTED tile and red for the erroring one —
+    // keyed tiles rest NEUTRAL (surface + soft line) so a dozen of them stop
+    // reading as honey wallpaper. The keyed signal is the honey Check + "Key in
+    // Vault" meta only.
     const fill = failing
       ? 'bg-[var(--risk-wash)] border-[var(--risk)]/40'
-      : p.hasKey
-        ? 'bg-[var(--honey-wash)] border-[var(--honey-line)]'
-        : 'bg-transparent border-[var(--line-soft)]';
+      : isSelected
+        ? 'bg-card border-[var(--honey-line)]'
+        : p.hasKey
+          ? 'bg-card border-[var(--line-soft)]'
+          : 'bg-transparent border-[var(--line-soft)]';
+    // Ring echoes the same one-truth-one-tone rule: risk on the erroring tile,
+    // honey only on a non-failing selected tile.
+    const ring = failing
+      ? 'ring-2 ring-[var(--risk)]/30'
+      : isSelected
+        ? 'ring-2 ring-[var(--honey-line)] shadow-[var(--shadow-card)]'
+        : '';
     return (
       <button
         key={p.id}
         type="button"
         aria-pressed={isSelected}
         onClick={() => handleSelect(p.id)}
-        className={`flex flex-col gap-1 rounded-[12px] border p-3 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] ${fill} ${
-          isSelected ? 'ring-2 ring-[var(--honey-line)] shadow-[var(--shadow-card)]' : ''
-        }`}
+        className={`flex flex-col gap-1 rounded-[12px] border p-3 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] ${fill} ${ring}`}
       >
         <div className="flex items-center justify-between gap-2">
           <span className={`truncate text-[13px] font-semibold ${p.hasKey || failing ? 'text-foreground' : 'text-[var(--text-2)]'}`}>
@@ -323,7 +333,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       )}
 
       {/* Tabs */}
-      <div role="tablist" aria-label="How to add a model" className="flex gap-1 rounded-lg bg-muted/40 p-1">
+      <div role="tablist" aria-label="How to add a model" className="flex gap-1 rounded-lg border border-[var(--line-soft)] bg-muted/60 p-1">
         <button
           type="button"
           role="tab"
@@ -407,14 +417,19 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                 ) : (
                   <span />
                 )}
-                {/* Round-6 fix 3a: no half-opacity honey ghost — enabled is the
-                    full theme-tuned primary; disabled flips to muted tokens so
-                    the two states are unmistakable in BOTH themes. */}
+                {/* R9 fix: an empty input yields a QUIET OUTLINE button (not a
+                    gray FILL that reads "permanently broken"); the instant a key
+                    is typed it flips to the full primary — an obvious enable. A
+                    non-empty testing state keeps the primary look while busy. */}
                 <button
                   type="button"
                   onClick={handleValidateAndSave}
                   disabled={validate.status === 'testing' || !keyValue.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed ${
+                    keyValue.trim()
+                      ? 'border-transparent bg-primary text-primary-foreground'
+                      : 'border-[var(--line-soft)] bg-transparent text-[var(--text-muted)]'
+                  }`}
                 >
                   {validate.status === 'testing' && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
                   {validate.status === 'testing' ? 'Validating…' : 'Validate & save'}

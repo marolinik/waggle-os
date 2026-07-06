@@ -248,28 +248,38 @@ const SettingsApp = () => {
             of the rail it governs (was a floating top-right segmented control).
             One dial governs both the dock and this Settings rail's depth; reuses
             useOnboarding().tier — no second key. */}
-        <div className="border-t border-border/50 p-2 space-y-1">
-          <span className="block px-1 text-[11px] text-muted-foreground">Show</span>
-          <div className="flex flex-col gap-0.5" role="group" aria-label="Settings detail level">
+        <div className="border-t border-border/50 p-2 space-y-1.5">
+          <span className="block px-0.5 text-[11px] font-medium text-muted-foreground">Show</span>
+          {/* R9: a real bordered-track segmented control (was a bare stack that
+              read as stray text) — one track, one filled active cell. Same aria +
+              tier mechanics. */}
+          <div
+            className="flex flex-col gap-0.5 rounded-lg border border-[var(--line-soft)] bg-muted/40 p-1"
+            role="group"
+            aria-label="Settings detail level"
+          >
             {([
               { id: 'simple', label: 'Essential' },
               { id: 'professional', label: 'Standard' },
               { id: 'power', label: 'Everything' },
-            ] as const).map(opt => (
-              <button
-                key={opt.id}
-                type="button"
-                aria-pressed={(onboardingState.tier || 'simple') === opt.id}
-                onClick={() => updateOnboarding({ tier: opt.id as UserTier })}
-                className={`w-full text-left px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                  (onboardingState.tier || 'simple') === opt.id
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+            ] as const).map(opt => {
+              const active = (onboardingState.tier || 'simple') === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => updateOnboarding({ tier: opt.id as UserTier })}
+                  className={`w-full text-left px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                    active
+                      ? 'bg-card text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>

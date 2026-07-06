@@ -237,9 +237,12 @@ describe('LoginBriefing (P1b)', () => {
     mocks.adapter.getMemoryStats.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
     mocks.adapter.getWorkspaces.mockRejectedValue(httpError(401, { code: 'MISSING_TOKEN' }, 'Unauthorized'));
     const screen = await renderBriefing();
+    // Wave Q Lane A: a failed briefing degrades to the slim inline row (NOT a
+    // blocking modal). The behavioral contract — error state, never the Day-0
+    // demo bubbles — is unchanged; only the surface it renders on moved.
     await waitFor(() => expect(screen.getByTestId('login-briefing-error')).toBeInTheDocument());
     expect(screen.queryByTestId('login-briefing-empty-hook')).toBeNull();
-    expect(screen.getByTestId('login-briefing-brag-line').textContent).toContain('Briefing unavailable');
+    expect(screen.getByTestId('login-briefing-error').textContent).toContain('Briefing unavailable');
     // Generous budget: full framer-motion render under parallel suite load.
   }, 15000);
 

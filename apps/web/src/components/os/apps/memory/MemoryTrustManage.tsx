@@ -93,16 +93,31 @@ interface DimensionChipProps {
  *  review). These overlap — they are NOT parts of the total, so they render as
  *  small inline chips beneath the headline count, never as equal-weight cards. */
 function DimensionChip({ value, label, tone = 'default', onClick, title }: DimensionChipProps) {
-  const valueColor =
-    tone === 'healthy' ? 'text-[var(--healthy)]' : tone === 'attention' ? 'text-[var(--attention)]' : 'text-[var(--text-2)]';
+  // Round-9 Lane C: the chips are subordinate to the one headline count, so the
+  // value reads smaller/quieter (fix 2). A zero (or not-applicable "—") count
+  // renders in dim text with NO surface wash so it reads as a calm "nothing
+  // here", never as a disabled control (fix 3); non-zero counts keep their tone.
+  const isZeroish = value === '0' || value === '—';
+  const valueColor = isZeroish
+    ? 'text-[var(--text-dim)]'
+    : tone === 'healthy'
+      ? 'text-[var(--healthy)]'
+      : tone === 'attention'
+        ? 'text-[var(--attention)]'
+        : 'text-[var(--text-2)]';
   const className = cn(
-    'inline-flex items-baseline gap-1.5 rounded-full border bg-[var(--surface-2)] px-2.5 py-1',
-    tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
+    'inline-flex items-baseline gap-1.5 rounded-full border px-2.5 py-1',
+    isZeroish
+      ? 'border-[var(--line-soft)] bg-transparent'
+      : cn(
+          'bg-[var(--surface-2)]',
+          tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
+        ),
     onClick && 'cursor-pointer transition-colors hover:border-[var(--honey-line)]',
   );
   const inner = (
     <>
-      <span className={cn('text-[13px] font-[700] leading-none tracking-[-0.01em]', valueColor)}>{value}</span>
+      <span className={cn('text-[12px] font-[650] leading-none tracking-[-0.01em]', valueColor)}>{value}</span>
       <span className="text-[11.5px] text-[var(--text-muted)]">{label}</span>
     </>
   );
@@ -139,6 +154,12 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
   // the unscored state is a single quiet inline badge on the provenance row
   // (the old stacked "unscored / CONF" micro-label was illegible).
   const scored = typeof memory.confidence === 'number' && Number.isFinite(memory.confidence);
+  // Round-5..9: raw harvest strings read as log output — buildMemoryPreview
+  // leads with the first line as a title, clamps the rest as a muted excerpt,
+  // strips markdown tokens, skips machine-provenance leads, and (round-9 Lane C
+  // fix 1) lifts a "session handoff <date> sN" slug out of the title into the
+  // provenance row's titleMeta. Pure display split; the drawer stays raw.
+  const preview = buildMemoryPreview(memory.content);
   return (
     <li
       className={cn(
@@ -150,36 +171,24 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
         {scored && <ConfidenceRing value={memory.confidence} className="mt-0.5" />}
         <div className="min-w-0 flex-1">
           <button type="button" onClick={onOpen} className="group block w-full text-left">
-            {/* Round-5: raw harvest strings read as log output — lead with the
-                first line as a title, clamp the rest as a muted excerpt. Pure
-                display split; the drawer still shows the full content.
-                Round-6 fix 2a: markdown tokens ('##', **bold**, `code`,
-                [links]) are stripped for this plain-text preview.
-                Round-7 fix 3: machine-provenance leads ("Timestamp: 178…",
-                "[Harvest:claude-code] session-handoff-…") are skipped or
-                de-slugified by buildMemoryPreview so the title reads human,
-                and the excerpt sentence-truncates at the last full stop —
-                display only, the stored content and drawer editor stay raw. */}
-            {(() => {
-              const { title, excerpt } = buildMemoryPreview(memory.content);
-              return (
-                <>
-                  <p className="line-clamp-2 text-[14.5px] font-medium leading-[1.45] text-[var(--text)] group-hover:text-[var(--honey-text)]">
-                    {title}
-                  </p>
-                  {excerpt && (
-                    <p className="mt-0.5 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
-                      {excerpt}
-                    </p>
-                  )}
-                </>
-              );
-            })()}
+            <p className="line-clamp-2 text-[14.5px] font-medium leading-[1.45] text-[var(--text)] group-hover:text-[var(--honey-text)]">
+              {preview.title}
+            </p>
+            {preview.excerpt && (
+              <p className="mt-0.5 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+                {preview.excerpt}
+              </p>
+            )}
           </button>
           {/* Provenance micro-metadata is trust-critical — 12px + --text-muted
               (AA), not the sub-11px --text-dim decoration tier (a11y review). */}
           <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[12px] text-[var(--text-muted)]">
-            <span className="text-[var(--intel)]">⬡ M-{memory.id}</span>
+            {/* Round-9 Lane C fix 4: the M-id used a violet (--intel) that read as
+                an unmanaged third hue on this warm surface — fold it into the
+                neutral --text-dim tier. */}
+            <span className="text-[var(--text-dim)]">⬡ M-{memory.id}</span>
+            {/* Round-9 Lane C fix 1: handoff provenance lifted out of the title. */}
+            {preview.titleMeta && <span>{preview.titleMeta}</span>}
             {srcLabel && <span>source: {srcLabel}</span>}
             {!scored && (
               <span

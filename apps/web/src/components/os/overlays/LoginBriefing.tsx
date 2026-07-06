@@ -90,8 +90,10 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const { connecting } = useService();
   // W2G: Escape/Tab-trap/focus-restore via the shared modal hook (the bespoke
   // overlay previously closed only on a backdrop click). Escape routes through
-  // onDismiss — same session-only dismissal as the backdrop.
-  const dialogRef = useFocusTrap<HTMLDivElement>(true, () => onDismiss());
+  // onDismiss — same session-only dismissal as the backdrop. Wave Q Lane A: the
+  // errored state is NOT a blocking modal (it degrades to a slim row below), so
+  // the trap only arms while the modal itself renders.
+  const dialogRef = useFocusTrap<HTMLDivElement>(!errored, () => onDismiss());
 
   useEffect(() => {
     if (connecting) return;
@@ -194,6 +196,50 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const bragLine = brag ? formatBragLine(brag) : null;
   const totalPending = brag?.pendingCount ?? 0;
 
+  // Wave Q Lane A (item 1): a failed briefing must never boot a blocking modal
+  // stacked over the NoModelBanner + Home's own error state. When the fetch
+  // errors we collapse to ONE slim, non-blocking, dismissible row — a calm
+  // branded moment (honey glyph, quiet secondary Retry), not a red-triangle
+  // alarm. Auto-recovers via useRevalidateOnError; the Retry is the manual
+  // escape hatch. (When the sidecar is unreachable the whole briefing is
+  // suppressed a level up in AppShell so the connection problem speaks once.)
+  if (errored) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="fixed inset-x-0 bottom-6 z-[90] flex justify-center px-4 pointer-events-none"
+      >
+        <div
+          role="status"
+          data-testid="login-briefing-error"
+          className="pointer-events-auto flex items-center gap-3 rounded-[12px] border border-[var(--line-soft)] bg-[var(--surface)] px-4 py-2.5 shadow-[var(--shadow-elevated)]"
+        >
+          <Brain className="h-4 w-4 shrink-0 text-[var(--honey-text)]" aria-hidden />
+          <span className="text-[13px] text-[var(--text-2)]">Briefing unavailable</span>
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin text-[var(--honey-text)]" aria-label="Retrying" />
+          ) : (
+            <button
+              onClick={() => { setLoading(true); void loadBriefing(); }}
+              data-testid="login-briefing-retry"
+              className="rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-2.5 py-1 text-[12.5px] font-medium text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
+            >
+              Retry
+            </button>
+          )}
+          <button
+            onClick={() => onDismiss()}
+            aria-label="Dismiss briefing"
+            className="rounded-lg p-1 text-[var(--text-dim)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <AnimatePresence>
       <motion.div
@@ -213,16 +259,21 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
           aria-modal="true"
           aria-labelledby="login-briefing-title"
           tabIndex={-1}
-          className="w-full max-w-lg glass rounded-2xl p-6 shadow-2xl focus:outline-none"
+          // Wave Q Lane A (item 3): a real elevated surface token instead of the
+          // translucent `glass` — in light mode `glass` let the dark backdrop
+          // bleed through as a muddy warm-gray; the opaque ivory `--surface`
+          // reads as a genuine elevated card in both themes.
+          className="w-full max-w-lg rounded-2xl border border-[var(--line-soft)] bg-[var(--surface)] p-6 shadow-[var(--shadow-elevated)] focus:outline-none"
           onClick={e => e.stopPropagation()}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between mb-4">
+          {/* Header — X on the header baseline (items-start), not centered
+              against the two-line title (Wave Q Lane A item 3). */}
+          <div className="flex items-start justify-between mb-4">
             <div className="min-w-0">
               <h2 id="login-briefing-title" className="text-lg font-display font-bold text-foreground">Catching you up</h2>
               <p className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-1 gap-y-0.5" data-testid="login-briefing-brag-line">
                 <Brain className="w-3 h-3 inline mr-0.5 shrink-0" />
-                <span>{bragLine ?? (errored ? 'Briefing unavailable' : 'Loading…')}</span>
+                <span>{bragLine ?? 'Loading…'}</span>
                 {totalPending > 0 && (
                   <span
                     className="text-amber-400 inline-flex items-center gap-0.5"
@@ -242,21 +293,6 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-5 h-5 animate-spin text-honey" />
-            </div>
-          ) : errored ? (
-            // P1b D3: failure state — distinct from the Day-0 empty hook.
-            // Auto-recovers via useRevalidateOnError (focus / online /
-            // connect-settled); the button is the manual escape hatch.
-            <div className="py-4 space-y-2 text-center" data-testid="login-briefing-error">
-              <p className="text-xs text-muted-foreground">
-                Couldn’t load your briefing — I’ll retry when the connection is back.
-              </p>
-              <button
-                onClick={() => { setLoading(true); void loadBriefing(); }}
-                className="px-3 py-1.5 text-xs rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors"
-              >
-                Retry now
-              </button>
             </div>
           ) : highlights.length === 0 && summaries.length === 0 ? (
             // Day-0 user — no workspaces AND no memory yet. The bare

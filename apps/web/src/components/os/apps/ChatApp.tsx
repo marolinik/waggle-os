@@ -563,6 +563,13 @@ const ChatApp = ({
   const stripWidth = useContainerWidth(stripRef);
   const isStripCompact = shouldCollapseChatHeader(stripWidth);
 
+  // R9 Lane D: presence is meaningful only for OTHER people in the room. The
+  // team endpoint returns the current user as `{ id: 'local', name: 'You' }`
+  // in solo/offline mode, which rendered as an anonymous floating 'Y' avatar on
+  // the composer strip. Drop the self entry so a lone user sees no presence chip
+  // and real teammates still surface.
+  const roomPresence = (teamPresence ?? []).filter(m => m.id !== 'local' && m.name !== 'You');
+
   // M-28 / ENG-7: suggested next-actions extracted from the most
   // recent assistant message. Empty array → no chips. Hidden while
   // the assistant is still streaming to avoid flickering chips as
@@ -983,7 +990,9 @@ const ChatApp = ({
                     // Round-6 fix 3: honey-tinted user bubble (theme-aware tokens)
                     // so it reads against the canvas in BOTH themes — the old
                     // near-surface fill was white-on-white in light mode.
-                    ? 'rounded-[4px_14px_14px_14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-3.5 py-2.5 leading-[1.55] text-[var(--text)]'
+                    // R9 Lane D: dedicated --user-bubble token warms the light-mode
+                    // fill (the shared honey-wash read cold green-grey there).
+                    ? 'rounded-[4px_14px_14px_14px] border border-[var(--user-bubble-line)] bg-[var(--user-bubble)] px-3.5 py-2.5 leading-[1.55] text-[var(--text)]'
                     : msg.role === 'system'
                     ? 'rounded-[12px] bg-[var(--surface-2)] px-3 py-2 text-[12px] italic text-[var(--text-muted)]'
                     : 'rounded-[14px] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
@@ -1243,16 +1252,16 @@ const ChatApp = ({
             {/* Team presence — round-7 fix 2b: the bare avatar chip was
                 unlabeled (a floating 'Y'), so the whole cluster is now one
                 strip pill with a native title naming who's here. */}
-            {!isStripCompact && teamPresence && teamPresence.length > 0 && (
+            {!isStripCompact && roomPresence.length > 0 && (
               <div
                 className={`${STRIP_PILL} px-1.5 text-muted-foreground`}
                 data-testid="chat-header-team-presence"
-                title={teamPresence.length === 1
-                  ? `${teamPresence[0].name} — active in this chat`
-                  : `Active in this chat: ${teamPresence.map(m => m.name).join(', ')}`}
+                title={roomPresence.length === 1
+                  ? `${roomPresence[0].name} — active in this chat`
+                  : `Active in this chat: ${roomPresence.map(m => m.name).join(', ')}`}
               >
                 <div className="flex -space-x-1.5">
-                  {teamPresence.slice(0, 4).map(m => (
+                  {roomPresence.slice(0, 4).map(m => (
                     <div key={m.id} className="relative">
                       <Avatar className="w-4 h-4 border border-card">
                         {m.avatar ? <AvatarImage src={m.avatar} /> : null}
@@ -1262,15 +1271,15 @@ const ChatApp = ({
                     </div>
                   ))}
                 </div>
-                {teamPresence.length > 4 && (
-                  <span>+{teamPresence.length - 4}</span>
+                {roomPresence.length > 4 && (
+                  <span>+{roomPresence.length - 4}</span>
                 )}
               </div>
             )}
 
             {/* ⋯ overflow menu — only rendered in compact mode and only
                 when there's at least one informational chip to show. */}
-            {isStripCompact && (storageType || (teamPresence && teamPresence.length > 0)) && (
+            {isStripCompact && (storageType || roomPresence.length > 0) && (
               <div className="relative" ref={overflowRef}>
                 <button
                   onClick={() => setShowHeaderOverflow(p => !p)}
@@ -1300,11 +1309,11 @@ const ChatApp = ({
                         </span>
                       </div>
                     )}
-                    {teamPresence && teamPresence.length > 0 && (
+                    {roomPresence.length > 0 && (
                       <div className="px-1" data-testid="chat-header-team-presence">
                         <p className="text-[11px] font-display text-muted-foreground mb-1">In this room</p>
                         <div className="flex flex-wrap gap-1.5">
-                          {teamPresence.map(m => (
+                          {roomPresence.map(m => (
                             <div key={m.id} className="flex items-center gap-1.5 text-[11px] text-foreground">
                               <Avatar className="w-4 h-4 border border-card">
                                 {m.avatar ? <AvatarImage src={m.avatar} /> : null}

@@ -634,16 +634,21 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     return (
       <div className="mx-auto h-full max-w-[920px] overflow-auto px-8 pt-[46px]" data-testid="home-cockpit-error">
         <div className="flex flex-col items-center justify-center py-20 text-center">
+          {/* Wave Q Lane A (item 4): a calm honey-family glyph, not a red
+              triangle — a transient briefing miss is an attention moment, not a
+              failure alarm. */}
           {offline
             ? <WifiOff className="mb-3 h-10 w-10 text-[var(--attention)]" />
-            : <AlertTriangle className="mb-3 h-10 w-10 text-[var(--risk)]" />}
+            : <AlertTriangle className="mb-3 h-10 w-10 text-[var(--attention)]" />}
           <p className="mb-3 text-[14px] text-[var(--text-muted)]">
             {offline ? "You're offline — your daily briefing needs the local service." : "Couldn't load your briefing."}
           </p>
+          {/* Wave Q Lane A (item 4): a real secondary button (bordered, legible)
+              rather than a honey-filled chip that read as disabled/ghosted. */}
           <button
             type="button"
             onClick={() => void load()}
-            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--honey)] px-3.5 py-1.5 text-[13px] font-medium text-[#1a1407] transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
             data-testid="home-cockpit-retry"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Retry
