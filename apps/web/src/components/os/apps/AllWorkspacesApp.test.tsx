@@ -11,13 +11,14 @@
  *    link); the actions menu inside stops propagation so managing never opens
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import type { Workspace } from '@/lib/types';
 
 const mocks = vi.hoisted(() => ({
   shell: {
     workspaces: [] as Workspace[],
     workspacesError: null as string | null,
+    workspacesLoading: false,
     selectWorkspace: vi.fn(),
     createWorkspace: vi.fn(),
     refreshWorkspaces: vi.fn(),
@@ -58,6 +59,7 @@ beforeEach(() => {
     ws({ id: 'w4', name: 'Scratch', storageType: 'virtual' }),
   ];
   mocks.shell.workspacesError = null;
+  mocks.shell.workspacesLoading = false;
   mocks.shell.createWorkspace.mockResolvedValue(undefined);
   mocks.shell.refreshWorkspaces.mockResolvedValue(undefined);
 });
@@ -207,40 +209,33 @@ describe('AllWorkspacesApp', () => {
     expect(onOpenWorkspace).not.toHaveBeenCalled();
   });
 
-  it('shows the create-first empty state ONLY after the query resolves genuinely-empty (D16 · Wave U Lane A)', () => {
-    vi.useFakeTimers();
-    try {
-      mocks.shell.workspaces = [];
-      render(<AllWorkspacesApp />);
-      // Loading is a distinct state — the empty CTA must not flash first.
-      expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
-      expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
-      // Once the settle floor elapses, an empty list becomes the empty state.
-      act(() => { vi.advanceTimersByTime(900); });
-      expect(screen.getByTestId('all-workspaces-empty')).toBeInTheDocument();
-      expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
+  it('shows the create-first empty state ONLY after the query resolves genuinely-empty (D16 · Wave U Lane A · R15-V3 loading flag)', () => {
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = true;
+    const { rerender } = render(<AllWorkspacesApp />);
+    // Loading is a distinct state — the empty CTA must not flash first.
+    expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+    // Once the real fetch settles, an empty list becomes the empty state.
+    mocks.shell.workspacesLoading = false;
+    rerender(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-empty')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
 
-      // The CTA opens the reused CreateWorkspaceDialog rather than dead-ending.
-      fireEvent.click(screen.getByTestId('all-workspaces-create-first'));
-      expect(screen.getByTestId('create-dialog')).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+    // The CTA opens the reused CreateWorkspaceDialog rather than dead-ending.
+    fireEvent.click(screen.getByTestId('all-workspaces-create-first'));
+    expect(screen.getByTestId('create-dialog')).toBeInTheDocument();
   });
 
   it('renders skeleton cards while the query is unresolved, never the empty CTA prematurely (Wave U Lane A item 1)', () => {
-    vi.useFakeTimers();
-    try {
-      mocks.shell.workspaces = [];
-      render(<AllWorkspacesApp />);
-      // Loading · empty · error are three distinct states — skeletons first.
-      expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
-      expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('all-workspaces-create-first')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+    mocks.shell.workspaces = [];
+    mocks.shell.workspacesLoading = true;
+    render(<AllWorkspacesApp />);
+    // Loading · empty · error are three distinct states — skeletons first.
+    expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-create-first')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
   });
 
   it('a populated query resolves straight to the grid — no skeleton flash', () => {
