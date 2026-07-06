@@ -59,7 +59,7 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
     <button
       onClick={(e) => { e.stopPropagation(); onClickAnywhere(); }}
       autoFocus
-      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 transition-colors focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--honey-line)]"
     >
       Continue →
     </button>

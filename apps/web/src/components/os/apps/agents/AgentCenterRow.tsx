@@ -20,6 +20,13 @@ interface AgentCenterRowProps {
 const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowProps) => {
   const meta = AGENT_STATE_META[agent.status];
   const rate = typeof agent.successRate === 'number' ? agent.successRate : null;
+  // Round-6 fix 4a — ONE truth for run history: a real lastRun timestamp shows
+  // "run Xago"; "no runs yet" appears ONLY when there is genuinely no run.
+  // (Previously "no runs yet" doubled as the null-sparkline placeholder and
+  // contradicted a visible "run 23d ago" in the next column.)
+  const lastRun = agent.lastRunAt && !Number.isNaN(Date.parse(agent.lastRunAt))
+    ? formatRelativeTime(agent.lastRunAt)
+    : null;
   return (
     <li className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card/40 px-2.5 py-2 hover:bg-muted/50 transition-colors">
       <button
@@ -37,22 +44,28 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
           </span>
           <span className="block text-[10px] text-muted-foreground truncate">{agent.goal}</span>
         </span>
+        {/* Tidy fixed meta grid (model · last-run · success · status), one
+            type size (10px muted) so the cluster scans as columns. */}
         <span className="hidden sm:flex flex-col items-end gap-0.5 shrink-0 w-24">
           <span className="text-[10px] text-muted-foreground truncate max-w-full">{agent.model}</span>
-          <span className="text-[10px] text-muted-foreground/70">run {formatRelativeTime(agent.lastRunAt)}</span>
+          <span className="text-[10px] text-muted-foreground tabular-nums">
+            {lastRun ? `run ${lastRun}` : 'no runs yet'}
+          </span>
         </span>
-        <span className="hidden md:flex items-center gap-1.5 shrink-0 w-20" title="Success rate over recorded runs">
-          {rate !== null ? (
+        <span
+          className="hidden md:flex items-center gap-1.5 shrink-0 w-20"
+          title={rate !== null ? 'Success rate over recorded runs' : undefined}
+        >
+          {rate !== null && (
             <>
               <span className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden" aria-hidden>
                 <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(rate * 100)}%` }} />
               </span>
               <span className="text-[10px] text-muted-foreground tabular-nums">{formatSuccessRate(agent.successRate)}</span>
             </>
-          ) : (
-            // Round-4: a bare '—' placeholder read as broken data — say what it means.
-            <span className="text-[10px] text-muted-foreground/70">no runs yet</span>
           )}
+          {/* rate === null → empty fixed-width column; the run-history truth
+              lives ONLY in the last-run slot above (no contradiction). */}
         </span>
         <StatusBadge tone={meta.tone} label={meta.label} />
       </button>

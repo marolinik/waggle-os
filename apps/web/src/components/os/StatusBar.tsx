@@ -144,7 +144,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
                 aria-label={`${memoryFrameCount.toLocaleString()} memory frames across all minds`}
               >
                 <Brain className="w-3 h-3" aria-hidden="true" />
-                {memoryFrameCount.toLocaleString()}
+                {memoryFrameCount.toLocaleString()} memories
                 {foldDelta !== null && (
                   <span aria-hidden className="memory-fold absolute -top-3 right-0 text-[10px] font-semibold text-honey whitespace-nowrap pointer-events-none">
                     +{foldDelta} ⬡
@@ -192,13 +192,13 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             <kbd className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
           </button>
         </HintTooltip>
-        <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-honey transition-colors" aria-label="Notifications">
+        {/* Round-6: an overlapping badge can never sit right on a 14px bell —
+            it occluded the glyph. Count now renders BESIDE the bell inside the
+            same click target: unambiguous, nothing covered, nothing clipped. */}
+        <button onClick={onNotificationClick} className="flex items-center gap-1 text-muted-foreground hover:text-honey transition-colors" aria-label={`Notifications${unreadNotifications > 0 ? ` (${unreadNotifications} unread)` : ''}`}>
           <Bell className="w-3.5 h-3.5" />
-          {/* Round-5: warm-family badge (alarm-red clashed with the palette) +
-              a background ring so it reads as sitting OVER the bell, never
-              colliding with the glyph or the clock to its right. */}
           {unreadNotifications > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-[var(--honey)] text-[9px] leading-none text-[#1a1407] ring-2 ring-background flex items-center justify-center font-bold px-1 whitespace-nowrap">
+            <span className="min-w-[15px] h-[15px] rounded-full bg-[var(--honey)] text-[9px] leading-none text-[#1a1407] flex items-center justify-center font-bold px-1 whitespace-nowrap">
               {unreadNotifications > 9 ? '9+' : unreadNotifications}
             </span>
           )}

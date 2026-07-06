@@ -22,6 +22,7 @@
 import { useMemo, useState } from 'react';
 import { Search, Plus, Hexagon, AlertTriangle } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
+import { DATE_LOCALE } from '@/lib/date-locale';
 import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import CreateWorkspaceDialog from '../overlays/CreateWorkspaceDialog';
@@ -68,6 +69,27 @@ function formatRelative(iso?: string): string | null {
   return `${weeks}w ago`;
 }
 
+/** Collision key for round-6 fix 1c — same-name AND same-group cards. */
+function dupKey(w: Workspace): string {
+  return `${w.name.trim().toLowerCase()}|${(w.group ?? '').trim().toLowerCase()}`;
+}
+
+/**
+ * Round-6 fix 1b: honest "Created …" line for description-less cards. Reads
+ * the server record's `created` ISO stamp (WorkspaceConfig.created — present
+ * on every list row but not yet declared on the web Workspace type). Relative
+ * while recent; a plain date once "NNw ago" stops being useful. Never
+ * fabricated — absent/invalid stamps render nothing.
+ */
+function formatCreated(iso?: string): string | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const days = (Date.now() - t) / 86_400_000;
+  if (days < 60) return `Created ${formatRelative(iso)}`;
+  return `Created ${new Date(t).toLocaleDateString(DATE_LOCALE)}`;
+}
+
 // ── Storage filter pills ──────────────────────────────────────────────────
 function FilterPills({
   active, counts, onChange,
@@ -109,17 +131,23 @@ function FilterPills({
 
 // ── One workspace card (real fields only) ─────────────────────────────────
 function WorkspaceCard({
-  ws, onOpen, onChanged, isDuplicateName,
+  ws, onOpen, onChanged, isDuplicateName, isDuplicateNameAndGroup,
 }: {
   ws: Workspace;
   onOpen: () => void;
   onChanged: () => void;
   /** True when another workspace shares this name — show the group to disambiguate. */
   isDuplicateName: boolean;
+  /** True when name AND group both collide — the group tag alone no longer
+   *  disambiguates, so a short id chip renders too (round-6 fix 1c). */
+  isDuplicateNameAndGroup?: boolean;
 }) {
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
   const lastActive = formatRelative(ws.lastActive ?? ws.updatedAt);
   const isHealthy = ws.health === 'healthy' && ws.status !== 'archived';
+  // The server list rows carry WorkspaceConfig.created; the web type doesn't
+  // declare it yet — narrow local read, no fabrication when absent.
+  const createdLine = formatCreated((ws as Workspace & { created?: string }).created);
 
   // Honesty: only render a memory count when the field actually exists.
   const hasMemoryCount = typeof ws.memoryCount === 'number';
@@ -153,9 +181,18 @@ function WorkspaceCard({
           >
             {ws.name}
           </h3>
-          {/* Disambiguate same-named workspaces with their group (issue 2b). */}
-          {isDuplicateName && ws.group && (
-            <span className="mt-0.5 block truncate text-[11.5px] text-[var(--text-dim)]">{ws.group}</span>
+          {/* Disambiguate same-named workspaces with their group (issue 2b);
+              when the group ALSO collides, append a short id chip so two
+              "Research Hub · Personal" cards stay tellable apart (fix 1c). */}
+          {isDuplicateName && (ws.group || isDuplicateNameAndGroup) && (
+            <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-[var(--text-dim)]">
+              {ws.group && <span className="truncate">{ws.group}</span>}
+              {isDuplicateNameAndGroup && (
+                <span className="shrink-0 rounded-[5px] border border-[var(--line-soft)] bg-[var(--surface-2)] px-1 font-mono text-[10px]">
+                  #{ws.id.slice(-4)}
+                </span>
+              )}
+            </span>
           )}
         </div>
         {badge && (
@@ -170,12 +207,16 @@ function WorkspaceCard({
       </div>
 
       {/* No min-h: a short (or absent) description must not leave a dead band
-          between the title block and the meta row (H2 fix 3). */}
-      {ws.description && (
+          between the title block and the meta row (H2 fix 3). A description-
+          less card gets ONE quiet honest activity line instead (fix 1b) —
+          "Created <when>" from the real server stamp, never invented copy. */}
+      {ws.description ? (
         <p className="mb-3 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
           {ws.description}
         </p>
-      )}
+      ) : createdLine ? (
+        <p className="mb-3 text-[13px] leading-[1.5] text-[var(--text-muted)]">{createdLine}</p>
+      ) : null}
 
       {/* Quiet meta row — real fields only (W2B honesty: no fabricated count,
           no filler dash; an absent field simply doesn't render). */}
@@ -274,6 +315,17 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
     }
     return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
   }, [workspaces]);
+
+  // Round-6 fix 1c: name+group BOTH collide → the group tag alone can't
+  // disambiguate, so those cards also get a short id chip.
+  const duplicateNameAndGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const w of shelfWorkspaces) {
+      const k = dupKey(w);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
+  }, [shelfWorkspaces]);
 
   const handleOpen = (id: string) => {
     selectWorkspace(id);
@@ -383,6 +435,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
               onOpen={() => handleOpen(ws.id)}
               onChanged={() => { void refreshWorkspaces(); }}
               isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}
+              isDuplicateNameAndGroup={duplicateNameAndGroups.has(dupKey(ws))}
             />
           ))}
         </div>

@@ -100,3 +100,29 @@ export function normalizeMemoryKey(text: string | null | undefined): string {
 export function isGroupableKey(key: string): boolean {
   return key.length >= MIN_NORMALIZED_KEY_CHARS;
 }
+
+// ── Display-layer markdown strip (round-6 fix 2a) ──────────────────────────
+//
+// Memory-card previews render as PLAIN TEXT nodes, so raw markdown tokens
+// ('## heading', **bold**, `code`, [links](url)) show literally and read as
+// log output. This is the same cleanup LoginBriefing's truncateHighlight
+// applies, extracted so Memory-Trust rows share one implementation. Display
+// only — never applied to stored content (the drawer still edits the raw
+// text and renders a real markdown preview).
+
+const MD_HEADING_RE = /^#{1,6}\s+/;
+const MD_BOLD_RE = /\*\*(.+?)\*\*/g;
+const MD_CODE_RE = /`(.+?)`/g;
+const MD_FENCE_RE = /^```[\w-]*\s*$/;
+const MD_LINK_RE = /\[([^\]]+)\]\([^)]*\)/g;
+
+/** Strip markdown tokens from ONE line of preview text (display only). */
+export function stripMarkdownTokens(line: string): string {
+  if (MD_FENCE_RE.test(line.trim())) return '';
+  return line
+    .replace(MD_HEADING_RE, '')
+    .replace(MD_LINK_RE, '$1')
+    .replace(MD_BOLD_RE, '$1')
+    .replace(MD_CODE_RE, '$1')
+    .trim();
+}

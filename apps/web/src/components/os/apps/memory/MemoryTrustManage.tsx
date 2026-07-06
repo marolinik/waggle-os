@@ -5,6 +5,7 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryStatus } from '@/lib/types';
 import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
+import { stripMarkdownTokens } from '@/lib/memory-text-normalize';
 import { frameSourceLabel } from '@/lib/frame-source';
 import { ConfidenceRing } from '../../warm';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
@@ -82,25 +83,37 @@ interface DimensionChipProps {
   value: string;
   label: string;
   tone?: 'default' | 'healthy' | 'attention';
+  /** Round-6 fix 2c: when set the chip is a real button (e.g. "to review" →
+   *  seeds the needs-confirm filter) instead of a static stat. */
+  onClick?: () => void;
+  title?: string;
 }
 
-/** A subordinate, non-summing "dimension" of the hive (fresh / stale / awaiting
- *  confirm). These overlap — they are NOT parts of the total, so they render as
+/** A subordinate, non-summing "dimension" of the hive (fresh / stale / to
+ *  review). These overlap — they are NOT parts of the total, so they render as
  *  small inline chips beneath the headline count, never as equal-weight cards. */
-function DimensionChip({ value, label, tone = 'default' }: DimensionChipProps) {
+function DimensionChip({ value, label, tone = 'default', onClick, title }: DimensionChipProps) {
   const valueColor =
     tone === 'healthy' ? 'text-[var(--healthy)]' : tone === 'attention' ? 'text-[var(--attention)]' : 'text-[var(--text-2)]';
-  return (
-    <span
-      className={cn(
-        'inline-flex items-baseline gap-1.5 rounded-full border bg-[var(--surface-2)] px-2.5 py-1',
-        tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
-      )}
-    >
+  const className = cn(
+    'inline-flex items-baseline gap-1.5 rounded-full border bg-[var(--surface-2)] px-2.5 py-1',
+    tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
+    onClick && 'cursor-pointer transition-colors hover:border-[var(--honey-line)]',
+  );
+  const inner = (
+    <>
       <span className={cn('text-[13px] font-[700] leading-none tracking-[-0.01em]', valueColor)}>{value}</span>
       <span className="text-[11.5px] text-[var(--text-muted)]">{label}</span>
-    </span>
+    </>
   );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} title={title} className={className}>
+        {inner}
+      </button>
+    );
+  }
+  return <span title={title} className={className}>{inner}</span>;
 }
 
 // ── Memory row (§5) ──────────────────────────────────────────────────────────
@@ -122,6 +135,10 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
   const srcLabel = frameSourceLabel(memory.source);
   const stale = isStale(memory);
   const needsConfirm = memory.status === 'unreviewed';
+  // Round-6 fix 2b: the ring renders only when a confidence actually exists;
+  // the unscored state is a single quiet inline badge on the provenance row
+  // (the old stacked "unscored / CONF" micro-label was illegible).
+  const scored = typeof memory.confidence === 'number' && Number.isFinite(memory.confidence);
   return (
     <li
       className={cn(
@@ -130,19 +147,25 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
       )}
     >
       <div className="flex items-start gap-3.5">
-        <ConfidenceRing value={memory.confidence} className="mt-0.5" />
+        {scored && <ConfidenceRing value={memory.confidence} className="mt-0.5" />}
         <div className="min-w-0 flex-1">
           <button type="button" onClick={onOpen} className="group block w-full text-left">
             {/* Round-5: raw harvest strings read as log output — lead with the
                 first line as a title, clamp the rest as a muted excerpt. Pure
-                display split; the drawer still shows the full content. */}
+                display split; the drawer still shows the full content.
+                Round-6 fix 2a: markdown tokens ('##', **bold**, `code`,
+                [links]) are stripped for this plain-text preview — display
+                only, the stored content and drawer editor stay raw. */}
             {(() => {
-              const [lead, ...rest] = memory.content.split('\n').filter(l => l.trim() !== '');
+              const [lead, ...rest] = memory.content
+                .split('\n')
+                .map(stripMarkdownTokens)
+                .filter(l => l !== '');
               const excerpt = rest.join(' ').trim();
               return (
                 <>
                   <p className="line-clamp-2 text-[14.5px] font-medium leading-[1.45] text-[var(--text)] group-hover:text-[var(--honey-text)]">
-                    {lead ?? memory.content}
+                    {lead ?? stripMarkdownTokens(memory.content)}
                   </p>
                   {excerpt && (
                     <p className="mt-0.5 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
@@ -158,6 +181,14 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
           <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[12px] text-[var(--text-muted)]">
             <span className="text-[var(--intel)]">⬡ M-{memory.id}</span>
             {srcLabel && <span>source: {srcLabel}</span>}
+            {!scored && (
+              <span
+                className="rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 font-sans text-[11px] text-[var(--text-muted)]"
+                title="No confidence stored for this memory — only harvested memories carry a score."
+              >
+                not scored yet
+              </span>
+            )}
             <span className={fresh.state === 'fresh' ? 'text-[var(--healthy)]' : 'text-[var(--attention)]'}>
               ● {fresh.label}
             </span>
@@ -406,7 +437,16 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           <DimensionChip value={stats.freshCount} label="fresh (last 7 days)" tone={stats.freshCount === '0' ? 'default' : 'healthy'} />
           <DimensionChip value={stats.highConf} label="high confidence" tone={stats.highConf === '—' || stats.highConf === '0' ? 'default' : 'healthy'} />
           <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
-          <DimensionChip value={stats.needsConfirm} label="awaiting your confirm" tone="attention" />
+          {/* Round-6 fix 2c: "awaiting your confirm" read alarming next to the
+              total — calmer "to review", and the chip now jumps straight to
+              the needs-confirm filter. Count stays real. */}
+          <DimensionChip
+            value={stats.needsConfirm}
+            label="to review"
+            tone="attention"
+            title="Show only memories awaiting your review"
+            onClick={() => setFilter('needs_confirm')}
+          />
         </div>
         <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
           Overlapping views — a memory can be counted in more than one.

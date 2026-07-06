@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, ArrowRight } from 'lucide-react';
 import { getPersonaAvatar, type PersonaConfig } from '@/lib/personas';
 
 interface SuggestedAgentCardsProps {
@@ -58,27 +58,37 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
           </li>
         ))}
       </ul>
-      {/* Round-4: quiet full-roster strip — every specialist at a glance, one
-          tap into the Templates catalog. No new data fetch (static PERSONAS). */}
+      {/* Round-6 fix 4b: the old per-persona thumbnail strip read as "22
+          indistinguishable circles" — replaced by ONE affordance: a compact
+          browse-all card with a small overlapping avatar sample + the count.
+          Names live in the Templates catalog it opens. No new data fetch. */}
       {allPersonas && allPersonas.length > 0 && onBrowseAll && (
         <div className="mt-5" data-testid="persona-roster">
-          <p className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-            Meet all {allPersonas.length} specialists
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {allPersonas.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={onBrowseAll}
-                title={p.name}
-                aria-label={`${p.name} — browse all templates`}
-                className="rounded-full transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-primary"
-              >
-                <img src={getPersonaAvatar(p.id)} alt="" className="h-7 w-7 rounded-full object-cover" />
-              </button>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={onBrowseAll}
+            className="group flex w-full items-center gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left transition-colors hover:border-[var(--honey-line)]"
+          >
+            <span className="flex shrink-0 -space-x-2.5" aria-hidden>
+              {allPersonas.slice(0, 5).map((p) => (
+                <img
+                  key={p.id}
+                  src={getPersonaAvatar(p.id)}
+                  alt=""
+                  className="h-8 w-8 rounded-full border-2 border-card object-cover"
+                />
+              ))}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-display font-semibold text-foreground">
+                Browse all {allPersonas.length} specialists
+              </span>
+              <span className="block text-[11.5px] text-muted-foreground">
+                Every role in the Templates catalog — pick one and put it to work.
+              </span>
+            </span>
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-honey transition-transform group-hover:translate-x-0.5" aria-hidden />
+          </button>
         </div>
       )}
     </div>

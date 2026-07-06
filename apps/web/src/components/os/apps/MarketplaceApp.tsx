@@ -234,8 +234,11 @@ const MarketplaceApp = () => {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header — inner content shares the centered browse column below so the
+          facet rail and count line up with the rows (round-6: full-bleed rows
+          put actions a long eye-travel from titles). */}
       <div className="px-4 py-3 border-b border-border/30">
+        <div className="mx-auto w-full max-w-[860px]">
         <div className="flex items-center gap-3 mb-3">
           <Store className="w-5 h-5" style={{ color: 'var(--honey-500)' }} />
           <h2 className="text-sm font-display font-semibold text-foreground">Marketplace</h2>
@@ -283,10 +286,13 @@ const MarketplaceApp = () => {
 
           </>
         )}
+        </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-auto p-3 space-y-2" role="tabpanel">
+      {/* Body — constrained to a centered readable column instead of a
+          full-bleed list. */}
+      <div className="flex-1 overflow-auto p-3" role="tabpanel">
+        <div className="mx-auto w-full max-w-[860px] space-y-2">
         {tab === 'audit' ? (
           <InstallAuditPanel showFilter limit={30} />
         ) : (
@@ -369,6 +375,7 @@ const MarketplaceApp = () => {
                 ))}
           </>
         )}
+        </div>
       </div>
 
       {/* Remove confirm — destructive direction keeps its consequence dialog

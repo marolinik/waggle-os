@@ -32,25 +32,27 @@ const personaByOrder = new Map<number, Persona>(
 );
 
 /**
- * Per-persona accent — a curated, warm-Hive-cohesive palette (honey/amber/
- * copper family with a few muted cool notes for rhythm; no purple, no
- * gradients). Each tile gets its own hue on the title, top hairline, and hover
- * border/glow so the grid reads as a cast of characters, not a spreadsheet.
- * Hues are chosen so horizontally/vertically adjacent tiles never repeat, and
- * a few map to meaning (confused → terracotta flag, sleeping → night blue,
- * analyst/team → data green, researcher → analytical blue).
+ * Per-persona accent — a curated warm ramp (honey / amber / copper / bronze /
+ * terracotta family; no purple, no gradients). Round-6 palette discipline:
+ * exactly ONE muted cool note survives (sleeping → night blue, where the hue
+ * IS the meaning); everything else stays in the warm-Hive family. Each tile
+ * gets its hue on the title, top hairline, and hover border/glow so the grid
+ * reads as a cast of characters, not a spreadsheet. Hues are chosen so
+ * horizontally/vertically adjacent tiles (4-col landing grid) never repeat,
+ * and a few map to meaning (confused → terracotta flag, researcher/team →
+ * deep bronze, analyst/architect → copper).
  */
 const PERSONA_ACCENTS: Readonly<Record<PersonaSlug, string>> = {
   hunter: '#f6c45a',
-  researcher: '#7aa6d6',
-  analyst: '#6cb78c',
+  researcher: '#c07e16',
+  analyst: '#d98a3d',
   connector: '#f2b950',
   architect: '#d98a3d',
   builder: '#e9a52c',
   writer: '#e0916f',
-  orchestrator: '#7aa6d6',
+  orchestrator: '#e9a52c',
   marketer: '#f6c45a',
-  team: '#6cb78c',
+  team: '#c07e16',
   celebrating: '#f9d27e',
   confused: '#db8068',
   sleeping: '#86a9d1',
@@ -496,6 +498,8 @@ const scopedCss = `
     border-radius: 16px;
     overflow: hidden;
   }
+  /* Round-6: fainter + slightly shrunken so the ghosts can't be mistaken for
+     unloaded cards — clearly ambient texture, not content-in-waiting. */
   .waggle-persona-filler::before {
     content: "";
     position: absolute;
@@ -503,7 +507,8 @@ const scopedCss = `
     background:
       radial-gradient(circle at 50% 46%, rgba(233, 165, 44, 0.10), rgba(233, 165, 44, 0) 62%),
       url("${HEX_TEXTURE_PATH}") center / cover no-repeat;
-    opacity: 0.35;
+    opacity: 0.2;
+    transform: scale(0.88);
     -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 22%, transparent 74%);
     mask-image: radial-gradient(circle at 50% 50%, #000 22%, transparent 74%);
   }
@@ -512,11 +517,11 @@ const scopedCss = `
     position: absolute;
     left: 50%;
     top: 50%;
-    width: 42px;
-    height: 46px;
+    width: 34px;
+    height: 38px;
     transform: translate(-50%, -50%);
     background: no-repeat center / contain
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='46' viewBox='0 0 42 46' fill='none'%3E%3Cpath d='M21 2 L39 12.5 V33.5 L21 44 L3 33.5 V12.5 Z' stroke='%23e9a52c' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E");
-    opacity: 0.3;
+    opacity: 0.18;
   }
 `;

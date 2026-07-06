@@ -157,17 +157,18 @@ describe('AgentsApp — Agent Center', () => {
     expect(screen.getByText(/Acme Research/)).toBeInTheDocument();
   });
 
-  it('sparse fleet shows the full-roster strip that opens the Templates view', async () => {
+  it('sparse fleet shows the browse-all-specialists card that opens the Templates view', async () => {
     mocks.adapter.listAgents.mockResolvedValue([]);
     renderApp();
     await screen.findByText(/No custom agents yet/);
 
+    // Round-6 fix 4b: ONE affordance (avatar sample + count), not 22
+    // indistinguishable per-persona thumbnails.
     const roster = screen.getByTestId('persona-roster');
-    expect(roster).toHaveTextContent('Meet all 22 specialists');
-    // One thumbnail per canonical persona, each named for its tooltip.
-    expect(within(roster).getAllByRole('button')).toHaveLength(22);
+    expect(roster).toHaveTextContent('Browse all 22 specialists');
+    expect(within(roster).getAllByRole('button')).toHaveLength(1);
 
-    fireEvent.click(within(roster).getByRole('button', { name: /Verifier — browse all templates/ }));
+    fireEvent.click(within(roster).getByRole('button', { name: /browse all 22 specialists/i }));
     expect(screen.getByRole('button', { name: /Templates/ })).toHaveAttribute('aria-pressed', 'true');
   });
 

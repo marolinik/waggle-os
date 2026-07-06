@@ -11,17 +11,21 @@ interface HexAvatarProps {
 }
 
 /**
- * H2 fix 3: 5 warm gradient tones (honey · amber · clay · moss · sand), picked
+ * Round-6 fix 1a: 5 SATURATED warm brand-adjacent gradient tones (honey ·
+ * bright honey · deep honey · warm copper · terracotta), picked
  * deterministically from the label so one workspace keeps its hue on every
- * surface. Honey stays the brand anchor (tone 0 uses the theme tokens); the
- * dark #1a1407 ink reads on every tone. Decorative only (aria-hidden).
+ * surface. The old moss/sand/clay trio read as murky off-ramp olives — every
+ * tone now stays on the honey→terracotta band so monograms read intentional
+ * on both themes. Honey stays the brand anchor (tone 0 uses the theme
+ * tokens); the dark #1a1407 ink reads on every tone. Decorative only
+ * (aria-hidden).
  */
 const WARM_TONES: ReadonlyArray<readonly [string, string]> = [
   ['var(--honey-bright)', 'var(--honey-deep)'], // honey (brand default)
-  ['#e8a765', '#c26d2c'],                        // amber
-  ['#e09a7e', '#b25e40'],                        // clay
-  ['#b8c48e', '#7d8f52'],                        // moss
-  ['#e3c896', '#b3915c'],                        // sand
+  ['#f6c45a', '#e9a52c'],                        // bright honey
+  ['#e9a52c', '#c07e16'],                        // deep honey
+  ['#d98a3d', '#b06a24'],                        // warm copper
+  ['#db8068', '#c05f43'],                        // terracotta
 ];
 
 function toneFor(label: string): readonly [string, string] {

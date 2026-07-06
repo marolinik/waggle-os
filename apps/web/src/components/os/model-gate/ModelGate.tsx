@@ -107,10 +107,18 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       if (modelRes?.configured) {
         if (modelRes.verified) { setProbe({ status: 'verified', verifiedModel: modelRes.model ?? undefined }); return; }
         if (modelRes.rejected) {
-          setProbe({ status: 'failed' });
+          // Round-6 fix 3b: derive WHICH provider owns the rejected default
+          // model (trivially available from the provider→models catalog) so
+          // that provider's chip can carry the warning glyph. No match →
+          // banner-only, never a guessed chip.
+          const owner = modelRes.model
+            ? activeProviders.find((p) => p.models.some((m) => m.id === modelRes.model))?.id
+            : undefined;
+          setProbe({ status: 'failed', failedProvider: owner });
           // Open the provider grid/key input so the user can fix the key now.
           setTab('cloud');
-          if (ids[0]) setSelected(ids[0]);
+          const open = owner ?? ids[0];
+          if (open) setSelected(open);
           return;
         }
         setProbe({ status: 'unverified' });
@@ -313,7 +321,14 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                       : 'border-border bg-card text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {p.hasKey && <Check className="size-3.5 text-honey" aria-label="key configured" />}
+                  {/* Round-6 fix 3b: a provider whose stored key failed the
+                      live probe shows an amber warning on ITS chip — the
+                      green check must not contradict the failure banner. */}
+                  {probe.status === 'failed' && probe.failedProvider === p.id ? (
+                    <AlertTriangle className="size-3 text-yellow-500" aria-label="key not responding" />
+                  ) : p.hasKey ? (
+                    <Check className="size-3.5 text-honey" aria-label="key configured" />
+                  ) : null}
                   {p.name}
                 </button>
               ))
@@ -346,11 +361,14 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                 ) : (
                   <span />
                 )}
+                {/* Round-6 fix 3a: no half-opacity honey ghost — enabled is the
+                    full theme-tuned primary; disabled flips to muted tokens so
+                    the two states are unmistakable in BOTH themes. */}
                 <button
                   type="button"
                   onClick={handleValidateAndSave}
                   disabled={validate.status === 'testing' || !keyValue.trim()}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground"
                 >
                   {validate.status === 'testing' && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
                   {validate.status === 'testing' ? 'Validating…' : 'Validate & save'}

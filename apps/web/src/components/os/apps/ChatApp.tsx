@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -152,12 +152,25 @@ const FEEDBACK_REASONS = [
   { id: 'other', label: 'Other' },
 ] as const;
 
-const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
+const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content, onRetry }: {
   messageId: string; messageIndex: number; sessionId?: string; feedback?: 'up' | 'down' | null;
+  /** Round-6 fix 2: raw message text for the hover-revealed Copy action. */
+  content?: string;
+  /** Round-6 fix 2: regenerate the turn — only wired on the last assistant message. */
+  onRetry?: () => void;
 }) => {
   const [vote, setVote] = useState(feedback);
   const [showReasons, setShowReasons] = useState(false);
   const [focusedReason, setFocusedReason] = useState(0);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    if (!content) return;
+    navigator.clipboard.writeText(content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => { /* clipboard unavailable — keep the quiet icon */ });
+  };
 
   const handleVote = (rating: 'up' | 'down', reason?: string) => {
     const newVote = vote === rating ? null : rating;
@@ -207,6 +220,36 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback }: {
           <ThumbsDown className="w-3 h-3" />
         </button>
       </HintTooltip>
+      {/* Round-6 fix 2: quiet hover-revealed actions co-located with the
+          thumbs row — Copy (checkmark flash) + Retry (last turn only). */}
+      {content && (
+        <HintTooltip content={copied ? 'Copied' : 'Copy response'}>
+          <button
+            onClick={handleCopy}
+            aria-label="Copy response"
+            data-testid="chat-msg-copy"
+            className={`p-0.5 rounded transition-opacity ${
+              copied
+                ? 'text-emerald-400 opacity-100'
+                : 'text-muted-foreground/40 hover:text-muted-foreground opacity-0 group-hover/turn:opacity-100 focus-visible:opacity-100'
+            }`}
+          >
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+          </button>
+        </HintTooltip>
+      )}
+      {onRetry && (
+        <HintTooltip content="Retry — regenerate this response">
+          <button
+            onClick={onRetry}
+            aria-label="Retry response"
+            data-testid="chat-msg-retry"
+            className="p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground opacity-0 group-hover/turn:opacity-100 focus-visible:opacity-100 transition-opacity"
+          >
+            <RotateCcw className="w-3 h-3" />
+          </button>
+        </HintTooltip>
+      )}
       {showReasons && (
         <div
           className="absolute bottom-full left-0 mb-1 bg-card border border-border rounded-lg shadow-xl z-20 py-1 w-36"
@@ -391,7 +434,9 @@ const AutonomyToggle = ({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-background border border-border/40 rounded-xl shadow-2xl overflow-hidden">
+          {/* Round-6 fix 1: opens UPWARD — the toggle now lives on the composer
+              strip at the bottom of the viewport. */}
+          <div className="absolute right-0 bottom-full mb-1 z-50 w-64 bg-background border border-border/40 rounded-xl shadow-2xl overflow-hidden">
             <div className="px-3 py-2 border-b border-border/20">
               <p className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">Autonomy</p>
               <p className="text-[10px] text-muted-foreground/70 mt-0.5">Skip approvals for trusted operations. Critical ops always gate.</p>
@@ -497,13 +542,13 @@ const ChatApp = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const personaPickerRef = useRef<HTMLDivElement>(null);
   const modelPickerRef = useRef<HTMLDivElement>(null);
-  // M-21 / UX-6: observe the header container to decide whether the
-  // informational chips (storage badge, team presence) should fold into
-  // a ⋯ overflow menu.
-  const headerRef = useRef<HTMLDivElement>(null);
+  // M-21 / UX-6: observe the agent strip (round-6 fix 1: relocated from the
+  // deleted header row to the composer) to decide whether the informational
+  // chips (storage badge, team presence) should fold into a ⋯ overflow menu.
+  const stripRef = useRef<HTMLDivElement>(null);
   const overflowRef = useRef<HTMLDivElement>(null);
-  const headerWidth = useContainerWidth(headerRef);
-  const isHeaderCompact = shouldCollapseChatHeader(headerWidth);
+  const stripWidth = useContainerWidth(stripRef);
+  const isStripCompact = shouldCollapseChatHeader(stripWidth);
 
   // M-28 / ENG-7: suggested next-actions extracted from the most
   // recent assistant message. Empty array → no chips. Hidden while
@@ -610,14 +655,14 @@ const ChatApp = ({
     return () => document.removeEventListener('mousedown', handler);
   }, [showPersonaPicker, showModelPicker, showHeaderOverflow]);
 
-  // Auto-close the overflow popover once the header widens past the
+  // Auto-close the overflow popover once the strip widens past the
   // compact threshold — without this, the popover stays open over an
   // empty slot when the user resizes.
   useEffect(() => {
-    if (!isHeaderCompact && showHeaderOverflow) {
+    if (!isStripCompact && showHeaderOverflow) {
       setShowHeaderOverflow(false);
     }
-  }, [isHeaderCompact, showHeaderOverflow]);
+  }, [isStripCompact, showHeaderOverflow]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -794,288 +839,6 @@ const ChatApp = ({
       )}
 
       <div className="flex flex-col flex-1 min-w-0">
-        {/* Header bar */}
-        <div
-          ref={headerRef}
-          className="flex items-center gap-2 px-3 py-1.5 border-b border-border/30 shrink-0"
-          data-testid="chat-header"
-          data-compact={isHeaderCompact ? 'true' : 'false'}
-        >
-          {sessions && (
-            <button
-              onClick={() => setShowSessions(p => !p)}
-              aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
-              aria-expanded={showSessions}
-              title={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
-            </button>
-          )}
-
-          {/* Persona picker */}
-          <div className="relative" ref={personaPickerRef}>
-            <button
-              onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
-              className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-muted/50 transition-colors"
-            >
-              {persona ? (
-                <>
-                  <Avatar className="w-5 h-5">
-                    <AvatarImage src={persona.avatar} />
-                    <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-[11px] font-display text-muted-foreground">{persona.name}</span>
-                </>
-              ) : (
-                <>
-                  <Bot className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-[11px] text-muted-foreground">Persona</span>
-                </>
-              )}
-              <ChevronDown className="w-3 h-3 text-muted-foreground" />
-            </button>
-            {showPersonaPicker && (
-              <div className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
-                {PERSONAS.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => { onPersonaChange?.(p.id); setShowPersonaPicker(false); }}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                      currentPersona === p.id ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <Avatar className="w-5 h-5 shrink-0">
-                      <AvatarImage src={p.avatar} />
-                      <AvatarFallback className="text-[11px] bg-primary/20">{p.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <div className="font-display text-foreground truncate">{p.name}</div>
-                      <div className="text-[11px] text-muted-foreground truncate">{p.description}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Memory-active trust signal — always visible (not gated by
-              isHeaderCompact). Signals that the workspace memory layer is
-              feeding context into this chat, which addresses the "where do
-              recall answers come from?" question that surfaced in the 5-
-              persona UX audit (dim 9 — Trust signals). */}
-          <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
-            <span
-              data-testid="chat-header-memory-active"
-              className="text-[10px] px-1.5 py-0.5 rounded font-display bg-primary/10 text-honey border border-primary/30 inline-flex items-center gap-1 cursor-help"
-            >
-              <Brain className="w-2.5 h-2.5" aria-hidden="true" />
-              Memory
-            </span>
-          </HintTooltip>
-
-          {/* M-21 / UX-6: storage + team presence render inline at full
-              width, or behind a ⋯ overflow menu when the header is
-              too narrow. Interactive controls (persona, autonomy,
-              model) stay always visible. */}
-          {!isHeaderCompact && storageType && (
-            <span
-              data-testid="chat-header-storage-badge"
-              className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
-                storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
-                : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
-              }`}
-            >
-              {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
-            </span>
-          )}
-
-          {/* Team presence */}
-          {!isHeaderCompact && teamPresence && teamPresence.length > 0 && (
-            <div className="flex items-center gap-1 mx-1" data-testid="chat-header-team-presence">
-              <div className="flex -space-x-1.5">
-                {teamPresence.slice(0, 4).map(m => (
-                  <div key={m.id} className="relative group">
-                    <Avatar className="w-5 h-5 border-2 border-card">
-                      {m.avatar ? <AvatarImage src={m.avatar} /> : null}
-                      <AvatarFallback className="text-[11px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[11px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
-                      {m.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              {teamPresence.length > 4 && (
-                <span className="text-[11px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
-              )}
-            </div>
-          )}
-
-          {/* ⋯ overflow menu — only rendered in compact mode and only
-              when there's at least one informational chip to show. */}
-          {isHeaderCompact && (storageType || (teamPresence && teamPresence.length > 0)) && (
-            <div className="relative" ref={overflowRef}>
-              <button
-                onClick={() => setShowHeaderOverflow(p => !p)}
-                className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-                aria-label="More chat header info"
-                data-testid="chat-header-overflow-trigger"
-              >
-                <MoreHorizontal className="w-3.5 h-3.5" />
-              </button>
-              {showHeaderOverflow && (
-                <div
-                  className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 p-2 space-y-2"
-                  data-testid="chat-header-overflow-menu"
-                >
-                  {storageType && (
-                    <div className="flex items-center justify-between gap-2 px-1">
-                      <span className="text-[11px] font-display text-muted-foreground">Storage</span>
-                      <span
-                        data-testid="chat-header-storage-badge"
-                        className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
-                          storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
-                          : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
-                        }`}
-                      >
-                        {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
-                      </span>
-                    </div>
-                  )}
-                  {teamPresence && teamPresence.length > 0 && (
-                    <div className="px-1" data-testid="chat-header-team-presence">
-                      <p className="text-[11px] font-display text-muted-foreground mb-1">In this room</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {teamPresence.map(m => (
-                          <div key={m.id} className="flex items-center gap-1.5 text-[11px] text-foreground">
-                            <Avatar className="w-4 h-4 border border-card">
-                              {m.avatar ? <AvatarImage src={m.avatar} /> : null}
-                              <AvatarFallback className="text-[10px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
-                            </Avatar>
-                            <span className="truncate max-w-[8ch]">{m.name}</span>
-                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Phase B.5: autonomy toggle — only render when the parent wired a handler */}
-          {onAutonomyChange && (
-            <div className="ml-auto">
-              <AutonomyToggle
-                level={autonomyLevel}
-                expiresAt={autonomyExpiresAt}
-                onChange={onAutonomyChange}
-              />
-            </div>
-          )}
-
-          {/* Model picker */}
-          <div className={`relative ${onAutonomyChange ? '' : 'ml-auto'}`} ref={modelPickerRef}>
-            <button
-              onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
-              title="Waggle picked the model — click to override"
-              className="flex items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface)] px-2.5 py-1 transition-colors hover:border-[var(--honey-line)]"
-            >
-              <DotLive tone="healthy" size={7} />
-              <span className="max-w-[140px] truncate font-mono text-[12px] text-[var(--text-2)]">
-                {currentModel ? formatModelLabel(currentModel) : 'auto'}
-              </span>
-              <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
-            </button>
-            {showModelPicker && (
-              <div className="absolute top-full right-0 mt-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
-                {(availableModels && availableModels.length > 0 ? availableModels : (currentModel ? [currentModel] : [])).map(m => (
-                  <button
-                    key={m}
-                    onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
-                      currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
-                    }`}
-                  >
-                    <Cpu className="w-3 h-3 text-honey shrink-0" />
-                    <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
-                  </button>
-                ))}
-                {(!availableModels || availableModels.length === 0) && !currentModel && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">No models available</div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Agent Profile toggle — merged into this row (UX gold-standard H1:
-              the dedicated collapsible row cost a full chrome layer). */}
-          <HintTooltip content={showAgentProfile ? 'Hide agent profile' : 'Show agent profile'}>
-            <button
-              onClick={() => setShowAgentProfile(p => !p)}
-              aria-label="Agent profile"
-              aria-expanded={showAgentProfile}
-              data-testid="chat-agent-profile-toggle"
-              className={`flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
-                showAgentProfile ? 'text-honey bg-primary/10' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-            </button>
-          </HintTooltip>
-        </div>
-
-        {/* Agent Profile Panel — expands below the header row when toggled */}
-        {showAgentProfile && (
-          <div className="shrink-0">
-            <div className="px-3 py-2.5 border-b border-border/20 bg-muted/20 space-y-2">
-              <div className="flex items-center gap-3">
-                {persona && (
-                  <Avatar className="w-9 h-9 shrink-0">
-                    <AvatarImage src={persona.avatar} />
-                    <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
-                  </Avatar>
-                )}
-                <div className="min-w-0">
-                  <p className="text-xs font-display font-semibold text-foreground">{persona?.name || 'Default Agent'}</p>
-                  <p className="text-[11px] text-muted-foreground">{persona?.description || 'General-purpose assistant'}</p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {templateId && templateId !== 'blank' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-honey text-[11px] font-display">
-                    <Sparkles className="w-2.5 h-2.5" />
-                    {TEMPLATE_DISPLAY[templateId]?.label || templateId}
-                  </span>
-                )}
-                {currentPersona && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[11px] font-display">
-                    <Bot className="w-2.5 h-2.5" />
-                    {persona?.name || currentPersona}
-                  </span>
-                )}
-                {currentModel && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-display">
-                    <Cpu className="w-2.5 h-2.5" />
-                    {formatModelLabel(currentModel)}
-                  </span>
-                )}
-              </div>
-              {templateId && TEMPLATE_DISPLAY[templateId] && (
-                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-                  <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} ·
-                  <span className="text-muted-foreground font-medium"> Style:</span> {persona?.description || 'General'}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Messages */}
         {/* Pins bar */}
         {pins.length > 0 && (
@@ -1157,7 +920,7 @@ const ChatApp = ({
             </div>
           )}
           {messages.map((msg, msgIdx) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
+            <div key={msg.id} className={`group/turn flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2`}
               onDoubleClick={() => {
                 if (onContextRail && msg.content) {
                   onContextRail({ type: 'message', id: msg.id, label: msg.content.slice(0, 60) });
@@ -1196,7 +959,10 @@ const ChatApp = ({
                 )}
                 <div className={`relative select-text cursor-text group/msg text-sm ${
                   msg.role === 'user'
-                    ? 'rounded-[4px_14px_14px_14px] bg-[var(--surface)] px-3.5 py-2.5 leading-[1.55] text-[var(--text)]'
+                    // Round-6 fix 3: honey-tinted user bubble (theme-aware tokens)
+                    // so it reads against the canvas in BOTH themes — the old
+                    // near-surface fill was white-on-white in light mode.
+                    ? 'rounded-[4px_14px_14px_14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-3.5 py-2.5 leading-[1.55] text-[var(--text)]'
                     : msg.role === 'system'
                     ? 'rounded-[12px] bg-[var(--surface-2)] px-3 py-2 text-[12px] italic text-[var(--text-muted)]'
                     : 'rounded-[14px] px-3.5 py-2.5 leading-[1.6] text-[var(--text)]'
@@ -1210,8 +976,10 @@ const ChatApp = ({
                   ) : (
                     <span className="whitespace-pre-wrap">{msg.content}</span>
                   )}
-                  {/* Copy button */}
-                  {msg.content && (
+                  {/* Copy button — assistant turns get Copy in the hover action
+                      row below (round-6 fix 2), so this overlay stays for user/
+                      system bubbles only. */}
+                  {msg.content && msg.role !== 'assistant' && (
                     <HintTooltip content="Copy message">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.content); }}
@@ -1242,7 +1010,14 @@ const ChatApp = ({
                   </div>
                 )}
                 {msg.role === 'assistant' && msg.content && (
-                  <FeedbackButtons messageId={msg.id} messageIndex={msgIdx} sessionId={activeSessionId ?? undefined} feedback={msg.feedback} />
+                  <FeedbackButtons
+                    messageId={msg.id}
+                    messageIndex={msgIdx}
+                    sessionId={activeSessionId ?? undefined}
+                    feedback={msg.feedback}
+                    content={msg.content}
+                    onRetry={msgIdx === messages.length - 1 && !isLoading ? onRetry : undefined}
+                  />
                 )}
                 {/* M-28 / ENG-7: clickable next-action chips on the last
                     assistant turn — fill the input on click so the user
@@ -1300,6 +1075,288 @@ const ChatApp = ({
               ))}
             </div>
           )}
+          {/* Agent Profile panel — opens above the agent strip now that its
+              toggle lives on the composer (round-6 fix 1). Content unchanged. */}
+          {showAgentProfile && (
+            <div className="mb-2 space-y-2 rounded-[12px] border border-border/30 bg-muted/20 px-3 py-2.5" data-testid="chat-agent-profile-panel">
+              <div className="flex items-center gap-3">
+                {persona && (
+                  <Avatar className="w-9 h-9 shrink-0">
+                    <AvatarImage src={persona.avatar} />
+                    <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  </Avatar>
+                )}
+                <div className="min-w-0">
+                  <p className="text-xs font-display font-semibold text-foreground">{persona?.name || 'Default Agent'}</p>
+                  <p className="text-[11px] text-muted-foreground">{persona?.description || 'General-purpose assistant'}</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {templateId && templateId !== 'blank' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-honey text-[11px] font-display">
+                    <Sparkles className="w-2.5 h-2.5" />
+                    {TEMPLATE_DISPLAY[templateId]?.label || templateId}
+                  </span>
+                )}
+                {currentPersona && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/50 text-accent-foreground text-[11px] font-display">
+                    <Bot className="w-2.5 h-2.5" />
+                    {persona?.name || currentPersona}
+                  </span>
+                )}
+                {currentModel && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary text-secondary-foreground text-[11px] font-display">
+                    <Cpu className="w-2.5 h-2.5" />
+                    {formatModelLabel(currentModel)}
+                  </span>
+                )}
+              </div>
+              {templateId && TEMPLATE_DISPLAY[templateId] && (
+                <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
+                  <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} ·
+                  <span className="text-muted-foreground font-medium"> Style:</span> {persona?.description || 'General'}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Round-6 fix 1 (chrome 3 bars → 2): the agent toolbar row moved from
+              a dedicated header bar to this slim strip attached to the top of the
+              composer — persona chip + Memory pill on the left; autonomy + model +
+              Agent Profile toggle on the right. Same controls, same handlers;
+              dropdowns open UPWARD because the strip sits at the viewport bottom. */}
+          <div
+            ref={stripRef}
+            className="flex items-center gap-1.5 px-1 pb-1.5"
+            data-testid="chat-agent-strip"
+            data-compact={isStripCompact ? 'true' : 'false'}
+          >
+            {sessions && (
+              <button
+                onClick={() => setShowSessions(p => !p)}
+                aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
+                aria-expanded={showSessions}
+                title={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
+              </button>
+            )}
+
+            {/* Persona picker */}
+            <div className="relative" ref={personaPickerRef}>
+              <button
+                onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
+                className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-lg hover:bg-muted/50 transition-colors"
+              >
+                {persona ? (
+                  <>
+                    <Avatar className="w-5 h-5">
+                      <AvatarImage src={persona.avatar} />
+                      <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-[11px] font-display text-muted-foreground">{persona.name}</span>
+                  </>
+                ) : (
+                  <>
+                    <Bot className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-[11px] text-muted-foreground">Persona</span>
+                  </>
+                )}
+                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+              </button>
+              {showPersonaPicker && (
+                <div className="absolute bottom-full left-0 mb-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                  {PERSONAS.map(p => (
+                    <button
+                      key={p.id}
+                      onClick={() => { onPersonaChange?.(p.id); setShowPersonaPicker(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                        currentPersona === p.id ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                      }`}
+                    >
+                      <Avatar className="w-5 h-5 shrink-0">
+                        <AvatarImage src={p.avatar} />
+                        <AvatarFallback className="text-[11px] bg-primary/20">{p.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="font-display text-foreground truncate">{p.name}</div>
+                        <div className="text-[11px] text-muted-foreground truncate">{p.description}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Memory-active trust signal — always visible (not gated by
+                isStripCompact). Signals that the workspace memory layer is
+                feeding context into this chat (5-persona UX audit, dim 9). */}
+            <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
+              <span
+                data-testid="chat-header-memory-active"
+                className="text-[10px] px-1.5 py-0.5 rounded font-display bg-primary/10 text-honey border border-primary/30 inline-flex items-center gap-1 cursor-help"
+              >
+                <Brain className="w-2.5 h-2.5" aria-hidden="true" />
+                Memory
+              </span>
+            </HintTooltip>
+
+            {/* M-21 / UX-6: storage + team presence render inline at full
+                width, or behind a ⋯ overflow menu when the strip is too
+                narrow. Interactive controls (persona, autonomy, model)
+                stay always visible. */}
+            {!isStripCompact && storageType && (
+              <span
+                data-testid="chat-header-storage-badge"
+                className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
+                  storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                  : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+                  : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+                }`}
+              >
+                {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
+              </span>
+            )}
+
+            {/* Team presence */}
+            {!isStripCompact && teamPresence && teamPresence.length > 0 && (
+              <div className="flex items-center gap-1 mx-1" data-testid="chat-header-team-presence">
+                <div className="flex -space-x-1.5">
+                  {teamPresence.slice(0, 4).map(m => (
+                    <div key={m.id} className="relative group">
+                      <Avatar className="w-5 h-5 border-2 border-card">
+                        {m.avatar ? <AvatarImage src={m.avatar} /> : null}
+                        <AvatarFallback className="text-[11px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[11px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
+                        {m.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {teamPresence.length > 4 && (
+                  <span className="text-[11px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
+                )}
+              </div>
+            )}
+
+            {/* ⋯ overflow menu — only rendered in compact mode and only
+                when there's at least one informational chip to show. */}
+            {isStripCompact && (storageType || (teamPresence && teamPresence.length > 0)) && (
+              <div className="relative" ref={overflowRef}>
+                <button
+                  onClick={() => setShowHeaderOverflow(p => !p)}
+                  className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                  aria-label="More chat context info"
+                  data-testid="chat-header-overflow-trigger"
+                >
+                  <MoreHorizontal className="w-3.5 h-3.5" />
+                </button>
+                {showHeaderOverflow && (
+                  <div
+                    className="absolute bottom-full left-0 mb-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 p-2 space-y-2"
+                    data-testid="chat-header-overflow-menu"
+                  >
+                    {storageType && (
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <span className="text-[11px] font-display text-muted-foreground">Storage</span>
+                        <span
+                          data-testid="chat-header-storage-badge"
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
+                            storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                            : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
+                            : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+                          }`}
+                        >
+                          {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
+                        </span>
+                      </div>
+                    )}
+                    {teamPresence && teamPresence.length > 0 && (
+                      <div className="px-1" data-testid="chat-header-team-presence">
+                        <p className="text-[11px] font-display text-muted-foreground mb-1">In this room</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {teamPresence.map(m => (
+                            <div key={m.id} className="flex items-center gap-1.5 text-[11px] text-foreground">
+                              <Avatar className="w-4 h-4 border border-card">
+                                {m.avatar ? <AvatarImage src={m.avatar} /> : null}
+                                <AvatarFallback className="text-[10px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                              </Avatar>
+                              <span className="truncate max-w-[8ch]">{m.name}</span>
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="ml-auto flex items-center gap-1.5">
+              {/* Phase B.5: autonomy toggle — only render when the parent wired a handler */}
+              {onAutonomyChange && (
+                <AutonomyToggle
+                  level={autonomyLevel}
+                  expiresAt={autonomyExpiresAt}
+                  onChange={onAutonomyChange}
+                />
+              )}
+
+              {/* Model picker */}
+              <div className="relative" ref={modelPickerRef}>
+                <button
+                  onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
+                  title="Waggle picked the model — click to override"
+                  className="flex items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface)] px-2 py-0.5 transition-colors hover:border-[var(--honey-line)]"
+                >
+                  <DotLive tone="healthy" size={7} />
+                  <span className="max-w-[140px] truncate font-mono text-[11px] text-[var(--text-2)]">
+                    {currentModel ? formatModelLabel(currentModel) : 'auto'}
+                  </span>
+                  <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
+                </button>
+                {showModelPicker && (
+                  <div className="absolute bottom-full right-0 mb-1 w-64 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                    {(availableModels && availableModels.length > 0 ? availableModels : (currentModel ? [currentModel] : [])).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => { onModelChange?.(m); setShowModelPicker(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 transition-colors ${
+                          currentModel === m ? 'bg-accent text-accent-foreground' : 'hover:bg-muted/50'
+                        }`}
+                      >
+                        <Cpu className="w-3 h-3 text-honey shrink-0" />
+                        <span className="font-display text-foreground truncate">{formatModelLabel(m)}</span>
+                      </button>
+                    ))}
+                    {(!availableModels || availableModels.length === 0) && !currentModel && (
+                      <div className="px-3 py-2 text-xs text-muted-foreground">No models available</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Agent Profile toggle */}
+              <HintTooltip content={showAgentProfile ? 'Hide agent profile' : 'Show agent profile'}>
+                <button
+                  onClick={() => setShowAgentProfile(p => !p)}
+                  aria-label="Agent profile"
+                  aria-expanded={showAgentProfile}
+                  data-testid="chat-agent-profile-toggle"
+                  className={`flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
+                    showAgentProfile ? 'text-honey bg-primary/10' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                  }`}
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                </button>
+              </HintTooltip>
+            </div>
+          </div>
+
           <div className="flex items-end gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
             <button
               onClick={handleFileSelect}
@@ -1319,9 +1376,9 @@ const ChatApp = ({
               rows={3}
             />
             <div className="flex items-center gap-2.5 pb-0.5">
-              {/* I1 fix 4b: Ctrl K here was the same global palette the top bar
-                  already labels "Search Ctrl K" — dropped to kill the conflict. */}
-              <span className="hidden font-mono text-[11px] text-[var(--text-dim)] sm:inline">⏎ send</span>
+              {/* Round-6 fix 4: single send affordance — the circular button only.
+                  Enter still submits (handleKeyDown); the "⏎ send" text hint and
+                  the earlier Ctrl K hint (I1 fix 4b) are both gone. */}
               {/* I1 fix 4a: --honey darkens in light theme, so the enabled state
                   read washed there. bg-primary is the theme-decoupled vibrant CTA
                   fill (2026-07-06) in BOTH themes; disabled goes neutral instead
