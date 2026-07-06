@@ -243,3 +243,65 @@ chat measure 760→680px (~72ch).
 - **Live-product judging** (video walkthrough or hands-on) instead of static
   screenshots once motion ships.
 - The structural items above as scoped arcs, not polish waves.
+
+**Goal amended (founder, 2026-07-06 ~07:00): synthesis items now in scope.**
+- Wave L (data): 53 dev-artifact workspaces ARCHIVED via local API (reversible
+  status flip; auth via the auth-exempt /api/auth/session-token bootstrap) —
+  45 ai-os-audit/flow + 2 e2e + 2 stresstest + research-hub-3/4/5 +
+  blank-workspace-2. Shelf now shows 6 real workspaces. research-hub-2 KEPT
+  (5 sessions = plausibly real work).
+- `2be2ac9c` Wave K (signature motion, reduced-motion guarded): brain-trophy
+  '+N ⬡' memory-fold on real count increases · streaming bee breathes ·
+  onboarding glow-breathe. Verified live (computed animationName).
+- `7beacbe0` Wave M: marketplace All shelf grouped by type with counts.
+- Judge brief now carries a code-verified MOTION INVENTORY as secondary
+  signal (statics can't show it; honest disclosure, judges may discount).
+- Round-6 capture in flight → judge round 6.
+
+**Round 6 verdict + Wave N (2026-07-06 ~08:30):**
+- Round-6 scores: design 7.7 · kw 7.7 · competitor 7.5 · a11y 7.8 · brand 7.8
+  (min 7.5, avg 7.7) — PLATEAU BROKEN (+0.34 avg over R4-5's ~7.4). Trajectory:
+  6.7 → 6.9 → 7.24 → 7.44 → 7.36 → 7.7.
+- `478b0ac2` shelf hides archived behind an 'Archived (N)' disclosure (grid
+  was rendering archived rows — surfaced by the recapture).
+- `d3d769ba` Wave N (N1 chrome lane + N2 chat + N3 truth + N4 marketplace/
+  landing; combined gate web tsc 0 · www tsc 0 · vitest 1343/1343): chat at
+  2 chrome bars w/ composer agent strip + hover Copy/real-Retry + honey user
+  bubble · bell count beside the glyph (overlap occluded the 14px bell —
+  cropped-crop diagnosis) · dark --text-dim AA bump · onboarding radial focal
+  fade + single-halo Continue · HexAvatar honey-band ramp + Created-line +
+  #id collision chip · memory md-stripped previews + 'to review' button-chip
+  + unscored quiet chip · ModelGate disabled-state + failing-provider glyph ·
+  marketplace 860px column + human source-form chips + connected warmth ·
+  landing scrollbar + warm persona ramp · 8 BENCHMARK anchors deleted (API).
+- Round-7 capture in flight → judge round 7.
+
+**Round 7 verdict + Wave O (2026-07-06 ~09:30):**
+- Round-7 scores: design 7.5 · kw 7.6 · competitor 7.8 · a11y **8.0** (first 8!)
+  · brand 7.5 (min 7.5, avg 7.68 — level with R6; composition improved).
+  Trajectory: 6.7 → 6.9 → 7.24 → 7.44 → 7.36 → 7.7 → 7.68.
+- New #1s are structural: ELEVATION SYSTEM (all cards flat 1px hairline) +
+  CHIP TAXONOMY (5 pill styles in one viewport). Plus a 4/5 HIGH: home hero
+  self-contradiction ('away 1 day' vs 'last active 2d ago').
+- Wave O in flight: O1 (home one-truth clause, composer chip grammar +
+  cropped-icons fix, memory title humanization, review-debt reframe) ·
+  O2 (shadow-token elevation sweep, full-slug collision chips, agents 6
+  suggestions + KPI relocation + meta legibility, provider chip state trio +
+  single alert, statusbar text bumps) · my lane DONE: unconditional
+  scrollbar-color (kills the recurring native-thumb artifact), light scrim
+  hex 0.04, landing filler fade completion, hero LoCoMo proof strip
+  (86.49 — canonical number only).
+
+**Round 8 verdict (2026-07-06 ~10:30) — SESSION CLOSE:**
+- Round-8: design **8.0** (home 8.5 · memory 8.3 · hero 8.5 · chat 8.0 ·
+  agents 8.0) · kw 7.5 · competitor 7.5 · a11y 7.4 · brand 7.5
+  (min 7.4, avg 7.58).
+- Full trajectory: 6.7 → 6.9 → 7.24 → 7.44 → 7.36 → 7.7 → 7.68 → 7.58.
+  **Second plateau ~7.6-7.7.** Convergent queue emptied 3× (R4/R5/R7); R8
+  asks = 3 surface redesigns + regime artifacts (autoFocus CTA ring reads as
+  'stuck focus' in every capture; headless overlay scrollbars).
+- Straggler BENCHMARK frame (id 529) deleted.
+- QUEUED NEXT ARC: settings provider-selector redesign (6.8, worst) ·
+  workspace card anatomy v3 (7.0) · home card-system unification ·
+  judging-regime switch to video/live · founder branch review (29 commits,
+  NOT pushed).
