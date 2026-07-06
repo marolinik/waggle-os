@@ -223,7 +223,9 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
             {ctx.recentThreads.slice(0, 4).map(t => (
               <button key={t.id} onClick={() => onSelectSession?.(t.id)}
                 className="w-full flex items-center justify-between text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 transition-colors">
-                <span className="truncate">{t.title}</span>
+                {/* Untitled sessions arrive as their raw id ("session-<uuid>") —
+                    never surface a machine slug as a conversation title. */}
+                <span className="truncate">{/^(session[-_ ]?)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t.title.trim()) ? 'Untitled conversation' : t.title}</span>
                 <ChevronRight className="w-3 h-3 shrink-0" />
               </button>
             ))}
