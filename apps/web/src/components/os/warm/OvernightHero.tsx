@@ -29,7 +29,7 @@ export function OvernightHero({
   return (
     <section
       className={cn(
-        'relative overflow-hidden rounded-[26px] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-7 shadow-[var(--shadow)]',
+        'relative overflow-hidden rounded-[var(--r-xl)] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-7 shadow-[var(--shadow-elevated)]',
         className,
       )}
     >

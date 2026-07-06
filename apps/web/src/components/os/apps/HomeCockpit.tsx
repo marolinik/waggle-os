@@ -180,10 +180,10 @@ function CockpitSkeleton() {
     <div className="mx-auto h-full max-w-[920px] animate-pulse overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit-loading">
       <div className="mb-2 h-4 w-44 rounded bg-[var(--surface-2)]" />
       <div className="mb-8 h-12 w-80 rounded-lg bg-[var(--surface-2)]" />
-      <div className="mb-8 h-40 rounded-[26px] border border-[var(--line-soft)] bg-[var(--surface)]" />
+      <div className="mb-8 h-40 rounded-[var(--r-xl)] border border-[var(--line-soft)] bg-[var(--surface)]" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[0, 1].map(i => (
-          <div key={i} className="h-28 rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)]" />
+          <div key={i} className="h-28 rounded-[var(--r-lg)] border border-[var(--line-soft)] bg-[var(--surface)]" />
         ))}
       </div>
     </div>
@@ -197,7 +197,7 @@ function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCr
       <h1 className="mb-1 font-display text-[clamp(28px,4vw,40px)] font-semibold leading-tight text-[var(--text)]">{greeting}</h1>
       <p className="mb-8 text-[15px] text-[var(--text-muted)]">Your AI should know how you work. Let's set up your first workspace.</p>
 
-      <div className="relative overflow-hidden rounded-[26px] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-8 text-center shadow-[var(--shadow)]">
+      <div className="relative overflow-hidden rounded-[var(--r-xl)] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-7 text-center shadow-[var(--shadow-elevated)]">
         <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(circle,var(--honey-glow),transparent_70%)]" />
         <div className="relative">
           <HexAvatar label="W" size={48} className="mx-auto mb-4" />
@@ -297,7 +297,7 @@ function StartHereCard({
 
   return (
     <section
-      className="mb-9 overflow-hidden rounded-[22px] border border-[var(--honey-line)] bg-[linear-gradient(145deg,var(--honey-wash),var(--surface))] p-5 shadow-[var(--shadow-honey)]"
+      className="mb-9 overflow-hidden rounded-[var(--r-xl)] border border-[var(--honey-line)] bg-[linear-gradient(145deg,var(--honey-wash),var(--surface))] p-6 shadow-[var(--shadow-elevated)]"
       data-testid="home-cockpit-start-here"
     >
       <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey-text)]">
@@ -369,7 +369,7 @@ function RecentWorkspacesPanel({
         {cards.map(ws => (
           <div
             key={ws.id}
-            className="group relative rounded-[18px] border border-[var(--line-soft)] bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
+            className="group relative rounded-[var(--r-lg)] border border-[var(--line-soft)] bg-card p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
             data-testid={`home-cockpit-ws-${ws.id}`}
           >
             <button type="button" onClick={() => onOpenDesktop(ws.id)} className="block w-full text-left">

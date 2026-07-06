@@ -132,7 +132,9 @@ describe('ModelGate', () => {
     mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: false, verified: true, error: 'rejected' });
     render(<ModelGate />);
-    expect(await screen.findByText(/not responding/i)).toBeInTheDocument();
+    // Banner-specific copy — the Wave P provider tile ALSO carries "not
+    // responding" now, so target the unique banner phrase to stay unambiguous.
+    expect(await screen.findByText(/key found but not responding/i)).toBeInTheDocument();
     // Grid auto-opened on the offending provider → its key input is visible.
     expect(await screen.findByLabelText(/api key for anthropic/i)).toBeInTheDocument();
   });

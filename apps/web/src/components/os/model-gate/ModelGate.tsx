@@ -22,7 +22,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Check, AlertTriangle, Loader2, KeyRound, Cpu, ExternalLink } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import { useProviders } from '@/hooks/useProviders';
+import { useProviders, type Provider } from '@/hooks/useProviders';
 import { Input } from '@/components/ui/input';
 
 interface ModelGateProps {
@@ -220,6 +220,52 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     }
   };
 
+  // Round-P provider selector: a real filled-tile grid (not a pill row). The
+  // fill/glyph encode key state at a glance; failing = the live probe rejected
+  // the stored key (same `probe.failedProvider` signal the old chip carried).
+  const keyedProviders = keyProviders.filter((p) => p.hasKey);
+  const unkeyedProviders = keyProviders.filter((p) => !p.hasKey);
+
+  const renderProviderTile = (p: Provider) => {
+    const failing = probe.status === 'failed' && probe.failedProvider === p.id;
+    const isSelected = selected === p.id;
+    const stateWord = failing ? 'not responding' : p.hasKey ? 'Key in Vault' : 'No key yet';
+    // Fill trio: keyed = honey wash · failing = risk wash · unkeyed = transparent outline.
+    const fill = failing
+      ? 'bg-[var(--risk-wash)] border-[var(--risk)]/40'
+      : p.hasKey
+        ? 'bg-[var(--honey-wash)] border-[var(--honey-line)]'
+        : 'bg-transparent border-[var(--line-soft)]';
+    return (
+      <button
+        key={p.id}
+        type="button"
+        aria-pressed={isSelected}
+        onClick={() => handleSelect(p.id)}
+        className={`flex flex-col gap-1 rounded-[12px] border p-3 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] ${fill} ${
+          isSelected ? 'ring-2 ring-[var(--honey-line)] shadow-[var(--shadow-card)]' : ''
+        }`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className={`truncate text-[13px] font-semibold ${p.hasKey || failing ? 'text-foreground' : 'text-[var(--text-2)]'}`}>
+            {p.name}
+          </span>
+          {/* A keyed-but-failing provider shows the risk glyph — the honey check
+              must never contradict the "not responding" state. */}
+          {failing ? (
+            <AlertTriangle className="size-3.5 shrink-0 text-[var(--risk)]" aria-label="key not responding" />
+          ) : p.hasKey ? (
+            <Check className="size-3.5 shrink-0 text-honey" aria-label="key configured" />
+          ) : null}
+        </div>
+        <span className="text-[11px] text-[var(--text-muted)]">
+          {p.models.length > 0 ? `${p.models.length} model${p.models.length === 1 ? '' : 's'} · ` : ''}
+          {stateWord}
+        </span>
+      </button>
+    );
+  };
+
   const wrap = variant === 'onboarding' ? 'space-y-5' : 'space-y-4';
 
   return (
@@ -242,8 +288,10 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
           </span>
         </div>
       ) : probe.status === 'failed' ? (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2.5 text-sm text-foreground">
-          <AlertTriangle className="size-4 shrink-0 text-yellow-500" aria-hidden />
+        // Same state, same tone: the failing provider TILE below uses --risk, so the
+        // banner announcing that state must too (two tones for one truth reads as a bug).
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-[var(--risk)]/30 bg-[var(--risk-wash)] px-3 py-2.5 text-sm text-foreground">
+          <AlertTriangle className="size-4 shrink-0 text-[var(--risk)]" aria-hidden />
           <span>Key found but not responding — you can fix it now or continue.</span>
         </div>
       ) : probe.status === 'unverified' ? (
@@ -305,41 +353,33 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
           <p className="text-xs text-muted-foreground">
             Bring your own key — it’s stored encrypted in your Vault and never leaves your machine.
           </p>
-          <div className="flex flex-wrap gap-2">
-            {providersLoading && keyProviders.length === 0 ? (
-              <span className="text-sm text-muted-foreground">Loading providers…</span>
-            ) : (
-              keyProviders.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  aria-pressed={selected === p.id}
-                  onClick={() => handleSelect(p.id)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                    selected === p.id
-                      ? 'border-primary bg-primary/10 text-foreground'
-                      : p.hasKey
-                        // Round-7 fix 4a state trio: FILLED = keyed, OUTLINE
-                        // (transparent bg) = merely supported, amber glyph
-                        // below = keyed-but-failing. No-key chips carry no
-                        // checkmark — nothing to confirm.
-                        ? 'border-border bg-card text-foreground hover:border-primary/40'
-                        : 'border-border bg-transparent text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {/* Round-6 fix 3b: a provider whose stored key failed the
-                      live probe shows an amber warning on ITS chip — the
-                      green check must not contradict the failure banner. */}
-                  {probe.status === 'failed' && probe.failedProvider === p.id ? (
-                    <AlertTriangle className="size-3 text-yellow-500" aria-label="key not responding" />
-                  ) : p.hasKey ? (
-                    <Check className="size-3.5 text-honey" aria-label="key configured" />
-                  ) : null}
-                  {p.name}
-                </button>
-              ))
-            )}
-          </div>
+          {providersLoading && keyProviders.length === 0 ? (
+            <span className="text-sm text-muted-foreground">Loading providers…</span>
+          ) : keyedProviders.length > 0 ? (
+            // With ≥1 keyed provider, split into "yours" then "add" so the
+            // configured providers read as a distinct, owned set.
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)]">Your providers</p>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                  {keyedProviders.map(renderProviderTile)}
+                </div>
+              </div>
+              {unkeyedProviders.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)]">Add a provider</p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                    {unkeyedProviders.map(renderProviderTile)}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            // First-run (nothing keyed): one flat grid, no group labels.
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+              {keyProviders.map(renderProviderTile)}
+            </div>
+          )}
 
           {selectedProvider && (
             <div className="space-y-2 rounded-lg border border-border bg-card/60 p-3">

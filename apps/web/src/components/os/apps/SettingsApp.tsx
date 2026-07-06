@@ -35,6 +35,7 @@ import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
 import CoverageCompassCard from '@/components/os/settings/CoverageCompassCard';
 import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
+import { SectionLabel } from '@/components/os/warm';
 
 type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
@@ -218,38 +219,38 @@ const SettingsApp = () => {
 
   return (
     <div className="flex h-full">
-      {/* Tab sidebar */}
-      <div className="w-36 border-r border-border/50 p-2 space-y-0.5 shrink-0 overflow-auto" role="tablist" aria-label="Settings sections">
-        {visibleTabs.map(tab => {
-          const locked = LOCKED_TABS[tab.id];
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-                activeTab === tab.id ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-              }`}
-            >
-              <tab.icon className="w-3.5 h-3.5" />
-              {tab.label}
-              {locked && <Lock className="w-3 h-3 ml-auto text-muted-foreground/50" />}
-            </button>
-          );
-        })}
-      </div>
+      {/* Tab sidebar — tabs scroll; the density control is anchored to its foot
+          (Wave P: it gates which tabs exist, so it lives with what it controls). */}
+      <div className="w-36 border-r border-border/50 shrink-0 flex flex-col">
+        <div className="flex-1 overflow-auto p-2 space-y-0.5" role="tablist" aria-label="Settings sections">
+          {visibleTabs.map(tab => {
+            const locked = LOCKED_TABS[tab.id];
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                tabIndex={activeTab === tab.id ? 0 : -1}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                  activeTab === tab.id ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                }`}
+              >
+                <tab.icon className="w-3.5 h-3.5" />
+                {tab.label}
+                {locked && <Lock className="w-3 h-3 ml-auto text-muted-foreground/50" />}
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Content */}
-      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
-
-        {/* PR5 D6 — global "Show:" disclosure control (relocated from the General
-            tab's Dock Experience select). One dial governs both the dock and this
-            Settings rail's depth; reuses useOnboarding().tier — no second key. */}
-        <div className="flex items-center justify-end gap-2 mb-4">
-          <span className="text-[11px] text-muted-foreground">Show</span>
-          <div className="inline-flex rounded-lg bg-muted/40 p-0.5" role="group" aria-label="Settings detail level">
+        {/* PR5 D6 / Wave P — the "Show" disclosure control. Anchored to the foot
+            of the rail it governs (was a floating top-right segmented control).
+            One dial governs both the dock and this Settings rail's depth; reuses
+            useOnboarding().tier — no second key. */}
+        <div className="border-t border-border/50 p-2 space-y-1">
+          <span className="block px-1 text-[11px] text-muted-foreground">Show</span>
+          <div className="flex flex-col gap-0.5" role="group" aria-label="Settings detail level">
             {([
               { id: 'simple', label: 'Essential' },
               { id: 'professional', label: 'Standard' },
@@ -260,10 +261,10 @@ const SettingsApp = () => {
                 type="button"
                 aria-pressed={(onboardingState.tier || 'simple') === opt.id}
                 onClick={() => updateOnboarding({ tier: opt.id as UserTier })}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                className={`w-full text-left px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
                   (onboardingState.tier || 'simple') === opt.id
                     ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
                 {opt.label}
@@ -271,6 +272,10 @@ const SettingsApp = () => {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
         {/* ═══ GENERAL ═══ */}
         {activeTab === 'general' && (
@@ -296,13 +301,14 @@ const SettingsApp = () => {
             </div>
 
             {/* PR5 D10 — local-first reassurance + the dock/plan distinction. The
-                disclosure selector that used to live here is now the top-right
-                "Show" control (D6); QW-5's "dock tier ≠ billing plan" note is
-                preserved here so the distinction isn't lost. */}
+                disclosure selector that used to live here is now the "Show"
+                control at the foot of the settings rail (D6/Wave P); QW-5's
+                "dock tier ≠ billing plan" note is preserved here so the
+                distinction isn't lost. */}
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <p className="text-xs font-display font-medium text-foreground mb-1">Local-first</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (top-right) sets how much of the app and these settings you see; it’s independent of your Pro/Teams plan, and every app stays reachable via Ctrl+K.
+                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (at the foot of the settings sidebar) sets how much of the app and these settings you see; it’s independent of your Pro/Teams plan, and every app stays reachable via Ctrl+K.
               </p>
             </div>
 
@@ -434,7 +440,7 @@ const SettingsApp = () => {
               }}
             />
 
-            <h3 className="text-sm font-display font-semibold text-foreground">Model Configuration</h3>
+            <SectionLabel>Model Configuration</SectionLabel>
 
             {/* Default model selector — from /api/providers */}
             <div>
@@ -483,43 +489,23 @@ const SettingsApp = () => {
               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save Model Settings
             </button>
 
-            {/* Provider key status */}
-            <div className="border-t border-border/30 pt-4">
-              <h4 className="text-xs font-display font-semibold text-foreground mb-3">Provider API Keys</h4>
-
-              <div className="flex items-start gap-2.5 p-3 mb-3 rounded-lg bg-primary/10 border border-primary/30">
+            {/* Provider keys — Wave P: the per-provider status list repeated the
+                ModelGate tile grid above 1:1, so it's collapsed to the Vault
+                pointer (the padlock note is the whole zone now). */}
+            <div className="border-t border-border/30 pt-4 space-y-3">
+              <SectionLabel>Provider Keys</SectionLabel>
+              <div className="flex items-start gap-2.5 p-3 rounded-lg bg-primary/10 border border-primary/30">
                 <Lock className="w-4 h-4 mt-0.5 text-honey shrink-0" />
                 <p className="text-xs text-foreground leading-relaxed">
-                  Keys are encrypted in the <strong className="text-honey">Vault</strong>. Add or replace a key above, or manage every secret in the <strong className="text-honey">Vault</strong> app from the dock.
+                  Keys live in the <strong className="text-honey">Vault</strong> — manage them above or in the <strong className="text-honey">Vault</strong> app from the dock.
                 </p>
               </div>
-
-              <div className="space-y-1.5">
-                {providers.filter(p => p.requiresKey).map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-2 rounded-lg bg-secondary/30 border border-border/30">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${p.hasKey ? 'bg-primary' : 'bg-muted-foreground/40'}`} />
-                      <span className="text-xs text-foreground">{p.name}</span>
-                      {p.badge && <span className="text-[11px] text-honey/60">({p.badge})</span>}
-                      <span className="text-[11px] text-muted-foreground">{p.models.length} models</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      {p.hasKey ? (
-                        <span className="text-[11px] text-honey">✓ Key configured</span>
-                      ) : (
-                        <span className="text-[11px] text-muted-foreground">No key</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
             </div>
 
             {/* Search provider status */}
-            <div className="border-t border-border/30 pt-4">
-              <h4 className="text-xs font-display font-semibold text-foreground mb-2">Search Providers</h4>
-              <p className="text-[11px] text-muted-foreground mb-2">Active: <strong>{activeSearch}</strong> (highest priority with a key)</p>
+            <div className="border-t border-border/30 pt-4 space-y-2">
+              <SectionLabel>Search Providers</SectionLabel>
+              <p className="text-[11px] text-muted-foreground">Active: <strong>{activeSearch}</strong> (highest priority with a key)</p>
               <div className="space-y-1">
                 {search.map(s => (
                   <div key={s.id} className="flex items-center gap-2 text-xs">

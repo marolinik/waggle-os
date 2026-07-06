@@ -20,7 +20,7 @@
  * `/workspaces/:id`); with no prop it degrades to selection-only.
  */
 import { useMemo, useState } from 'react';
-import { Search, Plus, Hexagon, AlertTriangle } from 'lucide-react';
+import { Search, Plus, Hexagon, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
@@ -144,11 +144,18 @@ function WorkspaceCard({
   isDuplicateNameAndGroup?: boolean;
 }) {
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
-  const lastActive = formatRelative(ws.lastActive ?? ws.updatedAt);
+  const activeAgo = formatRelative(ws.lastActive ?? ws.updatedAt);
   const isHealthy = ws.health === 'healthy' && ws.status !== 'archived';
   // The server list rows carry WorkspaceConfig.created; the web type doesn't
   // declare it yet — narrow local read, no fabrication when absent.
   const createdLine = formatCreated((ws as Workspace & { created?: string }).created);
+  // Round-8 v3 fix 2: the activity-preview body for description-less cards.
+  // Composed from real server stamps only — created + last-active — e.g.
+  // "Created 3w ago · active 2w ago". No `summary` field exists on the list
+  // payload (verified in lib/types Workspace), so none is invented. Each part
+  // is conditional; an all-absent card renders no body line at all.
+  const activityLine =
+    [createdLine, activeAgo ? `active ${activeAgo}` : null].filter(Boolean).join(' · ') || null;
 
   // Honesty: only render a memory count when the field actually exists.
   const hasMemoryCount = typeof ws.memoryCount === 'number';
@@ -168,7 +175,7 @@ function WorkspaceCard({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
       aria-label={`Open ${ws.name}`}
-      className="group relative cursor-pointer rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="group relative flex min-h-[132px] cursor-pointer flex-col rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       <div className="mb-3 flex items-center gap-3">
@@ -209,21 +216,23 @@ function WorkspaceCard({
         )}
       </div>
 
-      {/* No min-h: a short (or absent) description must not leave a dead band
-          between the title block and the meta row (H2 fix 3). A description-
-          less card gets ONE quiet honest activity line instead (fix 1b) —
-          "Created <when>" from the real server stamp, never invented copy. */}
+      {/* Body — the activity-preview zone. It grows (flex-1 via the flex-col
+          root) so the footer pins to a shared baseline. Real data only: a
+          description (2-line clamp) when present, otherwise the honest
+          created/last-active activity line. Never a dead band, never invented
+          copy. */}
       {ws.description ? (
-        <p className="mb-3 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+        <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
           {ws.description}
         </p>
-      ) : createdLine ? (
-        <p className="mb-3 text-[13px] leading-[1.5] text-[var(--text-muted)]">{createdLine}</p>
+      ) : activityLine ? (
+        <p className="text-[13px] leading-[1.5] text-[var(--text-muted)]">{activityLine}</p>
       ) : null}
 
-      {/* Quiet meta row — real fields only (W2B honesty: no fabricated count,
-          no filler dash; an absent field simply doesn't render). */}
-      <div className="flex items-center gap-3.5 text-[12px] text-[var(--text-dim)]">
+      {/* Meta footer — pinned to the card's bottom baseline (mt-auto) so EVERY
+          card's meta row aligns regardless of body length (round-8 fix 1).
+          Real fields only (W2B honesty: no fabricated count, no filler dash). */}
+      <div className="mt-auto flex items-center gap-3.5 pt-3 text-[12px] text-[var(--text-dim)]">
         {hasMemoryCount && (
           <span className="inline-flex items-center gap-1.5">
             <Hexagon className="h-3 w-3" strokeWidth={1.8} />
@@ -235,23 +244,31 @@ function WorkspaceCard({
             {ws.sessionCount} {ws.sessionCount === 1 ? 'session' : 'sessions'}
           </span>
         )}
-        {lastActive && (
-          <span className="font-mono text-[11px]">{lastActive}</span>
-        )}
         {isHealthy && (
           <span className="inline-flex items-center gap-1.5 text-[var(--healthy)]">
             <DotLive tone="healthy" size={7} /> healthy
           </span>
         )}
-        {/* Interactive-within-interactive: keep menu clicks out of the card's
-            open handler (keyboard is guarded by the card's target check). */}
-        <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
-          <WorkspaceActionsMenu
-            workspace={{ id: ws.id, name: ws.name, status: ws.status }}
-            onChanged={onChanged}
-            buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
-          />
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {/* Round-8 fix 3: a quiet "Open →" cue on hover/focus makes the
+              whole-card open target legible. Decorative — the card already
+              carries the "Open <name>" aria-label — so it's aria-hidden. */}
+          <span
+            aria-hidden
+            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--honey-text)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+          >
+            Open <ArrowRight className="h-3 w-3" />
+          </span>
+          {/* Interactive-within-interactive: keep menu clicks out of the card's
+              open handler (keyboard is guarded by the card's target check). */}
+          <span onClick={(e) => e.stopPropagation()}>
+            <WorkspaceActionsMenu
+              workspace={{ id: ws.id, name: ws.name, status: ws.status }}
+              onChanged={onChanged}
+              buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
+            />
+          </span>
+        </div>
       </div>
     </div>
   );

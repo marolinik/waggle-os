@@ -2,8 +2,8 @@
  * PR5 Phase B — Settings reskin/reconcile pins:
  *  - Settings opens on the Models tab with the shared ModelGate leading (D: "Models leads").
  *  - Billing rail tab renamed to "Plan" (D8).
- *  - The top-right "Show" disclosure control (D6) drives the rail, with Advanced
- *    surfacing only at Everything (D7).
+ *  - The "Show" disclosure control (D6, anchored to the foot of the tab rail)
+ *    drives the rail, with Advanced surfacing only at Everything (D7).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
@@ -59,7 +59,7 @@ describe('PR5 Settings reskin', () => {
     expect(screen.queryByRole('tab', { name: /^billing$/i })).toBeNull();
   });
 
-  it('the top-right Show control gates Advanced to Everything (D6 + D7)', async () => {
+  it('the Show control gates Advanced to Everything (D6 + D7)', async () => {
     await renderSettings();
     await screen.findByRole('group', { name: /settings detail level/i });
     // Default disclosure (Essential) hides Advanced from the rail.
