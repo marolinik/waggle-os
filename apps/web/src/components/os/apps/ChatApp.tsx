@@ -930,8 +930,12 @@ const ChatApp = ({
         )}
 
         {isLoading && (
-          <div className="shrink-0 h-0.5 w-full bg-muted/30 overflow-hidden">
-            <div className="h-full w-1/3 bg-primary/60 animate-pulse rounded-full"
+          // Wave W Lane E fix 1 (video legibility): the streaming bar read as a
+          // near-invisible hairline at 2fps — h-0.5 (2px) with a /60 segment. One
+          // visible tier up (h-1 + full-primary segment) so the send→streaming arc
+          // is legible on capture. The sliding shimmer motion is unchanged.
+          <div className="shrink-0 h-1 w-full bg-muted/30 overflow-hidden">
+            <div className="h-full w-1/3 bg-primary animate-pulse rounded-full"
               style={{ animation: 'shimmer 1.5s ease-in-out infinite', transformOrigin: 'left' }} />
           </div>
         )}
@@ -1012,8 +1016,11 @@ const ChatApp = ({
                     // provenance line). Signature motion: the bee "thinks" — a
                     // soft breathing honey ring while THIS turn is streaming
                     // (reduced-motion users keep a static ring via the CSS guard).
+                    // Wave W Lane E fix 1: the faint --honey-line ring was too
+                    // subtle to read as "streaming" on video; one tier up to the
+                    // saturated --honey-500 so the bee-shimmer indicator lands.
                     isLoading && msg === messages[messages.length - 1]
-                      ? 'ring-2 ring-[var(--honey-line)] dot-live'
+                      ? 'ring-2 ring-[var(--honey-500)] dot-live'
                       : ''
                   }`}
                 >

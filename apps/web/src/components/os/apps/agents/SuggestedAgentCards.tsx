@@ -1,3 +1,4 @@
+import { useReducedMotion } from 'framer-motion';
 import { Plus, ArrowRight } from 'lucide-react';
 import { getPersonaAvatar, type PersonaConfig } from '@/lib/personas';
 
@@ -29,6 +30,14 @@ const WHY: Record<string, string> = {
  * header, responsive card grid with the bee mascots front and center.
  */
 const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: SuggestedAgentCardsProps) => {
+  // Wave W (Lane A) item 2: the suggested bee cards share the shelf's entrance
+  // grammar — the memory `card-enter` keyframe (8px rise + fade, ease-out),
+  // ~40ms stagger, capped so the last card settles ≤500ms; the roster strip
+  // follows one beat after the last card. `backwards` fill holds the hidden
+  // start-state through the delay without pinning the cards' hover -translate
+  // tier. Reduced motion opts out entirely (instant, no rise/fade).
+  const reduceMotion = !!useReducedMotion();
+  const stripDelayMs = (Math.min(personas.length - 1, 4) + 1) * 40;
   if (personas.length === 0) return null;
   return (
     <div className="mt-5" data-testid="suggested-agents">
@@ -39,8 +48,11 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
         Your hive is quiet — spawn a specialist and put it to work.
       </p>
       <ul className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
-        {personas.map((p) => (
-          <li key={p.id}>
+        {personas.map((p, i) => (
+          <li
+            key={p.id}
+            style={reduceMotion ? undefined : { animation: 'card-enter 0.32s ease-out backwards', animationDelay: `${Math.min(i, 4) * 40}ms` }}
+          >
             <button
               type="button"
               onClick={() => onPick(p)}
@@ -85,7 +97,11 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
           browse-all card with a small overlapping avatar sample + the count.
           Names live in the Templates catalog it opens. No new data fetch. */}
       {allPersonas && allPersonas.length > 0 && onBrowseAll && (
-        <div className="mt-5" data-testid="persona-roster">
+        <div
+          className="mt-5"
+          data-testid="persona-roster"
+          style={reduceMotion ? undefined : { animation: 'card-enter 0.32s ease-out backwards', animationDelay: `${stripDelayMs}ms` }}
+        >
           <button
             type="button"
             onClick={onBrowseAll}

@@ -73,17 +73,18 @@ export default function MemoryCenterTab({
   // spinning (R13-V1 finding). A fresh remount always lands on the default
   // filters, so the initial seed keys on those; the live key (below) also folds
   // in the active filters for the mid-session mind-switch path.
-  const initialCacheKey = memoryListCacheKey(['mc', mind, wsParam, 'active', '', 0, '']);
+  const initialCacheKey = memoryListCacheKey(['mc', mind, wsParam, '', '', 0, '']);
   const [memories, setMemories] = useState<Memory[]>(() => readMemoryListCache(initialCacheKey) ?? []);
   const [loading, setLoading] = useState(() => readMemoryListCache(initialCacheKey) === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'' | MemoryKind>('');
-  // Default to the curated Active view: deprecated/superseded frames are
-  // version archaeology — surfacing them by default reads as "my memory is
-  // full of junk" to a first-time user. 'All' stays one click away.
-  const [status, setStatus] = useState<'' | MemoryStatus>('active');
+  // Wave W Lane D (item 2): land on the FULL recent list (density). The curated
+  // 'active' view hid the imported backlog (status=unreviewed), which left a
+  // fresh open reading as "one card in a dark field". 'All' is now the honest
+  // default; the curated 'active' view stays one click away as a labeled chip.
+  const [status, setStatus] = useState<'' | MemoryStatus>('');
   const [minConfidence, setMinConfidence] = useState(0);
 
   // Wave T Lane D (item 2): the live cache key folds in the server-side filters
@@ -374,8 +375,8 @@ export default function MemoryCenterTab({
   // list so a filtered-down set never reads as "one card floating in a black
   // void". `displayed` is the deduped display list (F22) — computed once, reused
   // by both the header and the grid. `filterDescriptor` names the active filters;
-  // status defaults to the curated Active view, so it is present unless the user
-  // picks All.
+  // Wave W Lane D (item 2) makes the full recent list (All) the default, so the
+  // descriptor rides the header only once the user narrows to a specific view.
   const displayed = useMemo(() => dedupeMemoriesForDisplay(memories), [memories]);
   const filterDescriptor = useMemo(() => {
     const parts: string[] = [];

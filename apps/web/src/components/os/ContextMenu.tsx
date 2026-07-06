@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { isActionItem, actionIndexForRenderItem } from '../../lib/context-menu-index';
 
 export interface ContextMenuItem {
@@ -15,11 +15,24 @@ interface ContextMenuProps {
   items: ContextMenuItem[];
   position: { x: number; y: number };
   onClose: () => void;
+  /**
+   * Wave W Lane B (item 2, opt-in — default-preserving): when set, the menu
+   * scales in FROM this transform-origin corner (150ms scale 0.96→1 + fade) so
+   * it reads as growing out of the trigger, and adopts the roomier "comfortable"
+   * item density (matching the marketplace row spacing). Callers that omit it
+   * render exactly as before. Set by WorkspaceActionsMenu to the kebab corner.
+   */
+  origin?: string;
 }
 
-const ContextMenu = ({ items, position, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ items, position, onClose, origin }: ContextMenuProps) => {
   const ref = useRef<HTMLDivElement>(null);
   const [focusIndex, setFocusIndex] = useState(-1);
+  const reduceMotion = useReducedMotion();
+  const cornered = origin !== undefined;
+  // Reduced motion drops the scale (fade only) for the cornered entrance; every
+  // other consumer keeps its existing behavior untouched.
+  const enterScale = cornered && !reduceMotion ? 0.96 : cornered ? 1 : 0.95;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -60,11 +73,11 @@ const ContextMenu = ({ items, position, onClose }: ContextMenuProps) => {
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, scale: 0.95 }}
+      initial={{ opacity: 0, scale: enterScale }}
       animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.1 }}
-      style={style}
+      exit={{ opacity: 0, scale: enterScale }}
+      transition={{ duration: cornered ? 0.15 : 0.1 }}
+      style={cornered ? { ...style, transformOrigin: origin } : style}
       className="min-w-[160px] py-1 rounded-xl glass-strong border border-border/50 shadow-xl"
     >
       {items.map((item, i) => {
@@ -75,7 +88,8 @@ const ContextMenu = ({ items, position, onClose }: ContextMenuProps) => {
             key={i}
             onClick={() => { item.onClick(); onClose(); }}
             disabled={item.disabled}
-            className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors
+            className={`w-full flex items-center text-xs text-left transition-colors
+              ${cornered ? 'gap-2.5 px-3.5 py-2' : 'gap-2 px-3 py-1.5'}
               ${item.danger ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-muted/50'}
               ${item.disabled ? 'opacity-40 cursor-not-allowed' : ''}
               ${focusIndex === currentActionIndex ? 'bg-muted/50' : ''}`}

@@ -169,10 +169,18 @@ export const VALUE_PROPS: readonly ValueProp[] = [
   { icon: Wrench, title: 'Real tools', desc: 'Search, draft, code, plan — not just chat' },
 ] as const;
 
-/** Shared framer-motion transition for step content */
+/**
+ * Shared framer-motion transition for step content.
+ * Wave W Lane E fix 2: directional (horizontal) slide instead of the old
+ * vertical nudge — the incoming step enters from the right (x:24) as the
+ * outgoing one exits left (x:-24), so welcome→step-1 (and every later step)
+ * reads as forward spatial motion rather than a fade-in-place. ~200ms.
+ * Motion-safe: the wizard wraps steps in <MotionConfig reducedMotion="user">,
+ * which drops the x transform to a pure opacity fade for reduced-motion users.
+ */
 export const fadeSlide = {
-  initial: { opacity: 0, y: 12 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -12 },
+  initial: { opacity: 0, x: 24 },
+  animate: { opacity: 1, x: 0 },
+  exit: { opacity: 0, x: -24 },
   transition: { duration: 0.2 },
 } as const;

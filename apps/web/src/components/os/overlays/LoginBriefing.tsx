@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion, type MotionProps } from 'framer-motion';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
@@ -207,6 +207,12 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
   const [brag, setBrag] = useState<BragSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  // Wave W Lane B (item 1): bumped on every successful (re)load so the animated
+  // recall cards + workspace rows re-key and replay their entrance stagger on
+  // EVERY modal open (and post-error recovery) — not just the first paint, which
+  // is all a prefetched-warm open would otherwise show.
+  const [revealKey, setRevealKey] = useState(0);
+  const reduceMotion = useReducedMotion();
   // P1b D3: a failed briefing load must NOT render the Day-0 empty-hook —
   // backend failure was indistinguishable from a brand-new user (and the
   // brag header sat on 'Loading…' forever).
@@ -249,6 +255,8 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
       setSummaries(data.summaries);
       setBrag(data.brag);
       setErrored(false);
+      // Fresh content landed → re-key the entrance so the stagger plays now.
+      setRevealKey(k => k + 1);
     } catch {
       // P1b D3: surface the failure — do not let it fall through to the
       // Day-0 empty-hook render path.
@@ -268,6 +276,26 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const visibleSummaries = summaries.filter(
     (ws) => !(isCannedWorkspaceSummary(ws.summary) && ws.memoryCount === 0),
   );
+
+  // Cap to 2 on first paint so the briefing greets rather than walls (the full
+  // memory list lives in the Memory app). Hoisted so the entrance stagger can
+  // continue its index from the recall cards into the workspace rows below.
+  const shownHighlights = highlights.slice(0, 2);
+
+  // Wave W Lane B (item 1): the product's hero moment deserves an entrance beat
+  // that survives 2fps. Recall cards then workspace rows rise 8px + fade, ~80ms
+  // apart, after a short base delay so the beat reads AFTER the modal itself
+  // arrives. Reduced motion → instant (no rise/fade), honoring the header rule.
+  const ENTER_BASE = 0.12;
+  const ENTER_STAGGER = 0.08;
+  const entranceProps = (index: number): MotionProps =>
+    reduceMotion
+      ? { initial: false, animate: { opacity: 1, y: 0 } }
+      : {
+          initial: { opacity: 0, y: 8 },
+          animate: { opacity: 1, y: 0 },
+          transition: { delay: ENTER_BASE + index * ENTER_STAGGER, duration: 0.2, ease: 'easeOut' },
+        };
 
   // Wave Q Lane A (item 1): a failed briefing must never boot a blocking modal
   // stacked over the NoModelBanner + Home's own error state. When the fetch
@@ -435,14 +463,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                   <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider flex items-center gap-1.5">
                     <Lightbulb className="w-3 h-3" /> I remember
                   </p>
-                  {/* Cap to 2 on first paint so the briefing greets rather than
-                      walls — the full memory list lives in the Memory app. */}
-                  {highlights.slice(0, 2).map((h, i) => (
+                  {/* Cap to 2 on first paint (shownHighlights) so the briefing
+                      greets rather than walls — the full memory list lives in
+                      the Memory app. */}
+                  {shownHighlights.map((h, i) => (
                     <motion.div
-                      key={i}
-                      initial={{ opacity: 0, x: -8 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + i * 0.15 }}
+                      key={`${revealKey}-h-${i}`}
+                      {...entranceProps(i)}
                       // Wave R Lane E: the "I remember" recall cards wear a
                       // honey-wash tint so they read as a distinct species from
                       // the neutral-surface workspace rows below (brand judge).
@@ -472,9 +499,10 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                 // the list overflows its cap (>3 rows overflow max-h-60).
                 <div className="relative">
                   <div className="space-y-2 max-h-60 overflow-auto">
-                  {visibleSummaries.map(ws => (
-                    <button
-                      key={ws.id}
+                  {visibleSummaries.map((ws, j) => (
+                    <motion.button
+                      key={`${revealKey}-${ws.id}`}
+                      {...entranceProps(shownHighlights.length + j)}
                       onClick={() => { onOpenWorkspace(ws.id); onDismiss(); }}
                       className="w-full text-left p-3 rounded-xl bg-secondary/30 border border-border/30 hover:bg-secondary/50 hover:border-primary/30 transition-all group"
                     >
@@ -538,7 +566,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                           <span className="text-amber-400"><AlertTriangle className="w-2.5 h-2.5 inline mr-0.5" />{ws.pendingTasks.length} pending</span>
                         )}
                       </div>
-                    </button>
+                    </motion.button>
                   ))}
                   </div>
                   {visibleSummaries.length > 3 && (

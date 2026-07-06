@@ -125,6 +125,22 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     await waitFor(() => expect(mocks.adapter.listMemories).toHaveBeenCalledTimes(2));
   });
 
+  it('the hero count-up floors at ceil(15%) — never paints 0/near-0 above rendered rows (Wave W Lane D item 1)', async () => {
+    resetMemoryHeroSession();
+    // 20 rows → floor = ceil(20 * 0.15) = 3, so no animation frame can show 0/1/2.
+    mocks.adapter.listMemories.mockResolvedValue(
+      Array.from({ length: 20 }, (_, i) => mem({ id: String(i + 1), createdAt: iso(1) })),
+    );
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    // Once data lands the hero replaces the stat-bar skeleton.
+    await waitFor(() => expect(screen.getByTestId('memory-trust-total')).toBeTruthy());
+    // The count-up is monotonic from the floor, so every sampled frame is ≥ floor
+    // (and thus never the "0 Memories with data present" data-bug frame).
+    expect(Number(screen.getByTestId('memory-trust-total').textContent)).toBeGreaterThanOrEqual(3);
+    // …and it still settles on the true total.
+    await waitFor(() => expect(screen.getByTestId('memory-trust-total').textContent).toBe('20'));
+  });
+
   it('workspace mind passes the workspace param to mutations', async () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '9', createdAt: iso(1) })]);
     render(<MemoryTrustManage mind="workspace" workspaceId="w1" onToast={() => {}} />);

@@ -19,7 +19,8 @@
  * `onOpenWorkspace` to navigate into a workspace (same target HomeCockpit uses,
  * `/workspaces/:id`); with no prop it degrades to selection-only.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { Search, Plus, Hexagon, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -165,7 +166,7 @@ function FilterPills({
 
 // ── One workspace card (real fields only) ─────────────────────────────────
 function WorkspaceCard({
-  ws, onOpen, onChanged, isDuplicateName,
+  ws, onOpen, onChanged, isDuplicateName, enterDelayMs,
 }: {
   ws: Workspace;
   onOpen: () => void;
@@ -173,6 +174,9 @@ function WorkspaceCard({
   /** True when another workspace shares this name — surface a "duplicate name"
    *  pill (with the raw slug in its tooltip) so two same-named cards resolve. */
   isDuplicateName: boolean;
+  /** Wave W (Lane A) item 1: staggered-entrance delay (ms) for the once-per-visit
+   *  cascade. Absent → the card renders at rest with no entrance animation. */
+  enterDelayMs?: number;
 }) {
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
   const activeAgo = formatRelative(ws.lastActive ?? ws.updatedAt);
@@ -225,6 +229,13 @@ function WorkspaceCard({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
       aria-label={`Open ${ws.name}`}
+      // Wave W (Lane A) item 1: the shelf's staggered entrance reuses the memory
+      // surface's `card-enter` keyframe (8px rise + fade, ease-out). Fill mode is
+      // `backwards` (NOT the memory row's `both`): this card carries a hover/focus
+      // -translate-y lift, and a `forwards`/`both` fill would pin the transform and
+      // break that tier — `backwards` only holds the hidden start-state during the
+      // stagger delay, then hands transform back to the hover tier once it settles.
+      style={enterDelayMs != null ? { animation: 'card-enter 0.32s ease-out backwards', animationDelay: `${enterDelayMs}ms` } : undefined}
       className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
@@ -430,6 +441,14 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
   const [showCreate, setShowCreate] = useState(false);
 
+  // Wave W (Lane A) items 1+3: the shelf cascades in on its FIRST content paint
+  // this visit — each card rises 8px + fades on a ~40ms stagger (reusing the
+  // memory surface's `card-enter` keyframe, ≤500ms total). `entrancePlayedRef`
+  // freezes the choreography after that first paint so a later filter keystroke
+  // (which re-mounts cards) never replays it; reduced motion opts out entirely.
+  const reduceMotion = !!useReducedMotion();
+  const entrancePlayedRef = useRef(false);
+
   // The shelf hides dev/test artefacts (ai-os-audit-*, StressTest-*, E2E-Audit-*…)
   // so it reads as the user's real work — matching the switcher/home visible
   // count. (Previously the grid was the deliberately-unfiltered "full shelf"; the
@@ -440,6 +459,14 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
     () => workspaces.filter(w => !isDevNoiseWorkspace(w.name) && w.status !== 'archived'),
     [workspaces],
   );
+
+  // Freeze the entrance stagger once the grid has painted real content this
+  // visit — a ref (not state) so setting it never re-renders mid-flight and
+  // strips an in-flight card animation; later renders (filter/re-sort) then read
+  // it as played and skip the cascade.
+  useEffect(() => {
+    if (resolved && shelfWorkspaces.length > 0) entrancePlayedRef.current = true;
+  }, [resolved, shelfWorkspaces.length]);
   // Archived workspaces live under a collapsed disclosure at the bottom of the
   // shelf — hidden from the working grid, but still reachable so unarchive
   // (via the card's actions menu) stays possible in-UI.
@@ -588,10 +615,13 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3" data-testid="all-workspaces-grid">
-          {filtered.map(ws => (
+          {filtered.map((ws, i) => (
             <WorkspaceCard
               key={ws.id}
               ws={ws}
+              // ~40ms/card, capped so the last card settles ≤500ms (0.32s dur +
+              // 160ms max delay); frozen after the first paint (once-per-visit).
+              enterDelayMs={reduceMotion || entrancePlayedRef.current ? undefined : Math.min(i, 4) * 40}
               onOpen={() => handleOpen(ws.id)}
               onChanged={() => { void refreshWorkspaces(); }}
               isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}

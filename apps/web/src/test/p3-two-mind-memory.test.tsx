@@ -65,13 +65,16 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     expect(arg.workspaceId).toBeUndefined();
   });
 
-  it('defaults to the curated Active view, not All (deprecated stays hidden)', async () => {
+  it('lands on the full recent list (All), with the curated Active view as a filter chip (Wave W Lane D item 2)', async () => {
     mocks.adapter.listMemories.mockResolvedValue([]);
     await renderTab();
     await waitFor(() => expect(mocks.adapter.listMemories).toHaveBeenCalled());
     const arg = mocks.adapter.listMemories.mock.calls[0][0];
-    expect(arg.status).toBe('active');
-    expect(screen.getByRole('button', { name: 'Active' }).getAttribute('aria-pressed')).toBe('true');
+    // No status filter → the server returns the full recent list (density); the
+    // curated 'active' view is one click away as a labeled chip.
+    expect(arg.status).toBeUndefined();
+    expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Active' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it("mind='workspace' reads with {mind:'workspace', workspaceId}", async () => {
@@ -187,18 +190,22 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     });
   });
 
-  it('frames the list with a result-count header — count + active-filter descriptor (Wave V Lane A item 2)', async () => {
+  it('frames the list with a result-count header — count always, filter descriptor once narrowed (Wave V Lane A item 2 / Wave W Lane D item 2)', async () => {
     mocks.adapter.listMemories.mockResolvedValue([
       mem({ id: '1', title: 'First fact', content: 'Alpha content' }),
       mem({ id: '2', title: 'Second fact', content: 'Beta content' }),
     ]);
     await renderTab();
     await waitFor(() => expect(screen.getByLabelText('First fact')).toBeTruthy());
-    // Trust-hero parity: the header names the result count + the active filter
-    // (status defaults to the curated Active view), so a filtered-down set never
-    // reads as one card floating in a void.
+    // Trust-hero parity: the header always names the result count, so a
+    // filtered-down set never reads as one card floating in a void.
     expect(screen.getByText('2 memories')).toBeTruthy();
-    expect(screen.getByText(/filtered by Active/)).toBeTruthy();
+    // Wave W Lane D (item 2): the default is now the full recent list (All), so no
+    // filter descriptor rides the header at rest…
+    expect(screen.queryByText(/filtered by/)).toBeNull();
+    // …but selecting the curated Active view names it in the descriptor.
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+    await waitFor(() => expect(screen.getByText(/filtered by Active/)).toBeTruthy());
   });
 
   it('keeps a "loading the rest…" status over seeded rows while a refresh is in flight (Wave V Lane A item 2)', async () => {

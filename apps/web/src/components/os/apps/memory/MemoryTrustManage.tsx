@@ -144,13 +144,15 @@ let heroCountAnimatedThisSession = false;
 /** Wave T Lane D (item 3) / Wave V Lane A (item 1) — the hero total LANDS
  *  instead of popping: a ~600ms ease-out count-up the FIRST time a real count
  *  arrives THIS app session, then settles instantly on every later mount and
- *  refresh (so a tab-return never re-animates from 0). Honors
- *  prefers-reduced-motion (instant set, no animation). `0` is a legitimate
- *  landed value here — the loading/unknown state is gated upstream
+ *  refresh (so a tab-return never re-animates). Honors prefers-reduced-motion
+ *  (instant set, no animation). Wave W Lane D (item 1): the count-up FLOORS at
+ *  ceil(15% of target) so a 2fps capture can never catch a "0 Memories" frame
+ *  above rendered rows (that reads as a data bug). An empty hive (total 0) floors
+ *  at 0 — a legitimate landed value; the loading/unknown state is gated upstream
  *  (StatBarSkeleton), so this never renders a false loading-zero. */
 function HeroCount({ total, capped, reduceMotion }: { total: number; capped: boolean; reduceMotion: boolean }) {
   const [display, setDisplay] = useState(() =>
-    reduceMotion || heroCountAnimatedThisSession ? total : 0,
+    reduceMotion || heroCountAnimatedThisSession ? total : Math.ceil(total * 0.15),
   );
   useEffect(() => {
     if (reduceMotion || heroCountAnimatedThisSession) {
@@ -159,12 +161,15 @@ function HeroCount({ total, capped, reduceMotion }: { total: number; capped: boo
       return;
     }
     heroCountAnimatedThisSession = true;
+    // Wave W Lane D (item 1): animate from the 15% floor (never 0/near-0 with
+    // data present), not from a bare 0.
+    const from = Math.ceil(total * 0.15);
     const durationMs = 600;
     const start = performance.now();
     let raf = requestAnimationFrame(function tick(now: number) {
       const p = Math.min(1, (now - start) / durationMs);
       const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic — decisive, then settles
-      setDisplay(Math.round(total * eased));
+      setDisplay(Math.round(from + (total - from) * eased));
       if (p < 1) raf = requestAnimationFrame(tick);
       else setDisplay(total);
     });

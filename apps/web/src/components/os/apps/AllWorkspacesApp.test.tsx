@@ -27,6 +27,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/providers/ShellContext', () => ({ useShell: () => mocks.shell }));
 
+// Wave W (Lane A): drive the entrance choreography's reduced-motion branch
+// deterministically. Only useReducedMotion is overridden; every other
+// framer-motion export is preserved so the rest of the tree is untouched.
+const motionMock = vi.hoisted(() => ({ reduce: false }));
+vi.mock('framer-motion', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('framer-motion')>()),
+  useReducedMotion: () => motionMock.reduce,
+}));
+
 // Thin stubs: both reach into ShellContext/adapter/toast internally — out of
 // scope for this view's grid/search/filter/empty-state logic.
 vi.mock('../WorkspaceActionsMenu', () => ({
@@ -51,6 +60,7 @@ beforeEach(() => {
   // Wave U Lane A: the shelf cache/resolution flags are module-scoped — reset
   // so each test starts cold (no leak) and non-empty renders resolve at once.
   resetWorkspaceShelfCache();
+  motionMock.reduce = false;
   mocks.shell.workspaces = [
     ws({ id: 'w1', name: 'Competitive Intelligence', storageType: 'local', memoryCount: 142, sessionCount: 12, health: 'healthy' }),
     ws({ id: 'w2', name: 'Pricing Model', storageType: 'virtual', memoryCount: 64, health: 'degraded' }),
@@ -269,5 +279,36 @@ describe('AllWorkspacesApp', () => {
     // Full on hover or focus-within (keyboard/focus parity).
     expect(kebab.className).toContain('group-hover:opacity-100');
     expect(kebab.className).toContain('group-focus-within:opacity-100');
+  });
+
+  it('cascades the shelf in on first paint — staggered card-enter, ~40ms apart (Wave W Lane A item 1)', () => {
+    render(<AllWorkspacesApp />);
+    const c1 = screen.getByTestId('all-workspaces-card-w1');
+    const c2 = screen.getByTestId('all-workspaces-card-w2');
+    const c3 = screen.getByTestId('all-workspaces-card-w3');
+    // Reuses the memory surface's card-enter keyframe (8px rise + fade).
+    expect(c1.style.animation).toContain('card-enter');
+    // ~40ms/card stagger in grid order; capped so the last card settles ≤500ms.
+    expect(c1.style.animationDelay).toBe('0ms');
+    expect(c2.style.animationDelay).toBe('40ms');
+    expect(c3.style.animationDelay).toBe('80ms');
+  });
+
+  it('does NOT replay the entrance on a filter keystroke — once per surface visit (Wave W Lane A item 1)', () => {
+    render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-card-w1').style.animation).toContain('card-enter');
+    // Filter down to one card, then clear — w1 re-mounts, but the cascade is
+    // frozen after the first paint, so it does not rise/fade again.
+    fireEvent.change(screen.getByTestId('all-workspaces-search'), { target: { value: 'pricing' } });
+    fireEvent.change(screen.getByTestId('all-workspaces-search'), { target: { value: '' } });
+    expect(screen.getByTestId('all-workspaces-card-w1').style.animation).toBe('');
+  });
+
+  it('reduced motion opts out of the entrance entirely — no rise/fade (Wave W Lane A item 3)', () => {
+    motionMock.reduce = true;
+    render(<AllWorkspacesApp />);
+    const c1 = screen.getByTestId('all-workspaces-card-w1');
+    expect(c1.style.animation).toBe('');
+    expect(c1.style.animationDelay).toBe('');
   });
 });

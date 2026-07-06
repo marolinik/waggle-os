@@ -19,6 +19,7 @@ import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useInstallStore } from '@/providers/InstallProvider';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
+import { Skeleton } from '@/components/ui/skeleton';
 import { dedupePacks } from '@/lib/dedupe-packs';
 import {
   filterExtensions, sortExtensions, dedupeExtensions,
@@ -270,6 +271,11 @@ const MarketplaceApp = () => {
   const nlNoMatch = isNlQuery && !loadError && visible.length === 0;
   const autoMatchNeed = nlNoMatch ? filterQuery.trim() : null;
   const nearest = nlNoMatch && autoMatch === 'empty' ? nearestCatalog(extensions, filterQuery) : [];
+  // Wave W Lane C §2: the semantic three-up returns AT MOST 3 hits — a 1-2-pick
+  // answer leaves the matched surface sparse. On a hit, append a quiet "More
+  // from the catalog" rail (nearestCatalog, ≤3) below the picks so the result
+  // never strands the user in dark space.
+  const catalogRail = nlNoMatch && autoMatch === 'matched' ? nearestCatalog(extensions, filterQuery) : [];
   // Round-4 merchandising: the band renders on the default All browse only
   // (no active query); banded entries are lifted OUT of the grid below so
   // each integration keeps exactly one row + one action.
@@ -443,18 +449,40 @@ const MarketplaceApp = () => {
               )
             )}
 
-            {/* R16-V4 catch: an NL query keyword-filters EVERYTHING out, so the
-                busy-dim on live results had nothing to hold and the list emptied
-                into a void the moment typing started. While the semantic match
-                settles, the pre-query browse rows stay visible — dimmed, inert,
-                capped — under the Matching status above. */}
+            {/* Wave W Lane C §1: an NL query keyword-filters EVERYTHING out, so
+                the busy-dim on live results has nothing to hold. While the
+                semantic match settles (the "Matching skills to this job…" status
+                shows above), stand up 3 purpose-built result-row skeletons — icon
+                square + two text lines + chip stubs — instead of dimming the
+                now-wrong pre-query browse rows. Motion-safe (animate-none under
+                reduced motion). */}
             {nlNoMatch && (autoMatch === 'idle' || autoMatch === 'searching') && (
-              <div
-                data-testid="nl-stale-dim"
-                aria-hidden
-                className="pointer-events-none select-none space-y-2 opacity-40"
-              >
-                {filterExtensions(extensions, '').slice(0, 6).map(ext => (
+              <div data-testid="nl-matching-skeletons" aria-hidden className="space-y-2">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="flex items-start gap-3 rounded-xl border border-border/30 bg-card px-3 py-2.5">
+                    <Skeleton className="h-10 w-10 shrink-0 rounded-lg motion-reduce:animate-none" />
+                    <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                      <Skeleton className="h-3 w-2/5 motion-reduce:animate-none" />
+                      <Skeleton className="h-3 w-4/5 motion-reduce:animate-none" />
+                      <div className="flex gap-2 pt-0.5">
+                        <Skeleton className="h-4 w-14 rounded-full motion-reduce:animate-none" />
+                        <Skeleton className="h-4 w-12 rounded-full motion-reduce:animate-none" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Wave W Lane C §2: a matched three-up can be as few as 1-2 picks.
+                Append a quiet "More from the catalog" rail below it so the answer
+                never strands the user in dark space (reuses nearestCatalog, ≤3). */}
+            {catalogRail.length > 0 && (
+              <div data-testid="nl-more-catalog" className="space-y-2 pt-1">
+                <p className="px-1 text-[11px] font-display font-semibold uppercase tracking-wider text-muted-foreground">
+                  More from the catalog
+                </p>
+                {catalogRail.map(ext => (
                   <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
                 ))}
               </div>

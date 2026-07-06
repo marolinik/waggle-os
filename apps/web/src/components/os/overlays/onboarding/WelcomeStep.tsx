@@ -30,26 +30,30 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
           the amber glow read as a square tile against light ivory). Drive the
           pulse through the `filter: drop-shadow` instead — it follows the bee's
           alpha silhouette, so the halo is bee-shaped, not a tile. Reduced-motion
-          holds a single static drop-shadow (no pulse). */}
+          holds a single static drop-shadow (no pulse).
+          Wave W Lane E fix 2: amplify the breathing so the hero moment has a
+          living pulse on video — a faster ~3s cycle with a visibly larger
+          radius/opacity swing (24→58px, 0.20→0.58) instead of the barely-there
+          28→46px / 0.26→0.46. Still tasteful; reduced-motion stays static. */}
       <motion.img
         src={beeMascot}
         alt="Waggle"
         className="w-24 h-24"
         animate={
           reduceMotion
-            ? { filter: 'drop-shadow(0 0 34px hsl(var(--primary) / 0.34))' }
+            ? { filter: 'drop-shadow(0 0 38px hsl(var(--primary) / 0.36))' }
             : {
                 filter: [
-                  'drop-shadow(0 0 28px hsl(var(--primary) / 0.26))',
-                  'drop-shadow(0 0 46px hsl(var(--primary) / 0.46))',
-                  'drop-shadow(0 0 28px hsl(var(--primary) / 0.26))',
+                  'drop-shadow(0 0 24px hsl(var(--primary) / 0.20))',
+                  'drop-shadow(0 0 58px hsl(var(--primary) / 0.58))',
+                  'drop-shadow(0 0 24px hsl(var(--primary) / 0.20))',
                 ],
               }
         }
         transition={
           reduceMotion
             ? { duration: 0 }
-            : { duration: 4.5, repeat: Infinity, ease: 'easeInOut' }
+            : { duration: 3, repeat: Infinity, ease: 'easeInOut' }
         }
       />
     </div>
