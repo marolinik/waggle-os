@@ -895,7 +895,7 @@ const ChatApp = ({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-auto p-4">
+        <div ref={scrollRef} className="flex-1 overflow-auto px-4 pb-4 pt-2">
           {/* Round-4 craft (I1 fix 1): hold the reading measure to ~760px like
               Claude/ChatGPT instead of letting turns run the full panel width.
               The wrapper turns h-full flex-col only in the empty state so
@@ -964,10 +964,13 @@ const ChatApp = ({
               }}>
               {msg.role === 'assistant' && (
                 <Avatar
-                  className={`w-6 h-6 mt-1 shrink-0 ${
-                    // Signature motion: the bee "thinks" — a soft breathing
-                    // honey ring while THIS turn is streaming (reduced-motion
-                    // users keep a static ring via the CSS guard).
+                  className={`w-9 h-9 mt-0.5 shrink-0 ${
+                    // Wave S Lane E (brand): the persona bee is the turn's
+                    // signature — 36px so the flat-geometric sprite reads crisp
+                    // (the 24px render looked like a low-res raster next to the
+                    // provenance line). Signature motion: the bee "thinks" — a
+                    // soft breathing honey ring while THIS turn is streaming
+                    // (reduced-motion users keep a static ring via the CSS guard).
                     isLoading && msg === messages[messages.length - 1]
                       ? 'ring-2 ring-[var(--honey-line)] dot-live'
                       : ''

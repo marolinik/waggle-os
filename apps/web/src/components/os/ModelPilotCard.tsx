@@ -186,6 +186,45 @@ const resolveModelCost = (modelId: string | null, providers: Provider[]): string
   return null;
 };
 
+/** Cost rank for a model — lower is cheaper. FREE=0, $=1, $$=2, $$$=3; an
+ *  unknown/unpriced cost returns null (excluded from cheaper-than comparisons). */
+const costRank = (model: { id: string; cost: string }): number | null => {
+  if (model.id.includes(':free')) return 0;
+  switch (model.cost) {
+    case '$': return 1;
+    case '$$': return 2;
+    case '$$$': return 3;
+    default: return null;
+  }
+};
+
+/** Find a strictly-cheaper, USABLE model than the primary from the live catalog
+ *  (real data only — the owning provider must have a key so the fallback can
+ *  actually fire, and it must not equal the primary). Returns the cheapest such
+ *  model, or null when none exists (no invention — the button then hides). */
+const findCheaperFallback = (
+  defaultModel: string,
+  providers: Provider[],
+): { id: string; name: string } | null => {
+  let primaryRank: number | null = null;
+  for (const p of providers) {
+    const m = p.models.find(mm => mm.id === defaultModel);
+    if (m) { primaryRank = costRank(m); break; }
+  }
+  if (primaryRank == null) return null;
+  let best: { id: string; name: string; rank: number } | null = null;
+  for (const p of providers) {
+    if (p.requiresKey && !p.hasKey) continue; // must be usable
+    for (const m of p.models) {
+      if (m.id === defaultModel) continue;
+      const rank = costRank(m);
+      if (rank == null || rank >= primaryRank) continue;
+      if (!best || rank < best.rank) best = { id: m.id, name: m.name, rank };
+    }
+  }
+  return best ? { id: best.id, name: best.name } : null;
+};
+
 const ModelPilotCard = ({
   defaultModel,
   fallbackModel,
@@ -233,6 +272,14 @@ const ModelPilotCard = ({
   };
 
   const visibleLanes = singleMode ? LANES.slice(0, 1) : LANES;
+
+  // kw (Wave S): when the fallback can never fire (== primary), offer a
+  // one-click switch to a strictly-cheaper usable model — only if one really
+  // exists in the catalog. Null hides the suggestion (no invented models).
+  const cheaperFallback =
+    !singleMode && fallbackModel && fallbackModel === defaultModel
+      ? findCheaperFallback(defaultModel, providers)
+      : null;
 
   return (
     <div className="rounded-xl bg-secondary/30 border border-border/30 p-4 space-y-3">
@@ -362,14 +409,24 @@ const ModelPilotCard = ({
           the amber on this screen; two amber banners at once read as an incident. */}
       {!singleMode && fallbackModel && fallbackModel === defaultModel && (
         <div
-          className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-[var(--line-soft)] bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground"
           data-testid="model-pilot-fallback-equals-primary"
         >
           <Shield className="w-3.5 h-3.5 shrink-0" />
-          <span className="flex-1">Fallback equals Primary — failover will never trigger.</span>
+          <span className="flex-1 min-w-[10rem]">Fallback equals Primary — failover will never trigger.</span>
+          {cheaperFallback && (
+            <button
+              onClick={() => onUpdate({ fallbackModel: cheaperFallback.id })}
+              title={`Switch fallback to ${cheaperFallback.name}`}
+              data-testid="model-pilot-use-cheaper-fallback"
+              className="shrink-0 font-display font-semibold text-honey transition-opacity hover:opacity-80"
+            >
+              Use a cheaper fallback
+            </button>
+          )}
           <button
             onClick={() => onUpdate({ fallbackModel: null })}
-            className="shrink-0 font-display font-semibold text-honey transition-opacity hover:opacity-80"
+            className="shrink-0 font-display font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Clear
           </button>

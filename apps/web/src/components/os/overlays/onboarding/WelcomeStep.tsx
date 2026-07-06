@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ShieldCheck, Lock, Globe } from 'lucide-react';
 import beeMascot from '@/assets/personas/general-purpose.png';
 import { fadeSlide } from './constants';
@@ -13,6 +13,7 @@ import type { WelcomeStepProps } from './types';
  * works locally.
  */
 const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
+  const reduceMotion = useReducedMotion();
   return (
   <motion.div
     key="step-first-launch"
@@ -23,16 +24,33 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
       {/* Wave R Lane E — brand moment: the canonical flat-geometric hex-bee
           mascot (the same set the persona picker + landing use) opens
           onboarding, a warm greeting instead of a generic app-icon tile. The
-          transparent mascot reads on both themes. glow-breathe keeps the slow
-          amber pulse (reduced-motion drops the animation via the keyframe
-          base). */}
-      <img
+          transparent mascot reads on both themes.
+          Wave S Lane E — kill the square tile seam: the old `glow-breathe`
+          class animated a `box-shadow`, which hugs the element's RECTANGLE (so
+          the amber glow read as a square tile against light ivory). Drive the
+          pulse through the `filter: drop-shadow` instead — it follows the bee's
+          alpha silhouette, so the halo is bee-shaped, not a tile. Reduced-motion
+          holds a single static drop-shadow (no pulse). */}
+      <motion.img
         src={beeMascot}
         alt="Waggle"
-        className="w-24 h-24 glow-breathe"
-        style={{
-          filter: 'drop-shadow(0 0 42px hsl(var(--primary) / 0.32))',
-        }}
+        className="w-24 h-24"
+        animate={
+          reduceMotion
+            ? { filter: 'drop-shadow(0 0 34px hsl(var(--primary) / 0.34))' }
+            : {
+                filter: [
+                  'drop-shadow(0 0 28px hsl(var(--primary) / 0.26))',
+                  'drop-shadow(0 0 46px hsl(var(--primary) / 0.46))',
+                  'drop-shadow(0 0 28px hsl(var(--primary) / 0.26))',
+                ],
+              }
+        }
+        transition={
+          reduceMotion
+            ? { duration: 0 }
+            : { duration: 4.5, repeat: Infinity, ease: 'easeInOut' }
+        }
       />
     </div>
     <span className="inline-block text-xs font-display font-semibold tracking-[0.3em] uppercase text-honey mb-4">

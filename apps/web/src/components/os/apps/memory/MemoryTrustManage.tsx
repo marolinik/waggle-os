@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Search, Loader2, Brain, Pencil, Trash2, Clock, Check, Save } from 'lucide-react';
+import { Search, Loader2, Brain, Pencil, Trash2, Clock, Check, Save, Tag } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
@@ -160,6 +160,12 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
   // fix 1) lifts a "session handoff <date> sN" slug out of the title into the
   // provenance row's titleMeta. Pure display split; the drawer stays raw.
   const preview = buildMemoryPreview(memory.content);
+  // Wave-S Lane C: compress the mono provenance dump (handoff meta + source)
+  // into ONE FILLED glyph chip; the full string lives in the tooltip
+  // ("transparency without terminal dump"). The M-id stays visible below — it
+  // is the correction handle.
+  const provFull = [preview.titleMeta, srcLabel ? `source: ${srcLabel}` : null].filter(Boolean).join(' · ');
+  const provShort = srcLabel ?? preview.titleMeta?.split('·')[0].trim();
   return (
     <li
       className={cn(
@@ -187,9 +193,17 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
                 an unmanaged third hue on this warm surface — fold it into the
                 neutral --text-dim tier. */}
             <span className="text-[var(--text-dim)]">⬡ M-{memory.id}</span>
-            {/* Round-9 Lane C fix 1: handoff provenance lifted out of the title. */}
-            {preview.titleMeta && <span>{preview.titleMeta}</span>}
-            {srcLabel && <span>source: {srcLabel}</span>}
+            {/* Wave-S Lane C: handoff meta + source folded into one glyph chip
+                (short label at rest, full provenance in the tooltip). */}
+            {provShort && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 font-sans text-[11px] text-[var(--text-muted)]"
+                title={provFull}
+              >
+                <Tag className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden />
+                {provShort}
+              </span>
+            )}
             {!scored && (
               <span
                 className="rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 font-sans text-[11px] text-[var(--text-muted)]"

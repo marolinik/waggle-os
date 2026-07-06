@@ -91,9 +91,16 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
     d.toLocaleDateString(DATE_LOCALE, { weekday: "short", month: "short", day: "numeric" });
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 h-8 glass-strong flex items-center justify-between px-4 select-none">
+    <div className="waggle-statusbar fixed top-0 left-0 right-0 z-50 h-8 glass-strong flex items-center justify-between px-4 select-none">
       <div className="flex items-center gap-3 min-w-0">
-        <img src={waggleLogo} alt="Waggle" className="w-4 h-4 rounded-sm shrink-0" />
+        {/* R11 Lane D: the full logo (mark + WAGGLE wordmark) crammed into 16px
+            read as a muddy dark tile in light. Clip to just the bee mark — a 200%
+            image nudged up/left so the wordmark falls outside the 16px window —
+            so it reads as an orange mark on the asset's own bg in both themes,
+            never a dark square. A faint ring keeps the cream tile crisp on ivory. */}
+        <span className="w-4 h-4 rounded-[4px] overflow-hidden shrink-0 inline-flex ring-1 ring-border/40">
+          <img src={waggleLogo} alt="Waggle" className="w-[200%] h-[200%] max-w-none object-cover -translate-x-1/4 -translate-y-[14%]" />
+        </span>
         <span className="text-xs font-display font-semibold text-foreground whitespace-nowrap shrink-0">Waggle AI</span>
         {/* L-02: hide workspace + model below md (~768px) so the logo
             + "Waggle AI" stay visible on narrow windows. */}
@@ -123,14 +130,16 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             {/* R9 kw judge: "Default: Haiku" beside a thread running Opus read as
                 two contradictory truths. The label now states its SCOPE — this
                 chip is the new-chat default; an open thread's model lives in the
-                chat header. Scoping, not fake agreement. */}
+                chat header. Scoping, not fake agreement.
+                R11 kw: "New chats:" was clever-but-oblique — "Default model:" is
+                self-evident; the tooltip still disambiguates the open thread. */}
             <HintTooltip content={`${modelLabel} (${model}) — default model for new chats in this workspace. An open chat may use its own model (shown in the chat header); the global default lives in Settings → Models.`}>
               <span
                 className="text-[11px] text-honey/80 font-display hidden lg:inline cursor-help"
                 data-testid="statusbar-model"
                 tabIndex={0}
               >
-                New chats: {modelLabel}
+                Default model: {modelLabel}
               </span>
             </HintTooltip>
           </>

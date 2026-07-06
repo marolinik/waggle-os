@@ -2,6 +2,7 @@ import { Play, Pause, Loader2 } from 'lucide-react';
 import type { Agent } from '@/lib/types';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { AGENT_STATE_META, formatSuccessRate, formatRelativeTime } from '@/lib/agent-center-display';
+import { getPersonaAvatar } from '@/lib/personas';
 
 /**
  * Agent Center list row (UX-Refactor Phase 3B, S09 — the "AgentCard" DS
@@ -34,9 +35,17 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
         className="flex-1 min-w-0 flex items-center gap-2.5 text-left"
         aria-label={`Open agent ${agent.name}`}
       >
-        <span className="w-7 h-7 shrink-0 rounded-lg bg-secondary/50 flex items-center justify-center text-sm" aria-hidden>
-          {agent.avatar ?? '🤖'}
-        </span>
+        {/* Wave S Lane E (brand): one illustration language — the persona's
+            flat-geometric hex-bee, never a platform emoji (custom agents like
+            "Editorial Critic" previously fell back to 🤖). Bare transparent PNG
+            (no tile) so it reads as the same mascot family as the persona picker
+            and chat turns; unmapped/custom personas fall back to general-purpose. */}
+        <img
+          src={getPersonaAvatar(agent.personaId || 'general-purpose')}
+          alt=""
+          aria-hidden
+          className="w-7 h-7 shrink-0 rounded-lg object-contain"
+        />
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-1.5">
             <span className="text-xs font-medium text-foreground truncate">{agent.name}</span>

@@ -251,7 +251,13 @@ const SettingsApp = () => {
           scrollable panel. PR5 D6 / Wave P mechanics unchanged — one dial governs
           both the dock and this rail's depth via useOnboarding().tier. */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex items-center justify-end gap-2 px-4 pt-3 pb-2.5 border-b border-border/40 shrink-0">
+        <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2.5 border-b border-border/40 shrink-0">
+          {/* Title anchors the Show control to a real header row so it reads as
+              docked to the section it sits above — not a floating pill (Wave S). */}
+          <h2 className="text-sm font-display font-semibold text-foreground">
+            {tabs.find(t => t.id === activeTab)?.label ?? 'Settings'}
+          </h2>
+          <div className="flex items-center gap-2">
           <span className="text-[11px] font-medium text-muted-foreground">Show</span>
           {/* R9 grammar: one bordered track, one filled active cell — now
               horizontal to sit in the header. Same aria + tier mechanics. */}
@@ -282,6 +288,7 @@ const SettingsApp = () => {
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
 

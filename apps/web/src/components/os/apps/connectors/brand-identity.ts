@@ -44,6 +44,8 @@ import {
   siFlydotio, siRailway, siRender, siDigitalocean, siHetzner,
   // AI & ML
   siHuggingface, siReplicate, siLangchain, siOllama,
+  // LLM providers (Settings → Models provider selector)
+  siGooglegemini, siMistralai, siDeepseek, siQwen, siMinimax, siOpenrouter,
   // Analytics
   siPosthog, siMixpanel, siPlausibleanalytics, siPrometheus, siGoogleanalytics,
   siVictoriametrics,
@@ -239,6 +241,22 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'llamacloud': brand('EC4899', 'LC'),
   'fastmcp': brand('7C3AED', 'FM'),
   'opik': brand('6B47F2', 'OP'),
+
+  // LLM providers — Settings → Models provider selector (Wave S Lane A). Keyed
+  // by the /api/providers ids; real simple-icons marks where they exist, a
+  // curated brand hex + monogram otherwise. 'perplexity' already resolves via
+  // its Web-search entry above.
+  'anthropic': si(siAnthropic, 'AN'),
+  'openai': brand('10A37F', 'AI'),
+  'google': si(siGooglegemini, 'GE'),
+  'deepseek': si(siDeepseek, 'DS'),
+  'xai': brand('18181B', 'X'),
+  'mistral': si(siMistralai, 'MI'),
+  'alibaba': si(siQwen, 'QW'),
+  'minimax': si(siMinimax, 'MM'),
+  'zhipu': brand('3859FF', 'GL'),
+  'moonshot': brand('16181D', 'KI'),
+  'openrouter': si(siOpenrouter, 'OR'),
 
   // Analytics ───────────────────────────────────────────────────────────────
   'posthog': si(siPosthog, 'PH'),

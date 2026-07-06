@@ -236,8 +236,8 @@
     --hive-800: #efe6d2;   /* = --surface-3 */
     --hive-700: #e4d8be;   /* = --line      */
     --hive-600: #d2c3a2;   /* = --line-strong */
-    --hive-500: #786e59;   /* = --text-dim — AA 4.7:1 on cream (was #a99e85 ≈2.4:1, failed on micro-labels) */
-    --hive-400: #6e6552;   /* = --text-muted — AA 5.4:1 (was #847a64) */
+    --hive-500: #736958;   /* = --text-dim — AA 4.80:1 on cream #f7f1e4 (R11 Lane D: #786e59 measured 4.47:1, under 4.5 at 11px meta; still a step lighter than --text-muted #6e6552 ≈5.1:1 so dim<muted holds) */
+    --hive-400: #6e6552;   /* = --text-muted — AA 5.1:1 on cream (was #847a64) */
     --hive-300: #5a5140;   /* = --text-2    */
     --hive-200: #3a3327;
     --hive-100: #2a2419;
@@ -390,8 +390,24 @@
   .desktop-overlay {
     background: radial-gradient(ellipse 72% 68% at 50% 44%, hsl(var(--background) / 0.52) 22%, hsl(var(--background) / 0.2) 74%);
   }
+  /* R11 Lane D (brand): light read as a faded copy — the hex lattice was washed
+     flat and the canvas had no warm focal point. Thin the center wash two steps
+     (0.4→0.3 center, 0.08→0.05 edge) so the wallpaper hive texture reads, and
+     stack a whisper honey radial at the top-center hero band so the eye lands on
+     warmth, not paper. Dark keeps its own wash. */
   :root[data-theme="light"] .desktop-overlay {
-    background: radial-gradient(ellipse 72% 68% at 50% 44%, hsl(var(--background) / 0.4) 22%, hsl(var(--background) / 0.08) 74%);
+    background:
+      radial-gradient(ellipse 58% 42% at 50% 8%, var(--honey-wash) 0%, transparent 62%),
+      radial-gradient(ellipse 72% 68% at 50% 44%, hsl(var(--background) / 0.3) 22%, hsl(var(--background) / 0.05) 74%);
+  }
+
+  /* R11 Lane D (a11y): the bright glass status bar washed its muted chrome
+     (breadcrumbs · 'Solo plan' · Search/Ctrl-K · date) toward invisible in
+     light. Redefine ONLY the bar's --muted-foreground one step darker
+     (33% L ≈ #625946, ~6:1 on the bar) — every text-muted-foreground child
+     inherits it. Dark keeps its tuned 57%. */
+  :root[data-theme="light"] .waggle-statusbar {
+    --muted-foreground: 41 17% 33%;
   }
 
   /* ── Onboarding full-screen scrim — theme-aware (was hard-coded black,

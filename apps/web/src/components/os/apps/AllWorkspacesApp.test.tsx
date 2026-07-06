@@ -73,23 +73,34 @@ describe('AllWorkspacesApp', () => {
     expect(screen.getByText(/12 sessions/)).toBeInTheDocument();
   });
 
-  it('renders the newest session title as the card body ("Last: …") when present (Wave R)', () => {
+  it('renders the newest session title as a quote-styled preview, no "Last:" prefix (Wave S)', () => {
     mocks.shell.workspaces = [
       ws({ id: 's1', name: 'Sessioned', lastSessionTitle: 'Draft the launch email', lastActive: new Date().toISOString() }),
     ];
     render(<AllWorkspacesApp />);
     const card = screen.getByTestId('all-workspaces-card-s1');
-    expect(card.textContent).toContain('Last: Draft the launch email');
+    expect(card.textContent).toContain('Draft the launch email');
+    expect(card.textContent).not.toContain('Last:');
   });
 
-  it('a description still wins over the session-title body line (Wave R priority)', () => {
+  it('a description still wins over the session-title preview (Wave S priority)', () => {
     mocks.shell.workspaces = [
       ws({ id: 's2', name: 'Described', description: 'A real description', lastSessionTitle: 'Some session' }),
     ];
     render(<AllWorkspacesApp />);
     const card = screen.getByTestId('all-workspaces-card-s2');
     expect(card.textContent).toContain('A real description');
-    expect(card.textContent).not.toContain('Last: Some session');
+    expect(card.textContent).not.toContain('Some session');
+  });
+
+  it('suppresses a canned starter greeting from the preview (Wave S honesty contract)', () => {
+    mocks.shell.workspaces = [
+      ws({ id: 's3', name: 'Fresh', lastSessionTitle: 'Hello! What can you help me with?' }),
+    ];
+    render(<AllWorkspacesApp />);
+    const card = screen.getByTestId('all-workspaces-card-s3');
+    // Template text is not data — omitted, never paraphrased.
+    expect(card.textContent).not.toContain('Hello! What can you help me with?');
   });
 
   it('does NOT fabricate a count for a workspace with undefined memoryCount', () => {

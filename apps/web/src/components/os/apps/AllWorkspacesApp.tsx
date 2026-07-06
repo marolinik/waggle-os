@@ -26,7 +26,8 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import CreateWorkspaceDialog from '../overlays/CreateWorkspaceDialog';
-import { HexAvatar, SectionLabel, DotLive } from '../warm';
+import { HexAvatar, SectionLabel } from '../warm';
+import { accentFor } from '../warm/HexAvatar';
 import type { StorageType, Workspace } from '@/lib/types';
 
 interface AllWorkspacesAppProps {
@@ -69,10 +70,18 @@ function formatRelative(iso?: string): string | null {
   return `${weeks}w ago`;
 }
 
-/** Collision key for round-6 fix 1c — same-name AND same-group cards. */
-function dupKey(w: Workspace): string {
-  return `${w.name.trim().toLowerCase()}|${(w.group ?? '').trim().toLowerCase()}`;
-}
+/**
+ * Wave S (Lane B) fix 1: session titles that are auto-prefilled starter prompts,
+ * not user-authored content. The server's `readLastSessionTitle` returns the
+ * newest session's first message; for a brand-new workspace that's a canned
+ * starter (DEFAULT_FIRST_MESSAGE / the "brand new workspace" suggested prompt).
+ * Suppressing these honours the no-fabrication contract — template text is not
+ * data, so it's omitted from the preview, never paraphrased.
+ */
+const CANNED_SESSION_TITLES: ReadonlySet<string> = new Set([
+  'Hello! What can you help me with?',
+  'What can you do in this workspace?',
+]);
 
 /**
  * Round-6 fix 1b: honest "Created …" line for description-less cards. Reads
@@ -131,21 +140,17 @@ function FilterPills({
 
 // ── One workspace card (real fields only) ─────────────────────────────────
 function WorkspaceCard({
-  ws, onOpen, onChanged, isDuplicateName, isDuplicateNameAndGroup,
+  ws, onOpen, onChanged, isDuplicateName,
 }: {
   ws: Workspace;
   onOpen: () => void;
   onChanged: () => void;
-  /** True when another workspace shares this name — show the group to disambiguate. */
+  /** True when another workspace shares this name — surface a "duplicate name"
+   *  pill (with the raw slug in its tooltip) so two same-named cards resolve. */
   isDuplicateName: boolean;
-  /** True when name AND group both collide — the group tag alone no longer
-   *  disambiguates, so the full workspace slug renders as a chip too
-   *  (round-6 fix 1c; round-7: full slug, not a truncated fragment). */
-  isDuplicateNameAndGroup?: boolean;
 }) {
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
   const activeAgo = formatRelative(ws.lastActive ?? ws.updatedAt);
-  const isHealthy = ws.health === 'healthy' && ws.status !== 'archived';
   // The server list rows carry WorkspaceConfig.created; the web type doesn't
   // declare it yet — narrow local read, no fabrication when absent.
   const createdLine = formatCreated((ws as Workspace & { created?: string }).created);
@@ -156,13 +161,19 @@ function WorkspaceCard({
   // is conditional; an all-absent card renders no body line at all.
   const activityLine =
     [createdLine, activeAgo ? `active ${activeAgo}` : null].filter(Boolean).join(' · ') || null;
-  // Wave R (Lane B) fix 2: when the server surfaces the newest session's title,
-  // it's the most alive thing the card can say — "Last: <title> · 2w ago". Real
-  // string from the list payload only (lastSessionTitle); absent → fall through
-  // to the created/last-active activity line.
-  const lastSessionLine = ws.lastSessionTitle
-    ? `Last: ${ws.lastSessionTitle}${activeAgo ? ` · ${activeAgo}` : ''}`
-    : null;
+  // Wave S (Lane B) fix 1: the newest session's title is the most alive thing
+  // the card can say — quote-styled ("…" · 2w ago), no "Last:" debris. Real
+  // string from the list payload only (lastSessionTitle). Suppressed when it's
+  // a canned starter prompt (template text, not user data) so the card falls
+  // through to the honest created/last-active line instead.
+  const sessionTitle = ws.lastSessionTitle?.trim();
+  const sessionPreview =
+    sessionTitle && !CANNED_SESSION_TITLES.has(sessionTitle) ? sessionTitle : null;
+
+  // Wave S (Lane B) fix 2: one live signal per card — a 2px top band in the
+  // workspace's deterministic accent hue (same hash the avatar uses), at 40%.
+  // Data-free, differentiates cards without fabrication.
+  const accent = accentFor(ws.name);
 
   // Honesty: only render a memory count when the field actually exists.
   const hasMemoryCount = typeof ws.memoryCount === 'number';
@@ -185,38 +196,26 @@ function WorkspaceCard({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
       aria-label={`Open ${ws.name}`}
-      className="group relative flex min-h-[132px] cursor-pointer flex-col rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
-      <div className="mb-3 flex items-center gap-3">
+      {/* Wave S (Lane B) fix 2: the one live signal — a 2px top band in the
+          workspace's deterministic accent hue (40% opacity). Decorative. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2px]"
+        style={{ background: `color-mix(in srgb, ${accent} 40%, transparent)` }}
+      />
+
+      {/* Slot 1 — identity row: avatar + name + storage badge. */}
+      <div className="mb-2.5 flex items-center gap-3">
         <HexAvatar label={ws.name} size={36} />
-        <div className="min-w-0 flex-1">
-          {/* The title carries the open testid — it's the card's primary click
-              target (clicks bubble to the card's open handler). */}
-          <h3
-            className="truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]"
-            data-testid={`all-workspaces-open-${ws.id}`}
-          >
-            {ws.name}
-          </h3>
-          {/* Disambiguate same-named workspaces with their group (issue 2b);
-              when the group ALSO collides, append the workspace's FULL slug in a
-              mono chip. Wave R (Lane B) fix 4: two identically-named cards used
-              to differ only by a 10px text-dim whisper — the disambiguator is now
-              promoted to readable weight (11.5px, text-muted, a bordered slug
-              chip) so the difference registers at a glance. BOTH cards in a
-              collision set carry theirs. */}
-          {isDuplicateName && (ws.group || isDuplicateNameAndGroup) && (
-            <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-[var(--text-muted)]">
-              {ws.group && <span className="truncate">{ws.group}</span>}
-              {isDuplicateNameAndGroup && (
-                <span className="min-w-0 truncate rounded-[5px] border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-px font-mono text-[11.5px] text-[var(--text-muted)]">
-                  {ws.id}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
+        <h3
+          className="min-w-0 flex-1 truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]"
+          data-testid={`all-workspaces-open-${ws.id}`}
+        >
+          {ws.name}
+        </h3>
         {badge && (
           <span
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
@@ -228,24 +227,47 @@ function WorkspaceCard({
         )}
       </div>
 
-      {/* Body — the activity-preview zone. It grows (flex-1 via the flex-col
-          root) so the footer pins to a shared baseline. Real data only: a
-          description (2-line clamp) when present, otherwise the honest
-          created/last-active activity line. Never a dead band, never invented
-          copy. */}
+      {/* Slot 2 — tag row (ALWAYS present, so every card shares the same rows).
+          The group as a filled chip; the raw slug is out of the resting card
+          (kw+a11y) — it rides a tooltip. Same-named cards get a subtle
+          "duplicate name" pill whose tooltip carries the slug to resolve them. */}
+      <div className="mb-2.5 flex items-center gap-1.5">
+        <span
+          className="inline-flex items-center rounded-[6px] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]"
+          title={`Workspace ID: ${ws.id}`}
+        >
+          {ws.group?.trim() || 'Personal'}
+        </span>
+        {isDuplicateName && (
+          <span
+            className="inline-flex items-center rounded-[6px] border border-[var(--line)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-dim)]"
+            title={`Workspace ID: ${ws.id}`}
+          >
+            duplicate name
+          </span>
+        )}
+      </div>
+
+      {/* Slot 3 — preview line. It grows (flex-1 via the flex-col root) so the
+          footer pins to a shared baseline. Real data only: a description (2-line
+          clamp), else the quote-styled newest-session title, else the honest
+          created/last-active line. Never a dead band, never invented copy. */}
       {ws.description ? (
         <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
           {ws.description}
         </p>
-      ) : lastSessionLine ? (
-        <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">{lastSessionLine}</p>
+      ) : sessionPreview ? (
+        <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+          “{sessionPreview}”
+          {activeAgo && <span className="text-[var(--text-dim)]"> · {activeAgo}</span>}
+        </p>
       ) : activityLine ? (
         <p className="text-[13px] leading-[1.5] text-[var(--text-muted)]">{activityLine}</p>
       ) : null}
 
-      {/* Meta footer — pinned to the card's bottom baseline (mt-auto) so EVERY
-          card's meta row aligns regardless of body length (round-8 fix 1).
-          Real fields only (W2B honesty: no fabricated count, no filler dash). */}
+      {/* Slot 4 — metrics footer, pinned to the card's bottom baseline (mt-auto)
+          so EVERY card's meta row aligns regardless of body length. Real fields
+          only (W2B honesty: no fabricated count, no filler dash). */}
       <div className="mt-auto flex items-center gap-3.5 pt-3 text-[12px] text-[var(--text-dim)]">
         {hasMemoryCount && (
           <span className="inline-flex items-center gap-1.5">
@@ -256,11 +278,6 @@ function WorkspaceCard({
         {hasSessionCount && (
           <span className="inline-flex items-center gap-1.5">
             {ws.sessionCount} {ws.sessionCount === 1 ? 'session' : 'sessions'}
-          </span>
-        )}
-        {isHealthy && (
-          <span className="inline-flex items-center gap-1.5 text-[var(--healthy)]">
-            <DotLive tone="healthy" size={7} /> healthy
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
@@ -351,17 +368,6 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
     }
     return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
   }, [workspaces]);
-
-  // Round-6 fix 1c: name+group BOTH collide → the group tag alone can't
-  // disambiguate, so those cards also get a short id chip.
-  const duplicateNameAndGroups = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const w of shelfWorkspaces) {
-      const k = dupKey(w);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
-  }, [shelfWorkspaces]);
 
   const handleOpen = (id: string) => {
     selectWorkspace(id);
@@ -471,7 +477,6 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
               onOpen={() => handleOpen(ws.id)}
               onChanged={() => { void refreshWorkspaces(); }}
               isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}
-              isDuplicateNameAndGroup={duplicateNameAndGroups.has(dupKey(ws))}
             />
           ))}
         </div>

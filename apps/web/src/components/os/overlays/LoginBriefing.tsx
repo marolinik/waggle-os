@@ -76,6 +76,18 @@ function truncateHighlight(content: string): string {
 // predicate (was a local copy that missed ai-os-audit-*/StressTest-*).
 const isTestWorkspace = isDevNoiseWorkspace;
 
+// Wave S Lane E (honesty): the server emits a brochure default summary
+// ("Everything you discuss in {name} stays in context — decisions, research,
+// and progress are remembered across sessions.") whenever a workspace has no
+// real generated summary yet (packages/server/.../workspaces.ts). That is
+// template copy, not the user's data — it must never render as a summary, and a
+// row whose ONLY content is that line (no memories) carries nothing to catch up
+// on. Matched on the name-invariant tail so it holds for any workspace name.
+const CANNED_SUMMARY_TAIL =
+  'stays in context — decisions, research, and progress are remembered across sessions';
+const isCannedWorkspaceSummary = (summary?: string): boolean =>
+  typeof summary === 'string' && summary.includes(CANNED_SUMMARY_TAIL);
+
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
   const [highlights, setHighlights] = useState<MemoryHighlight[]>([]);
@@ -196,6 +208,15 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
 
   const bragLine = brag ? formatBragLine(brag) : null;
   const totalPending = brag?.pendingCount ?? 0;
+
+  // Wave S Lane E (honesty): omit rows that carry no information — a canned
+  // brochure summary AND zero memories. Guarded on memoryCount so a workspace
+  // with real memory content is NEVER hidden (its brochure text is suppressed
+  // below instead). Brag header counts are untouched (they read memory stats,
+  // not this list), so the digest and header stay consistent.
+  const visibleSummaries = summaries.filter(
+    (ws) => !(isCannedWorkspaceSummary(ws.summary) && ws.memoryCount === 0),
+  );
 
   // Wave Q Lane A (item 1): a failed briefing must never boot a blocking modal
   // stacked over the NoModelBanner + Home's own error state. When the fetch
@@ -374,7 +395,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               )}
 
               {/* Workspace list */}
-              {summaries.length === 0 ? (
+              {visibleSummaries.length === 0 ? (
                 <div className="text-center py-6">
                   <Sparkles className="w-8 h-8 text-honey/50 mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">No active workspaces yet. Create one to get started!</p>
@@ -384,7 +405,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                 // the list overflows its cap (>3 rows overflow max-h-60).
                 <div className="relative">
                   <div className="space-y-2 max-h-60 overflow-auto">
-                  {summaries.map(ws => (
+                  {visibleSummaries.map(ws => (
                     <button
                       key={ws.id}
                       onClick={() => { onOpenWorkspace(ws.id); onDismiss(); }}
@@ -412,10 +433,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       </div>
 
                       {/* An empty workspace gets an honest nudge, not the
-                          brochure line the server emits as its summary. */}
+                          brochure line the server emits as its summary. Wave S
+                          Lane E: a canned brochure summary on a kept row (real
+                          memories but no generated summary yet) is suppressed —
+                          template copy never renders as the user's data. */}
                       {ws.memoryCount === 0 && ws.sessionCount === 0 ? (
                         <p className="text-[11px] text-muted-foreground mb-1.5 italic">Nothing here yet — start a chat and I'll remember it.</p>
-                      ) : ws.summary ? (
+                      ) : ws.summary && !isCannedWorkspaceSummary(ws.summary) ? (
                         <p className="text-[11px] text-muted-foreground mb-1.5 line-clamp-2">{ws.summary}</p>
                       ) : null}
 
@@ -450,7 +474,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                     </button>
                   ))}
                   </div>
-                  {summaries.length > 3 && (
+                  {visibleSummaries.length > 3 && (
                     <div
                       aria-hidden
                       className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-gradient-to-t from-[var(--surface)] to-transparent"

@@ -43,7 +43,9 @@ describe('AGENT_STATE_META — §14.5 full vocabulary', () => {
   it('uses human labels for the multi-word states', () => {
     expect(AGENT_STATE_META.waiting_for_approval.label).toBe('Waiting for approval');
     expect(AGENT_STATE_META.failed.tone).toBe('risk');
-    expect(AGENT_STATE_META.running.tone).toBe('info');
+    // Wave-S Lane C: running reads as an active-good state (healthy sage), not
+    // the intelligence/info violet.
+    expect(AGENT_STATE_META.running.tone).toBe('healthy');
   });
 });
 

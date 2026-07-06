@@ -62,11 +62,17 @@ function actionKey(ext: Extension): ActionKey | null {
 const PRIMARY_ACTION_CLASS =
   'flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50';
 
-/** ONE chip grammar (R10 Lane C): every tag lozenge (type / category / trust /
- *  source form) uses the app-wide quiet chip — line-soft border, surface-2 fill,
- *  muted text — so the row stops carrying a second competing lozenge style. */
+/** ONE chip grammar (R10 / Wave-S Lane C) — TWO species, app-wide:
+ *   FILLED  (category / type / trust / source form): line-soft border,
+ *           surface-2 fill, muted 11px text — the quiet lozenge below.
+ *   OUTLINE (status: Available / Installed / scan verdict): tone border+text
+ *           via StatusBadge + the healthy install pill — never a filled tag.
+ *  Keeping the two visually distinct stops the row carrying two competing
+ *  lozenge styles for two different meanings. */
 const TAG_CHIP =
   'rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]';
+/** FILLED species with a leading glyph — used for the multi-form source chips. */
+const TAG_CHIP_GLYPH = `inline-flex items-center gap-1 ${TAG_CHIP}`;
 
 /** User-language nouns for the dedup provenance forms (`ext.sources`) —
  *  registry jargon translated to what each form DOES for the user: a package
@@ -77,6 +83,16 @@ const SOURCE_NOUNS: Record<string, string> = {
   mcp: 'MCP server',
   package: 'skill',
   pack: 'skill pack',
+};
+
+/** Glyph + short word per integration form — the multi-form row renders one
+ *  FILLED glyph chip per form (all sharing one tooltip) instead of a single
+ *  sentence chip (Wave-S Lane C: no sentence chips). */
+const SOURCE_FORM_META: Record<string, { Icon: typeof Download; label: string }> = {
+  connector: { Icon: Plug, label: 'connector' },
+  mcp: { Icon: Zap, label: 'MCP' },
+  package: { Icon: Download, label: 'skill' },
+  pack: { Icon: Download, label: 'skill pack' },
 };
 
 /** "Works as connector & MCP server" — one human phrase for a multi-form
@@ -188,15 +204,25 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
           {ext.category && <span className={TAG_CHIP}>{ext.category}</span>}
           {ext.trust && <span className={`${TAG_CHIP} capitalize`}>{ext.trust}</span>}
           {/* Genuinely multi-form integration (dedup winner absorbed ≥1 twin) —
-              name the forms so the merge is legible, not silently hidden. */}
+              one FILLED glyph chip per form, all sharing ONE tooltip (Wave-S
+              Lane C: no sentence chips). */}
           {ext.sources && ext.sources.length > 1 && (
-            <span data-testid="extension-sources" className={TAG_CHIP}>
-              {describeSourceForms(ext.sources)}
+            <span data-testid="extension-sources" className="inline-flex items-center gap-1.5" title={describeSourceForms(ext.sources)}>
+              {[...new Set(ext.sources)].map(s => {
+                const meta = SOURCE_FORM_META[s];
+                return (
+                  <span key={s} className={TAG_CHIP_GLYPH}>
+                    {meta && <meta.Icon className="w-3 h-3 shrink-0" aria-hidden />}
+                    {meta?.label ?? s}
+                  </span>
+                );
+              })}
             </span>
           )}
-          {/* Base muted token, NO /60 modifier — the opacity tier measured 2.27:1
-              in light theme (round-6 judge finding). */}
-          <span className="text-[11px] text-muted-foreground">{ext.source}</span>
+          {/* Registry/source token — FILLED chip species (Wave-S Lane C: was an
+              orphan plain-text token; the chip also clears the 2.27:1 light-theme
+              contrast the old muted text measured at). */}
+          {ext.source && <span className={TAG_CHIP}>{ext.source}</span>}
         </div>
 
         {/* In-place connector token-paste (bearer/api_key/basic). OAuth never

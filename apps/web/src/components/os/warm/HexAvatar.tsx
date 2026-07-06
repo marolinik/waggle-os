@@ -35,6 +35,16 @@ function toneFor(label: string): readonly [string, string] {
   return WARM_TONES[h % WARM_TONES.length];
 }
 
+/**
+ * Wave S (Lane B): the deterministic accent for a label — the bright stop of its
+ * warm tone, picked by the SAME hash the avatar uses. Reused for the workspace
+ * card's 2px top band so a card's live signal shares one source of truth with
+ * its monogram hue (no drift, no fabrication).
+ */
+export function accentFor(label: string): string {
+  return toneFor(label)[0];
+}
+
 function firstInitial(label: string): string {
   const ch = label.trim()[0];
   return ch ? ch.toUpperCase() : 'W';

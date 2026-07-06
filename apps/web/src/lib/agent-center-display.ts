@@ -18,7 +18,7 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 export const AGENT_STATE_META: Record<AgentRunState, { label: string; tone: StatusTone }> = {
   draft: { label: 'Draft', tone: 'neutral' },
   idle: { label: 'Idle', tone: 'neutral' },
-  running: { label: 'Running', tone: 'info' },
+  running: { label: 'Running', tone: 'healthy' },
   paused: { label: 'Paused', tone: 'attention' },
   failed: { label: 'Failed', tone: 'risk' },
   waiting_for_approval: { label: 'Waiting for approval', tone: 'attention' },

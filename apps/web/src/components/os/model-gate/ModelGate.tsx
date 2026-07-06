@@ -24,6 +24,8 @@ import { Check, AlertTriangle, Loader2, KeyRound, Cpu, ExternalLink } from 'luci
 import { adapter } from '@/lib/adapter';
 import { useProviders, type Provider } from '@/hooks/useProviders';
 import { Input } from '@/components/ui/input';
+import BrandTile from '@/components/os/apps/connectors/BrandTile';
+import { getBrandIdentity } from '@/components/os/apps/connectors/brand-identity';
 
 interface ModelGateProps {
   /** Fires after a model becomes available (key saved or local pull ok), so a parent
@@ -175,6 +177,21 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     setValidate({ status: 'idle' });
   };
 
+  // "Fix it now" (failed banner): jump straight to the offending provider's key
+  // input and focus it, so the recovery action lives IN the banner, not in prose.
+  const focusFailingKey = () => {
+    setTab('cloud');
+    if (probe.status === 'failed' && probe.failedProvider) setSelected(probe.failedProvider);
+    // Let the key input for the (re)selected provider mount before focusing it.
+    setTimeout(() => {
+      const el = document.getElementById('model-gate-key');
+      if (el instanceof HTMLInputElement) {
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        el.focus();
+      }
+    }, 60);
+  };
+
   const handleValidateAndSave = async () => {
     const key = keyValue.trim();
     if (!selectedProvider || !key) return;
@@ -258,24 +275,29 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
         type="button"
         aria-pressed={isSelected}
         onClick={() => handleSelect(p.id)}
-        className={`flex flex-col gap-1 rounded-[12px] border p-3 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] ${fill} ${ring}`}
+        className={`flex items-start gap-2.5 rounded-[12px] border p-2.5 text-left transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] ${fill} ${ring}`}
       >
-        <div className="flex items-center justify-between gap-2">
-          <span className={`truncate text-[13px] font-semibold ${p.hasKey || failing ? 'text-foreground' : 'text-[var(--text-2)]'}`}>
-            {p.name}
+        {/* Brand logomark — reuses the marketplace BrandTile technique (real
+            simple-icons mark when known, monogram-hex fallback otherwise). */}
+        <BrandTile identity={getBrandIdentity(p.id, p.name, '')} size={28} className="mt-0.5" />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className={`truncate text-[13px] font-semibold ${p.hasKey || failing ? 'text-foreground' : 'text-[var(--text-2)]'}`}>
+              {p.name}
+            </span>
+            {/* A keyed-but-failing provider shows the risk glyph — the honey check
+                must never contradict the "not responding" state. */}
+            {failing ? (
+              <AlertTriangle className="size-3.5 shrink-0 text-[var(--risk)]" aria-label="key not responding" />
+            ) : p.hasKey ? (
+              <Check className="size-3.5 shrink-0 text-honey" aria-label="key configured" />
+            ) : null}
+          </div>
+          <span className="text-[11px] text-[var(--text-muted)]">
+            {p.models.length > 0 ? `${p.models.length} model${p.models.length === 1 ? '' : 's'} · ` : ''}
+            {stateWord}
           </span>
-          {/* A keyed-but-failing provider shows the risk glyph — the honey check
-              must never contradict the "not responding" state. */}
-          {failing ? (
-            <AlertTriangle className="size-3.5 shrink-0 text-[var(--risk)]" aria-label="key not responding" />
-          ) : p.hasKey ? (
-            <Check className="size-3.5 shrink-0 text-honey" aria-label="key configured" />
-          ) : null}
         </div>
-        <span className="text-[11px] text-[var(--text-muted)]">
-          {p.models.length > 0 ? `${p.models.length} model${p.models.length === 1 ? '' : 's'} · ` : ''}
-          {stateWord}
-        </span>
       </button>
     );
   };
@@ -306,7 +328,14 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
         // banner announcing that state must too (two tones for one truth reads as a bug).
         <div role="status" className="flex items-center gap-2 rounded-lg border border-[var(--risk)]/30 bg-[var(--risk-wash)] px-3 py-2.5 text-sm text-foreground">
           <AlertTriangle className="size-4 shrink-0 text-[var(--risk)]" aria-hidden />
-          <span>Key found but not responding — you can fix it now or continue.</span>
+          <span className="flex-1">Key found but not responding.</span>
+          <button
+            type="button"
+            onClick={focusFailingKey}
+            className="shrink-0 rounded-md border border-[var(--risk)]/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-[var(--risk)]/10"
+          >
+            Fix it now
+          </button>
         </div>
       ) : probe.status === 'unverified' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
@@ -337,13 +366,15 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       )}
 
       {/* Tabs */}
-      <div role="tablist" aria-label="How to add a model" className="flex gap-1 rounded-lg border border-[var(--line-soft)] bg-muted/60 p-1">
+      {/* Content-sized 2-segment control (not a full-width band): inline-flex so
+          it hugs its two cells — no phantom trailing cells / hex show-through. */}
+      <div role="tablist" aria-label="How to add a model" className="inline-flex gap-1 rounded-lg border border-[var(--line-soft)] bg-muted/60 p-1">
         <button
           type="button"
           role="tab"
           aria-selected={tab === 'cloud'}
           onClick={() => setTab('cloud')}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             tab === 'cloud' ? 'bg-card text-foreground shadow-sm ring-1 ring-[var(--honey-line)]' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -354,7 +385,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
           role="tab"
           aria-selected={tab === 'local'}
           onClick={() => setTab('local')}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
             tab === 'local' ? 'bg-card text-foreground shadow-sm ring-1 ring-[var(--honey-line)]' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
