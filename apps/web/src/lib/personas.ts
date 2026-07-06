@@ -1,27 +1,29 @@
-import analyticsAvatar from '@/assets/personas/analytics.jpeg';
-import contentWriterAvatar from '@/assets/personas/content-writer.jpeg';
-import forecasterAvatar from '@/assets/personas/forecaster.jpeg';
-import hookAnalyzerAvatar from '@/assets/personas/hook-analyzer.jpeg';
-import publisherAvatar from '@/assets/personas/publisher.jpeg';
-import researcherAvatar from '@/assets/personas/researcher.jpeg';
-import synthesizerAvatar from '@/assets/personas/synthesizer.jpeg';
-import trendDetectorAvatar from '@/assets/personas/trend-detector.jpeg';
-// 14 dedicated avatars (2026-07-06) so all 22 personas are unique — same
-// nano-banana "Warm-Hive bee" style family (see assets/personas/README.md).
-import consultantAvatar from '@/assets/personas/consultant.jpeg';
-import creativeDirectorAvatar from '@/assets/personas/creative-director.jpeg';
-import dataEngineerAvatar from '@/assets/personas/data-engineer.jpeg';
-import executiveAssistantAvatar from '@/assets/personas/executive-assistant.jpeg';
-import financeOwnerAvatar from '@/assets/personas/finance-owner.jpeg';
-import hrManagerAvatar from '@/assets/personas/hr-manager.jpeg';
-import legalProfessionalAvatar from '@/assets/personas/legal-professional.jpeg';
-import marketerAvatar from '@/assets/personas/marketer.jpeg';
-import opsManagerAvatar from '@/assets/personas/ops-manager.jpeg';
-import productManagerSeniorAvatar from '@/assets/personas/product-manager-senior.jpeg';
-import projectManagerAvatar from '@/assets/personas/project-manager.jpeg';
-import recruiterAvatar from '@/assets/personas/recruiter.jpeg';
-import supportAgentAvatar from '@/assets/personas/support-agent.jpeg';
-import verifierAvatar from '@/assets/personas/verifier.jpeg';
+// 22 avatars in the canonical flat-geometric hex-bee language (2026-07-06,
+// Wave Q mascot unification — R9 judges flagged the old glossy sticker set as
+// a second illustration dialect vs the landing bees). One transparent PNG per
+// persona id; see assets/personas/README.md for the generation recipe.
+import analystAvatar from '@/assets/personas/analyst.png';
+import coderAvatar from '@/assets/personas/coder.png';
+import consultantAvatar from '@/assets/personas/consultant.png';
+import coordinatorAvatar from '@/assets/personas/coordinator.png';
+import creativeDirectorAvatar from '@/assets/personas/creative-director.png';
+import dataEngineerAvatar from '@/assets/personas/data-engineer.png';
+import executiveAssistantAvatar from '@/assets/personas/executive-assistant.png';
+import financeOwnerAvatar from '@/assets/personas/finance-owner.png';
+import generalPurposeAvatar from '@/assets/personas/general-purpose.png';
+import hrManagerAvatar from '@/assets/personas/hr-manager.png';
+import legalProfessionalAvatar from '@/assets/personas/legal-professional.png';
+import marketerAvatar from '@/assets/personas/marketer.png';
+import opsManagerAvatar from '@/assets/personas/ops-manager.png';
+import plannerAvatar from '@/assets/personas/planner.png';
+import productManagerSeniorAvatar from '@/assets/personas/product-manager-senior.png';
+import projectManagerAvatar from '@/assets/personas/project-manager.png';
+import recruiterAvatar from '@/assets/personas/recruiter.png';
+import researcherAvatar from '@/assets/personas/researcher.png';
+import salesRepAvatar from '@/assets/personas/sales-rep.png';
+import supportAgentAvatar from '@/assets/personas/support-agent.png';
+import verifierAvatar from '@/assets/personas/verifier.png';
+import writerAvatar from '@/assets/personas/writer.png';
 
 export interface PersonaConfig {
   id: string;
@@ -33,24 +35,25 @@ export interface PersonaConfig {
 
 /**
  * Map all 22 real agent persona IDs (from packages/agent/src/persona-data.ts)
- * to a UNIQUE bee avatar each (2026-07-06). Every persona carries a distinct
- * cluster prop so the picker/switcher never shows two identical mascots.
+ * to a UNIQUE bee avatar each — 1:1 by persona id since the Wave Q flat-
+ * geometric set (no more repurposed legacy names). Every persona carries a
+ * distinct prop so the picker/switcher never shows two identical mascots.
  */
 const AVATAR_MAP: Record<string, string> = {
   // Universal modes
-  'general-purpose': synthesizerAvatar,
-  'planner': forecasterAvatar,
+  'general-purpose': generalPurposeAvatar,
+  'planner': plannerAvatar,
   'verifier': verifierAvatar,
-  'coordinator': publisherAvatar,
+  'coordinator': coordinatorAvatar,
   // Knowledge workers
   'researcher': researcherAvatar,
-  'writer': contentWriterAvatar,
-  'analyst': analyticsAvatar,
-  'coder': hookAnalyzerAvatar,
+  'writer': writerAvatar,
+  'analyst': analystAvatar,
+  'coder': coderAvatar,
   // Domain specialists
   'project-manager': projectManagerAvatar,
   'executive-assistant': executiveAssistantAvatar,
-  'sales-rep': trendDetectorAvatar,
+  'sales-rep': salesRepAvatar,
   'marketer': marketerAvatar,
   'product-manager-senior': productManagerSeniorAvatar,
   'hr-manager': hrManagerAvatar,
