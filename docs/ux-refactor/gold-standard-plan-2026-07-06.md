@@ -371,3 +371,22 @@ re-inserting bench frames; recheck before any future capture.
 - R10 capture: home CLEAN (modal dismissed; healthy content modal captured
   separately as 142) · settings back at Essential tier · label-consistent
   set (130-132 recaptured after the StatusBar relabel). Judging in flight.
+
+**Round 10 verdict (2026-07-06 ~17:05):**
+- R10: design 7.8 · kw 7.7 · competitor 7.6 · a11y 7.6 · brand 7.5
+  (**min 7.5 — new high** · avg 7.64). Trajectory: 6.7 → 6.9 → 7.24 → 7.44 →
+  7.36 → 7.7 → 7.68 → 7.58 → 7.52 → 7.64. Wave Q verdicts landed: home 8.4
+  ("out-crafts Claude and ChatGPT"), memory 8.5, agents mascots "award-grade
+  brand asset", landing 8.6/8.4.
+- NEW BUG the panel caught: settings 6.6 — shot 141 shows a browser-default
+  BLUE focus ring on the Anthropic tile beside OpenAI's honey selected border
+  (a `ring` utility missing its color token) — all 5 judges flagged it.
+- Wave R launched (5 Opus lanes, wf_ab570c2d-953): A settings ring grammar +
+  Show re-home to content header + $$$ legend · B workspace card living
+  identity INCLUDING server list-row enrichment (memoryCount + last-session
+  line — the data blocker judges have hit 3 rounds running) · C marketplace
+  craft (chip grammar, submit affordance, warm Connected, START-HERE
+  re-curation) · D chrome truth (memory-count scope label, composer control
+  family, light elevation + light --attention AA, dark chip legibility, hex
+  wallpaper radial falloff) · E brand moments (mascots on onboarding/briefing/
+  chat-empty, memory stat order, landing LoCoMo flagship stat).
