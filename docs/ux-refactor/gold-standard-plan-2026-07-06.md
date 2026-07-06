@@ -305,3 +305,43 @@ chat measure 760→680px (~72ch).
   workspace card anatomy v3 (7.0) · home card-system unification ·
   judging-regime switch to video/live · founder branch review (29 commits,
   NOT pushed).
+
+---
+
+## S2 — Wave P + mascot fix + R9 (2026-07-06 ~15:45, goal re-armed: 5×9/10)
+
+**Wave P (`3fa98f81`) — the three queued structural redesigns, executed as 3
+parallel Opus lanes** (spec: `wave-P-spec-2026-07-06.md`):
+- Settings/ModelGate: pill row → filled provider TILE grid (keyed=honey-wash /
+  failing=risk-wash+glyph / unkeyed=quiet outline; ring on selected;
+  "Your providers"/"Add a provider" grouping) · Show density control anchored
+  to the rail foot (a11y: radiogroup no longer nested in tablist) · Models tab
+  de-duplicated (provider row-list removed — the tile grid is the one truth) ·
+  failing banner unified on --risk with the tile (was yellow-500).
+- Workspaces: card v3 — flex-col + mt-auto footer on ONE baseline, honest
+  "Created X · active Y" activity line (verified: list rows carry NO summary
+  field), hover "Open →" affordance, min-h 132 (168 opened a dead band).
+- Home: 3-tier card grammar — heroes r-xl + shadow-elevated + one eyebrow
+  anatomy (StartHere keeps honey border+gradient identity, drops shadow-honey);
+  tier-2 cards r-lg + shadow-card; tier-3 rows 14px flat.
+- Gates: web tsc 0 · vitest 1355/1355. (One self-inflicted JSX-comment-in-
+  ternary broke vite mid-session — caught by browser QA + suite, fixed.)
+
+**Mascots (`1fbb9cc2`):** Writer + Night Shift landing bees were rendered-
+cartoon outliers → regenerated in the house flat-geometric style (nano-banana
+pro + style refs), then DETERMINISTIC palette correction (measured refs at
+~40° golden vs generations at ~30° orange → PIL hue shift + white→cream +
+halo rim cleanup). Verified in-grid on :3005.
+
+**Capture-regime fixes (live in R9 set):** activeElement.blur() before every
+shot (kills the phantom "stuck focus" ring) + scrollbar-hide style (headless
+overlay-thumb artifact) — both disclosed to judges as capture notes; 2 NEW
+interaction-state shots (140 card-hover, 141 provider-tile-selected).
+
+**Data hygiene:** 3 more BENCHMARK frames deleted via API (530, 501, 283 —
+the q=BENCHMARK sweep missed prefix variants). ⚠ id 530 appeared AFTER 529's
+deletion — something (likely the concurrent BEAM-benchmark session touching
+benchmarks/ + hive-mind-* in this same worktree, uncommitted as of 15:45) is
+re-inserting bench frames; recheck before any future capture.
+
+**R9 judging in flight** (5-persona panel, wf_6ee59488-f11).
