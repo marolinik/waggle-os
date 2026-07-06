@@ -11,7 +11,7 @@
  *    link); the actions menu inside stops propagation so managing never opens
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
 import type { Workspace } from '@/lib/types';
 
 const mocks = vi.hoisted(() => ({
@@ -29,15 +29,17 @@ vi.mock('@/providers/ShellContext', () => ({ useShell: () => mocks.shell }));
 // Thin stubs: both reach into ShellContext/adapter/toast internally — out of
 // scope for this view's grid/search/filter/empty-state logic.
 vi.mock('../WorkspaceActionsMenu', () => ({
-  default: ({ workspace }: { workspace: { id: string } }) => (
-    <button data-testid={`actions-${workspace.id}`}>actions</button>
+  // Forward buttonClassName so the rest-affordance tier (Wave U Lane A item 2)
+  // is assertable on the trigger.
+  default: ({ workspace, buttonClassName }: { workspace: { id: string }; buttonClassName?: string }) => (
+    <button data-testid={`actions-${workspace.id}`} className={buttonClassName}>actions</button>
   ),
 }));
 vi.mock('../overlays/CreateWorkspaceDialog', () => ({
   default: ({ open }: { open: boolean }) => (open ? <div data-testid="create-dialog" /> : null),
 }));
 
-import AllWorkspacesApp from './AllWorkspacesApp';
+import AllWorkspacesApp, { resetWorkspaceShelfCache } from './AllWorkspacesApp';
 
 const ws = (over: Partial<Workspace> & { id: string; name: string }): Workspace => ({
   group: 'Personal',
@@ -45,6 +47,9 @@ const ws = (over: Partial<Workspace> & { id: string; name: string }): Workspace 
 });
 
 beforeEach(() => {
+  // Wave U Lane A: the shelf cache/resolution flags are module-scoped — reset
+  // so each test starts cold (no leak) and non-empty renders resolve at once.
+  resetWorkspaceShelfCache();
   mocks.shell.workspaces = [
     ws({ id: 'w1', name: 'Competitive Intelligence', storageType: 'local', memoryCount: 142, sessionCount: 12, health: 'healthy' }),
     ws({ id: 'w2', name: 'Pricing Model', storageType: 'virtual', memoryCount: 64, health: 'degraded' }),
@@ -202,14 +207,72 @@ describe('AllWorkspacesApp', () => {
     expect(onOpenWorkspace).not.toHaveBeenCalled();
   });
 
-  it('shows the create-first empty state when there are zero workspaces (D16)', () => {
+  it('shows the create-first empty state ONLY after the query resolves genuinely-empty (D16 · Wave U Lane A)', () => {
+    vi.useFakeTimers();
+    try {
+      mocks.shell.workspaces = [];
+      render(<AllWorkspacesApp />);
+      // Loading is a distinct state — the empty CTA must not flash first.
+      expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
+      expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+      // Once the settle floor elapses, an empty list becomes the empty state.
+      act(() => { vi.advanceTimersByTime(900); });
+      expect(screen.getByTestId('all-workspaces-empty')).toBeInTheDocument();
+      expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
+
+      // The CTA opens the reused CreateWorkspaceDialog rather than dead-ending.
+      fireEvent.click(screen.getByTestId('all-workspaces-create-first'));
+      expect(screen.getByTestId('create-dialog')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('renders skeleton cards while the query is unresolved, never the empty CTA prematurely (Wave U Lane A item 1)', () => {
+    vi.useFakeTimers();
+    try {
+      mocks.shell.workspaces = [];
+      render(<AllWorkspacesApp />);
+      // Loading · empty · error are three distinct states — skeletons first.
+      expect(screen.getByTestId('all-workspaces-loading')).toBeInTheDocument();
+      expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('all-workspaces-create-first')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a populated query resolves straight to the grid — no skeleton flash', () => {
+    // Non-empty on first render → resolved synchronously, no loading state.
+    render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-grid')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-loading')).not.toBeInTheDocument();
+  });
+
+  it('seeds a revisit from the session cache so last-known cards paint instantly (Wave U Lane A item 1)', () => {
+    // First visit resolves with real cards → populates the module cache.
+    const { unmount } = render(<AllWorkspacesApp />);
+    expect(screen.getByTestId('all-workspaces-grid')).toBeInTheDocument();
+    unmount();
+    // A revisit where the live list hasn't rehydrated yet (empty) paints the
+    // cached shelf instantly — not a skeleton, not the empty state.
     mocks.shell.workspaces = [];
     render(<AllWorkspacesApp />);
-    expect(screen.getByTestId('all-workspaces-empty')).toBeInTheDocument();
-    expect(screen.queryByTestId('all-workspaces-grid')).not.toBeInTheDocument();
+    expect(screen.getByTestId('all-workspaces-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('all-workspaces-card-w1')).toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-loading')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('all-workspaces-empty')).not.toBeInTheDocument();
+  });
 
-    // The CTA opens the reused CreateWorkspaceDialog rather than dead-ending.
-    fireEvent.click(screen.getByTestId('all-workspaces-create-first'));
-    expect(screen.getByTestId('create-dialog')).toBeInTheDocument();
+  it('the card actions kebab is a rest affordance (low opacity), full on hover/focus-within (Wave U Lane A item 2)', () => {
+    render(<AllWorkspacesApp />);
+    const kebab = screen.getByTestId('actions-w1');
+    // Visible at rest (touch + keyboard), not opacity-0 hover-only reveal.
+    expect(kebab.className).toContain('opacity-60');
+    expect(kebab.className).not.toContain('opacity-0');
+    // Full on hover or focus-within (keyboard/focus parity).
+    expect(kebab.className).toContain('group-hover:opacity-100');
+    expect(kebab.className).toContain('group-focus-within:opacity-100');
   });
 });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle, ShieldOff } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -66,6 +67,7 @@ export default function MemoryCenterTab({
 }: MemoryCenterTabProps = {}) {
   // Workspace-mind ops carry the workspace param; personal ops must not.
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
+  const reduceMotion = !!useReducedMotion();
   // Wave T Lane D (item 2): seed the initial list from the session cache so a
   // Trust ↔ Memories tab switch re-shows its rows instantly instead of re-
   // spinning (R13-V1 finding). A fresh remount always lands on the default
@@ -369,7 +371,13 @@ export default function MemoryCenterTab({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    // Wave U Lane E (item 4): a ~150ms fade-slide when this panel mounts on the
+    // Trust↔Memories tab swap (reuses the card-enter keyframe at the Wave T hover
+    // timing). motion-safe — reduced-motion keeps the instant swap.
+    <div
+      className="flex flex-col h-full"
+      style={reduceMotion ? undefined : { animation: 'card-enter 0.15s ease-out both' }}
+    >
       {/* Filter bar */}
       <div className="border-b border-border/50 p-2.5 space-y-2 bg-background/60">
         <div className="flex items-center gap-2">
@@ -487,7 +495,25 @@ export default function MemoryCenterTab({
       {/* List */}
       <div className="flex-1 overflow-auto p-2.5">
         {loading && memories.length === 0 ? (
-          <div role="status" aria-live="polite" className="text-center py-12"><Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" /><p className="text-xs text-muted-foreground">Loading memories…</p></div>
+          // Wave U Lane E (item 3): a generic centered spinner told the user
+          // nothing about the surface shape. Render skeleton cards on the real
+          // MemoryCard geometry (two-column grid, title + 2 preview lines + a
+          // badge row) so the wait previews the list that's coming. The pulse is
+          // decorative (aria-hidden); the live region carries the announcement.
+          <div role="status" aria-live="polite" aria-busy="true" className="grid grid-cols-1 lg:grid-cols-2 gap-2 animate-pulse motion-reduce:animate-none">
+            <span className="sr-only">Loading memories…</span>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} aria-hidden className="rounded-xl border border-border bg-card/60 p-3">
+                <div className="h-3.5 w-2/3 rounded bg-muted mb-2" />
+                <div className="h-3 w-full rounded bg-muted mb-1" />
+                <div className="h-3 w-4/5 rounded bg-muted" />
+                <div className="mt-2.5 flex gap-1.5">
+                  <div className="h-4 w-14 rounded bg-muted" />
+                  <div className="h-4 w-10 rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : error ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>

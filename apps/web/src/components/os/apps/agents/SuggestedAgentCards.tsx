@@ -66,7 +66,12 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
               </span>
               <span className="block text-[12px] leading-snug text-muted-foreground">{p.description}</span>
               {WHY[p.id] && (
-                <span className="mt-1.5 block text-[11px] leading-snug text-muted-foreground/70">{WHY[p.id]}</span>
+                // Wave U Lane E (item 1): the "why this one" whisper line was
+                // text-muted-foreground/70 (~2.3:1 dark / ~3.0:1 light — sub-AA).
+                // Drop the /70 to the full --muted-foreground token (~6.1:1 dark,
+                // ~5.7:1 light); the 11px size + spacing keep it subordinate to
+                // the 12px description without falling below the AA text floor.
+                <span className="mt-1.5 block text-[11px] leading-snug text-muted-foreground">{WHY[p.id]}</span>
               )}
               <span className="mt-auto inline-flex items-center gap-1 pt-3 text-[12px] font-display font-semibold text-honey opacity-80 transition-opacity group-hover:opacity-100">
                 <Plus className="h-3.5 w-3.5" /> Create

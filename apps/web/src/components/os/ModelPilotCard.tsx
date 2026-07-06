@@ -45,7 +45,10 @@ const LANES: LaneConfig[] = [
     key: 'primary',
     label: 'Primary',
     icon: Zap,
-    rail: 'var(--honey)',
+    // Wave U Lane E (item 2): --honey-text (not raw --honey) so the 11px label
+    // clears AA in light — raw --honey #c07f00 probes ~3.3:1 on the ivory card,
+    // --honey-text #9a6408 is ~4.9:1. No-op in dark (both resolve to #e9a52c).
+    rail: 'var(--honey-text)',
     description: 'Your default model for all tasks',
   },
   {
@@ -55,8 +58,10 @@ const LANES: LaneConfig[] = [
     // Warm copper — role identity deliberately OFF the semantic palette
     // (round-4: the --risk rail read as "this lane is failing"). Mixed from
     // the theme tokens so it tracks both themes; the Shield icon carries the
-    // role, and red/green stay reserved for real states.
-    rail: 'color-mix(in srgb, var(--honey) 55%, var(--risk) 45%)',
+    // role, and red/green stay reserved for real states. Wave U Lane E (item 2):
+    // the honey half uses --honey-text so the copper label clears AA in light
+    // (~3.8:1 → ~4.7:1); no-op in dark where --honey-text == --honey.
+    rail: 'color-mix(in srgb, var(--honey-text) 55%, var(--risk) 45%)',
     description: 'Used when primary is down or rate-limited',
   },
   {

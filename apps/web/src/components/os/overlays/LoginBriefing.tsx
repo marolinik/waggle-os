@@ -18,7 +18,7 @@ import { useService } from '@/providers/ServiceProvider';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import type { Workspace } from '@/lib/types';
 import { selectBriefingHighlights } from '@/lib/briefing-highlights';
-import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
+import { isDevNoiseWorkspace, workspaceCounts } from '@/lib/workspace-counts';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import {
   computeBragSummary,
@@ -100,7 +100,10 @@ const isCannedWorkspaceSummary = (summary?: string): boolean =>
 // slim error row; the soft sources (memory search / stats) already degrade to
 // []/null inline. Byte-for-byte the logic the component's loadBriefing used to
 // run inline — moved, not changed.
-async function fetchBriefingData(): Promise<BriefingData> {
+// Exported (not a component) so the numbers reconciliation is unit-tested at its
+// seam; the file already forgoes fast-refresh via prefetchBriefing below.
+// eslint-disable-next-line react-refresh/only-export-components
+export async function fetchBriefingData(): Promise<BriefingData> {
   const [workspaces, frames, stats] = await Promise.all([
     adapter.getWorkspaces(),
     adapter.searchMemory('important decision project plan', 'global').catch(() => []),
@@ -162,7 +165,19 @@ async function fetchBriefingData(): Promise<BriefingData> {
   // contradicted the Home grid's recency ordering.
   summaries.sort((a, b) => Date.parse(b.lastActive || '0') - Date.parse(a.lastActive || '0'));
 
-  return { highlights, summaries, brag: computeBragSummary(stats, summaries) };
+  // Wave U Lane B (item 2 — numbers reconciliation): the header's workspace count
+  // must equal Home's hero ("N workspaces waiting"). Both now read the SAME
+  // canonical visible count (non-archived, non-dev-noise) from workspaceCounts(),
+  // so the modal and the hero it overlays can never state two different totals for
+  // one store. computeBragSummary's own summaries.length was a capped, archived-
+  // inclusive subset — that mismatch is the "2 vs 6 workspaces" the judges caught.
+  // (The row list below stays a curated recency preview — a list, not a count claim.)
+  const brag = computeBragSummary(stats, summaries);
+  return {
+    highlights,
+    summaries,
+    brag: { ...brag, workspaceCount: workspaceCounts(workspaces).visible },
+  };
 }
 
 // Prefetch cache: a single in-flight/settled briefing promise the BootScreen

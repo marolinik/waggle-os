@@ -215,19 +215,20 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
   };
 
   return (
-    // Wave T Lane E fix 1: one discoverable action row. At rest it holds a
-    // persistent low-opacity hint (~3:1) so copy/retry are findable without
-    // hover; the whole row lifts to full contrast (>4.5:1) with a 150ms
-    // slide/fade on turn hover AND on :focus-within (keyboard parity). Icons
-    // rest at --text-dim (AA-tuned) and brighten to --text on direct hover.
-    // Reduced-motion drops the slide (opacity-only), honoring the guard.
-    <div className="flex items-center gap-1 mt-1 relative opacity-60 translate-y-0.5 transition-[opacity,transform] duration-150 ease-out group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
+    // Wave T Lane E fix 1 + Wave U Lane F fix 1: one discoverable action row,
+    // now reading as a toolbar. At rest it holds a persistent hint (opacity-75)
+    // on a subtle --surface-2 pill so copy/retry are findable without hover; the
+    // whole row lifts to full contrast (>4.5:1) with a 150ms slide/fade on turn
+    // hover AND on :focus-within (keyboard parity). 16px icons rest at
+    // --text-dim (AA-tuned) and brighten to --text on direct hover. Reduced-
+    // motion drops the slide (opacity-only), honoring the guard.
+    <div data-testid="chat-action-row" className="inline-flex items-center gap-1 mt-1 relative rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 opacity-75 translate-y-0.5 transition-[opacity,transform] duration-150 ease-out group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
       <HintTooltip content="Good response">
         <button
           onClick={() => handleVote('up')}
           className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-[var(--text-dim)] hover:text-[var(--text)]'}`}
         >
-          <ThumbsUp className="w-3 h-3" />
+          <ThumbsUp className="w-4 h-4" />
         </button>
       </HintTooltip>
       <HintTooltip content="Poor response">
@@ -238,7 +239,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
           }}
           className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-[var(--text-dim)] hover:text-[var(--text)]'}`}
         >
-          <ThumbsDown className="w-3 h-3" />
+          <ThumbsDown className="w-4 h-4" />
         </button>
       </HintTooltip>
       {/* Round-6 fix 2 / Wave T Lane E: Copy (checkmark flash) + Retry (last
@@ -256,7 +257,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
                 : 'text-[var(--text-dim)] hover:text-[var(--text)]'
             }`}
           >
-            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
           </button>
         </HintTooltip>
       )}
@@ -268,7 +269,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
             data-testid="chat-msg-retry"
             className="p-0.5 rounded text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
           >
-            <RotateCcw className="w-3 h-3" />
+            <RotateCcw className="w-4 h-4" />
           </button>
         </HintTooltip>
       )}
@@ -557,6 +558,8 @@ const ChatApp = ({
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showModelPicker, setShowModelPicker] = useState(false);
   const [showHeaderOverflow, setShowHeaderOverflow] = useState(false);
+  // Wave U Lane F fix 2: one-shot scale pop when the send button fills honey.
+  const [sendPulse, setSendPulse] = useState(false);
   // B3: the right work canvas opens on a fresh artifact and survives navigation
   // (it lives inside ChatApp's kept-alive flex root).
   const [canvasOpen, setCanvasOpen] = useState(false);
@@ -704,6 +707,23 @@ const ChatApp = ({
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isLoading]);
+
+  // Wave U Lane F fix 2: a ~200ms scale pop the moment the send button fills
+  // honey (empty→ready). Fires once per empty→ready transition — the ref guard
+  // means streaming/isLoading flips, prefilled-on-mount starters, and plain
+  // re-renders never re-pulse — and the scale class is motion-safe gated on the
+  // button, so reduced-motion never scales.
+  const canSend = Boolean(input.trim()) && !isLoading;
+  const prevCanSendRef = useRef(canSend);
+  useEffect(() => {
+    if (canSend && !prevCanSendRef.current) {
+      setSendPulse(true);
+      const id = setTimeout(() => setSendPulse(false), 200);
+      prevCanSendRef.current = canSend;
+      return () => clearTimeout(id);
+    }
+    prevCanSendRef.current = canSend;
+  }, [canSend]);
 
   // F2: mount-once auto-send of the wizard's first task. The prefill (line ~464)
   // stays visible — the same "about to ship" beat as the FR #32 starter prompts —
@@ -1455,13 +1475,13 @@ const ChatApp = ({
                   of low-opacity honey so the two states are unmistakable. */}
               <button
                 onClick={handleSend}
-                disabled={!input.trim() || isLoading}
+                disabled={!canSend}
                 aria-label="Send"
-                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
-                  input.trim() && !isLoading
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-200 ${
+                  canSend
                     ? 'bg-primary text-[#1a1407] hover:opacity-90'
                     : 'bg-[var(--surface-2)] text-[var(--text-dim)]'
-                }`}
+                } ${sendPulse ? 'motion-safe:scale-110' : ''}`}
               >
                 <Send className="w-4 h-4" />
               </button>

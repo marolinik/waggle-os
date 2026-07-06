@@ -19,7 +19,7 @@
  * `onOpenWorkspace` to navigate into a workspace (same target HomeCockpit uses,
  * `/workspaces/:id`); with no prop it degrades to selection-only.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Hexagon, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -29,6 +29,31 @@ import CreateWorkspaceDialog from '../overlays/CreateWorkspaceDialog';
 import { HexAvatar, SectionLabel } from '../warm';
 import { accentFor } from '../warm/HexAvatar';
 import type { StorageType, Workspace } from '@/lib/types';
+
+// ── Wave U (Lane A) item 1: session-scoped shelf cache ─────────────────────
+// The shelf must show THREE distinct states — loading, empty, error — not
+// flash the empty "Create your first workspace" CTA for ~0.5s before the query
+// lands. Two module-scoped guards make that honest (mirrors memory-list-cache):
+//   • shelfSessionCache holds the last resolved workspace list, so a revisit
+//     within the SPA session paints last-known cards instantly and refreshes in
+//     the background (cold on reload — a fresh session by design).
+//   • shelfSessionResolved records that the query resolved ≥once this session,
+//     so a revisit to a genuinely-empty account skips the settle floor.
+// ShellContext does not forward useWorkspaces' `loading` flag, so a one-shot
+// settle floor stands in for it: until the list is non-empty, an error
+// surfaces, or the floor elapses, the shelf is treated as still loading.
+let shelfSessionCache: Workspace[] | null = null;
+let shelfSessionResolved = false;
+const SHELF_SETTLE_MS = 800;
+
+/** Test-only: reset the module-scoped shelf cache so state can't leak across tests.
+ *  (memory-list-cache keeps this in its own module; the lane is scoped to this
+ *  one file, so the helper co-locates here behind a fast-refresh exemption.) */
+// eslint-disable-next-line react-refresh/only-export-components
+export function resetWorkspaceShelfCache(): void {
+  shelfSessionCache = null;
+  shelfSessionResolved = false;
+}
 
 interface AllWorkspacesAppProps {
   /**
@@ -302,10 +327,14 @@ function WorkspaceCard({
           {/* Interactive-within-interactive: keep menu clicks out of the card's
               open handler (keyboard is guarded by the card's target check). */}
           <span onClick={(e) => e.stopPropagation()}>
+            {/* Wave U (Lane A) fix 2: a rest affordance, not a hover-only reveal
+                — visible at low opacity at rest (touch + keyboard users can see
+                it), full on hover or focus-within (the chat action-row tier from
+                Wave T Lane E: rest ~0.6 → hover/focus-within 1.0). */}
             <WorkspaceActionsMenu
               workspace={{ id: ws.id, name: ws.name, status: ws.status }}
               onChanged={onChanged}
-              buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
+              buttonClassName="opacity-60 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100"
             />
           </span>
         </div>
@@ -314,12 +343,91 @@ function WorkspaceCard({
   );
 }
 
+// ── Loading state (Wave U Lane A item 1) ──────────────────────────────────
+// One skeleton card matching the fixed-slot card geometry (min-h 132 · rounded
+// · surface · identity/tag/preview/metrics slots). Decorative — the shelf owns
+// the live "Loading workspaces…" announcement.
+function ShelfCardSkeleton() {
+  return (
+    <div
+      aria-hidden
+      className="flex min-h-[132px] flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)]"
+    >
+      {/* Slot 1 — identity: avatar + name + badge */}
+      <div className="mb-2.5 flex items-center gap-3">
+        <div className="h-9 w-9 shrink-0 rounded-[10px] bg-[var(--surface-2)]" />
+        <div className="h-4 flex-1 rounded bg-[var(--surface-2)]" />
+        <div className="h-5 w-14 shrink-0 rounded-full bg-[var(--surface-2)]" />
+      </div>
+      {/* Slot 2 — tag */}
+      <div className="mb-2.5 flex items-center gap-1.5">
+        <div className="h-4 w-16 rounded-[6px] bg-[var(--surface-2)]" />
+      </div>
+      {/* Slot 3 — preview (reserved two-line body, min-h matches the card) */}
+      <div className="min-h-[39px] space-y-1.5">
+        <div className="h-3 w-full rounded bg-[var(--surface-2)]" />
+        <div className="h-3 w-3/5 rounded bg-[var(--surface-2)]" />
+      </div>
+      {/* Slot 4 — metrics footer, pinned to the bottom baseline */}
+      <div className="mt-auto flex items-center gap-3.5 pt-3">
+        <div className="h-3 w-20 rounded bg-[var(--surface-2)]" />
+        <div className="h-3 w-16 rounded bg-[var(--surface-2)]" />
+      </div>
+    </div>
+  );
+}
+
+function ShelfLoading() {
+  return (
+    <div className="mx-auto h-full max-w-[1000px] overflow-auto px-8 pb-16 pt-7" data-testid="all-workspaces-loading">
+      <h1 className="mb-1.5 text-[28px] font-semibold tracking-[-0.02em] text-[var(--text)]">Workspaces</h1>
+      <p className="mb-5 text-[14px] text-[var(--text-muted)]">
+        Home greets you with the day. This is the full shelf — every workspace, where it
+        lives, and what's happening in it.
+      </p>
+      {/* Pulse the whole grid as one unit; motion-reduce holds it steady. */}
+      <div
+        aria-hidden
+        className="grid animate-pulse grid-cols-1 gap-3.5 motion-reduce:animate-none sm:grid-cols-2 lg:grid-cols-3"
+      >
+        <ShelfCardSkeleton />
+        <ShelfCardSkeleton />
+        <ShelfCardSkeleton />
+      </div>
+      <span role="status" className="sr-only">Loading workspaces…</span>
+    </div>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────
 const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const {
-    workspaces, workspacesError,
+    workspaces: liveWorkspaces, workspacesError,
     selectWorkspace, createWorkspace, refreshWorkspaces,
   } = useShell();
+
+  // Wave U (Lane A) item 1: seed the shelf from the session cache so a revisit
+  // paints last-known cards instantly; the live list wins the moment it
+  // (re)arrives non-empty. Every downstream derivation reads this effective list.
+  const workspaces = liveWorkspaces.length > 0 ? liveWorkspaces : (shelfSessionCache ?? liveWorkspaces);
+
+  // Three distinct states (loading · empty · error): never flash the empty
+  // "Create your first workspace" CTA before the query resolves. A one-shot
+  // settle floor stands in for the `loading` flag ShellContext doesn't forward —
+  // the shelf is "loading" until the list is non-empty, an error surfaces, or
+  // the floor elapses. A resolution recorded this session skips the floor on
+  // later revisits.
+  const [settled, setSettled] = useState(shelfSessionResolved);
+  useEffect(() => {
+    if (shelfSessionResolved) return;
+    const t = window.setTimeout(() => setSettled(true), SHELF_SETTLE_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  const resolved = workspaces.length > 0 || workspacesError != null || settled;
+  useEffect(() => {
+    if (liveWorkspaces.length > 0) shelfSessionCache = liveWorkspaces;
+    if (resolved) shelfSessionResolved = true;
+  }, [liveWorkspaces, resolved]);
 
   const [query, setQuery] = useState('');
   const [storageFilter, setStorageFilter] = useState<StorageFilter>('all');
@@ -380,6 +488,12 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
     selectWorkspace(id);
     onOpenWorkspace?.(id);
   };
+
+  // Loading is the distinct third state — 3 skeleton cards in the shelf
+  // geometry, never the empty CTA, until the query resolves (Wave U Lane A).
+  if (!resolved) {
+    return <ShelfLoading />;
+  }
 
   // Empty state (D16): a zero-workspace visit gets a create CTA, never a dead end.
   if (shelfWorkspaces.length === 0) {

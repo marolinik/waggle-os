@@ -26,10 +26,13 @@ const mocks = vi.hoisted(() => ({
     installMcp: vi.fn(),
     revokeMcp: vi.fn().mockResolvedValue({ ok: true }),
     getExtendAudit: vi.fn(),
+    agentSearch: vi.fn(),
+    installPack: vi.fn().mockResolvedValue(undefined),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
+import type { AgentSearchResponse } from '@/lib/agent-search';
 import MarketplaceApp from '@/components/os/apps/MarketplaceApp';
 import { ServiceProvider } from '@/providers/ServiceProvider';
 import { InstallProvider } from '@/providers/InstallProvider';
@@ -41,6 +44,20 @@ const renderApp = () => render(
 const skillRows = (installed = false) => ([
   { id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed, scanStatus: 'passed', source: 'registry' },
 ]);
+
+// Semantic-match fixtures for the NL auto-run (Wave U Lane C). MATCH resolves a
+// skill pick; NO_MATCH resolves empty picks so the catalog fallback shows.
+const MATCH: AgentSearchResponse = {
+  need: 'send a slide deck to my whole team', gapDetected: true, alreadyHandled: false,
+  recommendation: null, candidates: [],
+  picks: {
+    skill: { name: 'deck-builder', type: 'marketplace', availability: 'installable', description: 'Turn work into slides', matchReason: 'matches: slide, deck', matchScore: 0.8, install: { mode: 'store', extensionId: 'pkg:42', type: 'skill', kind: 'package', packageId: 42 } },
+  },
+};
+const NO_MATCH: AgentSearchResponse = {
+  need: 'send a slide deck to my whole team', gapDetected: true, alreadyHandled: false,
+  recommendation: null, candidates: [], picks: {},
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -64,6 +81,7 @@ beforeEach(() => {
   mocks.adapter.uninstallMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
   mocks.adapter.installMcp.mockResolvedValue({ installed: true });
   mocks.adapter.getExtendAudit.mockResolvedValue([]);
+  mocks.adapter.agentSearch.mockResolvedValue(MATCH);
 });
 afterEach(cleanup);
 
@@ -237,18 +255,47 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     expect(screen.getByText('PostgreSQL')).toBeInTheDocument(); // still in the grid
   });
 
-  it('an NL query with no keyword match bridges to the semantic search (Wave T Lane B §1)', async () => {
+  it('an NL query with no keyword match AUTO-RUNS the semantic match — no dead-end (Wave U Lane C §1)', async () => {
     renderApp();
     await screen.findByText('Web Scraper');
     // ≥3-word described need that no loaded row matches by name/description.
     fireEvent.change(screen.getByLabelText('Ask Waggle'), {
       target: { value: 'send a slide deck to my whole team' },
     });
-    const bridge = await screen.findByTestId('nl-search-bridge');
-    expect(bridge).toHaveTextContent(/Press Enter/i);
-    // A one-word miss stays the plain "no results" copy — no bridge.
+    // The bridge runs itself — no "press Enter" hint — and renders the ranked
+    // result under the "Matched to your request" label.
+    await waitFor(
+      () => expect(mocks.adapter.agentSearch).toHaveBeenCalledWith('send a slide deck to my whole team'),
+      { timeout: 3000 },
+    );
+    expect(await screen.findByTestId('nl-matched-label')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-search-pick-skill')).toHaveTextContent('deck-builder');
+    // The old "press Enter" dead-end hint is gone.
+    expect(screen.queryByTestId('nl-search-bridge')).not.toBeInTheDocument();
+  });
+
+  it('when the semantic match ALSO finds nothing, shows closest catalog entries + a real escape (Lane C §2)', async () => {
+    mocks.adapter.agentSearch.mockResolvedValue(NO_MATCH);
+    renderApp();
+    await screen.findByText('Web Scraper');
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), {
+      target: { value: 'reconcile invoices against the ledger nightly' },
+    });
+    const fallback = await screen.findByTestId('nl-no-match-fallback', {}, { timeout: 3000 });
+    // A real escape button (not a text link), and no gray "no match by name" lead.
+    expect(within(fallback).getByTestId('nl-ask-agent').tagName).toBe('BUTTON');
+    expect(screen.queryByTestId('nl-search-bridge')).not.toBeInTheDocument();
+    expect(screen.queryByText(/by name/i)).not.toBeInTheDocument();
+  });
+
+  it('a 1-2 word miss keeps the plain "No results" copy and never auto-runs (Lane C §3)', async () => {
+    renderApp();
+    await screen.findByText('Web Scraper');
     fireEvent.change(screen.getByLabelText('Ask Waggle'), { target: { value: 'zzzznope' } });
-    await waitFor(() => expect(screen.queryByTestId('nl-search-bridge')).not.toBeInTheDocument());
+    expect(await screen.findByText('No results for "zzzznope"')).toBeInTheDocument();
+    expect(screen.queryByTestId('nl-no-match-fallback')).not.toBeInTheDocument();
+    // Below the NL threshold — the semantic engine is never invoked.
+    await waitFor(() => expect(mocks.adapter.agentSearch).not.toHaveBeenCalled(), { timeout: 1200 });
   });
 
   it('the Audit tab reads the C18 shared feed and the type filter re-queries', async () => {

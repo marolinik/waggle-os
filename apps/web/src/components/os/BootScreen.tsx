@@ -1,5 +1,5 @@
-import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useState, useEffect, useCallback, useRef } from "react";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import { useIsLightTheme } from "@/hooks/useIsLightTheme";
@@ -13,40 +13,59 @@ const PHASES = [
 ];
 
 const PHASE_DURATION = 400;
-const READY_PAUSE = 400;
-const EXIT_DELAY = 300;
+// Wave U Lane D (item 1): perceptual boot floor. The boot screen shows for at
+// least this long — enough for the brand moment — then exits the instant the
+// shell's data dependencies are ready (`ready` prop). Replaces the old fixed
+// ~2.3s choreography floor that made returning users sit through dead air.
+const MIN_BRAND_MS = 850;
 const SKIP_HINT_DELAY = 1000;
 
-const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
+const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; ready?: boolean }) => {
   const [phase, setPhase] = useState(0);
-  const [done, setDone] = useState(false);
+  const [floorElapsed, setFloorElapsed] = useState(false);
   const [showSkipHint, setShowSkipHint] = useState(false);
+  const completedRef = useRef(false);
+  const reduceMotion = useReducedMotion();
   // Logo asset varies by theme: jpeg (solid dark backing, honey W) reads well
   // on the hive-950 dark background; png (transparent, black "WAGGLE" text)
   // reads well on the cream light background.
   const isLight = useIsLightTheme();
   const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
 
-  const handleSkip = useCallback(() => {
+  // Fire onComplete at most once — the floor+ready path and the manual skip
+  // (click / any key) both race to exit; whichever wins, the other is a no-op.
+  const finish = useCallback(() => {
+    if (completedRef.current) return;
+    completedRef.current = true;
     onComplete();
   }, [onComplete]);
 
+  const handleSkip = useCallback(() => {
+    finish();
+  }, [finish]);
+
+  // Perceptual floor: hold the boot screen for at least MIN_BRAND_MS so the
+  // brand moment lands, no matter how fast deps resolve.
+  useEffect(() => {
+    const t = setTimeout(() => setFloorElapsed(true), MIN_BRAND_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Exit once the floor has elapsed AND the shell's deps are ready. While deps
+  // are genuinely unresolved (ready=false) the boot holds past the floor — the
+  // phase choreography below settles on "Ready." and waits (item 1).
+  useEffect(() => {
+    if (floorElapsed && ready) finish();
+  }, [floorElapsed, ready, finish]);
+
+  // Visual phase choreography — advances on its own cadence, decoupled from the
+  // exit trigger so shortening the floor never truncates it mid-transition.
   useEffect(() => {
     if (phase < PHASES.length - 1) {
       const t = setTimeout(() => setPhase(p => p + 1), PHASE_DURATION);
       return () => clearTimeout(t);
-    } else {
-      const t = setTimeout(() => setDone(true), READY_PAUSE);
-      return () => clearTimeout(t);
     }
   }, [phase]);
-
-  useEffect(() => {
-    if (done) {
-      const t = setTimeout(onComplete, EXIT_DELAY);
-      return () => clearTimeout(t);
-    }
-  }, [done, onComplete]);
 
   useEffect(() => {
     const handleKeyDown = () => handleSkip();
@@ -64,8 +83,10 @@ const BootScreen = ({ onComplete }: { onComplete: () => void }) => {
   return (
     <motion.div
       initial={{ opacity: 1 }}
-      exit={{ opacity: 0, scale: 1.05 }}
-      transition={{ duration: 0.5, ease: "easeInOut" }}
+      // Item 2: the exit stays choreographed (fade) at the shorter floor; under
+      // reduced motion it becomes an instant swap (no fade, no scale).
+      exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 1.05 }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeInOut" }}
       className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center cursor-pointer"
       data-testid="boot-screen"
       role="status"

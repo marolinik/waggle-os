@@ -562,7 +562,15 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
   const openDetail = (m: Memory) => { setSelected(m); setDraft(m.content); };
 
   return (
-    <>
+    // Wave U Lane E (item 4): a ~150ms fade-slide when the Manage body mounts on
+    // the Trust↔Memories tab swap (same card-enter keyframe + Wave T hover
+    // timing as the Memories panel). The wrapper carries the parent's space-y-6
+    // so the stat-bar / search / rows rhythm is unchanged. motion-safe — reduced
+    // motion keeps the instant swap.
+    <div
+      className="space-y-6"
+      style={reduceMotion ? undefined : { animation: 'card-enter 0.15s ease-out both' }}
+    >
       {/* §3 stat bar — one TOTAL headline + subordinate, non-summing dimension
           chips. The three views overlap (a memory can be fresh AND awaiting
           confirm), so they must never read as a partition of the total. */}
@@ -749,7 +757,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           </>
         )}
       </DetailDrawer>
-    </>
+    </div>
   );
 }
 

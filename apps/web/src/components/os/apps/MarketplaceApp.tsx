@@ -12,7 +12,7 @@
  * its ApprovalModal consequence dialog. The Audit tab is the C18 shared feed.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Store, Loader2, Package } from 'lucide-react';
+import { Store, Loader2, Package, Sparkles } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
 import { classifyInstallRisk, actionRisk, installTrustSource } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
@@ -27,7 +27,7 @@ import {
 } from '@/lib/extension-catalog';
 import ExtensionCard from './extend/ExtensionCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
-import AgentSearchBox from './extend/AgentSearchBox';
+import AgentSearchBox, { type AutoMatchState } from './extend/AgentSearchBox';
 
 /** The four shelves (D2) — the design's "one simple shelf" set. */
 const SHELVES = ['all', 'skill', 'connector', 'mcp'] as const;
@@ -89,6 +89,23 @@ export function startHerePicks(list: Extension[]): Extension[] {
   return picks.length >= 2 ? picks : [];
 }
 
+/** Closest catalog entries for a described need when BOTH keyword filtering and
+ *  the semantic match come up empty (Wave U Lane C §2) — a real, installable
+ *  starting point instead of a dead-end. Ranked by loaded-token overlap on
+ *  name/description (best first), then catalog order; never fabricated (drawn
+ *  only from the loaded list). */
+export function nearestCatalog(list: Extension[], query: string, n = 3): Extension[] {
+  const tokens = query.toLowerCase().split(/\s+/).filter(t => t.length >= 3);
+  return [...list]
+    .map(e => {
+      const hay = `${e.name ?? ''} ${e.description ?? ''}`.toLowerCase();
+      return { e, score: tokens.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(x => x.e);
+}
+
 /** Structured install risk/provenance (regression-locked by p7-issue17). */
 export function buildInstallRequest(ext: Extension): ApprovalRequest {
   return {
@@ -124,6 +141,10 @@ const MarketplaceApp = () => {
   const [removeTarget, setRemoveTarget] = useState<Extension | null>(null);
   const [removing, setRemoving] = useState(false);
   const [shelfNote, setShelfNote] = useState<string | null>(null);
+  // Lifecycle of the NL auto-match (reported by AgentSearchBox) — lets the
+  // no-match area suppress its dead-end while matching / on a hit and show the
+  // catalog fallback only when the semantic match ALSO finds nothing (Lane C).
+  const [autoMatch, setAutoMatch] = useState<AutoMatchState>('idle');
   // Monotonic request token — only the LATEST loadFacet call may commit state.
   const requestSeq = useRef(0);
 
@@ -229,10 +250,14 @@ const MarketplaceApp = () => {
   };
 
   const visible = filterExtensions(extensions, filterQuery);
-  // NL dead-end bridge (Wave T Lane B §1): a query that reads like a described
-  // need (≥3 words) with no keyword match hands off to the semantic engine
-  // instead of dead-ending — that engine already answers on Enter.
+  // NL bridge (Wave U Lane C §1): a query that reads like a described need
+  // (≥3 words) with no keyword match auto-runs the semantic engine instead of
+  // dead-ending. The engine + results live in AgentSearchBox above; here we only
+  // hand it the need and compose the fallback if it too comes up empty.
   const isNlQuery = filterQuery.trim().split(/\s+/).filter(Boolean).length >= 3;
+  const nlNoMatch = isNlQuery && !loading && !loadError && visible.length === 0;
+  const autoMatchNeed = nlNoMatch ? filterQuery.trim() : null;
+  const nearest = nlNoMatch && autoMatch === 'empty' ? nearestCatalog(extensions, filterQuery) : [];
   // Round-4 merchandising: the band renders on the default All browse only
   // (no active query); banded entries are lifted OUT of the grid below so
   // each integration keeps exactly one row + one action.
@@ -319,7 +344,7 @@ const MarketplaceApp = () => {
             {/* ONE smart input (H-round merge): keystrokes filter the grid
                 below live; Enter asks the agent-search engine for a capability
                 three-up. Replaces the former separate header search field. */}
-            <AgentSearchBox onQueryChange={setQuery} />
+            <AgentSearchBox onQueryChange={setQuery} autoRunNeed={autoMatchNeed} onAutoStateChange={setAutoMatch} />
             <div className="border-t border-border/20 my-1" />
 
             {startHere.length > 0 && (
@@ -365,23 +390,43 @@ const MarketplaceApp = () => {
             )}
 
             {!loading && !loadError && visible.length === 0 && (
-              <div className="text-center py-8">
-                <Package className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                {isNlQuery ? (
-                  // The moment the brand should feel magical: bridge the miss to
-                  // the semantic search that answers on Enter (Wave T Lane B §1).
-                  <>
-                    <p className="text-xs text-muted-foreground">{`No skill matches "${filterQuery}" by name.`}</p>
-                    <p data-testid="nl-search-bridge" className="mt-1 text-xs text-honey">
-                      Press Enter — Waggle matches skills to this job.
-                    </p>
-                  </>
-                ) : (
+              isNlQuery ? (
+                // Described need, no keyword hit: the semantic match runs itself
+                // (AgentSearchBox above shows the BeeLoader + ranked results under
+                // "Matched to your request"). We compose a fallback ONLY when that
+                // match also finds nothing — closest catalog entries + a real
+                // escape, never a gray "no match by name" dead-end (Lane C §2).
+                autoMatch === 'empty' ? (
+                  <div data-testid="nl-no-match-fallback" className="space-y-2 py-1">
+                    {nearest.length > 0 && (
+                      <>
+                        <p className="px-1 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
+                          Closest in the catalog
+                        </p>
+                        {nearest.map(ext => (
+                          <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                        ))}
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenIn('home')}
+                      data-testid="nl-ask-agent"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--honey-line)] bg-[var(--honey-wash)] px-3 py-2 text-xs font-medium text-[var(--honey-text)] transition-colors hover:bg-primary/15"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Ask your agent to do this instead
+                    </button>
+                  </div>
+                ) : null
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">
                     {filterQuery ? `No results for "${filterQuery}"` : 'No extensions available for this facet'}
                   </p>
-                )}
-              </div>
+                </div>
+              )
             )}
 
             {groupedSections.length > 0
