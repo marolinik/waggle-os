@@ -221,6 +221,16 @@ const MarketplaceApp = () => {
   const gridVisible = startHere.length > 0
     ? visible.filter(e => !startHere.some(f => f.id === e.id))
     : visible;
+  // Round-5 merchandising: the default All browse groups by type with section
+  // headers instead of one alphabetical mixed-type dump. A live query (or a
+  // typed facet) keeps the flat relevance list.
+  const groupedSections: Array<{ label: string; items: Extension[] }> =
+    facet === 'all' && !query
+      ? (['skill', 'connector', 'mcp'] as const)
+          .map(t => ({ label: FACET_LABELS[t], items: gridVisible.filter(e => e.type === t) }))
+          .concat([{ label: 'More', items: gridVisible.filter(e => !['skill', 'connector', 'mcp'].includes(e.type)) }])
+          .filter(s => s.items.length > 0)
+      : [];
 
   return (
     <div className="flex flex-col h-full">
@@ -338,14 +348,25 @@ const MarketplaceApp = () => {
               </div>
             )}
 
-            {gridVisible.map(ext => (
-              <ExtensionCard
-                key={ext.id}
-                ext={ext}
-                onRemove={setRemoveTarget}
-                onOpenIn={handleOpenIn}
-              />
-            ))}
+            {groupedSections.length > 0
+              ? groupedSections.map(section => (
+                  <div key={section.label} data-testid={`marketplace-section-${section.label.toLowerCase()}`} className="space-y-2">
+                    <p className="pt-2 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
+                      {section.label} <span className="text-[var(--text-dim)] normal-case tracking-normal">· {section.items.length}</span>
+                    </p>
+                    {section.items.map(ext => (
+                      <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                    ))}
+                  </div>
+                ))
+              : gridVisible.map(ext => (
+                  <ExtensionCard
+                    key={ext.id}
+                    ext={ext}
+                    onRemove={setRemoveTarget}
+                    onOpenIn={handleOpenIn}
+                  />
+                ))}
           </>
         )}
       </div>
