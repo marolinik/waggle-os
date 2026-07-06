@@ -132,10 +132,26 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
       <div className="flex items-start gap-3.5">
         <ConfidenceRing value={memory.confidence} className="mt-0.5" />
         <div className="min-w-0 flex-1">
-          <button type="button" onClick={onOpen} className="block w-full text-left">
-            <p className="line-clamp-3 text-[14.5px] leading-[1.5] text-[var(--text)] hover:text-[var(--honey)]">
-              {memory.content}
-            </p>
+          <button type="button" onClick={onOpen} className="group block w-full text-left">
+            {/* Round-5: raw harvest strings read as log output — lead with the
+                first line as a title, clamp the rest as a muted excerpt. Pure
+                display split; the drawer still shows the full content. */}
+            {(() => {
+              const [lead, ...rest] = memory.content.split('\n').filter(l => l.trim() !== '');
+              const excerpt = rest.join(' ').trim();
+              return (
+                <>
+                  <p className="line-clamp-2 text-[14.5px] font-medium leading-[1.45] text-[var(--text)] group-hover:text-[var(--honey-text)]">
+                    {lead ?? memory.content}
+                  </p>
+                  {excerpt && (
+                    <p className="mt-0.5 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+                      {excerpt}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </button>
           {/* Provenance micro-metadata is trust-critical — 12px + --text-muted
               (AA), not the sub-11px --text-dim decoration tier (a11y review). */}
@@ -157,7 +173,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
 
           {stale && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-3 py-2">
-              <Clock className="h-4 w-4 shrink-0 text-[var(--honey)]" strokeWidth={1.9} />
+              <Clock className="h-4 w-4 shrink-0 text-[var(--honey-text)]" strokeWidth={1.9} />
               <span className="text-[12.5px] text-[var(--text-2)]">This is {ageLabel(memory.createdAt)} old — still true?</span>
               <div className="ml-auto flex gap-1.5">
                 <button
@@ -199,7 +215,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
             onClick={onOpen}
             title="Edit / correct"
             aria-label={`Edit or correct memory M-${memory.id}`}
-            className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--honey-line)] hover:text-[var(--honey)]"
+            className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--honey-line)] hover:text-[var(--honey-text)]"
           >
             <Pencil className="h-[15px] w-[15px]" strokeWidth={1.8} />
           </button>
@@ -452,7 +468,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       ) : error ? (
         <div role="alert" className="py-12 text-center">
           <p className="mb-2 text-[13px] text-[var(--risk)]">{error}</p>
-          <button onClick={() => load()} className="text-[13px] text-[var(--honey)] hover:underline">Retry</button>
+          <button onClick={() => load()} className="text-[13px] text-[var(--honey-text)] hover:underline">Retry</button>
         </div>
       ) : shown.length === 0 ? (
         <div role="status" aria-live="polite" className="py-12 text-center">

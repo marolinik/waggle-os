@@ -1113,7 +1113,7 @@ const ChatApp = ({
               Claude/ChatGPT instead of letting turns run the full panel width.
               The wrapper turns h-full flex-col only in the empty state so
               WorkspaceBriefing's h-full/flex-1 roots keep filling the viewport. */}
-          <div className={`mx-auto w-full max-w-[760px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : ''}`}>
+          <div className={`mx-auto w-full max-w-[680px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : ''}`}>
           {messages.length === 0 && workspaceId && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
@@ -1275,7 +1275,7 @@ const ChatApp = ({
         {/* Input area */}
         <div className="p-3 border-t border-border/30">
           {/* I1 fix 1: composer shares the ~760px reading column with the thread. */}
-          <div className="relative mx-auto w-full max-w-[760px]">
+          <div className="relative mx-auto w-full max-w-[680px]">
           {showSlash && filteredCommands.length > 0 && (
             <div className="absolute bottom-full left-0 right-0 mb-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
               {filteredCommands.map((c, idx) => (

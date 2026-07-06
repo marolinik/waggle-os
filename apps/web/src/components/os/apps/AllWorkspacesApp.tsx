@@ -286,7 +286,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
             <button
               type="button"
               onClick={() => void refreshWorkspaces()}
-              className="shrink-0 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
+              className="shrink-0 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
               data-testid="all-workspaces-retry"
             >
               Retry

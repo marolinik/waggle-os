@@ -98,7 +98,7 @@ function formatClock(iso: string): string {
 
 /** Honey-accented key number inside a composed sentence. */
 function honey(n: ReactNode): ReactNode {
-  return <span className="font-semibold text-[var(--honey)]">{n}</span>;
+  return <span className="font-semibold text-[var(--honey-text)]">{n}</span>;
 }
 
 function rankTimestamp(iso?: string): number {
@@ -236,7 +236,7 @@ function GreetingHeader({
   return (
     <header className="mb-9">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--honey)]">
+        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--honey-text)]">
           <DotLive tone="healthy" size={7} />
           <span>{formatBriefingDate(date)}</span>
           {formatClock(date) && <span className="text-[var(--text-dim)]">· {formatClock(date)}</span>}
@@ -293,7 +293,7 @@ function StartHereCard({
       className="mb-9 overflow-hidden rounded-[22px] border border-[var(--honey-line)] bg-[linear-gradient(145deg,var(--honey-wash),var(--surface))] p-5 shadow-[var(--shadow-honey)]"
       data-testid="home-cockpit-start-here"
     >
-      <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
+      <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey-text)]">
         <Sparkles className="h-3.5 w-3.5" />
         <span>Start here</span>
       </div>
@@ -392,7 +392,7 @@ function RecentWorkspacesPanel({
               <button
                 type="button"
                 onClick={() => onContinue(ws.id, ws.continueSessionId)}
-                className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
+                className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
                 data-testid={`home-cockpit-continue-${ws.id}`}
               >
                 Continue <ChevronRight className="h-3.5 w-3.5" />
@@ -735,7 +735,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           <button
             type="button"
             onClick={openMemoryReview}
-            className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
+            className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
             data-testid="home-cockpit-review-cta"
           >
             Review <ChevronRight className="h-3.5 w-3.5" />

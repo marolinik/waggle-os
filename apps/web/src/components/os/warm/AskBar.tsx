@@ -56,7 +56,7 @@ export function AskBar({
             onPlus(text);
             if (text) setAndTap('');
           }}
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--honey)] hover:bg-[var(--honey-wash)]"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--honey-text)] hover:bg-[var(--honey-wash)]"
         >
           <Plus className="h-5 w-5" />
         </button>

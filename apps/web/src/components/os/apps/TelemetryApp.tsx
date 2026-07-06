@@ -130,7 +130,7 @@ const TelemetryApp = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-5 h-5 animate-spin text-[var(--honey)]" />
+        <Loader2 className="w-5 h-5 animate-spin text-[var(--honey-text)]" />
       </div>
     );
   }
@@ -152,7 +152,7 @@ const TelemetryApp = () => {
     <div className="flex flex-col h-full">
       <div className="shrink-0 px-4 py-3 border-b border-[var(--line-soft)]">
         <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-[var(--honey)]" />
+          <BarChart3 className="w-4 h-4 text-[var(--honey-text)]" />
           <h2 className="text-sm font-display font-semibold text-[var(--text)]">Usage &amp; cost</h2>
         </div>
       </div>
@@ -162,7 +162,7 @@ const TelemetryApp = () => {
         <div className="grid grid-cols-3 gap-3">
           <div className="p-3 rounded-[12px] bg-[var(--surface)] border border-[var(--line-soft)]">
             <div className="flex items-center gap-1.5 mb-1">
-              <DollarSign className="w-3.5 h-3.5 text-[var(--honey)]" />
+              <DollarSign className="w-3.5 h-3.5 text-[var(--honey-text)]" />
               <span className="text-[10px] text-[var(--text-dim)] uppercase font-display tracking-wide">Total · est.</span>
             </div>
             <p className="text-lg font-display font-bold text-[var(--text)]">${data.totalCost.toFixed(2)}</p>
@@ -295,7 +295,7 @@ const TelemetryApp = () => {
                 <SurfaceRow
                   key={i}
                   className="px-3 py-2"
-                  leading={<Zap className="w-3.5 h-3.5 text-[var(--honey)]" />}
+                  leading={<Zap className="w-3.5 h-3.5 text-[var(--honey-text)]" />}
                   title={<span className="font-mono text-[12px] font-normal">{t.name}</span>}
                   actions={<span className="font-mono text-[11px] text-[var(--text-muted)]">{t.count}×</span>}
                 />

@@ -177,10 +177,11 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         </HintTooltip>
         <button onClick={onNotificationClick} className="relative text-muted-foreground hover:text-honey transition-colors" aria-label="Notifications">
           <Bell className="w-3.5 h-3.5" />
-          {/* Wave F (fix 2b): the "9+" badge was cropped at 14px — give it room
-              (16px + real padding) and nudge it so it never clips the glyphs. */}
+          {/* Round-5: warm-family badge (alarm-red clashed with the palette) +
+              a background ring so it reads as sitting OVER the bell, never
+              colliding with the glyph or the clock to its right. */}
           {unreadNotifications > 0 && (
-            <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 rounded-full bg-destructive text-[9px] leading-none text-destructive-foreground flex items-center justify-center font-bold px-1 whitespace-nowrap">
+            <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 rounded-full bg-[var(--honey)] text-[9px] leading-none text-[#1a1407] ring-2 ring-background flex items-center justify-center font-bold px-1 whitespace-nowrap">
               {unreadNotifications > 9 ? '9+' : unreadNotifications}
             </span>
           )}

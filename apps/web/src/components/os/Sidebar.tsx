@@ -94,7 +94,7 @@ const Sidebar = ({
             />
           )}
           <Icon
-            className={`h-[19px] w-[19px] shrink-0 ${active ? "text-[var(--honey)]" : ""}`}
+            className={`h-[19px] w-[19px] shrink-0 ${active ? "text-[var(--honey-text)]" : ""}`}
             strokeWidth={1.7}
           />
           <span className="hidden flex-1 text-sm font-medium lg:inline">{item.label}</span>
@@ -156,7 +156,7 @@ const Sidebar = ({
           data-testid="sidebar-command"
           aria-label="Search and commands"
           onClick={onOpenCommand}
-          className="flex items-center justify-center gap-3 rounded-[10px] border border-dashed border-[var(--line-strong)] px-2.5 py-2.5 text-left text-[var(--text-muted)] transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--honey-wash)] hover:text-[var(--honey)] lg:justify-start"
+          className="flex items-center justify-center gap-3 rounded-[10px] border border-dashed border-[var(--line-strong)] px-2.5 py-2.5 text-left text-[var(--text-muted)] transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--honey-wash)] hover:text-[var(--honey-text)] lg:justify-start"
         >
           <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} />
           <span className="hidden flex-1 text-[13px] font-semibold lg:inline">Search &amp; commands</span>
@@ -172,7 +172,7 @@ const Sidebar = ({
           data-testid="nav-spawn-agent"
           aria-label="New Agent"
           onClick={onSpawnAgent}
-          className="mt-1.5 flex items-center justify-center gap-2.5 rounded-[10px] border border-[var(--line)] bg-card px-2.5 py-2 text-left text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--honey)] lg:justify-start"
+          className="mt-1.5 flex items-center justify-center gap-2.5 rounded-[10px] border border-[var(--line)] bg-card px-2.5 py-2 text-left text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--honey-text)] lg:justify-start"
         >
           <Plus className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
           <span className="hidden flex-1 text-[13px] font-semibold lg:inline">New Agent</span>

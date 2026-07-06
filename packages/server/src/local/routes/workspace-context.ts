@@ -137,7 +137,7 @@ const FRIENDLY_JOB_NAMES: Record<string, string> = {
  * Branch precedence (highest first):
  *   1. **Fresh state** — `frameCount===0 && !lastActiveIso`: first-time copy that
  *      sets expectations ("anything you discuss here will be remembered").
- *      FR #29: prevents "Working late. Here's your current state:" from
+ *      FR #29: prevents "Working late. Here's your current state" from
  *      surfacing on a brand-new workspace where there is no current state.
  *   2. **Inactivity override** — workspace last active >24h ago: "You've been
  *      away N days. Here's what happened:".
@@ -152,7 +152,7 @@ export function buildTimeAwareGreeting(
 
   // Fresh-state branch — empty workspace, no captured memory yet. Take this
   // branch BEFORE the inactivity override and time-of-day fallback so a fresh
-  // user landing at 2am doesn't see "Working late. Here's your current state:"
+  // user landing at 2am doesn't see "Working late. Here's your current state"
   // before any state exists. Note: `lastActiveIso` may still be set (e.g. to
   // `ws.created` from `workspaces.ts`), so we key the fresh-state branch on
   // `frameCount` alone — if there are no memories, there is nothing to brief.
@@ -167,15 +167,15 @@ export function buildTimeAwareGreeting(
     const diffDays = Math.floor(diffMs / (86400 * 1000));
     if (diffDays > 0) {
       const dayLabel = diffDays === 1 ? '1 day' : `${diffDays} days`;
-      return `You've been away ${dayLabel}. Here's what happened:`;
+      return `You've been away ${dayLabel}. Here's what happened`;
     }
   }
 
   // Time-of-day greeting
-  if (hour >= 6 && hour < 12) return "Good morning. Here's your day:";
-  if (hour >= 12 && hour < 18) return "Good afternoon. Here's where you left off:";
-  if (hour >= 18 && hour <= 23) return "Good evening. Here's what you accomplished today:";
-  return "Working late. Here's your current state:";
+  if (hour >= 6 && hour < 12) return "Good morning. Here's your day";
+  if (hour >= 12 && hour < 18) return "Good afternoon. Here's where you left off";
+  if (hour >= 18 && hour <= 23) return "Good evening. Here's what you accomplished today";
+  return "Working late. Here's your current state";
 }
 
 /**

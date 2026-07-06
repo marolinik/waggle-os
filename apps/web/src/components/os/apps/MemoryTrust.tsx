@@ -57,7 +57,7 @@ function ManageHero({ compact, controls }: { compact: boolean; controls?: ReactN
         'font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]',
         compact ? 'text-[20px]' : 'text-[28px]',
       )}>
-        Memory you can <span className="text-[var(--honey)]">correct, age, and forget.</span>
+        Memory you can <span className="text-[var(--honey-text)]">correct, age, and forget.</span>
       </h1>
       {!compact && (
         <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
@@ -83,7 +83,7 @@ function WhyHero({ controls }: { controls?: ReactNode }) {
         {controls}
       </div>
       <h1 className="text-[28px] font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]">
-        Ask the agent <span className="text-[var(--honey)]">&ldquo;why did you do that?&rdquo;</span>
+        Ask the agent <span className="text-[var(--honey-text)]">&ldquo;why did you do that?&rdquo;</span>
       </h1>
       <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
         Any action an agent takes can be traced back to the exact memories and sources behind it —

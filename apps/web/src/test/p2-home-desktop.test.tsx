@@ -56,7 +56,7 @@ function httpError(status: number, message = `HTTP ${status}`) {
 
 const RAW_ISO = '2026-06-11T07:42:13.512Z';
 const briefing = (over: Record<string, unknown> = {}) => ({
-  greeting: "Good morning, Marko. Here's your day:",
+  greeting: "Good morning, Marko. Here's your day",
   userName: 'Marko',
   date: RAW_ISO,
   recentWorkspaces: [],

@@ -293,7 +293,7 @@ const VaultApp = () => {
                         <span className="text-[11px] text-foreground font-mono mr-2 max-w-[180px] truncate">{revealedValue}</span>
                       )}
                       <HintTooltip content="Renew — enter a fresh value for this key">
-                        <button onClick={() => handleRenew(s)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--honey)] hover:bg-[var(--honey-wash)] transition-colors">
+                        <button onClick={() => handleRenew(s)} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--honey-text)] hover:bg-[var(--honey-wash)] transition-colors">
                           <RefreshCw className="w-3 h-3" /> Renew
                         </button>
                       </HintTooltip>
