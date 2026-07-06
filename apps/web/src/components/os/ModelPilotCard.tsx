@@ -34,9 +34,9 @@ interface LaneConfig {
   key: 'primary' | 'fallback' | 'budget';
   label: string;
   icon: React.ElementType;
-  color: string;       // border + accent color
-  bgColor: string;     // lane background
-  dotColor: string;     // status dot color
+  /** Role accent (warm palette token) — drives the left rail + label text only;
+   *  the row surface itself stays neutral (H2 fix: no full-row tints). */
+  rail: string;
   description: string;
 }
 
@@ -45,27 +45,21 @@ const LANES: LaneConfig[] = [
     key: 'primary',
     label: 'Primary',
     icon: Zap,
-    color: 'text-emerald-400',
-    bgColor: 'bg-emerald-500/5 border-emerald-500/20',
-    dotColor: 'bg-emerald-400',
+    rail: 'var(--honey)',
     description: 'Your default model for all tasks',
   },
   {
     key: 'fallback',
     label: 'Fallback',
     icon: Shield,
-    color: 'text-amber-400',
-    bgColor: 'bg-amber-500/5 border-amber-500/20',
-    dotColor: 'bg-amber-400',
+    rail: 'var(--risk)', // terracotta/clay
     description: 'Used when primary is down or rate-limited',
   },
   {
     key: 'budget',
     label: 'Budget Saver',
     icon: Coins,
-    color: 'text-sky-400',
-    bgColor: 'bg-sky-500/5 border-sky-500/20',
-    dotColor: 'bg-sky-400',
+    rail: 'var(--healthy)', // sage/moss
     description: 'Activates when daily spend exceeds threshold',
   },
 ];
@@ -74,12 +68,6 @@ const COST_TOOLTIPS: Record<string, string> = {
   '$': '~$0.001/msg',
   '$$': '~$0.01/msg',
   '$$$': '~$0.05/msg',
-};
-
-const COST_COLORS: Record<string, string> = {
-  '$': 'text-emerald-400',
-  '$$': 'text-amber-400',
-  '$$$': 'text-rose-400',
 };
 
 /** Dropdown for picking a model, grouped by provider */
@@ -121,12 +109,14 @@ const LaneDropdown = ({
               {provider.name}
             </span>
             {!provider.hasKey && provider.requiresKey && (
-              <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
+              <span className="flex items-center gap-0.5 text-[11px] text-[var(--status-warning)]">
                 <Key className="w-2.5 h-2.5" /> No key
               </span>
             )}
+            {/* ✓ = key configured (presence only — no probe status is in reach
+                here), so it stays muted-neutral rather than a success green. */}
             {provider.hasKey && (
-              <span className="text-[11px] text-emerald-400">&#10003;</span>
+              <span className="text-[11px] text-muted-foreground">&#10003;</span>
             )}
           </div>
           {provider.models.map(m => {
@@ -149,7 +139,7 @@ const LaneDropdown = ({
                 <span className="flex items-center gap-1.5">
                   {m.name}
                   {isFree && (
-                    <span className="px-1 py-0.5 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
+                    <span className="px-1 py-0.5 rounded text-[11px] font-display font-bold bg-[var(--healthy-wash)] text-[var(--healthy)] leading-none">
                       FREE
                     </span>
                   )}
@@ -161,10 +151,8 @@ const LaneDropdown = ({
                     <span className="text-muted-foreground/40">Add key in Vault</span>
                   ) : (
                     <HintTooltip content={COST_TOOLTIPS[m.cost] ?? ''}>
-                      <span
-                        className={COST_COLORS[m.cost] ?? ''}
-                        tabIndex={0}
-                      >
+                      {/* The $ count already encodes cost — neutral text, no traffic-light colors. */}
+                      <span className="text-muted-foreground" tabIndex={0}>
                         {m.cost}
                       </span>
                     </HintTooltip>
@@ -292,13 +280,19 @@ const ModelPilotCard = ({
           const isOpen = openLane === lane.key;
 
           return (
-            <div key={lane.key} className={`relative rounded-lg border p-2.5 ${lane.bgColor}`}>
+            <div key={lane.key} className="relative rounded-lg border border-[var(--line-soft)] bg-card p-2.5 pl-3.5">
+              {/* Single role accent: inset 3px rail + colored label (no overflow-hidden —
+                  the LaneDropdown below overhangs the row). */}
+              <span
+                aria-hidden
+                className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full"
+                style={{ background: lane.rail }}
+              />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${lane.dotColor}`} />
-                  <lane.icon className={`w-3.5 h-3.5 shrink-0 ${lane.color}`} />
+                  <lane.icon className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
-                    <p className={`text-[11px] font-display font-semibold ${lane.color}`}>
+                    <p className="text-[11px] font-display font-semibold" style={{ color: lane.rail }}>
                       {lane.label}
                     </p>
                     <p className="text-[11px] text-muted-foreground truncate">{lane.description}</p>
@@ -314,16 +308,13 @@ const ModelPilotCard = ({
                     <div className="flex items-center justify-end gap-1">
                       {cost && (
                         <HintTooltip content={COST_TOOLTIPS[cost] ?? ''}>
-                          <span
-                            className={`text-[11px] ${COST_COLORS[cost] ?? ''}`}
-                            tabIndex={0}
-                          >
+                          <span className="text-[11px] text-muted-foreground" tabIndex={0}>
                             {cost}
                           </span>
                         </HintTooltip>
                       )}
                       {isFree && (
-                        <span className="px-1 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
+                        <span className="px-1 rounded text-[11px] font-display font-bold bg-[var(--healthy-wash)] text-[var(--healthy)] leading-none">
                           FREE
                         </span>
                       )}
@@ -357,23 +348,19 @@ const ModelPilotCard = ({
       </div>
 
       {/* W2C: a persisted fallback equal to the primary can never fire
-          (chat.ts guards resolvedModel !== fallbackModel). Warn + one-click clear. */}
+          (chat.ts guards resolvedModel !== fallbackModel). Warn + one-click clear.
+          H2: quiet neutral styling — the ModelGate key-health banner above owns
+          the amber on this screen; two amber banners at once read as an incident. */}
       {!singleMode && fallbackModel && fallbackModel === defaultModel && (
         <div
-          className="flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px]"
-          style={{
-            background: 'color-mix(in srgb, var(--status-warning) 12%, transparent)',
-            borderColor: 'color-mix(in srgb, var(--status-warning) 40%, transparent)',
-            color: 'var(--status-warning)',
-          }}
+          className="flex items-center gap-2 rounded-lg border border-[var(--line-soft)] bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground"
           data-testid="model-pilot-fallback-equals-primary"
         >
           <Shield className="w-3.5 h-3.5 shrink-0" />
           <span className="flex-1">Fallback equals Primary — failover will never trigger.</span>
           <button
             onClick={() => onUpdate({ fallbackModel: null })}
-            className="shrink-0 font-display font-semibold transition-opacity hover:opacity-80"
-            style={{ color: 'var(--status-warning)' }}
+            className="shrink-0 font-display font-semibold text-honey transition-opacity hover:opacity-80"
           >
             Clear
           </button>
@@ -398,7 +385,7 @@ const ModelPilotCard = ({
             step={0.05}
             value={budgetThreshold}
             onChange={(e) => onUpdate({ budgetThreshold: parseFloat(e.target.value) })}
-            className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-sky-400 cursor-pointer"
+            className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-[var(--honey)] cursor-pointer"
           />
           <div className="flex justify-between text-[11px] text-muted-foreground mt-0.5">
             <span>10%</span>
@@ -408,11 +395,11 @@ const ModelPilotCard = ({
         </div>
       )}
 
-      {/* Cost legend */}
+      {/* Cost legend — neutral: the $ count is the encoding, not a color. */}
       <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
         {Object.entries(COST_TOOLTIPS).map(([tier, tooltip]) => (
           <span key={tier} className="flex items-center gap-0.5">
-            <span className={COST_COLORS[tier]}>{tier}</span> {tooltip}
+            <span className="text-foreground">{tier}</span> {tooltip}
           </span>
         ))}
       </div>

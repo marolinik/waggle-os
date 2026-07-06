@@ -81,13 +81,18 @@ describe('warm primitives — render smoke', () => {
     expect(screen.getByText(/auto/)).toBeInTheDocument();
   });
 
-  it('OvernightHero shows the statement when runs exist, empty text otherwise', () => {
+  it('OvernightHero always renders the statement; the chip row only when runs exist', () => {
     const { rerender } = render(
-      <OvernightHero statement={<>Folded 14 memories</>} runs={[{ label: 'x' }]} />,
+      <OvernightHero statement={<>Folded 14 memories</>} runs={[{ label: '14 consolidated' }]} />,
     );
     expect(screen.getByText('Folded 14 memories')).toBeInTheDocument();
-    rerender(<OvernightHero statement={<>Folded 14 memories</>} runs={[]} emptyText="A calm night" />);
+    expect(screen.getByText('14 consolidated')).toBeInTheDocument();
+    // H2: single-clause stories pass no chips (a lone chip would repeat the
+    // sentence) — the statement must still render; the caller owns the
+    // empty-night fallback line.
+    rerender(<OvernightHero statement={<>A calm night</>} runs={[]} />);
     expect(screen.getByText('A calm night')).toBeInTheDocument();
+    expect(screen.queryByText('14 consolidated')).not.toBeInTheDocument();
   });
 
   it('AskBar submits trimmed text and clears the input', () => {

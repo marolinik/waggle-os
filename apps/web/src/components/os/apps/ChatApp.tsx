@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ChevronUp, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -1013,19 +1013,27 @@ const ChatApp = ({
               </div>
             )}
           </div>
+
+          {/* Agent Profile toggle — merged into this row (UX gold-standard H1:
+              the dedicated collapsible row cost a full chrome layer). */}
+          <HintTooltip content={showAgentProfile ? 'Hide agent profile' : 'Show agent profile'}>
+            <button
+              onClick={() => setShowAgentProfile(p => !p)}
+              aria-label="Agent profile"
+              aria-expanded={showAgentProfile}
+              data-testid="chat-agent-profile-toggle"
+              className={`flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
+                showAgentProfile ? 'text-honey bg-primary/10' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+            </button>
+          </HintTooltip>
         </div>
 
-        {/* Agent Profile Panel — collapsible */}
-        <div className="shrink-0">
-          <button
-            onClick={() => setShowAgentProfile(p => !p)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-[11px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors border-b border-border/20"
-          >
-            <Layers className="w-3 h-3 text-honey" />
-            <span className="font-display font-medium">Agent Profile</span>
-            {showAgentProfile ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
-          </button>
-          {showAgentProfile && (
+        {/* Agent Profile Panel — expands below the header row when toggled */}
+        {showAgentProfile && (
+          <div className="shrink-0">
             <div className="px-3 py-2.5 border-b border-border/20 bg-muted/20 space-y-2">
               <div className="flex items-center gap-3">
                 {persona && (
@@ -1061,13 +1069,13 @@ const ChatApp = ({
               </div>
               {templateId && TEMPLATE_DISPLAY[templateId] && (
                 <p className="text-[11px] text-muted-foreground/70 leading-relaxed">
-                  <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} · 
+                  <span className="text-muted-foreground font-medium">Domain:</span> {TEMPLATE_DISPLAY[templateId].desc} ·
                   <span className="text-muted-foreground font-medium"> Style:</span> {persona?.description || 'General'}
                 </p>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Messages */}
         {/* Pins bar */}

@@ -573,21 +573,26 @@ const WorkspaceDesktopApp = ({
               <h2 className="truncate font-display text-[clamp(20px,2.4vw,28px)] font-semibold leading-tight tracking-[-0.02em] text-[var(--text)]">
                 {displayName}
               </h2>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] text-[var(--text-muted)]">
-                {agentsRunning > 0 && (
-                  <span className="inline-flex items-center gap-1.5" data-testid="ws-agents-running">
-                    <DotLive tone="healthy" size={7} />
-                    {agentsRunning} agent{agentsRunning === 1 ? '' : 's'} live
-                  </span>
-                )}
-                {typeof ctx?.stats?.memoryCount === 'number' && (
-                  <span>{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
-                )}
-                {relativeTime(lastEvent?.ts) && <span>updated {relativeTime(lastEvent?.ts)}</span>}
-                {wsStatus !== 'active' && (
-                  <span className="capitalize text-[var(--attention)]" data-testid="ws-status-pill" data-status={wsStatus}>{wsStatus}</span>
-                )}
-              </div>
+              {/* UX gold-standard H1: on the Chat tab (highest-dwell surface) the
+                  header compacts — the memories/updated subtitle hides so the
+                  thread starts higher. Title + actions stay. */}
+              {activeTab !== 'chat' && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] text-[var(--text-muted)]">
+                  {agentsRunning > 0 && (
+                    <span className="inline-flex items-center gap-1.5" data-testid="ws-agents-running">
+                      <DotLive tone="healthy" size={7} />
+                      {agentsRunning} agent{agentsRunning === 1 ? '' : 's'} live
+                    </span>
+                  )}
+                  {typeof ctx?.stats?.memoryCount === 'number' && (
+                    <span>{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
+                  )}
+                  {relativeTime(lastEvent?.ts) && <span>updated {relativeTime(lastEvent?.ts)}</span>}
+                  {wsStatus !== 'active' && (
+                    <span className="capitalize text-[var(--attention)]" data-testid="ws-status-pill" data-status={wsStatus}>{wsStatus}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">

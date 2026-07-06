@@ -9,6 +9,9 @@ interface AskBarProps {
   /** Optional "+" affordance — receives the current trimmed input (quick note);
    *  callers open the command palette when the input is empty (no dead button). */
   onPlus?: (text: string) => void;
+  /** Optional keystroke tap — lets a host use the bar as a live filter too
+   *  (Marketplace single smart input). Fires with '' when the bar clears. */
+  onChange?: (text: string) => void;
   cmdkHint?: boolean;
   className?: string;
 }
@@ -22,15 +25,20 @@ export function AskBar({
   placeholder = 'Start something new — “draft the board update from this week’s work”…',
   onSubmit,
   onPlus,
+  onChange,
   cmdkHint = true,
   className,
 }: AskBarProps) {
   const [value, setValue] = useState('');
+  const setAndTap = (next: string) => {
+    setValue(next);
+    onChange?.(next);
+  };
   const submit = () => {
     const text = value.trim();
     if (!text) return;
     onSubmit(text);
-    setValue('');
+    setAndTap('');
   };
   return (
     <div
@@ -46,7 +54,7 @@ export function AskBar({
           onClick={() => {
             const text = value.trim();
             onPlus(text);
-            if (text) setValue('');
+            if (text) setAndTap('');
           }}
           className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[var(--honey)] hover:bg-[var(--honey-wash)]"
         >
@@ -55,7 +63,7 @@ export function AskBar({
       )}
       <input
         value={value}
-        onChange={(e) => setValue(e.target.value)}
+        onChange={(e) => setAndTap(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();

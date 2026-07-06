@@ -516,7 +516,10 @@ function buildRunChips(o: OvernightSummary): RunChipProps[] {
   if (o.artifactsCreated > 0) chips.push({ label: `${o.artifactsCreated} ${o.artifactsCreated === 1 ? 'artifact' : 'artifacts'} created`, tone: 'work' });
   if (o.automationsCompleted > 0) chips.push({ label: `${o.automationsCompleted} ${o.automationsCompleted === 1 ? 'automation' : 'automations'} completed`, tone: 'healthy' });
   if (o.failures.length > 0) chips.push({ label: `${o.failures.length} ${o.failures.length === 1 ? 'run' : 'runs'} failed`, tone: 'risk' });
-  return chips;
+  // H2: chips mirror the story clauses 1:1 — a lone chip would only repeat the
+  // single-clause hero sentence verbatim, so it's suppressed. Multi-clause
+  // stories keep the chip breakdown.
+  return chips.length === 1 ? [] : chips;
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
@@ -734,7 +737,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
       )}
 
       <div className="mb-9">
-        <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} emptyText={overnightEmpty} />
+        <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} />
         {failureCount > 0 && (
           <button
             type="button"

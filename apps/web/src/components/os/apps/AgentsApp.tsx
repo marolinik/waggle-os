@@ -248,7 +248,10 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground shrink-0" data-testid="agent-center-kpis">
                 <span><span className="text-foreground font-medium tabular-nums">{kpis.total}</span> {kpis.total === 1 ? 'agent' : 'agents'}</span>
                 <span><span className="text-foreground font-medium tabular-nums">{kpis.running}</span> running</span>
-                <span>avg success <span className="text-foreground font-medium tabular-nums">{kpis.avgSuccessRate === null ? '—' : formatSuccessRate(kpis.avgSuccessRate)}</span></span>
+                {/* H2: no runs yet → hide the segment rather than showing a dash. */}
+                {kpis.avgSuccessRate !== null && (
+                  <span>avg success <span className="text-foreground font-medium tabular-nums">{formatSuccessRate(kpis.avgSuccessRate)}</span></span>
+                )}
               </div>
             </div>
           </div>

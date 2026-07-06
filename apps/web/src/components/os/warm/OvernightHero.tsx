@@ -5,11 +5,12 @@ import { RunChip, type RunChipProps } from './RunChip';
 
 interface OvernightHeroProps {
   eyebrow?: string;
-  /** The "While you slept …" statement; embed honey spans for key numbers. */
+  /** The "While you slept …" statement; embed honey spans for key numbers.
+   *  The caller owns the empty-night fallback line — the statement always
+   *  renders, whether or not chips accompany it (H2: single-clause stories
+   *  pass no chips, since a lone chip would just repeat the sentence). */
   statement: ReactNode;
   runs?: RunChipProps[];
-  /** Quiet line shown when nothing ran overnight (degrade, never crash). */
-  emptyText?: string;
   className?: string;
 }
 
@@ -22,7 +23,6 @@ export function OvernightHero({
   eyebrow = 'While you slept',
   statement,
   runs = [],
-  emptyText = 'Nothing ran overnight — a calm night for the hive.',
   className,
 }: OvernightHeroProps) {
   const hasRuns = runs.length > 0;
@@ -43,7 +43,7 @@ export function OvernightHero({
           {eyebrow}
         </div>
         <p className="max-w-[60ch] text-[clamp(19px,2.4vw,26px)] font-semibold leading-[1.4] text-[var(--text)]">
-          {hasRuns ? statement : emptyText}
+          {statement}
         </p>
         {hasRuns && (
           <div className="mt-5 flex flex-wrap gap-2">

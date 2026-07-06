@@ -12,9 +12,8 @@
  * its ApprovalModal consequence dialog. The Audit tab is the C18 shared feed.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Store, Search, Loader2, Package } from 'lucide-react';
+import { Store, Loader2, Package } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
-import { Input } from '@/components/ui/input';
 import { classifyInstallRisk, actionRisk, installTrustSource } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
@@ -248,16 +247,6 @@ const MarketplaceApp = () => {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
-              <Search className="w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search skills, connectors, MCP servers..."
-                className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
-            </div>
           </>
         )}
       </div>
@@ -268,9 +257,10 @@ const MarketplaceApp = () => {
           <InstallAuditPanel showFilter limit={30} />
         ) : (
           <>
-            {/* Screen-09 agent-search bar — ask for a capability; the three-up
-                suggestion installs through the same store as the grid below. */}
-            <AgentSearchBox />
+            {/* ONE smart input (H-round merge): keystrokes filter the grid
+                below live; Enter asks the agent-search engine for a capability
+                three-up. Replaces the former separate header search field. */}
+            <AgentSearchBox onQueryChange={setQuery} />
             <div className="border-t border-border/20 my-1" />
 
             {shelfNote && (

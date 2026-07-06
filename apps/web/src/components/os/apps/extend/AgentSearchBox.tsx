@@ -32,7 +32,13 @@ function openApp(appId: string) {
   window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId } }));
 }
 
-const AgentSearchBox = () => {
+interface AgentSearchBoxProps {
+  /** Live keystroke tap — the Marketplace uses this to filter the grid while
+   *  the same input still answers NL intent on Enter (single smart input). */
+  onQueryChange?: (q: string) => void;
+}
+
+const AgentSearchBox = ({ onQueryChange }: AgentSearchBoxProps = {}) => {
   const { install, isInstalling } = useInstallStore();
   const { toast } = useToast();
   const [result, setResult] = useState<AgentSearchResponse | null>(null);
@@ -112,8 +118,9 @@ const AgentSearchBox = () => {
   return (
     <div data-testid="agent-search-box" className="space-y-2">
       <AskBar
-        placeholder="Describe what you need — “send a message to my team”…"
+        placeholder="Search — or describe what you need and press Enter…"
         onSubmit={(t) => void run(t)}
+        onChange={onQueryChange}
         cmdkHint={false}
       />
 

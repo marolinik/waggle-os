@@ -418,13 +418,16 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
             </button>
           );
         })}
-        {/* "Forgotten" is gated off — hard delete leaves no tombstone (no list to show). */}
+        {/* "Forgotten" is gated off — hard delete leaves no tombstone (no list to
+            show). Same contrast as the live chips (a11y: the old dim+opacity-50
+            treatment was near-invisible in both themes); disabled reads from the
+            dashed border + cursor + tooltip instead of low contrast. */}
         <button
           type="button"
           aria-disabled="true"
           aria-label="Forgotten filter unavailable — forgetting is permanent, there's no recoverable list (hard delete, by design)"
           title="Forgetting is permanent — there's no recoverable list (hard delete, by design)"
-          className="cursor-not-allowed rounded-[9px] border border-[var(--line-soft)] bg-[var(--surface)] px-3 py-2 text-[12.5px] font-semibold text-[var(--text-dim)] opacity-50"
+          className="cursor-not-allowed rounded-[9px] border border-dashed border-[var(--line-strong)] bg-[var(--surface)] px-3 py-2 text-[12.5px] font-semibold text-[var(--text-muted)]"
         >
           Forgotten
         </button>

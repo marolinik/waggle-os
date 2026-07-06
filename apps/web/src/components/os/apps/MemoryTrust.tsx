@@ -37,24 +37,34 @@ const SEGMENTS: { id: TrustView; label: string }[] = [
   { id: 'why', label: 'Why did you do that?' },
 ];
 
-/** Editorial eyebrow + honey-accented H1 + body, per the §2 design contract. */
-function ManageHero() {
+/** localStorage flag — full editorial hero on the FIRST visit only; compact after. */
+const HERO_SEEN_KEY = 'waggle:memory-hero-seen';
+
+/** Editorial eyebrow + honey-accented H1 + body, per the §2 design contract.
+ *  UX gold-standard H1: the full manifesto renders once; repeat visits get the
+ *  compact form (eyebrow + smaller H1, paragraph hidden) so the stat block leads. */
+function ManageHero({ compact }: { compact: boolean }) {
   return (
-    <header className="mb-1">
+    <header className="mb-1" data-testid="memory-trust-hero" data-compact={compact ? 'true' : 'false'}>
       <p className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
         <span className="h-px w-5 bg-[var(--honey)]" aria-hidden="true" />
         Trust · inspect · correct · forget
       </p>
-      <h1 className="text-[28px] font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]">
+      <h1 className={cn(
+        'font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]',
+        compact ? 'text-[20px]' : 'text-[28px]',
+      )}>
         Memory you can <span className="text-[var(--honey)]">correct, age, and forget.</span>
       </h1>
-      <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
-        A memory that only grows is a liability. Waggle shows you{' '}
-        <b className="font-semibold text-[var(--text-2)]">how sure it is</b>,{' '}
-        <b className="font-semibold text-[var(--text-2)]">how fresh it is</b>, and{' '}
-        <b className="font-semibold text-[var(--text-2)]">where it came from</b> — and lets you fix or
-        forget anything. You&rsquo;re always in control of what the hive believes.
-      </p>
+      {!compact && (
+        <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
+          A memory that only grows is a liability. Waggle shows you{' '}
+          <b className="font-semibold text-[var(--text-2)]">how sure it is</b>,{' '}
+          <b className="font-semibold text-[var(--text-2)]">how fresh it is</b>, and{' '}
+          <b className="font-semibold text-[var(--text-2)]">where it came from</b> — and lets you fix or
+          forget anything. You&rsquo;re always in control of what the hive believes.
+        </p>
+      )}
     </header>
   );
 }
@@ -109,6 +119,17 @@ function TrustPrincipleFooter({ view }: { view: TrustView }) {
 
 export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
   const [view, setView] = useState<TrustView>('manage');
+  // Hero demote: full manifesto only on the first-ever visit (flag read+set
+  // once per mount, in the initializer, so it can't flip mid-session).
+  const [heroCompact] = useState<boolean>(() => {
+    try {
+      const seen = localStorage.getItem(HERO_SEEN_KEY) === 'true';
+      if (!seen) localStorage.setItem(HERO_SEEN_KEY, 'true');
+      return seen;
+    } catch {
+      return false; // storage unavailable → keep the full hero (harmless)
+    }
+  });
   const [toast, setToast] = useState<string | null>(null);
   // Cross-view accountability loop: Manage row → "Why?" sets the trace target +
   // switches to Why; the Why view's "correct it" hands an id back to Manage's editor.
@@ -181,7 +202,7 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
         <div className="mx-auto w-full max-w-[920px] space-y-6 px-8 py-7">
           {view === 'manage' ? (
             <>
-              <ManageHero />
+              <ManageHero compact={heroCompact} />
               <MemoryTrustManage
                 mind={mind}
                 workspaceId={workspaceId}

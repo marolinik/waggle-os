@@ -169,8 +169,10 @@ function WorkspaceCard({
         )}
       </div>
 
+      {/* No min-h: a short (or absent) description must not leave a dead band
+          between the title block and the meta row (H2 fix 3). */}
       {ws.description && (
-        <p className="mb-3.5 line-clamp-2 min-h-[38px] text-[13px] leading-[1.5] text-[var(--text-muted)]">
+        <p className="mb-3 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
           {ws.description}
         </p>
       )}
@@ -335,8 +337,8 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
         </button>
       </div>
       <p className="mb-5 text-[14px] text-[var(--text-muted)]">
-        Home greets you with the day. <span className="text-[var(--text-2)]">This is the full shelf</span> —
-        every workspace, where it lives, and what's happening in it.
+        Home greets you with the day. This is the full shelf — every workspace, where it
+        lives, and what's happening in it.
       </p>
 
       {/* Toolbar: search + storage filter pills */}
@@ -365,7 +367,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
           No workspaces match.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2" data-testid="all-workspaces-grid">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3" data-testid="all-workspaces-grid">
           {filtered.map(ws => (
             <WorkspaceCard
               key={ws.id}
