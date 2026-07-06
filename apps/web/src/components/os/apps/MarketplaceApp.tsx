@@ -443,6 +443,23 @@ const MarketplaceApp = () => {
               )
             )}
 
+            {/* R16-V4 catch: an NL query keyword-filters EVERYTHING out, so the
+                busy-dim on live results had nothing to hold and the list emptied
+                into a void the moment typing started. While the semantic match
+                settles, the pre-query browse rows stay visible — dimmed, inert,
+                capped — under the Matching status above. */}
+            {nlNoMatch && (autoMatch === 'idle' || autoMatch === 'searching') && (
+              <div
+                data-testid="nl-stale-dim"
+                aria-hidden
+                className="pointer-events-none select-none space-y-2 opacity-40"
+              >
+                {filterExtensions(extensions, '').slice(0, 6).map(ext => (
+                  <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                ))}
+              </div>
+            )}
+
             {/* Wave V Lane E §2: the matched-results container stays mounted and
                 only dims (aria-busy) while a search settles — it doesn't collapse
                 and rebuild between keystrokes. */}
