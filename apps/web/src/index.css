@@ -360,12 +360,12 @@
   }
 
   /* ── Desktop wallpaper overlay ──────────────────────────────────────────
-     Dark wash lifted 0.2→0.45 (2026-07-06): the hex lattice was loud enough
-     to cross content text on Agents/Marketplace/Memory (5-judge finding —
-     "decorative strokes must never intersect text"). Texture stays present
-     in gutters/heroes; content columns sit on opaque card surfaces. */
+     2026-07-06: both wallpapers regenerated with the lattice edge-weighted
+     and the CENTER calm (judges: texture must never compete with content),
+     so the dark wash eases back to 0.3 — enough to seat content, without
+     erasing the corner glow the new asset carries. */
   .desktop-overlay {
-    background: hsl(var(--background) / 0.45);
+    background: hsl(var(--background) / 0.3);
   }
   :root[data-theme="light"] .desktop-overlay {
     background: hsl(var(--background) / 0.15);
