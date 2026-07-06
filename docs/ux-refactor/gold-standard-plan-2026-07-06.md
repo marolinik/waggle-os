@@ -390,3 +390,18 @@ re-inserting bench frames; recheck before any future capture.
   family, light elevation + light --attention AA, dark chip legibility, hex
   wallpaper radial falloff) · E brand moments (mascots on onboarding/briefing/
   chat-empty, memory stat order, landing LoCoMo flagship stat).
+
+**Round 11 verdict (2026-07-06 ~18:05):**
+- R11: design 7.5 · kw 7.8 · competitor 7.8 · a11y 7.8 · brand 7.8
+  (**avg 7.74 — best yet**; min 7.5 held by the design director alone; the
+  other FOUR judges posted their highest scores of the whole arc).
+  Trajectory: 6.7 → 6.9 → 7.24 → 7.44 → 7.36 → 7.7 → 7.68 → 7.58 → 7.52 →
+  7.64 → 7.74.
+- Design director's thesis (the clearest roadmap of the arc): "The gap to
+  9/10 is not another hero — it's craft parity on the boring surfaces:
+  workspace card v3, the provider selector, one unified chip grammar, and
+  asset-level consistency (no platform emoji anywhere)."
+- Wave R verdicts: landing 8.5 · home 8.0 · briefing modal 7.8 (was 6.5) ·
+  blue ring GONE (error+selected states called "excellent") · workspace
+  cards still the floor (6.8 — "Last:" prefix read as debris; bar keeps
+  rising: now they want fixed slots + a live signal per card).
