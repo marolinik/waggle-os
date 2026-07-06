@@ -83,7 +83,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   return (
     <div
       data-testid="extension-card"
-      className="flex items-start gap-3 p-3 rounded-xl border border-border/30 bg-secondary/20 hover:border-border/60 transition-colors"
+      className="flex items-start gap-3 p-3 rounded-xl border border-border/30 bg-card hover:border-border/60 transition-colors"
     >
       <Package className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">

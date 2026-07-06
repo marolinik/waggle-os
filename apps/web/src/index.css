@@ -359,9 +359,13 @@
     font-family: var(--sans);
   }
 
-  /* ── Desktop wallpaper overlay — stronger wash in light mode ────────── */
+  /* ── Desktop wallpaper overlay ──────────────────────────────────────────
+     Dark wash lifted 0.2→0.45 (2026-07-06): the hex lattice was loud enough
+     to cross content text on Agents/Marketplace/Memory (5-judge finding —
+     "decorative strokes must never intersect text"). Texture stays present
+     in gutters/heroes; content columns sit on opaque card surfaces. */
   .desktop-overlay {
-    background: hsl(var(--background) / 0.2);
+    background: hsl(var(--background) / 0.45);
   }
   :root[data-theme="light"] .desktop-overlay {
     background: hsl(var(--background) / 0.15);

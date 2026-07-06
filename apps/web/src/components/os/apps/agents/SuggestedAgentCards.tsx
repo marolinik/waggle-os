@@ -24,7 +24,7 @@ const SuggestedAgentCards = ({ personas, onPick }: SuggestedAgentCardsProps) => 
             <button
               type="button"
               onClick={() => onPick(p)}
-              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary/30 border border-border/30 hover:border-primary/30 transition-colors text-left"
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-card border border-border/30 hover:border-primary/30 transition-colors text-left"
             >
               <img src={getPersonaAvatar(p.id)} alt="" className="w-8 h-8 rounded-full shrink-0 object-cover" />
               <span className="flex-1 min-w-0">
