@@ -49,6 +49,12 @@ export default async function Hero() {
               </li>
             ))}
           </ul>
+
+          {/* Round-7: the hero's dead bottom quarter carries the product's
+              strongest proof — one quiet benchmark strip, linking to #proof. */}
+          <a href="#proof" className={styles.proofStrip}>
+            {t('proof_strip')} <span aria-hidden="true">→</span>
+          </a>
         </div>
 
         <div className={styles.visual}>

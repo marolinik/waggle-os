@@ -45,10 +45,11 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
           <span className="block text-[10px] text-muted-foreground truncate">{agent.goal}</span>
         </span>
         {/* Tidy fixed meta grid (model · last-run · success · status), one
-            type size (10px muted) so the cluster scans as columns. */}
+            type size (11px, --text-muted — round-7 fix 3c raised the 10px
+            whisper to the AA meta tier) so the cluster scans as columns. */}
         <span className="hidden sm:flex flex-col items-end gap-0.5 shrink-0 w-24">
-          <span className="text-[10px] text-muted-foreground truncate max-w-full">{agent.model}</span>
-          <span className="text-[10px] text-muted-foreground tabular-nums">
+          <span className="text-[11px] text-[var(--text-muted)] truncate max-w-full">{agent.model}</span>
+          <span className="text-[11px] text-[var(--text-muted)] tabular-nums">
             {lastRun ? `run ${lastRun}` : 'no runs yet'}
           </span>
         </span>
@@ -61,7 +62,7 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
               <span className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden" aria-hidden>
                 <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(rate * 100)}%` }} />
               </span>
-              <span className="text-[10px] text-muted-foreground tabular-nums">{formatSuccessRate(agent.successRate)}</span>
+              <span className="text-[11px] text-[var(--text-muted)] tabular-nums">{formatSuccessRate(agent.successRate)}</span>
             </>
           )}
           {/* rate === null → empty fixed-width column; the run-history truth

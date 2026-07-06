@@ -136,9 +136,9 @@ describe('shouldSuggestAgents — F-W5C sparse state', () => {
     expect(shouldSuggestAgents({ ...base, tab: 'archive' })).toBe(false);
   });
 
-  it('curates 2-3 persona ids', () => {
-    expect(SUGGESTED_PERSONA_IDS.length).toBeGreaterThanOrEqual(2);
-    expect(SUGGESTED_PERSONA_IDS.length).toBeLessThanOrEqual(3);
+  it('curates 6 unique persona ids (round-7 fix 3a)', () => {
+    expect(SUGGESTED_PERSONA_IDS.length).toBe(6);
+    expect(new Set(SUGGESTED_PERSONA_IDS).size).toBe(SUGGESTED_PERSONA_IDS.length);
   });
 });
 

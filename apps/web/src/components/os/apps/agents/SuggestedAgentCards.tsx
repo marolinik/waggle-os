@@ -16,6 +16,9 @@ const WHY: Record<string, string> = {
   researcher: 'A strong first hire — every investigation it runs feeds your hive memory.',
   writer: 'Turns what the hive already knows into drafts you can ship.',
   analyst: 'Reads your numbers and surfaces the patterns worth acting on.',
+  planner: 'Maps the work before anyone commits — plans your other agents can execute.',
+  coder: 'Builds, debugs, and reviews code with your project context behind it.',
+  consultant: 'Research, analysis, and client-ready deliverables in one specialist.',
 };
 
 /**
@@ -41,7 +44,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
             <button
               type="button"
               onClick={() => onPick(p)}
-              className="group flex h-full w-full flex-col rounded-[14px] border border-[var(--line-soft)] bg-card p-4 text-left transition-colors hover:border-[var(--honey-line)]"
+              className="group flex h-full w-full flex-col rounded-[14px] border border-[var(--line-soft)] bg-card p-4 text-left shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
             >
               <span className="mb-2.5 flex items-center gap-3">
                 <img src={getPersonaAvatar(p.id)} alt="" className="h-12 w-12 shrink-0 rounded-full object-cover" />
@@ -67,7 +70,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
           <button
             type="button"
             onClick={onBrowseAll}
-            className="group flex w-full items-center gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left transition-colors hover:border-[var(--honey-line)]"
+            className="group flex w-full items-center gap-3 rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left shadow-[var(--shadow-sm)] transition-[border-color,box-shadow] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
           >
             <span className="flex shrink-0 -space-x-2.5" aria-hidden>
               {allPersonas.slice(0, 5).map((p) => (

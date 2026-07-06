@@ -318,7 +318,13 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
                     selected === p.id
                       ? 'border-primary bg-primary/10 text-foreground'
-                      : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                      : p.hasKey
+                        // Round-7 fix 4a state trio: FILLED = keyed, OUTLINE
+                        // (transparent bg) = merely supported, amber glyph
+                        // below = keyed-but-failing. No-key chips carry no
+                        // checkmark — nothing to confirm.
+                        ? 'border-border bg-card text-foreground hover:border-primary/40'
+                        : 'border-border bg-transparent text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {/* Round-6 fix 3b: a provider whose stored key failed the

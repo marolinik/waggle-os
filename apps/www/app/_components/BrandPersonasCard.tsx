@@ -497,6 +497,16 @@ const scopedCss = `
     min-height: 260px;
     border-radius: 16px;
     overflow: hidden;
+    /* Round-7: complete the falloff — the texture dissolves toward the grid's
+       outer edge so the ghost reads as intentional ambience, never as an
+       unloaded card. */
+    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+    mask-image: linear-gradient(to right, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+  }
+  .waggle-persona-filler:nth-of-type(1),
+  li.waggle-persona-filler:first-child {
+    -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+    mask-image: linear-gradient(to left, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
   }
   /* Round-6: fainter + slightly shrunken so the ghosts can't be mistaken for
      unloaded cards — clearly ambient texture, not content-in-waiting. */

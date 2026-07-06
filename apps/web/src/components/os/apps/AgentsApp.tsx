@@ -189,6 +189,19 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
           <h2 className="text-sm font-display font-bold text-foreground">Agents</h2>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* KPI strip (C27: success-rate yes, hours-saved no). Round-7 fix 3b:
+              lives in the page header as page-level stats — the search row
+              below breathes. Center view only (Templates isn't the fleet). */}
+          {view === 'center' && (
+            <div className="hidden sm:flex items-center gap-3 mr-2 text-[11px] text-muted-foreground shrink-0" data-testid="agent-center-kpis">
+              <span><span className="text-foreground font-medium tabular-nums">{kpis.total}</span> {kpis.total === 1 ? 'agent' : 'agents'}</span>
+              <span><span className="text-foreground font-medium tabular-nums">{kpis.running}</span> running</span>
+              {/* H2: no runs yet → hide the segment rather than showing a dash. */}
+              {kpis.avgSuccessRate !== null && (
+                <span>avg success <span className="text-foreground font-medium tabular-nums">{formatSuccessRate(kpis.avgSuccessRate)}</span></span>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setView(view === 'templates' ? 'center' : 'templates')}
             aria-pressed={view === 'templates'}
@@ -234,25 +247,16 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1">
-                <Search className="w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search agents..."
-                  className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </div>
-              {/* KPI strip (C27: success-rate yes, hours-saved no). */}
-              <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground shrink-0" data-testid="agent-center-kpis">
-                <span><span className="text-foreground font-medium tabular-nums">{kpis.total}</span> {kpis.total === 1 ? 'agent' : 'agents'}</span>
-                <span><span className="text-foreground font-medium tabular-nums">{kpis.running}</span> running</span>
-                {/* H2: no runs yet → hide the segment rather than showing a dash. */}
-                {kpis.avgSuccessRate !== null && (
-                  <span>avg success <span className="text-foreground font-medium tabular-nums">{formatSuccessRate(kpis.avgSuccessRate)}</span></span>
-                )}
-              </div>
+            {/* Search row — KPIs moved to the page header (round-7 fix 3b),
+                so the field gets the full row to itself. */}
+            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
+              <Search className="w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search agents..."
+                className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
             </div>
           </div>
 

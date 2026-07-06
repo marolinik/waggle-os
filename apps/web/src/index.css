@@ -390,10 +390,12 @@
       url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23e9a52c' fill-opacity='0.05'/%3E%3C/svg%3E");
   }
   :root[data-theme="light"] .onboarding-scrim {
+    /* hex 0.06→0.04 (round-7): light rendered the texture at higher apparent
+       contrast than dark — wallpaper noise instead of ambience. */
     background-color: rgba(250, 247, 240, 0.95);
     background-image:
       radial-gradient(ellipse 55% 52% at 50% 44%, rgba(250, 247, 240, 0.97) 28%, rgba(250, 247, 240, 0) 78%),
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23b57d12' fill-opacity='0.06'/%3E%3C/svg%3E");
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23b57d12' fill-opacity='0.04'/%3E%3C/svg%3E");
   }
 
   /* ── Honeycomb background pattern (the hex mesh) ────────────────────── */
@@ -439,12 +441,13 @@
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-corner { background: transparent; }
-/* Firefox (no ::-webkit-scrollbar support): same warm thumb on a transparent
-   track so no light strip cuts the canvas in either theme. Scoped with
-   @supports so Chromium keeps the richer webkit styling above (setting
-   scrollbar-color unconditionally would disable it). */
-@supports not selector(::-webkit-scrollbar) {
-  * { scrollbar-color: var(--hive-600) transparent; }
+/* Standards path, UNCONDITIONAL (round-7): headless/overlay Chromium ignores
+   the ::-webkit-* rules and painted a bright native thumb over the dark
+   canvas in every audit. `scrollbar-color` wins everywhere it's supported —
+   consistency beats the fancier webkit look. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hive-600) transparent;
 }
 
 /* ── Hive Animations ──────────────────────────────────────────────────── */

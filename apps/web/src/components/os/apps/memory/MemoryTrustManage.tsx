@@ -5,7 +5,7 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryStatus } from '@/lib/types';
 import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
-import { stripMarkdownTokens } from '@/lib/memory-text-normalize';
+import { buildMemoryPreview } from '@/lib/memory-text-normalize';
 import { frameSourceLabel } from '@/lib/frame-source';
 import { ConfidenceRing } from '../../warm';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
@@ -154,18 +154,18 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
                 first line as a title, clamp the rest as a muted excerpt. Pure
                 display split; the drawer still shows the full content.
                 Round-6 fix 2a: markdown tokens ('##', **bold**, `code`,
-                [links]) are stripped for this plain-text preview — display
-                only, the stored content and drawer editor stay raw. */}
+                [links]) are stripped for this plain-text preview.
+                Round-7 fix 3: machine-provenance leads ("Timestamp: 178…",
+                "[Harvest:claude-code] session-handoff-…") are skipped or
+                de-slugified by buildMemoryPreview so the title reads human,
+                and the excerpt sentence-truncates at the last full stop —
+                display only, the stored content and drawer editor stay raw. */}
             {(() => {
-              const [lead, ...rest] = memory.content
-                .split('\n')
-                .map(stripMarkdownTokens)
-                .filter(l => l !== '');
-              const excerpt = rest.join(' ').trim();
+              const { title, excerpt } = buildMemoryPreview(memory.content);
               return (
                 <>
                   <p className="line-clamp-2 text-[14.5px] font-medium leading-[1.45] text-[var(--text)] group-hover:text-[var(--honey-text)]">
-                    {lead ?? stripMarkdownTokens(memory.content)}
+                    {title}
                   </p>
                   {excerpt && (
                     <p className="mt-0.5 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
@@ -439,12 +439,14 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
           {/* Round-6 fix 2c: "awaiting your confirm" read alarming next to the
               total — calmer "to review", and the chip now jumps straight to
-              the needs-confirm filter. Count stays real. */}
+              the needs-confirm filter. Count stays real.
+              Round-7 fix 4: a big count here read as "your memory is broken" —
+              the tooltip reframes it honestly (imported backlog, no urgency). */}
           <DimensionChip
             value={stats.needsConfirm}
             label="to review"
             tone="attention"
-            title="Show only memories awaiting your review"
+            title="Most of these are imported memories waiting for a first look — reviewing a few at a time is plenty."
             onClick={() => setFilter('needs_confirm')}
           />
         </div>

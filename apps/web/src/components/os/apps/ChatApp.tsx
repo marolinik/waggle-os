@@ -84,6 +84,17 @@ const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
   'blank': { label: 'Custom', desc: 'General-purpose workspace' },
 };
 
+/**
+ * Round-7 fix 2a: ONE pill grammar for every chip on the composer agent strip —
+ * same height (h-6), radius (rounded-full), type size (text-[11px]), border and
+ * fill. Accent lives ONLY in text/icon color (and the model pill keeps mono).
+ */
+const STRIP_PILL =
+  'inline-flex h-6 items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 text-[11px] transition-colors hover:border-[var(--honey-line)]';
+/** Icon-only variant of the strip pill (chevron, overflow, profile toggles). */
+const STRIP_ICON_PILL =
+  'grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:text-foreground';
+
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Switch model' },
   { cmd: '/models', desc: 'List models' },
@@ -371,10 +382,12 @@ const ApprovalGate = ({
  * specific TTLs. Labels are plain-language display names only — the internal
  * level values ('normal' | 'trusted' | 'yolo') are unchanged everywhere.
  */
-const AUTONOMY_CONFIG: Record<AutonomyLevel, { label: string; color: string; bg: string; border: string; icon: React.ComponentType<{ className?: string }>; tagline: string }> = {
-  normal:  { label: 'Ask first', color: 'text-muted-foreground', bg: 'bg-muted/30',         border: 'border-border/40',      icon: Shield, tagline: 'Asks before every change' },
-  trusted: { label: 'Trusted',   color: 'text-sky-300',          bg: 'bg-sky-500/10',       border: 'border-sky-500/40',     icon: Shield, tagline: 'Makes routine changes; still asks for risky ones' },
-  yolo:    { label: 'Autopilot', color: 'text-amber-300',        bg: 'bg-amber-500/10',     border: 'border-amber-500/40',   icon: Zap,    tagline: 'Acts without asking for approval. Use with care.' },
+// Round-7 fix 2a: the trigger chip now wears the shared STRIP_PILL grammar, so
+// the per-level accent is carried by text/icon color only (bg/border dropped).
+const AUTONOMY_CONFIG: Record<AutonomyLevel, { label: string; color: string; icon: React.ComponentType<{ className?: string }>; tagline: string }> = {
+  normal:  { label: 'Ask first', color: 'text-muted-foreground', icon: Shield, tagline: 'Asks before every change' },
+  trusted: { label: 'Trusted',   color: 'text-sky-300',          icon: Shield, tagline: 'Makes routine changes; still asks for risky ones' },
+  yolo:    { label: 'Autopilot', color: 'text-amber-300',        icon: Zap,    tagline: 'Acts without asking for approval. Use with care.' },
 };
 
 const TTL_OPTIONS: Array<{ label: string; minutes: number | null }> = [
@@ -422,7 +435,7 @@ const AutonomyToggle = ({
       <HintTooltip content={config.tagline}>
         <button
           onClick={() => setOpen(o => !o)}
-          className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-display border ${config.bg} ${config.color} ${config.border} hover:brightness-110 transition`}
+          className={`${STRIP_PILL} font-display ${config.color}`}
         >
           <Icon className="w-3 h-3" />
           <span>{config.label}</span>
@@ -664,11 +677,15 @@ const ChatApp = ({
     }
   }, [isStripCompact, showHeaderOverflow]);
 
+  // Round-7 fix 2c: also re-anchor when isLoading flips — the Retry button and
+  // suggested-action chips of the last turn render only AFTER streaming ends,
+  // so a [messages]-only scroll left them straddling the container's bottom
+  // edge (the hover Copy/Retry icons rendered visually cut above the composer).
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, isLoading]);
 
   // F2: mount-once auto-send of the wizard's first task. The prefill (line ~464)
   // stays visible — the same "about to ship" beat as the FR #32 starter prompts —
@@ -875,8 +892,12 @@ const ChatApp = ({
           {/* Round-4 craft (I1 fix 1): hold the reading measure to ~760px like
               Claude/ChatGPT instead of letting turns run the full panel width.
               The wrapper turns h-full flex-col only in the empty state so
-              WorkspaceBriefing's h-full/flex-1 roots keep filling the viewport. */}
-          <div className={`mx-auto w-full max-w-[680px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : ''}`}>
+              WorkspaceBriefing's h-full/flex-1 roots keep filling the viewport.
+              Round-7 fix 2c: pb-6 gives the LAST turn's hover action row
+              (Copy/Retry) clearance above the scroll container's bottom edge —
+              without it the icons sat flush against (and visually cut by) the
+              boundary just above the composer. */}
+          <div className={`mx-auto w-full max-w-[680px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : 'pb-6'}`}>
           {messages.length === 0 && workspaceId && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
@@ -1137,7 +1158,7 @@ const ChatApp = ({
                 aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
                 aria-expanded={showSessions}
                 title={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}
-                className="text-muted-foreground hover:text-foreground transition-colors"
+                className={STRIP_ICON_PILL}
               >
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
               </button>
@@ -1147,23 +1168,23 @@ const ChatApp = ({
             <div className="relative" ref={personaPickerRef}>
               <button
                 onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
-                className="flex items-center gap-1.5 px-1.5 py-0.5 rounded-lg hover:bg-muted/50 transition-colors"
+                className={`${STRIP_PILL} text-muted-foreground`}
               >
                 {persona ? (
                   <>
-                    <Avatar className="w-5 h-5">
+                    <Avatar className="w-4 h-4">
                       <AvatarImage src={persona.avatar} />
-                      <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                      <AvatarFallback className="text-[9px] bg-primary/20">{persona.name[0]}</AvatarFallback>
                     </Avatar>
-                    <span className="text-[11px] font-display text-muted-foreground">{persona.name}</span>
+                    <span className="font-display">{persona.name}</span>
                   </>
                 ) : (
                   <>
-                    <Bot className="w-3.5 h-3.5 text-muted-foreground" />
-                    <span className="text-[11px] text-muted-foreground">Persona</span>
+                    <Bot className="w-3.5 h-3.5" />
+                    <span>Persona</span>
                   </>
                 )}
-                <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                <ChevronDown className="w-3 h-3" />
               </button>
               {showPersonaPicker && (
                 <div className="absolute bottom-full left-0 mb-1 w-56 bg-card border border-border rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
@@ -1195,7 +1216,7 @@ const ChatApp = ({
             <HintTooltip content="This chat uses your workspace memory — past sessions, entities, and decisions inform every reply. Click the Memory app in the dock to browse.">
               <span
                 data-testid="chat-header-memory-active"
-                className="text-[10px] px-1.5 py-0.5 rounded font-display bg-primary/10 text-honey border border-primary/30 inline-flex items-center gap-1 cursor-help"
+                className={`${STRIP_PILL} cursor-help font-display text-honey`}
               >
                 <Brain className="w-2.5 h-2.5" aria-hidden="true" />
                 Memory
@@ -1209,35 +1230,40 @@ const ChatApp = ({
             {!isStripCompact && storageType && (
               <span
                 data-testid="chat-header-storage-badge"
-                className={`text-[10px] px-1.5 py-0.5 rounded font-display ${
-                  storageType === 'local' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                  : storageType === 'team' ? 'bg-sky-500/10 text-sky-400 border border-sky-500/30'
-                  : 'bg-violet-500/10 text-violet-400 border border-violet-500/30'
+                className={`${STRIP_PILL} font-display ${
+                  storageType === 'local' ? 'text-emerald-400'
+                  : storageType === 'team' ? 'text-sky-400'
+                  : 'text-violet-400'
                 }`}
               >
                 {storageType === 'local' ? 'Linked' : storageType === 'team' ? 'Team' : 'Virtual'}
               </span>
             )}
 
-            {/* Team presence */}
+            {/* Team presence — round-7 fix 2b: the bare avatar chip was
+                unlabeled (a floating 'Y'), so the whole cluster is now one
+                strip pill with a native title naming who's here. */}
             {!isStripCompact && teamPresence && teamPresence.length > 0 && (
-              <div className="flex items-center gap-1 mx-1" data-testid="chat-header-team-presence">
+              <div
+                className={`${STRIP_PILL} px-1.5 text-muted-foreground`}
+                data-testid="chat-header-team-presence"
+                title={teamPresence.length === 1
+                  ? `${teamPresence[0].name} — active in this chat`
+                  : `Active in this chat: ${teamPresence.map(m => m.name).join(', ')}`}
+              >
                 <div className="flex -space-x-1.5">
                   {teamPresence.slice(0, 4).map(m => (
-                    <div key={m.id} className="relative group">
-                      <Avatar className="w-5 h-5 border-2 border-card">
+                    <div key={m.id} className="relative">
+                      <Avatar className="w-4 h-4 border border-card">
                         {m.avatar ? <AvatarImage src={m.avatar} /> : null}
-                        <AvatarFallback className="text-[11px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
+                        <AvatarFallback className="text-[9px] bg-sky-500/20 text-sky-400">{m.name[0]}</AvatarFallback>
                       </Avatar>
-                      <div className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
-                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[11px] text-foreground bg-card px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-30 shadow-lg">
-                        {m.name}
-                      </span>
+                      <div className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full border border-card ${m.status === 'online' ? 'bg-emerald-400' : 'bg-muted-foreground'}`} />
                     </div>
                   ))}
                 </div>
                 {teamPresence.length > 4 && (
-                  <span className="text-[11px] text-muted-foreground ml-1">+{teamPresence.length - 4}</span>
+                  <span>+{teamPresence.length - 4}</span>
                 )}
               </div>
             )}
@@ -1248,7 +1274,7 @@ const ChatApp = ({
               <div className="relative" ref={overflowRef}>
                 <button
                   onClick={() => setShowHeaderOverflow(p => !p)}
-                  className="flex items-center justify-center w-6 h-6 rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+                  className={STRIP_ICON_PILL}
                   aria-label="More chat context info"
                   data-testid="chat-header-overflow-trigger"
                 >
@@ -1297,6 +1323,10 @@ const ChatApp = ({
             )}
 
             <div className="ml-auto flex items-center gap-1.5">
+              {/* Round-7 fix 2a: subtle divider between the context cluster
+                  (sessions · persona · Memory · presence) and the control
+                  cluster (autonomy · model · profile). */}
+              <span aria-hidden className="h-4 border-l border-[var(--line-soft)]" />
               {/* Phase B.5: autonomy toggle — only render when the parent wired a handler */}
               {onAutonomyChange && (
                 <AutonomyToggle
@@ -1311,10 +1341,10 @@ const ChatApp = ({
                 <button
                   onClick={() => { setShowModelPicker(p => !p); setShowPersonaPicker(false); }}
                   title="Waggle picked the model — click to override"
-                  className="flex items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface)] px-2 py-0.5 transition-colors hover:border-[var(--honey-line)]"
+                  className={STRIP_PILL}
                 >
                   <DotLive tone="healthy" size={7} />
-                  <span className="max-w-[140px] truncate font-mono text-[11px] text-[var(--text-2)]">
+                  <span className="max-w-[140px] truncate font-mono text-[var(--text-2)]">
                     {currentModel ? formatModelLabel(currentModel) : 'auto'}
                   </span>
                   <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
@@ -1347,8 +1377,10 @@ const ChatApp = ({
                   aria-label="Agent profile"
                   aria-expanded={showAgentProfile}
                   data-testid="chat-agent-profile-toggle"
-                  className={`flex items-center justify-center w-6 h-6 rounded-md transition-colors ${
-                    showAgentProfile ? 'text-honey bg-primary/10' : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                  className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border transition-colors ${
+                    showAgentProfile
+                      ? 'border-[var(--honey-line)] bg-[var(--honey-wash)] text-honey'
+                      : 'border-[var(--line-soft)] bg-[var(--surface-2)] text-muted-foreground hover:border-[var(--honey-line)] hover:text-foreground'
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5" />

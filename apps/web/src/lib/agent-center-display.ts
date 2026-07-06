@@ -92,7 +92,9 @@ export function agentKpis(agents: Agent[]): {
  * click-to-create cards when the fleet is near-empty. Ids are the canonical
  * persona ids (packages/agent/src/persona-data.ts, mirrored in lib/personas).
  */
-export const SUGGESTED_PERSONA_IDS: readonly string[] = ['researcher', 'writer', 'analyst'];
+export const SUGGESTED_PERSONA_IDS: readonly string[] = [
+  'researcher', 'writer', 'analyst', 'planner', 'coder', 'consultant',
+];
 
 /**
  * Whether to surface the "Suggested agents" block: only on the unfiltered

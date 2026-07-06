@@ -132,8 +132,10 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
       data-testid="extension-card"
       className={`flex items-start gap-3 p-3 rounded-xl border bg-card transition-colors ${
         connectedRow
-          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
-          : 'border-border/30 hover:border-border/60'
+          // Rest elevation folded INTO the inset honey hairline (one combined
+          // box-shadow — two shadow-* utilities on one element would collide).
+          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
+          : 'border-border/30 hover:border-border/60 shadow-[var(--shadow-sm)]'
       }`}
     >
       {/* Brand identity tile (simple-icons mark or monogram) — no more

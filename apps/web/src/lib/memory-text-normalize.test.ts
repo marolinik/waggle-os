@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeMemoryKey, isGroupableKey, MIN_NORMALIZED_KEY_CHARS } from './memory-text-normalize';
+import {
+  normalizeMemoryKey,
+  isGroupableKey,
+  MIN_NORMALIZED_KEY_CHARS,
+  buildMemoryPreview,
+  sentenceTruncate,
+} from './memory-text-normalize';
 
 describe('normalizeMemoryKey', () => {
   it('collapses two strings that differ only by an embedded audit-run id', () => {
@@ -99,5 +105,79 @@ describe('normalizeMemoryKey', () => {
     const first = normalizeMemoryKey(input);
     const second = normalizeMemoryKey(input);
     expect(first).toBe(second);
+  });
+});
+
+describe('buildMemoryPreview (round-7 fix 3 — humanized row titles)', () => {
+  it('skips a bare "Timestamp: <digits>" lead line and titles with the first human line', () => {
+    const { title, excerpt } = buildMemoryPreview(
+      'Timestamp: 1782400441971\nImran prefers dark mode in every editor he uses',
+    );
+    expect(title).toBe('Imran prefers dark mode in every editor he uses');
+    expect(excerpt).toBe('');
+  });
+
+  it('de-slugifies a "[Harvest:…] <slug>" lead line into a readable title', () => {
+    const { title } = buildMemoryPreview(
+      '[Harvest:claude-code] session-handoff-2026-06-24-s2-final\nBody of the harvested note follows here.',
+    );
+    expect(title).toBe('session handoff 2026 06 24 s2 final');
+  });
+
+  it('keeps the remainder as the title when the harvest prefix wraps human text', () => {
+    const { title } = buildMemoryPreview('[Harvest:claude] Marko prefers dark mode across all tools');
+    expect(title).toBe('Marko prefers dark mode across all tools');
+  });
+
+  it('advances past a harvest lead with no usable remainder to the first human line', () => {
+    const { title } = buildMemoryPreview(
+      '[Harvest:gemini]\n#42\nThe Germany GTM launch plan needs a final review',
+    );
+    expect(title).toBe('The Germany GTM launch plan needs a final review');
+  });
+
+  it('falls back to the raw first line when nothing qualifies (today\'s behavior)', () => {
+    const { title } = buildMemoryPreview('Timestamp: 1782400441971');
+    expect(title).toBe('Timestamp: 1782400441971');
+  });
+
+  it('leaves ordinary content untouched: first line = title, rest = excerpt', () => {
+    const { title, excerpt } = buildMemoryPreview('The launch plan\nWe ship Q3. Then we review.');
+    expect(title).toBe('The launch plan');
+    expect(excerpt).toBe('We ship Q3. Then we review.');
+  });
+
+  it('still strips markdown tokens for the display split', () => {
+    const { title } = buildMemoryPreview('## Weekly review notes for the team\nbody');
+    expect(title).toBe('Weekly review notes for the team');
+  });
+
+  it('excludes skipped machine lines from the excerpt', () => {
+    const { excerpt } = buildMemoryPreview(
+      'Timestamp: 1782400441971\nA human title line for this memory\nAnd the excerpt body.',
+    );
+    expect(excerpt).toBe('And the excerpt body.');
+    expect(excerpt).not.toContain('1782400441971');
+  });
+
+  it('handles empty content without throwing', () => {
+    expect(buildMemoryPreview('')).toEqual({ title: '', excerpt: '' });
+  });
+});
+
+describe('sentenceTruncate', () => {
+  it('returns short text unchanged', () => {
+    expect(sentenceTruncate('Short and sweet.', 220)).toBe('Short and sweet.');
+  });
+
+  it('cuts a long excerpt at the last full stop inside the budget', () => {
+    const text = 'First sentence here. Second sentence lands inside. Third one runs well past the budget and keeps going.';
+    const out = sentenceTruncate(text, 60);
+    expect(out).toBe('First sentence here. Second sentence lands inside.');
+  });
+
+  it('leaves text without a usable stop for the CSS clamp', () => {
+    const text = 'x'.repeat(300);
+    expect(sentenceTruncate(text, 220)).toBe(text);
   });
 });

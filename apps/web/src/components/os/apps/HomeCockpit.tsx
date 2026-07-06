@@ -232,7 +232,14 @@ function GreetingHeader({
   /** Most recent lastActive across the briefing's workspace cards. */
   lastActive?: string;
 }) {
-  const lastActiveRel = formatRelative(lastActive);
+  // Round-7 fix 1: the server-composed greeting may already carry an
+  // away/last-active statement ("You've been away 1 day, Marko") built from
+  // ITS OWN recency field. Repeating a client-computed "last active 2d ago"
+  // clause right below it showed two disagreeing truths in one viewport.
+  // ONE truth: when the greeting already says it, the factual line drops its
+  // recency clause (the workspace/review-count clauses stay).
+  const greetingStatesRecency = /been away|last active/i.test(greeting);
+  const lastActiveRel = greetingStatesRecency ? '' : formatRelative(lastActive);
   return (
     <header className="mb-9">
       <div className="mb-4 flex items-center justify-between gap-3">

@@ -126,3 +126,91 @@ export function stripMarkdownTokens(line: string): string {
     .replace(MD_CODE_RE, '$1')
     .trim();
 }
+
+// ── Display-layer preview split (round-7 fix 3) ─────────────────────────────
+//
+// MemoryTrustManage renders a memory as "first line = title, rest = excerpt",
+// but harvested frames often LEAD with machine provenance — a bare
+// "Timestamp: 1782400441971" line, or a "[Harvest:claude-code] session-handoff-…"
+// slug — which read as garbage titles. buildMemoryPreview picks the first
+// HUMAN lead instead. Display only: nothing here touches the stored content;
+// the drawer still shows and edits the raw text.
+
+export interface MemoryPreview {
+  /** Humanized first display line (falls back to the raw first line). */
+  title: string;
+  /** Remaining lines joined, sentence-truncated near the clamp budget. */
+  excerpt: string;
+}
+
+/** Bare machine-provenance line: 'Timestamp: 1782400441971' and nothing else. */
+const TIMESTAMP_LINE_RE = /^timestamp\s*:?\s*\d{6,}$/i;
+
+/** '[Harvest:<tool>]' provenance prefix on a lead line. */
+const HARVEST_PREFIX_RE = /^\[harvest:[^\]]*\]\s*/i;
+
+/** A slug: no whitespace, at least one dash/underscore joint. */
+function isSlug(s: string): boolean {
+  return s.length > 0 && !/\s/.test(s) && /[-_]/.test(s);
+}
+
+function deSlugify(s: string): string {
+  return s.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** A line a human reads as a title/sentence: ≥4 words and not majority
+ *  punctuation/digits. */
+function isHumanLine(line: string): boolean {
+  const words = line.split(/\s+/).filter(Boolean);
+  if (words.length < 4) return false;
+  const noise = (line.match(/[\p{N}\p{P}\p{S}]/gu) ?? []).length;
+  return noise <= line.length / 2;
+}
+
+/** Pick the display title from the stripped non-empty lines, skipping machine
+ *  provenance leads. Returns null when nothing qualifies (caller falls back to
+ *  the first line, exactly today's behavior). */
+function selectPreviewTitle(lines: string[]): { title: string; index: number } | null {
+  let scanningForHuman = false;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (TIMESTAMP_LINE_RE.test(line)) continue; // (a) bare timestamp — never a title
+    if (HARVEST_PREFIX_RE.test(line)) {
+      // (b) harvest-provenance lead: de-slugify the remainder if it's a slug,
+      // keep it if it already reads human, else scan on for a human line.
+      const remainder = line.replace(HARVEST_PREFIX_RE, '').trim();
+      if (isSlug(remainder)) return { title: deSlugify(remainder), index: i };
+      if (isHumanLine(remainder)) return { title: remainder, index: i };
+      scanningForHuman = true;
+      continue;
+    }
+    if (scanningForHuman && !isHumanLine(line)) continue;
+    return { title: line, index: i };
+  }
+  return null;
+}
+
+/** Rough character budget of the two clamped excerpt lines. */
+const EXCERPT_SENTENCE_CAP = 220;
+
+/** Cut a long excerpt at the last full stop inside the clamp budget so the
+ *  preview ends on a sentence instead of a mid-word ellipsis. When no usable
+ *  stop exists, return the text untouched and let the CSS clamp ellipsize. */
+export function sentenceTruncate(text: string, cap = EXCERPT_SENTENCE_CAP): string {
+  if (text.length <= cap) return text;
+  const head = text.slice(0, cap);
+  const lastStop = head.lastIndexOf('. ');
+  if (lastStop >= cap * 0.4) return head.slice(0, lastStop + 1);
+  return text;
+}
+
+/** Split memory content into a humanized {title, excerpt} for row previews. */
+export function buildMemoryPreview(content: string): MemoryPreview {
+  const lines = content.split('\n').map(stripMarkdownTokens).filter((l) => l !== '');
+  if (lines.length === 0) return { title: stripMarkdownTokens(content), excerpt: '' };
+  const picked = selectPreviewTitle(lines) ?? { title: lines[0], index: 0 };
+  // Machine-provenance lines BEFORE the picked title are dropped from the
+  // preview entirely (they're still in the stored content and the drawer).
+  const excerpt = sentenceTruncate(lines.slice(picked.index + 1).join(' ').trim());
+  return { title: picked.title, excerpt };
+}

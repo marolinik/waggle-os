@@ -189,7 +189,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           >
             <Search className="w-3 h-3" />
             <span className="text-[10px] font-display">Search</span>
-            <kbd className="text-[9px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
+            <kbd className="text-[10px] px-1 py-0.5 rounded bg-muted border border-border/40 font-mono">Ctrl K</kbd>
           </button>
         </HintTooltip>
         {/* Round-6: an overlapping badge can never sit right on a 14px bell —
@@ -198,7 +198,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         <button onClick={onNotificationClick} className="flex items-center gap-1 text-muted-foreground hover:text-honey transition-colors" aria-label={`Notifications${unreadNotifications > 0 ? ` (${unreadNotifications} unread)` : ''}`}>
           <Bell className="w-3.5 h-3.5" />
           {unreadNotifications > 0 && (
-            <span className="min-w-[15px] h-[15px] rounded-full bg-[var(--honey)] text-[9px] leading-none text-[#1a1407] flex items-center justify-center font-bold px-1 whitespace-nowrap">
+            <span className="min-w-[15px] h-[15px] rounded-full bg-[var(--honey)] text-[10px] leading-none text-[#1a1407] flex items-center justify-center font-bold px-1 whitespace-nowrap">
               {unreadNotifications > 9 ? '9+' : unreadNotifications}
             </span>
           )}

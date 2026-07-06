@@ -285,7 +285,7 @@ const ModelPilotCard = ({
           const isOpen = openLane === lane.key;
 
           return (
-            <div key={lane.key} className="relative rounded-lg border border-[var(--line-soft)] bg-card p-2.5 pl-3.5">
+            <div key={lane.key} className="relative rounded-lg border border-[var(--line-soft)] bg-card p-2.5 pl-3.5 shadow-[var(--shadow-sm)]">
               {/* Single role accent: inset 3px rail + colored label (no overflow-hidden —
                   the LaneDropdown below overhangs the row). */}
               <span

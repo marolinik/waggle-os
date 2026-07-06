@@ -139,7 +139,8 @@ function WorkspaceCard({
   /** True when another workspace shares this name — show the group to disambiguate. */
   isDuplicateName: boolean;
   /** True when name AND group both collide — the group tag alone no longer
-   *  disambiguates, so a short id chip renders too (round-6 fix 1c). */
+   *  disambiguates, so the full workspace slug renders as a chip too
+   *  (round-6 fix 1c; round-7: full slug, not a truncated fragment). */
   isDuplicateNameAndGroup?: boolean;
 }) {
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
@@ -167,7 +168,7 @@ function WorkspaceCard({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
       aria-label={`Open ${ws.name}`}
-      className="group relative cursor-pointer rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="group relative cursor-pointer rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       <div className="mb-3 flex items-center gap-3">
@@ -182,14 +183,16 @@ function WorkspaceCard({
             {ws.name}
           </h3>
           {/* Disambiguate same-named workspaces with their group (issue 2b);
-              when the group ALSO collides, append a short id chip so two
-              "Research Hub · Personal" cards stay tellable apart (fix 1c). */}
+              when the group ALSO collides, append the workspace's FULL slug in
+              a quiet mono chip (round-7: the truncated "#-hub"/"#ub-2" chip
+              read as a bug — full slugs are readable and honest, and BOTH
+              cards in a collision set carry theirs). */}
           {isDuplicateName && (ws.group || isDuplicateNameAndGroup) && (
             <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-[var(--text-dim)]">
               {ws.group && <span className="truncate">{ws.group}</span>}
               {isDuplicateNameAndGroup && (
-                <span className="shrink-0 rounded-[5px] border border-[var(--line-soft)] bg-[var(--surface-2)] px-1 font-mono text-[10px]">
-                  #{ws.id.slice(-4)}
+                <span className="min-w-0 truncate rounded-[5px] border border-[var(--line-soft)] bg-[var(--surface-2)] px-1 font-mono text-[10px]">
+                  {ws.id}
                 </span>
               )}
             </span>
