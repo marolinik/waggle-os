@@ -56,11 +56,11 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     expect(card?.textContent).toBe('—');
   });
 
-  it('renders the confidence ring number when confidence is present', async () => {
+  it('renders the confidence ring as NN% when confidence is present', async () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '7', confidence: 94, createdAt: iso(1) })]);
     render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
     await waitFor(() => expect(screen.getByText('⬡ M-7')).toBeTruthy());
-    expect(screen.getByText('94')).toBeTruthy();
+    expect(screen.getByText('94%')).toBeTruthy();
   });
 
   it('the "Needs confirm" filter shows only unreviewed memories', async () => {

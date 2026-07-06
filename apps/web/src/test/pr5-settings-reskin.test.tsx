@@ -18,6 +18,12 @@ const mocks = vi.hoisted(() => ({
     getServerUrl: vi.fn().mockReturnValue('http://127.0.0.1:3333'),
     getProviders: vi.fn().mockResolvedValue({ providers: [], search: [], activeSearch: 'duckduckgo' }),
     getLocalInferenceStatus: vi.fn().mockResolvedValue({ servers: [], ollamaInstalled: false, totalLocalModels: 0 }),
+    // MODEL-GATE: the mount probe calls these too — absent, the probe's async
+    // closure throws (TypeError: not a function) as an UNHANDLED rejection that
+    // poisons unrelated tests in the full-suite run. configured:false = the
+    // probe's honest "nothing to check" idle path.
+    probeModel: vi.fn().mockResolvedValue({ configured: false }),
+    probeProvider: vi.fn().mockResolvedValue({ configured: false, valid: false, verified: false }),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));

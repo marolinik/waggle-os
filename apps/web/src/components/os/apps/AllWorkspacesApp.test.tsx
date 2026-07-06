@@ -7,7 +7,8 @@
  *  - a zero-workspace visit shows the create-first empty state (D16)
  *  - NO-FABRICATION: a workspace with undefined memoryCount renders NO memory
  *    chip (W2B: not even a filler "—"), never an invented number (PR3/PR3.5)
- *  - opening a card selects the workspace + fires onOpenWorkspace
+ *  - the ENTIRE card opens the workspace (Wave F fix 1b — no floating "Open >"
+ *    link); the actions menu inside stops propagation so managing never opens
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
@@ -45,7 +46,7 @@ const ws = (over: Partial<Workspace> & { id: string; name: string }): Workspace 
 
 beforeEach(() => {
   mocks.shell.workspaces = [
-    ws({ id: 'w1', name: 'Competitive Intelligence', storageType: 'local', memoryCount: 142, health: 'healthy' }),
+    ws({ id: 'w1', name: 'Competitive Intelligence', storageType: 'local', memoryCount: 142, sessionCount: 12, health: 'healthy' }),
     ws({ id: 'w2', name: 'Pricing Model', storageType: 'virtual', memoryCount: 64, health: 'degraded' }),
     ws({ id: 'w3', name: 'Marketing Site', storageType: 'team', memoryCount: 51 }),
     // No memoryCount → must render an honest dash, never a fabricated number.
@@ -67,8 +68,9 @@ describe('AllWorkspacesApp', () => {
     expect(screen.getByTestId('all-workspaces-card-w3')).toBeInTheDocument();
     expect(screen.getByTestId('all-workspaces-card-w4')).toBeInTheDocument();
     expect(screen.getByText('Competitive Intelligence')).toBeInTheDocument();
-    // Real counts render as-is.
+    // Real counts render as-is in the quiet meta row.
     expect(screen.getByText(/142 memories/)).toBeInTheDocument();
+    expect(screen.getByText(/12 sessions/)).toBeInTheDocument();
   });
 
   it('does NOT fabricate a count for a workspace with undefined memoryCount', () => {
@@ -127,12 +129,20 @@ describe('AllWorkspacesApp', () => {
     expect(screen.queryByTestId('all-workspaces-filter-local')).not.toBeInTheDocument();
   });
 
-  it('opening a card selects the workspace and fires onOpenWorkspace', () => {
+  it('the whole card opens the workspace; the actions menu does not (Wave F fix 1b)', () => {
     const onOpenWorkspace = vi.fn();
     render(<AllWorkspacesApp onOpenWorkspace={onOpenWorkspace} />);
+    // The title (primary click target) opens via the card's click handler…
     fireEvent.click(screen.getByTestId('all-workspaces-open-w1'));
     expect(mocks.shell.selectWorkspace).toHaveBeenCalledWith('w1');
     expect(onOpenWorkspace).toHaveBeenCalledWith('w1');
+    // …and so does the card surface itself.
+    fireEvent.click(screen.getByTestId('all-workspaces-card-w2'));
+    expect(onOpenWorkspace).toHaveBeenCalledWith('w2');
+    // The actions menu stops propagation — managing must never open.
+    onOpenWorkspace.mockClear();
+    fireEvent.click(screen.getByTestId('actions-w3'));
+    expect(onOpenWorkspace).not.toHaveBeenCalled();
   });
 
   it('shows the create-first empty state when there are zero workspaces (D16)', () => {

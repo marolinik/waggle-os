@@ -186,7 +186,23 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (teamFilter) {
       workspaces = workspaces.filter((ws) => ws.teamId === teamFilter || ws.team === teamFilter);
     }
-    return workspaces;
+    // Wave F (fix 1a): enrich each row with a cheap sessionCount — a readdir of
+    // the same sessions dir the /:id/context stats count. Deliberately NO
+    // memoryCount here: that would open every workspace's mind DB on every list
+    // call (expensive + the MultiMindCache LRU-eviction hazard), so cards only
+    // show memory counts where a richer per-workspace source provides them.
+    // An unreadable dir omits the field — never fabricate a 0 from an error.
+    return workspaces.map((ws) => {
+      try {
+        const sessionsDir = path.join(server.localConfig.dataDir, 'workspaces', ws.id, 'sessions');
+        const sessionCount = fs.existsSync(sessionsDir)
+          ? fs.readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl')).length
+          : 0;
+        return { ...ws, sessionCount };
+      } catch {
+        return ws;
+      }
+    });
   });
 
   // POST /api/workspaces — create workspace

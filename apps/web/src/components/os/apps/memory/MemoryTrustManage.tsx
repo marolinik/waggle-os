@@ -4,6 +4,7 @@ import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryStatus } from '@/lib/types';
+import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
 import { frameSourceLabel } from '@/lib/frame-source';
 import { ConfidenceRing } from '../../warm';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
@@ -107,9 +108,13 @@ interface MemoryRowProps {
   onForget: () => void;
   onConfirm: () => void;
   busy: boolean;
+  /** Display-layer dedup (F22, Wave F fix 3b): how many near-identical records
+   *  this row represents. When > 1 an "×N" badge renders — purely informational,
+   *  nothing is merged or deleted in the store. */
+  duplicateCount?: number;
 }
 
-function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps) {
+function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }: MemoryRowProps) {
   const fresh = freshness(memory.createdAt);
   const srcLabel = frameSourceLabel(memory.source);
   const stale = isStale(memory);
@@ -135,6 +140,14 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps
             <span className={fresh.state === 'fresh' ? 'text-[var(--healthy)]' : 'text-[var(--attention)]'}>
               ● {fresh.label}
             </span>
+            {duplicateCount != null && duplicateCount > 1 && (
+              <span
+                className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[var(--text-muted)]"
+                title={`${duplicateCount} near-identical memories collapsed here — display only, nothing was merged or deleted.`}
+              >
+                ×{duplicateCount}
+              </span>
+            )}
           </div>
 
           {stale && (
@@ -304,6 +317,12 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     return set;
   }, [live, filter, q]);
 
+  // Wave F (fix 3b): same display-layer collapse the Memories tab uses (F22) —
+  // near-identical rows fold into one representative with an ×N badge. Render
+  // only; every underlying record stays in the store and row actions key off
+  // the representative's real id.
+  const shownDeduped = useMemo(() => dedupeMemoriesForDisplay(shown), [shown]);
+
   // One-shot: open a specific memory's editor when asked (the Why view's
   // "that memory is wrong → correct it" hands the id back here).
   useEffect(() => {
@@ -437,10 +456,11 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
         </div>
       ) : (
         <ul className="grid gap-2.5">
-          {shown.map((m) => (
+          {shownDeduped.map(({ memory: m, duplicateCount }) => (
             <MemoryRow
               key={m.id}
               memory={m}
+              duplicateCount={duplicateCount}
               busy={busy}
               onOpen={() => openDetail(m)}
               onForget={() => forget(m)}

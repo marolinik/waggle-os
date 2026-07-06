@@ -20,7 +20,7 @@
  * `/workspaces/:id`); with no prop it degrades to selection-only.
  */
 import { useMemo, useState } from 'react';
-import { Search, Plus, Hexagon, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Search, Plus, Hexagon, AlertTriangle } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
 import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
@@ -126,48 +126,58 @@ function WorkspaceCard({
   const hasSessionCount = typeof ws.sessionCount === 'number';
 
   return (
+    // Wave F (fix 1b): the ENTIRE card is the open target — no floating "Open >"
+    // link. The actions menu inside stops propagation so managing never opens.
     <div
-      className="group relative rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        // Only when the card itself is focused — Enter on the nested actions
+        // menu must not also open the workspace.
+        if (e.target !== e.currentTarget) return;
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
+      }}
+      aria-label={`Open ${ws.name}`}
+      className="group relative cursor-pointer rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="block w-full text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)] rounded-[10px]"
-        aria-label={`Open ${ws.name}`}
-      >
-        <div className="mb-3 flex items-center gap-3">
-          <HexAvatar label={ws.name} size={36} />
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]">
-              {ws.name}
-            </h3>
-            {/* Disambiguate same-named workspaces with their group (issue 2b). */}
-            {isDuplicateName && ws.group && (
-              <span className="mt-0.5 block truncate text-[11.5px] text-[var(--text-dim)]">{ws.group}</span>
-            )}
-          </div>
-          {badge && (
-            <span
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
-              style={{ color: badge.color, background: badge.wash }}
-            >
-              <Hexagon className="h-3 w-3" fill="currentColor" strokeWidth={0} />
-              {badge.label}
-            </span>
+      <div className="mb-3 flex items-center gap-3">
+        <HexAvatar label={ws.name} size={36} />
+        <div className="min-w-0 flex-1">
+          {/* The title carries the open testid — it's the card's primary click
+              target (clicks bubble to the card's open handler). */}
+          <h3
+            className="truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]"
+            data-testid={`all-workspaces-open-${ws.id}`}
+          >
+            {ws.name}
+          </h3>
+          {/* Disambiguate same-named workspaces with their group (issue 2b). */}
+          {isDuplicateName && ws.group && (
+            <span className="mt-0.5 block truncate text-[11.5px] text-[var(--text-dim)]">{ws.group}</span>
           )}
         </div>
-
-        {ws.description && (
-          <p className="mb-3.5 line-clamp-2 min-h-[38px] text-[13px] leading-[1.5] text-[var(--text-muted)]">
-            {ws.description}
-          </p>
+        {badge && (
+          <span
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
+            style={{ color: badge.color, background: badge.wash }}
+          >
+            <Hexagon className="h-3 w-3" fill="currentColor" strokeWidth={0} />
+            {badge.label}
+          </span>
         )}
-      </button>
+      </div>
 
+      {ws.description && (
+        <p className="mb-3.5 line-clamp-2 min-h-[38px] text-[13px] leading-[1.5] text-[var(--text-muted)]">
+          {ws.description}
+        </p>
+      )}
+
+      {/* Quiet meta row — real fields only (W2B honesty: no fabricated count,
+          no filler dash; an absent field simply doesn't render). */}
       <div className="flex items-center gap-3.5 text-[12px] text-[var(--text-dim)]">
-        {/* W2B: no fabricated count AND no filler dash — render the memory chip
-            only when the field actually exists (the Open button always shows). */}
         {hasMemoryCount && (
           <span className="inline-flex items-center gap-1.5">
             <Hexagon className="h-3 w-3" strokeWidth={1.8} />
@@ -179,30 +189,23 @@ function WorkspaceCard({
             {ws.sessionCount} {ws.sessionCount === 1 ? 'session' : 'sessions'}
           </span>
         )}
+        {lastActive && (
+          <span className="font-mono text-[11px]">{lastActive}</span>
+        )}
         {isHealthy && (
           <span className="inline-flex items-center gap-1.5 text-[var(--healthy)]">
             <DotLive tone="healthy" size={7} /> healthy
           </span>
         )}
-        <button
-          type="button"
-          onClick={onOpen}
-          className="ml-auto inline-flex items-center gap-0.5 font-semibold text-[var(--honey)] transition-opacity hover:opacity-80"
-          data-testid={`all-workspaces-open-${ws.id}`}
-        >
-          Open <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="mt-2.5 flex items-center justify-between">
-        {lastActive ? (
-          <span className="font-mono text-[11px] text-[var(--text-dim)]">{lastActive}</span>
-        ) : <span />}
-        <WorkspaceActionsMenu
-          workspace={{ id: ws.id, name: ws.name, status: ws.status }}
-          onChanged={onChanged}
-          buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
-        />
+        {/* Interactive-within-interactive: keep menu clicks out of the card's
+            open handler (keyboard is guarded by the card's target check). */}
+        <span className="ml-auto" onClick={(e) => e.stopPropagation()}>
+          <WorkspaceActionsMenu
+            workspace={{ id: ws.id, name: ws.name, status: ws.status }}
+            onChanged={onChanged}
+            buttonClassName="opacity-0 group-hover:opacity-100 focus:opacity-100"
+          />
+        </span>
       </div>
     </div>
   );

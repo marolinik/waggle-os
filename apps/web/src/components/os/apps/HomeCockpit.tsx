@@ -146,7 +146,8 @@ function buildStartHereMove(briefing: HomeBriefing, wsById: Map<string, RecentWo
 
     return {
       title: `Continue ${workspace.name}`,
-      workspaceName: workspace.name,
+      // Wave F (fix 2a): the title already names the workspace — a second
+      // "WORKSPACE NAME" eyebrow under it was pure redundancy.
       reason: workspace.summary
         ? `Because you left off here: ${workspace.summary}`
         : 'Because this is your most recent workspace.',
@@ -221,8 +222,17 @@ function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCr
 
 // ── Greeting (mono date row + live dot + streak + two-line H1) ────────────
 function GreetingHeader({
-  greeting, date, workspaceCount,
-}: { greeting: string; date: string; workspaceCount: number }) {
+  greeting, date, workspaceCount, pendingTotal, lastActive,
+}: {
+  greeting: string;
+  date: string;
+  workspaceCount: number;
+  /** Sum of pendingCount across the briefing's workspace cards (real data). */
+  pendingTotal: number;
+  /** Most recent lastActive across the briefing's workspace cards. */
+  lastActive?: string;
+}) {
+  const lastActiveRel = formatRelative(lastActive);
   return (
     <header className="mb-9">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -236,16 +246,26 @@ function GreetingHeader({
       <h1 className="font-display text-[clamp(34px,5vw,52px)] font-semibold leading-[1.04] tracking-[-0.02em] text-[var(--text)]">
         {greeting}
       </h1>
-      <p
-        className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--text-muted)]"
-        data-testid="home-cockpit-positioning"
-      >
-        Waggle is your personal AI workspace: it remembers you, knows your projects, evolves with each decision,
-        guides the next step, and runs the right AI underneath.
-      </p>
-      {workspaceCount > 0 && (
-        <p className="mt-2 text-[clamp(17px,2.2vw,22px)] font-medium text-[var(--text-2)]">
-          {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you.
+      {/* Wave F (fix 2): a RETURNING user gets their real deltas, not marketing
+          copy — composed from data the briefing already carries (no new fetch).
+          The positioning paragraph stays only for the day-0 user (no workspaces),
+          who has nothing real to show yet. */}
+      {workspaceCount > 0 ? (
+        <p
+          className="mt-3 text-[clamp(16px,2vw,19px)] font-medium text-[var(--text-2)]"
+          data-testid="home-cockpit-facts"
+        >
+          {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you
+          {pendingTotal > 0 && <> · {pendingTotal} {pendingTotal === 1 ? 'item' : 'items'} to review</>}
+          {lastActiveRel && <> · last active {lastActiveRel}</>}
+        </p>
+      ) : (
+        <p
+          className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--text-muted)]"
+          data-testid="home-cockpit-positioning"
+        >
+          Waggle is your personal AI workspace: it remembers you, knows your projects, evolves with each decision,
+          guides the next step, and runs the right AI underneath.
         </p>
       )}
     </header>
@@ -668,9 +688,23 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     ? 'Your overnight summary needs the local service.'
     : 'A calm night — nothing ran while you were away.';
 
+  // Wave F (fix 2): factual hero deltas for a returning user — reuse the
+  // briefing's own card data (most recent activity + attention debt), no fetch.
+  const heroLastActive = recentWorkspaces.reduce<string | undefined>(
+    (best, w) => (w.lastActive && (!best || rankTimestamp(w.lastActive) > rankTimestamp(best)) ? w.lastActive : best),
+    undefined,
+  );
+  const heroPendingTotal = recentWorkspaces.reduce((n, w) => n + (w.pendingCount || 0), 0);
+
   return (
     <div className="relative mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit">
-      <GreetingHeader greeting={greeting} date={briefing.date} workspaceCount={totalWorkspaceCount ?? recentWorkspaces.length} />
+      <GreetingHeader
+        greeting={greeting}
+        date={briefing.date}
+        workspaceCount={totalWorkspaceCount ?? recentWorkspaces.length}
+        pendingTotal={heroPendingTotal}
+        lastActive={heroLastActive}
+      />
 
       <StartHereCard
         move={startHereMove}

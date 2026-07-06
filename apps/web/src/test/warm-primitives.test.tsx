@@ -56,13 +56,15 @@ describe('warm primitives — render smoke', () => {
     expect(screen.getByText('14 memories consolidated')).toBeInTheDocument();
   });
 
-  it('ConfidenceRing renders the value + CONF caption, and a neutral dash when unknown', () => {
+  it('ConfidenceRing renders NN% + CONF caption, and a labeled "unscored" badge when unknown', () => {
     const { rerender } = render(<ConfidenceRing value={94} />);
-    expect(screen.getByText('94')).toBeInTheDocument();
+    expect(screen.getByText('94%')).toBeInTheDocument();
     expect(screen.getByText('conf')).toBeInTheDocument();
-    // Unknown confidence (harvest-only signal absent) → "—", never a fabricated number.
+    // Unknown confidence (harvest-only signal absent) → a quiet labeled badge,
+    // never an empty dial with a dash and never a fabricated number (Wave F 3a).
     rerender(<ConfidenceRing value={undefined} />);
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('unscored')).toBeInTheDocument();
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
   });
 
   it('confidenceColor maps bands ≥85 healthy / ≥60 attention / <60 risk', () => {
