@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { ShieldCheck, Lock } from 'lucide-react';
+import { ShieldCheck, Lock, Globe } from 'lucide-react';
 import waggleLogoDark from '@/assets/waggle-logo.jpeg';
 import waggleLogoLight from '@/assets/waggle-logo.png';
 import { useIsLightTheme } from '@/hooks/useIsLightTheme';
@@ -50,7 +50,7 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
         title="More languages coming soon"
         className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border/50 bg-muted/30 text-xs font-display text-muted-foreground"
       >
-        🌐 English (US)
+        <Globe className="w-3 h-3" aria-hidden /> English (US)
       </span>
     </div>
 

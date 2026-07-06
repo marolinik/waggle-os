@@ -7,7 +7,7 @@
  */
 
 import { useState } from 'react';
-import { ChevronDown, Key, AlertTriangle } from 'lucide-react';
+import { ChevronDown, Key, AlertTriangle, Zap, Timer, Turtle, type LucideIcon } from 'lucide-react';
 import type { Provider, ProviderModel } from '@/hooks/useProviders';
 import { formatModelLabel } from '@/lib/model-label';
 
@@ -29,11 +29,19 @@ const COST_COLORS: Record<string, string> = {
   '$$$': 'text-rose-400',
 };
 
-const SPEED_LABELS: Record<string, string> = {
-  fast: '⚡',
-  medium: '⏱',
-  slow: '🐢',
+// Lucide, not emoji — one icon language across the chrome (2026-07-06 P2).
+const SPEED_ICONS: Record<string, { icon: LucideIcon; label: string }> = {
+  fast: { icon: Zap, label: 'Fast' },
+  medium: { icon: Timer, label: 'Medium speed' },
+  slow: { icon: Turtle, label: 'Slower' },
 };
+
+function SpeedGlyph({ speed }: { speed: string }) {
+  const entry = SPEED_ICONS[speed];
+  if (!entry) return null;
+  const Icon = entry.icon;
+  return <Icon className="w-3 h-3 inline text-muted-foreground" aria-label={entry.label} />;
+}
 
 const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyAvailable = false, className = '' }: ModelSelectorProps) => {
   const [open, setOpen] = useState(false);
@@ -67,7 +75,7 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                   }`}>
                   {m.name}
                   <span className={`ml-1 ${COST_COLORS[m.cost] ?? ''}`}>{m.cost}</span>
-                  <span className="ml-0.5">{SPEED_LABELS[m.speed] ?? ''}</span>
+                  <span className="ml-0.5"><SpeedGlyph speed={m.speed} /></span>
                 </button>
               ))}
               {provider.models.length === 0 && !provider.requiresKey && (
@@ -126,7 +134,7 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                   <span>{m.name}</span>
                   <span className="flex items-center gap-1.5 text-[11px]">
                     <span className={COST_COLORS[m.cost] ?? ''}>{m.cost}</span>
-                    <span>{SPEED_LABELS[m.speed] ?? ''}</span>
+                    <span><SpeedGlyph speed={m.speed} /></span>
                   </span>
                 </button>
               ))}

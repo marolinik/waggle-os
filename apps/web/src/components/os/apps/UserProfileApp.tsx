@@ -3,6 +3,7 @@ import {
   User, PenLine, Palette, Heart, Save, Loader2, Search,
   Upload, Sparkles, CheckCircle2, Globe, Clock, MessageSquare,
   FileText, Presentation, FileSpreadsheet, FileDown, Check, X, Hexagon,
+  Zap, Scale,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { adapter } from '@/lib/adapter';
@@ -428,7 +429,11 @@ const UserProfileApp = () => {
                     className={`px-3 py-1.5 rounded-lg text-xs font-display transition-colors ${
                       commStyle === s ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground hover:text-foreground'
                     }`}>
-                    {s === 'brief' ? '⚡ Brief' : s === 'balanced' ? '⚖️ Balanced' : '📝 Detailed'}
+                    {s === 'brief'
+                      ? <><Zap className="w-3 h-3 inline mr-1" aria-hidden />Brief</>
+                      : s === 'balanced'
+                        ? <><Scale className="w-3 h-3 inline mr-1" aria-hidden />Balanced</>
+                        : <><FileText className="w-3 h-3 inline mr-1" aria-hidden />Detailed</>}
                   </button>
                 ))}
               </div>

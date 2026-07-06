@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, RefreshCw, Clock, CheckCircle2, AlertCircle,
   Loader2, Plus, Zap, Brain, Trash2, Pause, Play, Sparkles, RotateCcw, XCircle,
+  MessageSquare, FileText,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -654,7 +655,11 @@ const HarvestTab = () => {
             <div className="space-y-1 max-h-32 overflow-auto mb-3">
               {preview.preview.map(item => (
                 <p key={item.id} className="text-[11px] text-muted-foreground truncate">
-                  {item.type === 'conversation' ? '💬' : item.type === 'memory' ? '🧠' : '📄'} {item.title}
+                  {item.type === 'conversation'
+                    ? <MessageSquare className="w-3 h-3 inline mr-1 text-honey/70" aria-hidden />
+                    : item.type === 'memory'
+                      ? <Brain className="w-3 h-3 inline mr-1 text-honey/70" aria-hidden />
+                      : <FileText className="w-3 h-3 inline mr-1 text-honey/70" aria-hidden />} {item.title}
                 </p>
               ))}
             </div>

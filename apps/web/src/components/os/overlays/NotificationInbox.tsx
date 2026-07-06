@@ -1,4 +1,4 @@
-import { Bell, Check, CheckCheck, X, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Bell, Check, CheckCheck, X, CheckCircle2, ArrowRight, Clock, ShieldCheck, ClipboardList, MessageSquare, Bot, Pin, type LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Notification } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,8 +14,9 @@ interface NotificationInboxProps {
   onMarkAllRead: () => void;
 }
 
-const typeIcons: Record<string, string> = {
-  cron: '⏰', approval: '🔐', task: '📋', message: '💬', agent: '🤖',
+// Lucide, not emoji — one icon language across the chrome (2026-07-06 P2).
+const typeIcons: Record<string, LucideIcon> = {
+  cron: Clock, approval: ShieldCheck, task: ClipboardList, message: MessageSquare, agent: Bot,
 };
 
 const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAllRead }: NotificationInboxProps) => {
@@ -71,6 +72,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
             )}
             {notifications.map(n => {
               const { title, body, href } = humanizeNotification(n);
+              const TypeIcon = typeIcons[n.type] ?? Pin;
               return (
               <div
                 key={n.id}
@@ -79,7 +81,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5">{typeIcons[n.type] || '📌'}</span>
+                  <TypeIcon className="w-4 h-4 mt-0.5 text-honey/70 shrink-0" aria-hidden />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-display font-medium text-foreground">{title}</p>
                     {body && <p className="text-[11px] text-muted-foreground mt-0.5">{body}</p>}

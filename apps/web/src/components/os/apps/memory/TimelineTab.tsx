@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2, AlertTriangle } from 'lucide-react';
+import { Brain, Search, Clock, Trash2, Edit3, Filter, Eye, Copy, Loader2, AlertTriangle, ClipboardList, Calendar, Lightbulb, Scale, CheckSquare, Tag, FileText, type LucideIcon } from 'lucide-react';
 import { AnimatePresence } from 'framer-motion';
 import { Input } from '@/components/ui/input';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -16,8 +16,9 @@ import { HintTooltip } from '@/components/ui/hint-tooltip';
  * entity — that distinction is the Memories tab's job.
  */
 
-const frameTypeIcons: Record<string, string> = {
-  fact: '📋', event: '📅', insight: '💡', decision: '⚖️', task: '✅', entity: '🏷️',
+// Lucide, not emoji — one icon language across the chrome (2026-07-06 P2).
+const frameTypeIcons: Record<string, LucideIcon> = {
+  fact: ClipboardList, event: Calendar, insight: Lightbulb, decision: Scale, task: CheckSquare, entity: Tag,
 };
 
 const FRAME_TYPES = ['fact', 'event', 'insight', 'decision', 'task', 'entity'];
@@ -134,7 +135,7 @@ const TimelineTab = ({
                         typeFilters.includes(t) ? 'bg-primary/20 text-honey' : 'bg-muted text-muted-foreground'
                       }`}
                     >
-                      {frameTypeIcons[t]} {t}
+                      {(() => { const TypeIcon = frameTypeIcons[t]; return TypeIcon ? <TypeIcon className="w-3 h-3 inline mr-0.5" aria-hidden /> : null; })()}{t}
                     </button>
                   ))}
                 </div>
@@ -168,7 +169,7 @@ const TimelineTab = ({
               }`}
             >
               <div className="flex items-center gap-1.5">
-                <span>{frameTypeIcons[f.type] || '📄'}</span>
+                {(() => { const TypeIcon = frameTypeIcons[f.type] ?? FileText; return <TypeIcon className="w-3.5 h-3.5 text-honey/70 shrink-0" aria-hidden />; })()}
                 <span className="font-display font-medium text-foreground truncate flex-1">{f.title}</span>
               </div>
               <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
@@ -221,7 +222,7 @@ const TimelineTab = ({
           <div className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className="text-lg">{frameTypeIcons[selectedFrame.type] || '📄'}</span>
+                {(() => { const TypeIcon = frameTypeIcons[selectedFrame.type] ?? FileText; return <TypeIcon className="w-5 h-5 text-honey shrink-0" aria-hidden />; })()}
                 <h3 className="text-sm font-display font-semibold text-foreground">{selectedFrame.title}</h3>
               </div>
               <div className="flex items-center gap-1">
