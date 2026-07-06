@@ -43,7 +43,7 @@ function ManageHero() {
     <header className="mb-1">
       <p className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
         <span className="h-px w-5 bg-[var(--honey)]" aria-hidden="true" />
-        Trust · the thing that makes you stay
+        Trust · inspect · correct · forget
       </p>
       <h1 className="text-[28px] font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]">
         Memory you can <span className="text-[var(--honey)]">correct, age, and forget.</span>
