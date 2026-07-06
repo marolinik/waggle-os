@@ -33,7 +33,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   LayoutGrid, MessageSquare, FileBox, Brain,
-  Loader2, Users, WifiOff, ShieldAlert, ChevronRight,
+  Users, WifiOff, ShieldAlert, ChevronRight,
   FileText, SearchX, RefreshCw,
 } from 'lucide-react';
 import { tierSatisfies, TIER_LABELS } from '@waggle/shared';
@@ -487,10 +487,60 @@ const WorkspaceDesktopApp = ({
   // ── Whole-screen states ────────────────────────────────────────────────
 
   if (loading) {
+    // Wave V Lane E fix 1: cold entry is a layout-preserving skeleton, not a
+    // centered "Loading workspace…" spinner in an empty void. The header +
+    // tab-bar scaffold hold the page shape; the content area carries the
+    // WorkspaceBriefing thread-shaped placeholder idiom, so entering a
+    // workspace reads as "your workspace is loading" rather than a blank frame.
+    // role=status + sr-only keeps the announcement; reduced-motion stills it.
     return (
-      <div className="h-full flex items-center justify-center bg-background text-muted-foreground" data-testid="ws-desktop-loading">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        <span className="text-sm">Loading workspace…</span>
+      <div
+        className="h-full flex flex-col overflow-hidden bg-background animate-pulse motion-reduce:animate-none"
+        role="status"
+        aria-label="Loading workspace"
+        aria-busy="true"
+        data-testid="ws-desktop-loading"
+      >
+        <span className="sr-only">Loading workspace…</span>
+        {/* Header scaffold — mirrors the real header row (avatar + title). */}
+        <div className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5" aria-hidden="true">
+          <div className="flex items-center gap-3">
+            <div className="h-[46px] w-[46px] shrink-0 rounded-[14px] bg-[var(--surface-2)]" />
+            <div className="space-y-2">
+              <div className="h-2.5 w-24 rounded bg-[var(--surface-2)]" />
+              <div className="h-5 w-52 rounded bg-[var(--surface-2)]" />
+            </div>
+          </div>
+        </div>
+        {/* Tab-bar scaffold — a row of pill placeholders. */}
+        <div className="shrink-0 flex items-center gap-4 border-b border-[var(--line-soft)] px-4 py-3.5" aria-hidden="true">
+          {[14, 10, 12, 12, 10].map((w, i) => (
+            <div key={i} className="h-3 rounded bg-[var(--surface-2)]" style={{ width: `${w * 4}px` }} />
+          ))}
+        </div>
+        {/* Content — thread-shaped placeholders (WorkspaceBriefing idiom). */}
+        <div className="flex-1 min-h-0 overflow-hidden p-6" aria-hidden="true">
+          <div className="mx-auto w-full max-w-[680px] space-y-4 py-2">
+            <div className="flex gap-2">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+              <div className="flex-1 space-y-2 pt-0.5">
+                <div className="h-3 w-28 rounded bg-[var(--surface-2)]" />
+                <div className="h-3 w-full rounded bg-[var(--surface-2)]" />
+                <div className="h-3 w-4/5 rounded bg-[var(--surface-2)]" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <div className="h-10 w-2/5 rounded-[4px_14px_14px_14px] bg-[var(--surface-2)]" />
+            </div>
+            <div className="flex gap-2">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+              <div className="flex-1 space-y-2 pt-0.5">
+                <div className="h-3 w-32 rounded bg-[var(--surface-2)]" />
+                <div className="h-3 w-11/12 rounded bg-[var(--surface-2)]" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

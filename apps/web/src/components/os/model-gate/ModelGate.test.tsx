@@ -73,10 +73,14 @@ describe('ModelGate', () => {
     expect(await screen.findByText(/no working model yet/i)).toBeInTheDocument();
   });
 
-  it('reports a working model when a provider already has a key', async () => {
+  it('a keyed provider settles on ONE honest verdict — never the empty "no working model yet" state', async () => {
+    // Wave V single-truth: the mount probe for the keyed provider is
+    // network-degraded (valid, not verified — the beforeEach default), so the ONE
+    // verdict is the honest neutral and the empty state never paints. The prior
+    // "you have a working model" key-presence flash (only visible pre-probe) is gone.
     mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     render(<ModelGate />);
-    expect(await screen.findByText(/working model/i)).toBeInTheDocument();
+    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/no working model yet/i)).not.toBeInTheDocument();
   });
 
@@ -145,12 +149,16 @@ describe('ModelGate', () => {
     expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
   });
 
-  it('a network-degraded probe (valid, not verified) keeps the neutral key-found wording', async () => {
+  it('a network-degraded probe (valid, not verified) settles on the honest neutral, never an over-claim', async () => {
     mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     mocks.adapter.probeProvider.mockResolvedValue({ configured: true, valid: true, verified: false });
     render(<ModelGate />);
-    expect(await screen.findByText(/you have a working model/i)).toBeInTheDocument();
+    // Wave V single-truth: the ONE verdict is the honest "couldn’t verify … just
+    // now" — it must NOT over-claim "verified" nor "you’re ready to go" off a key
+    // it could not confirm (the old wording only appeared as a pre-probe flash).
+    expect(await screen.findByText(/verify your key just now/i)).toBeInTheDocument();
     expect(screen.queryByText(/key verified/i)).toBeNull();
+    expect(screen.queryByText(/ready to go/i)).toBeNull();
   });
 
   // ── MODEL-GATE: probe the workspace's actual default model ──

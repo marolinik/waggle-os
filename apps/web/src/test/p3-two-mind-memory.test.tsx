@@ -187,6 +187,37 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     });
   });
 
+  it('frames the list with a result-count header — count + active-filter descriptor (Wave V Lane A item 2)', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([
+      mem({ id: '1', title: 'First fact', content: 'Alpha content' }),
+      mem({ id: '2', title: 'Second fact', content: 'Beta content' }),
+    ]);
+    await renderTab();
+    await waitFor(() => expect(screen.getByLabelText('First fact')).toBeTruthy());
+    // Trust-hero parity: the header names the result count + the active filter
+    // (status defaults to the curated Active view), so a filtered-down set never
+    // reads as one card floating in a void.
+    expect(screen.getByText('2 memories')).toBeTruthy();
+    expect(screen.getByText(/filtered by Active/)).toBeTruthy();
+  });
+
+  it('keeps a "loading the rest…" status over seeded rows while a refresh is in flight (Wave V Lane A item 2)', async () => {
+    // First load seeds the session list cache.
+    mocks.adapter.listMemories.mockResolvedValueOnce([mem({ id: '1', title: 'Seeded fact', content: 'Cached content' })]);
+    const { default: MemoryCenterTab } = await import('@/components/os/apps/memory/MemoryCenterTab');
+    const first = render(<MemoryCenterTab mind="personal" consumeDeepLinks={false} />);
+    await waitFor(() => expect(screen.getByLabelText('Seeded fact')).toBeTruthy());
+    first.unmount();
+
+    // Tab return: rows re-seed from cache instantly; the background refresh never
+    // resolves here, so the header must carry the loading affordance OVER the
+    // seeded card (not a bare floating card, and not a full-surface skeleton).
+    mocks.adapter.listMemories.mockImplementationOnce(() => new Promise(() => {}));
+    render(<MemoryCenterTab mind="personal" consumeDeepLinks={false} />);
+    expect(screen.getByLabelText('Seeded fact')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/loading the rest/)).toBeTruthy());
+  });
+
   it("switching minds never renders the previous mind's rows while the new fetch is in flight", async () => {
     mocks.adapter.listMemories.mockResolvedValueOnce([mem({ id: '1', title: 'Workspace-only fact' })]);
     const { default: MemoryCenterTab } = await import('@/components/os/apps/memory/MemoryCenterTab');

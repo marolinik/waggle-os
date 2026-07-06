@@ -210,6 +210,10 @@ function WorkspaceCard({
     // Wave R (Lane B) fix 5: the rest border steps --line-soft → --line in DARK
     // ONLY (`:root:not([data-theme=light]) &:not(:hover)`) so dark cards stop
     // vanishing on hive-950; light keeps --line-soft and hover keeps honey.
+    // Wave V (Lane C) motion tier 2: hover/focus-visible answer with a
+    // motion-safe 2px lift + a honey glow bloom (--shadow-honey) ON TOP of the
+    // border tier; reduced motion keeps the color tier (border + bloom) and
+    // drops only the lift (transform gated behind motion-safe), 150ms ease-out.
     <div
       role="button"
       tabIndex={0}
@@ -221,7 +225,7 @@ function WorkspaceCard({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
       aria-label={`Open ${ws.name}`}
-      className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       {/* Wave S (Lane B) fix 2: the one live signal — a 2px top band in the

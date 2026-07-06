@@ -625,3 +625,18 @@
   .glow-breathe { animation: none; }
   .dot-live { animation: none; }
 }
+
+/* Lane D (Wave V) — signature theme crossfade ("sunset over the hive").
+   ThemeProvider stamps `.theme-transition` on <html> for one swap window only,
+   so this transition applies during the toggle and is gone before it can slow an
+   ordinary hover. Color-family properties ONLY (no width/inset/transform) so the
+   layout never animates. motion-safe: the whole rule is `no-preference`-gated,
+   so reduced-motion users get the instant token swap. */
+@media (prefers-reduced-motion: no-preference) {
+  html.theme-transition,
+  html.theme-transition * {
+    transition-property: background-color, border-color, color, fill, stroke;
+    transition-duration: 360ms;
+    transition-timing-function: ease-out;
+  }
+}

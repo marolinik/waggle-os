@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle, ShieldOff } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
@@ -370,6 +370,25 @@ export default function MemoryCenterTab({
     })();
   };
 
+  // Wave V Lane A (item 2): a Trust-hero-parity result-count header frames the
+  // list so a filtered-down set never reads as "one card floating in a black
+  // void". `displayed` is the deduped display list (F22) — computed once, reused
+  // by both the header and the grid. `filterDescriptor` names the active filters;
+  // status defaults to the curated Active view, so it is present unless the user
+  // picks All.
+  const displayed = useMemo(() => dedupeMemoriesForDisplay(memories), [memories]);
+  const filterDescriptor = useMemo(() => {
+    const parts: string[] = [];
+    const statusLabel = STATUS_FILTERS.find((s) => s.value === status)?.label;
+    if (status && statusLabel) parts.push(statusLabel);
+    if (kind) parts.push(memoryKindLabel(kind));
+    const confLabel = CONFIDENCE_FILTERS.find((c) => c.value === minConfidence)?.label;
+    if (minConfidence && confLabel) parts.push(confLabel);
+    const query = q.trim();
+    if (query) parts.push(`matching "${query}"`);
+    return parts.join(' · ');
+  }, [status, kind, minConfidence, q]);
+
   return (
     // Wave U Lane E (item 4): a ~150ms fade-slide when this panel mounts on the
     // Trust↔Memories tab swap (reuses the card-enter keyframe at the Wave T hover
@@ -492,6 +511,28 @@ export default function MemoryCenterTab({
         )}
       </div>
 
+      {/* Wave V Lane A (item 2): result-count header — Trust-hero parity. Rendered
+          only when there are rows to frame; the skeleton / empty / error branches
+          own the empty-list surface below. When a background refresh is in flight
+          over seeded rows, an inline "loading the rest…" status replaces the bare
+          floating card (the R15-V3 "one card in a black void" finding). */}
+      {!error && displayed.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-border/50 bg-background/40 px-2.5 py-1.5">
+          <span className="text-[11px] font-medium text-foreground">
+            {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+          </span>
+          {filterDescriptor && (
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">· filtered by {filterDescriptor}</span>
+          )}
+          {loading && (
+            <span role="status" aria-live="polite" aria-busy="true" className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden />
+              loading the rest…
+            </span>
+          )}
+        </div>
+      )}
+
       {/* List */}
       <div className="flex-1 overflow-auto p-2.5">
         {loading && memories.length === 0 ? (
@@ -538,7 +579,7 @@ export default function MemoryCenterTab({
                 by an embedded run/uuid/timestamp) collapse to one card with an ×N
                 badge. Row actions still key off the real representative id — nothing
                 is merged or deleted in the store. */}
-            {dedupeMemoriesForDisplay(memories).map(({ memory: m, duplicateCount }) => (
+            {displayed.map(({ memory: m, duplicateCount }) => (
               <MemoryCard
                 key={m.id}
                 memory={m}

@@ -135,7 +135,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
                 self-evident; the tooltip still disambiguates the open thread. */}
             <HintTooltip content={`${modelLabel} (${model}) — default model for new chats in this workspace. An open chat may use its own model (shown in the chat header); the global default lives in Settings → Models.`}>
               <span
-                className="text-[11px] text-honey/80 font-display hidden lg:inline cursor-help"
+                className="text-[11px] text-honey font-display hidden lg:inline cursor-help"
                 data-testid="statusbar-model"
                 tabIndex={0}
               >
@@ -149,7 +149,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across all minds (personal + every workspace). This grows every time you chat — it's why Waggle gets better the more you use it.`}>
               <span
-                className={`relative text-[11px] text-honey/80 font-display hidden lg:inline-flex items-center gap-1 cursor-help rounded-full px-1 ${foldDelta !== null ? 'honey-pulse' : ''}`}
+                className={`relative text-[11px] text-honey font-display hidden lg:inline-flex items-center gap-1 cursor-help rounded-full px-1 ${foldDelta !== null ? 'honey-pulse' : ''}`}
                 data-testid="statusbar-memory-count"
                 aria-label={`${memoryFrameCount.toLocaleString()} memory frames across all minds`}
               >
@@ -157,8 +157,12 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
                 {memoryFrameCount.toLocaleString()} memories
                 {/* R10 Lane D (kw #1): the status bar counts ALL minds while the
                     Memory page counts the personal mind — two honest numbers that
-                    read as a contradiction unscoped. Name the scope in the chip. */}
-                <span className="opacity-60"> · all minds</span>
+                    read as a contradiction unscoped. Name the scope in the chip.
+                    Wave V Lane F (a11y): the scope suffix carried the honey text at
+                    opacity-60 (≈2.4:1 in light — sub-AA). Give it the muted-text
+                    token instead: it still de-emphasises vs the honey count but
+                    clears AA (≈5.6:1 light / 6.1:1 dark) in both themes. */}
+                <span className="text-[var(--text-muted)]"> · all minds</span>
                 {foldDelta !== null && (
                   <span aria-hidden className="memory-fold absolute -top-3 right-0 text-[10px] font-semibold text-honey whitespace-nowrap pointer-events-none">
                     +{foldDelta} ⬡

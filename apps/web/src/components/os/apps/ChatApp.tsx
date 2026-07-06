@@ -132,7 +132,13 @@ const ToolCard = ({ tool }: { tool: ToolExecution }) => {
         <ToolStatusIcon status={tool.status} />
         <span className="font-display font-medium text-foreground">{tool.name}</span>
         {tool.duration && <span className="text-muted-foreground ml-auto">{tool.duration}ms</span>}
-        <button onClick={() => setShowRaw(!showRaw)} className="text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          onClick={() => setShowRaw(!showRaw)}
+          aria-label={showRaw ? 'Hide raw tool data' : 'Show raw tool data'}
+          aria-expanded={showRaw}
+          title={showRaw ? 'Hide raw tool data' : 'Show raw tool data'}
+          className="text-muted-foreground hover:text-foreground transition-colors"
+        >
           <Code className="w-3 h-3" />
         </button>
       </div>
@@ -226,6 +232,8 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
       <HintTooltip content="Good response">
         <button
           onClick={() => handleVote('up')}
+          aria-label="Good response"
+          aria-pressed={vote === 'up'}
           className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-[var(--text-dim)] hover:text-[var(--text)]'}`}
         >
           <ThumbsUp className="w-4 h-4" />
@@ -237,6 +245,8 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
             if (vote === 'down') { handleVote('down'); return; }
             setShowReasons(s => !s);
           }}
+          aria-label="Poor response"
+          aria-pressed={vote === 'down'}
           className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-[var(--text-dim)] hover:text-[var(--text)]'}`}
         >
           <ThumbsDown className="w-4 h-4" />
@@ -911,7 +921,7 @@ const ChatApp = ({
               <div key={pin.id} className="flex items-start gap-2 text-xs">
                 <span style={{ color: 'var(--honey-500)' }}>{'\u2B21'}</span>
                 <span className="text-foreground line-clamp-1 flex-1">{pin.messageContent.slice(0, 100)}</span>
-                <button onClick={() => { if (workspaceId) adapter.removePin(workspaceId, pin.id); setPins(p => p.filter(x => x.id !== pin.id)); }} className="text-muted-foreground/40 hover:text-destructive shrink-0">
+                <button onClick={() => { if (workspaceId) adapter.removePin(workspaceId, pin.id); setPins(p => p.filter(x => x.id !== pin.id)); }} aria-label="Remove pin" title="Remove pin" className="text-muted-foreground/40 hover:text-destructive shrink-0">
                   <PinOff className="w-3 h-3" />
                 </button>
               </div>
@@ -1058,6 +1068,7 @@ const ChatApp = ({
                     <HintTooltip content="Copy message">
                       <button
                         onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(msg.content); }}
+                        aria-label="Copy message"
                         className="absolute top-1 right-1 p-1 rounded opacity-0 group-hover/msg:opacity-60 hover:!opacity-100 transition-opacity bg-background/50"
                       >
                         <Code className="w-3 h-3" />
@@ -1068,6 +1079,8 @@ const ChatApp = ({
                     <HintTooltip content={pins.some(p => p.messageContent === msg.content) ? 'Unpin' : 'Pin message'}>
                       <button
                         onClick={(e) => { e.stopPropagation(); handlePin(msg); }}
+                        aria-label={pins.some(p => p.messageContent === msg.content) ? 'Unpin message' : 'Pin message'}
+                        aria-pressed={pins.some(p => p.messageContent === msg.content)}
                         className={`absolute top-1 right-7 p-1 rounded transition-opacity bg-background/50 ${
                           pins.some(p => p.messageContent === msg.content)
                             ? 'opacity-80 text-honey'
@@ -1226,6 +1239,9 @@ const ChatApp = ({
             <div className="relative" ref={personaPickerRef}>
               <button
                 onClick={() => { setShowPersonaPicker(p => !p); setShowModelPicker(false); }}
+                title="Agent persona for this chat — click to switch"
+                aria-haspopup="menu"
+                aria-expanded={showPersonaPicker}
                 className={`${STRIP_PILL} text-muted-foreground`}
               >
                 {persona ? (

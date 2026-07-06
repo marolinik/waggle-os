@@ -137,6 +137,10 @@ const MarketplaceApp = () => {
   const [filterQuery, setFilterQuery] = useState('');
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(false);
+  // Wave V Lane E §2: true from the keystroke until its debounced fetch settles
+  // (covers the pre-fetch 300ms gap that `loading` alone misses). Drives the
+  // dimmed-but-mounted results so the list doesn't collapse between keystrokes.
+  const [searchPending, setSearchPending] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Extension | null>(null);
   const [removing, setRemoving] = useState(false);
@@ -203,7 +207,7 @@ const MarketplaceApp = () => {
         setLoadError(err instanceof Error ? err.message : 'Failed to load extensions');
       }
     } finally {
-      if (seq === requestSeq.current) setLoading(false);
+      if (seq === requestSeq.current) { setLoading(false); setSearchPending(false); }
     }
   }, []);
 
@@ -222,6 +226,7 @@ const MarketplaceApp = () => {
     if (connecting) return;
     if (lastQueryRef.current === query) return;
     lastQueryRef.current = query;
+    setSearchPending(true);
     const t = setTimeout(() => void loadFacet(facet, query), 300);
     return () => clearTimeout(t);
   }, [connecting, facet, query, loadFacet]);
@@ -250,12 +255,19 @@ const MarketplaceApp = () => {
   };
 
   const visible = filterExtensions(extensions, filterQuery);
+  // A search/reload is settling — a server fetch is in flight OR we're still in
+  // the keystroke→fetch debounce gap. The results container stays mounted and
+  // dims (aria-busy) rather than collapsing between keystrokes (Wave V Lane E §2).
+  const busy = loading || searchPending;
   // NL bridge (Wave U Lane C §1): a query that reads like a described need
   // (≥3 words) with no keyword match auto-runs the semantic engine instead of
   // dead-ending. The engine + results live in AgentSearchBox above; here we only
-  // hand it the need and compose the fallback if it too comes up empty.
+  // hand it the need and compose the fallback if it too comes up empty. Wave V
+  // Lane E §2: keyed on the settled query, NOT on `loading`, so a transient
+  // reload no longer tears down and remounts the "Matched to your request"
+  // section across adjacent debounce ticks — it holds until the query changes.
   const isNlQuery = filterQuery.trim().split(/\s+/).filter(Boolean).length >= 3;
-  const nlNoMatch = isNlQuery && !loading && !loadError && visible.length === 0;
+  const nlNoMatch = isNlQuery && !loadError && visible.length === 0;
   const autoMatchNeed = nlNoMatch ? filterQuery.trim() : null;
   const nearest = nlNoMatch && autoMatch === 'empty' ? nearestCatalog(extensions, filterQuery) : [];
   // Round-4 merchandising: the band renders on the default All browse only
@@ -370,7 +382,9 @@ const MarketplaceApp = () => {
               </p>
             )}
 
-            {loading && visible.length === 0 && (
+            {/* Cold load only — once ANY extensions are loaded, a reload dims the
+                existing list (below) instead of collapsing to this spinner. */}
+            {loading && extensions.length === 0 && (
               <div className="text-center py-8">
                 <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
                 <p className="text-xs text-muted-foreground">Loading extensions...</p>
@@ -389,7 +403,7 @@ const MarketplaceApp = () => {
               </div>
             )}
 
-            {!loading && !loadError && visible.length === 0 && (
+            {!busy && !loadError && visible.length === 0 && (
               isNlQuery ? (
                 // Described need, no keyword hit: the semantic match runs itself
                 // (AgentSearchBox above shows the BeeLoader + ranked results under
@@ -429,25 +443,34 @@ const MarketplaceApp = () => {
               )
             )}
 
-            {groupedSections.length > 0
-              ? groupedSections.map(section => (
-                  <div key={section.label} data-testid={`marketplace-section-${section.label.toLowerCase()}`} className="space-y-2">
-                    <p className="pt-2 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
-                      {section.label} <span className="text-[var(--text-dim)] normal-case tracking-normal">· {section.items.length}</span>
-                    </p>
-                    {section.items.map(ext => (
-                      <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
-                    ))}
-                  </div>
-                ))
-              : gridVisible.map(ext => (
-                  <ExtensionCard
-                    key={ext.id}
-                    ext={ext}
-                    onRemove={setRemoveTarget}
-                    onOpenIn={handleOpenIn}
-                  />
-                ))}
+            {/* Wave V Lane E §2: the matched-results container stays mounted and
+                only dims (aria-busy) while a search settles — it doesn't collapse
+                and rebuild between keystrokes. */}
+            <div
+              data-testid="marketplace-results"
+              aria-busy={busy || undefined}
+              className={`space-y-2 transition-opacity duration-150 motion-reduce:transition-none ${busy ? 'opacity-60' : ''}`}
+            >
+              {groupedSections.length > 0
+                ? groupedSections.map(section => (
+                    <div key={section.label} data-testid={`marketplace-section-${section.label.toLowerCase()}`} className="space-y-2">
+                      <p className="pt-2 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
+                        {section.label} <span className="text-[var(--text-dim)] normal-case tracking-normal">· {section.items.length}</span>
+                      </p>
+                      {section.items.map(ext => (
+                        <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                      ))}
+                    </div>
+                  ))
+                : gridVisible.map(ext => (
+                    <ExtensionCard
+                      key={ext.id}
+                      ext={ext}
+                      onRemove={setRemoveTarget}
+                      onOpenIn={handleOpenIn}
+                    />
+                  ))}
+            </div>
           </>
         )}
         </div>

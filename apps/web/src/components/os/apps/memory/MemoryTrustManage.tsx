@@ -133,21 +133,32 @@ function DimensionChip({ value, label, tone = 'default', onClick, title }: Dimen
   return <span title={title} className={className}>{inner}</span>;
 }
 
-/** Wave T Lane D (item 3) — the hero total LANDS instead of popping: a ~600ms
- *  ease-out count-up the first time a real count arrives, then snaps on later
- *  refreshes. Honors prefers-reduced-motion (instant set, no animation). `0` is
- *  a legitimate landed value here — the loading/unknown state is gated upstream
+// Wave V Lane A (item 1): the count-up entrance is a once-per-APP-SESSION
+// flourish, not a per-mount one. Gating it on a module-level flag (mirrors
+// AllWorkspacesApp's shelfSessionResolved) means a Trust↔Memories tab-return
+// remount — or any background refresh — initializes straight to the real number
+// instead of re-animating from 0, so the hero can never paint a transient 0 on
+// re-entry. Reset via resetMemoryHeroSession() (test-only).
+let heroCountAnimatedThisSession = false;
+
+/** Wave T Lane D (item 3) / Wave V Lane A (item 1) — the hero total LANDS
+ *  instead of popping: a ~600ms ease-out count-up the FIRST time a real count
+ *  arrives THIS app session, then settles instantly on every later mount and
+ *  refresh (so a tab-return never re-animates from 0). Honors
+ *  prefers-reduced-motion (instant set, no animation). `0` is a legitimate
+ *  landed value here — the loading/unknown state is gated upstream
  *  (StatBarSkeleton), so this never renders a false loading-zero. */
 function HeroCount({ total, capped, reduceMotion }: { total: number; capped: boolean; reduceMotion: boolean }) {
-  const [display, setDisplay] = useState(() => (reduceMotion ? total : 0));
-  const startedRef = useRef(false);
+  const [display, setDisplay] = useState(() =>
+    reduceMotion || heroCountAnimatedThisSession ? total : 0,
+  );
   useEffect(() => {
-    if (reduceMotion || startedRef.current) {
-      startedRef.current = true;
+    if (reduceMotion || heroCountAnimatedThisSession) {
+      heroCountAnimatedThisSession = true;
       setDisplay(total);
       return;
     }
-    startedRef.current = true;
+    heroCountAnimatedThisSession = true;
     const durationMs = 600;
     const start = performance.now();
     let raf = requestAnimationFrame(function tick(now: number) {
@@ -759,6 +770,14 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       </DetailDrawer>
     </div>
   );
+}
+
+/** Test-only: reset the session-scoped hero count-up flag so animation state
+ *  can't leak across tests. Behind a fast-refresh exemption (the lane is scoped
+ *  to this file, so the helper co-locates here — mirrors resetWorkspaceShelfCache). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function resetMemoryHeroSession(): void {
+  heroCountAnimatedThisSession = false;
 }
 
 export { freshness, isStale };

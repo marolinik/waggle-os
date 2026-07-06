@@ -196,16 +196,18 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   return (
     <div
       data-testid="extension-card"
-      // Row hover tier (Wave T Lane B §3): rest flat → hover/focus-within lifts
-      // one elevation step (shadow-sm → shadow) + warms the border to honey,
-      // 150ms ease-out. `group` lets the primary action gain full contrast on
-      // row hover (see PRIMARY_ACTION_CLASS).
-      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-150 ease-out ${
+      // Row hover tier (Wave T Lane B §3 · Wave V Lane C motion tier 2): rest
+      // flat → hover/focus-within adds a motion-safe 2px lift + blooms the
+      // elevation to the honey glow (--shadow-honey) and warms the border to
+      // honey, 150ms ease-out. Reduced motion keeps the color tier (border +
+      // bloom) and drops only the lift. `group` lets the primary action gain
+      // full contrast on row hover (see PRIMARY_ACTION_CLASS).
+      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-within:-translate-y-0.5 ${
         connectedRow
           // Rest elevation folded INTO the inset honey hairline (one combined
           // box-shadow — two shadow-* utilities on one element would collide).
-          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] hover:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow)] focus-within:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
-          : 'border-border/30 shadow-[var(--shadow-sm)] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow)]'
+          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] hover:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-honey)] focus-within:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-honey)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
+          : 'border-border/30 shadow-[var(--shadow-sm)] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]'
       }`}
     >
       {/* Brand identity tile (simple-icons mark or monogram) — no more

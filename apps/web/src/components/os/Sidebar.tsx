@@ -108,7 +108,12 @@ const Sidebar = ({
     );
   };
 
-  const zoneLabel = "hidden lg:flex items-center gap-2 px-2.5 pt-3.5 pb-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-[var(--text-dim)]";
+  // Wave V Lane F (a11y): the section labels sit on --bg-2, which is one step
+  // darker than --bg in light — where --text-dim measured 4.47:1 (sub-AA at
+  // 9.5px). --text-muted clears it on --bg-2 in both themes (4.77:1 light /
+  // 6.31:1 dark) while staying quieter than body text. (--text-dim stays tuned
+  // for its --bg surfaces elsewhere; fixing it globally would over-lighten those.)
+  const zoneLabel = "hidden lg:flex items-center gap-2 px-2.5 pt-3.5 pb-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-[var(--text-muted)]";
 
   return (
     <TooltipProvider>

@@ -24,6 +24,7 @@ import { Check, AlertTriangle, Loader2, KeyRound, Cpu, ExternalLink } from 'luci
 import { adapter } from '@/lib/adapter';
 import { useProviders, type Provider } from '@/hooks/useProviders';
 import { Input } from '@/components/ui/input';
+import BeeLoader from '@/components/ui/BeeLoader';
 import BrandTile from '@/components/os/apps/connectors/BrandTile';
 import { getBrandIdentity } from '@/components/os/apps/connectors/brand-identity';
 
@@ -69,7 +70,11 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     // MODEL-GATE: when we probe the workspace's actual default model, the banner
     // can name the model itself rather than just the provider.
     verifiedModel?: string;
-  }>({ status: 'idle' });
+    // Wave V (Lane B): start in 'probing' so the resolution phase owns the banner
+    // from the first frame. 'idle' is now STRICTLY the terminal "no cloud provider
+    // to probe" state (rely on localReady) — never the pre-probe initial — so no
+    // premature key-presence verdict paints before the mount probe settles.
+  }>({ status: 'probing' });
 
   // Local models
   const [local, setLocal] = useState<LocalStatus | null>(null);
@@ -164,6 +169,20 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     // Re-probing on provider-list changes is correct; the server caches 60s.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providersLoading, activeProviderIds]);
+
+  // Wave V (Lane B) — single-truth resolution phase. The banner must paint EXACTLY
+  // ONE verdict. While ANY probe is in flight we're "resolving" (providersLoading
+  // OR the mount probe still running); the neutral "Checking your models…" banner
+  // is revealed only after a 300ms grace, so a fast happy path (probes settle
+  // <300ms) skips it and the verdict paints once, immediately — no
+  // "No working model" → "you're ready" → "provider error" flip within ~1s.
+  const resolving = providersLoading || probe.status === 'probing';
+  const [showChecking, setShowChecking] = useState(false);
+  useEffect(() => {
+    if (!resolving) { setShowChecking(false); return; }
+    const t = window.setTimeout(() => setShowChecking(true), 300);
+    return () => window.clearTimeout(t);
+  }, [resolving]);
 
   const keyProviders = useMemo(
     () => providers.filter((p) => p.requiresKey && p.id !== 'ollama'),
@@ -306,12 +325,17 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
 
   return (
     <div className={wrap}>
-      {/* Readiness banner — F3: probe-backed, not key-presence-backed. */}
-      {probe.status === 'probing' ? (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-          <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-          <span>Model key found — checking it works…</span>
-        </div>
+      {/* Readiness banner — F3: probe-backed, not key-presence-backed. Wave V
+          (Lane B): single-truth. While resolving, paint NOTHING until the 300ms
+          grace elapses, then a neutral "Checking your models…"; once settled,
+          render EXACTLY ONE verdict below — no intermediate verdict may paint. */}
+      {resolving ? (
+        showChecking ? (
+          <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+            <span aria-hidden className="shrink-0"><BeeLoader size={22} /></span>
+            <span>Checking your models…</span>
+          </div>
+        ) : null
       ) : probe.status === 'verified' ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-foreground">
           <Check className="size-4 shrink-0 text-honey" aria-hidden />

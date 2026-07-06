@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion';
+import beeMascot from '@/assets/personas/general-purpose.png';
 import { adapter } from '@/lib/adapter';
 import { captureOnboardingComplete } from '@/lib/posthog';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
@@ -58,6 +59,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const [step, setStep] = useState(() => Math.min(Math.max(state.step, 0), LAST_INDEX));
   const autoTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const offline = useOfflineStatus();
+  const reduceMotion = useReducedMotion();
 
   /* ── Profile (S13 / B8) ── */
   const [profile, setProfile] = useState<OnboardingProfileFields>({
@@ -281,6 +283,11 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
   const recommendedId = recommendTemplateId(profile.workType, profile.role);
 
   return (
+    // Wave V Lane F item 3 (motion-safe): reducedMotion="user" makes the shared
+    // fadeSlide step transition (and the progress-bar fill) honor
+    // prefers-reduced-motion — the y-slide drops to a pure opacity fade for
+    // reduced-motion users, while everyone else keeps the ~200ms slide/fade.
+    <MotionConfig reducedMotion="user">
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -310,9 +317,39 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         />
       </div>
 
-      {/* Top bar: step dots + back + skip */}
+      {/* Top bar: mascot + step dots + back + skip */}
       <div className="flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
+          {/* Wave V Lane F item 3 (mascot carry): the breathing hex-bee greets
+              the user on Welcome, then used to vanish — every later step opened
+              with a different generic glyph, breaking the brand moment. This
+              persistent mascot lives in the shell chrome (outside AnimatePresence)
+              so it stays mounted and keeps breathing continuously as steps change.
+              Shown from who-are-you onward (Welcome keeps its own hero mascot).
+              Motion-safe: reduced-motion holds a single static drop-shadow. */}
+          {showNavChrome && (
+            <motion.img
+              src={beeMascot}
+              alt="Waggle"
+              className="h-7 w-7 shrink-0"
+              animate={
+                reduceMotion
+                  ? { filter: 'drop-shadow(0 0 8px hsl(var(--primary) / 0.30))' }
+                  : {
+                      filter: [
+                        'drop-shadow(0 0 5px hsl(var(--primary) / 0.20))',
+                        'drop-shadow(0 0 11px hsl(var(--primary) / 0.42))',
+                        'drop-shadow(0 0 5px hsl(var(--primary) / 0.20))',
+                      ],
+                    }
+              }
+              transition={
+                reduceMotion
+                  ? { duration: 0 }
+                  : { duration: 4.5, repeat: Infinity, ease: 'easeInOut' }
+              }
+            />
+          )}
           {showNavChrome && (
             <button
               onClick={() => {
@@ -422,6 +459,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
         </div>
       </div>
     </motion.div>
+    </MotionConfig>
   );
 };
 

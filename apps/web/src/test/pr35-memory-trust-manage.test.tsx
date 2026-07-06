@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/lib/app-deeplink', () => ({ consumeDeepLink: () => null }));
 
-import MemoryTrustManage from '@/components/os/apps/memory/MemoryTrustManage';
+import MemoryTrustManage, { resetMemoryHeroSession } from '@/components/os/apps/memory/MemoryTrustManage';
 import { clearMemoryListCache } from '@/components/os/apps/memory/memory-list-cache';
 
 const DAY = 86_400_000;
@@ -35,7 +35,7 @@ function mem(over: Partial<Memory> & Pick<Memory, 'id'>): Memory {
   } as Memory;
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); clearMemoryListCache(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); clearMemoryListCache(); resetMemoryHeroSession(); });
 beforeEach(() => {
   mocks.adapter.deleteMemoryById.mockResolvedValue(undefined);
   mocks.adapter.confirmMemory.mockResolvedValue({});
@@ -102,6 +102,27 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     fireEvent.click(screen.getByTitle('Confirm this memory'));
     await waitFor(() => expect(mocks.adapter.confirmMemory).toHaveBeenCalledWith('8', undefined, 'personal'));
     expect(onToast).toHaveBeenCalledWith(expect.stringContaining('Confirmed M-8'));
+  });
+
+  it('hero count settles instantly on a tab-return remount — never a transient 0 (Wave V Lane A item 1)', async () => {
+    resetMemoryHeroSession();
+    mocks.adapter.listMemories.mockResolvedValue([
+      mem({ id: '1', createdAt: iso(1) }),
+      mem({ id: '2', createdAt: iso(1) }),
+      mem({ id: '3', createdAt: iso(1) }),
+    ]);
+    const { unmount } = render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    // First visit resolves the real count (the once-per-session count-up runs here).
+    await waitFor(() => expect(screen.getByTestId('memory-trust-total').textContent).toBe('3'));
+    unmount();
+
+    // Tab return: the list re-seeds from the session cache, so the hero must show
+    // the cached 3 on its very FIRST paint — no skeleton, no count-up from 0.
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    expect(screen.getByTestId('memory-trust-total').textContent).toBe('3');
+
+    // Drain the background refresh so its setState lands inside act().
+    await waitFor(() => expect(mocks.adapter.listMemories).toHaveBeenCalledTimes(2));
   });
 
   it('workspace mind passes the workspace param to mutations', async () => {

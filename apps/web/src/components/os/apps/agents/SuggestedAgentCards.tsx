@@ -44,7 +44,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
             <button
               type="button"
               onClick={() => onPick(p)}
-              className="group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card p-4 text-left shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+              className="group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card p-4 text-left shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
             >
               {/* Wave T Lane F item 1: honey top hairline that blooms on
                   hover/focus — the perceivable delta the video judges missed
@@ -89,7 +89,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
           <button
             type="button"
             onClick={onBrowseAll}
-            className="group relative flex w-full items-center gap-3 overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+            className="group relative flex w-full items-center gap-3 overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
           >
             {/* Wave T Lane F item 1: same honey top hairline as the bee cards. */}
             <span
@@ -115,7 +115,11 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
                 Every role in the Templates catalog — pick one and put it to work.
               </span>
             </span>
-            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-honey transition-transform group-hover:translate-x-0.5" aria-hidden />
+            {/* Wave V (Lane C) item 2: the → rides at rest as a dim honey hint
+                (not hover-only), brightening + nudging on hover AND focus-visible
+                (keyboard parity), so the "browse all" affordance is legible when
+                idle. */}
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-honey/60 transition-all duration-150 group-hover:translate-x-0.5 group-hover:text-honey group-focus-visible:translate-x-0.5 group-focus-visible:text-honey" aria-hidden />
           </button>
         </div>
       )}
