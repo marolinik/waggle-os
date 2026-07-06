@@ -9,12 +9,25 @@
  * keeps its consequence dialog; install/connect/enable are one-click (§09).
  */
 import { useState } from 'react';
-import { Download, ExternalLink, Loader2, Package, Plug, Trash2, Zap } from 'lucide-react';
+import { Download, ExternalLink, Loader2, Plug, Trash2, Zap } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
 import type { Extension } from '@/lib/extension-catalog';
 import { isTogglable } from '@/lib/install-store';
 import { useInstallStore } from '@/providers/InstallProvider';
+import BrandTile from '../connectors/BrandTile';
+import { getBrandIdentity } from '../connectors/brand-identity';
+
+/** Humanize raw registry slugs ("agent-skills" → "Agent Skills") for display.
+ *  Curated names (mixed case, spaces, digits-first like "1Password") pass
+ *  through untouched — only all-lowercase dash/underscore slugs transform. */
+export function displayExtensionName(name: string): string {
+  if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name)) return name;
+  return name
+    .split(/[-_]/)
+    .map(t => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t))
+    .join(' ');
+}
 
 const SCAN_LABELS: Record<string, { tone: 'healthy' | 'attention' | 'risk'; label: string }> = {
   passed: { tone: 'healthy', label: 'Scan passed' },
@@ -85,10 +98,17 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
       data-testid="extension-card"
       className="flex items-start gap-3 p-3 rounded-xl border border-border/30 bg-card hover:border-border/60 transition-colors"
     >
-      <Package className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+      {/* Brand identity tile (simple-icons mark or monogram) — no more
+          one-generic-cube-for-everything (2026-07-06 judge finding). */}
+      <BrandTile
+        identity={getBrandIdentity(ext.id, ext.name, ext.category ?? '')}
+        size={36}
+        connected={!!installed && ext.type === 'connector'}
+        className="mt-0.5"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-display font-medium text-foreground truncate">{ext.name}</span>
+          <span className="text-sm font-display font-medium text-foreground truncate">{displayExtensionName(ext.name)}</span>
           <StatusBadge
             tone={installed ? 'healthy' : 'neutral'}
             label={installed ? (verb?.installed ?? 'Installed') : 'Available'}

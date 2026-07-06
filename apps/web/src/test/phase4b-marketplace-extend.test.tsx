@@ -70,12 +70,12 @@ afterEach(cleanup);
 describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
   it('the All shelf federates skills + connectors + MCP (and only those three)', async () => {
     renderApp();
-    expect(await screen.findByText('web-scraper')).toBeInTheDocument();
+    expect(await screen.findByText('Web Scraper')).toBeInTheDocument();
     // Browse-only pack: display_name renders, no install affordance (A4).
     expect(screen.getByText('Research Pack')).toBeInTheDocument();
     expect(screen.queryByTestId('extension-install-pack:research-pack')).not.toBeInTheDocument();
     expect(screen.getByText('PostgreSQL')).toBeInTheDocument();
-    expect(screen.getByText('pg-mcp-pkg')).toBeInTheDocument();
+    expect(screen.getByText('Pg Mcp Pkg')).toBeInTheDocument();
     expect(screen.getByText('GitHub')).toBeInTheDocument();
     // Agents/models/templates are NOT in the marketplace shelf (D2).
     expect(screen.queryByText('Researcher')).not.toBeInTheDocument();
@@ -85,7 +85,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
 
   it('exposes exactly the four shelves (D2)', async () => {
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     const rail = screen.getByTestId('extension-facets');
     expect(rail).toHaveTextContent('All');
     expect(rail).toHaveTextContent('Skills');
@@ -104,7 +104,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
 
   it('Add installs a package one-click through the store — no ApprovalModal', async () => {
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
     await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
     // One-click: the pre-emptive consequence dialog is gone for installs.
@@ -117,7 +117,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     mocks.adapter.installMarketplacePackage.mockResolvedValue(
       new Response(JSON.stringify({ blocked: true, severity: 'CRITICAL', message: 'Blocked' }), { status: 403 }));
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
     await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
     // Still offers Add — a gate-rejected item never enters the installed count.
@@ -130,7 +130,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       { id: 'slack', name: 'Slack', description: 'Chat', service: 'slack', authType: 'bearer', status: 'disconnected', capabilities: [], substrate: 'waggle', tools: [], category: 'comms' },
     ]);
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
 
     fireEvent.click(await screen.findByTestId('extension-install-connector:slack'));
@@ -149,7 +149,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     window.addEventListener('waggle:open-app', listener);
     try {
       renderApp();
-      await screen.findByText('web-scraper');
+      await screen.findByText('Web Scraper');
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
       fireEvent.click(await screen.findByTestId('extension-install-connector:gcal'));
       await waitFor(() => expect(events.some(e => e.detail.appId === 'connectors')).toBe(true));
@@ -162,7 +162,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
 
   it('the connector shelf shows the honest in-place note', async () => {
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
     expect(await screen.findByTestId('federated-note')).toHaveTextContent(/vault/i);
   });
@@ -184,7 +184,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       params?.type === 'mcp' ? { packages: [], total: 0 } : { packages: skillRows(true), total: 1 }
     ));
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(await screen.findByRole('button', { name: /Remove/ }));
 
     const modal = await screen.findByTestId('approval-modal');
@@ -204,7 +204,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       Object.assign(new Error('boom'), { name: 'AdapterHttpError', status: 500 }),
     );
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(await screen.findByRole('button', { name: /Remove/ }));
     fireEvent.click(await screen.findByTestId('approval-modal-approve'));
     await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
@@ -220,7 +220,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       initiator: 'user', detail: 'Installed from registry',
     }]);
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByRole('tab', { name: 'Audit' }));
 
     await waitFor(() => expect(mocks.adapter.getExtendAudit).toHaveBeenCalledWith({ limit: 30 }));
