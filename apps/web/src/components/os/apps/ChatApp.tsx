@@ -1164,7 +1164,16 @@ const ChatApp = ({
                 }
               }}>
               {msg.role === 'assistant' && (
-                <Avatar className="w-6 h-6 mt-1 shrink-0">
+                <Avatar
+                  className={`w-6 h-6 mt-1 shrink-0 ${
+                    // Signature motion: the bee "thinks" — a soft breathing
+                    // honey ring while THIS turn is streaming (reduced-motion
+                    // users keep a static ring via the CSS guard).
+                    isLoading && msg === messages[messages.length - 1]
+                      ? 'ring-2 ring-[var(--honey-line)] dot-live'
+                      : ''
+                  }`}
+                >
                   {/* I1 fix 2: the active persona's bee sprite on every assistant
                       turn (22 unique mascots); unknown/custom personas fall back
                       to the letter/Bot mark below. */}

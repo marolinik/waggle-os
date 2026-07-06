@@ -24,10 +24,12 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
     className="text-center"
   >
     <div className="relative w-24 h-24 mx-auto mb-6">
+      {/* glow-breathe: the hive is alive — slow amber pulse (reduced-motion
+          drops the animation and keeps a static glow via the keyframe base). */}
       <img
         src={waggleLogo}
         alt="Waggle"
-        className="w-24 h-24 rounded-2xl"
+        className="w-24 h-24 rounded-2xl glow-breathe"
         style={{
           boxShadow: '0 0 60px hsl(var(--primary) / 0.3)',
         }}

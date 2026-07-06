@@ -48,8 +48,13 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
   // compounding (rubric dim 8). Hidden when the count is zero (a
   // brand-new user is better served by the LoginBriefing demo hook).
   const [memoryFrameCount, setMemoryFrameCount] = useState<number | null>(null);
+  // Signature motion: when the REAL count increases between polls, a small
+  // “+N ⬡” particle folds into the hive (the brain chip) and fades. Honest by
+  // construction — it only ever fires on an actual frame-count increase.
+  const [foldDelta, setFoldDelta] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
+    let foldTimer: ReturnType<typeof setTimeout> | undefined;
     const load = () => {
       adapter.getMemoryStats()
         .then(stats => {
@@ -58,14 +63,21 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           // total } with `frames` on each bucket — same shape that powers
           // the LoginBriefing brag line.
           const n = stats?.total?.frames ?? 0;
-          setMemoryFrameCount(n > 0 ? n : null);
+          setMemoryFrameCount(prev => {
+            if (prev !== null && n > prev) {
+              setFoldDelta(n - prev);
+              if (foldTimer) clearTimeout(foldTimer);
+              foldTimer = setTimeout(() => { if (!cancelled) setFoldDelta(null); }, 2000);
+            }
+            return n > 0 ? n : null;
+          });
         })
         .catch(() => { /* silent — leave count hidden */ });
     };
     load();
     // Refresh every 60s so the trophy ticks up during active use.
     const id = setInterval(load, 60_000);
-    return () => { cancelled = true; clearInterval(id); };
+    return () => { cancelled = true; clearInterval(id); if (foldTimer) clearTimeout(foldTimer); };
   }, []);
 
   useEffect(() => {
@@ -127,12 +139,17 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
             <HintTooltip content={`${memoryFrameCount.toLocaleString()} memory frames across all minds (personal + every workspace). This grows every time you chat — it's why Waggle gets better the more you use it.`}>
               <span
-                className="text-[11px] text-honey/80 font-display hidden lg:inline-flex items-center gap-1 cursor-help"
+                className={`relative text-[11px] text-honey/80 font-display hidden lg:inline-flex items-center gap-1 cursor-help rounded-full px-1 ${foldDelta !== null ? 'honey-pulse' : ''}`}
                 data-testid="statusbar-memory-count"
                 aria-label={`${memoryFrameCount.toLocaleString()} memory frames across all minds`}
               >
                 <Brain className="w-3 h-3" aria-hidden="true" />
                 {memoryFrameCount.toLocaleString()}
+                {foldDelta !== null && (
+                  <span aria-hidden className="memory-fold absolute -top-3 right-0 text-[10px] font-semibold text-honey whitespace-nowrap pointer-events-none">
+                    +{foldDelta} ⬡
+                  </span>
+                )}
               </span>
             </HintTooltip>
           </>

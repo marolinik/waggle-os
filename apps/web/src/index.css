@@ -477,6 +477,28 @@
   animation: float 3s ease-in-out infinite;
 }
 
+/* ── Signature motion: a memory folds into the hive ──────────────────────
+   Fired by the StatusBar brain trophy when the REAL frame count increases:
+   a small “+N ⬡” particle rises into the count and fades. Base opacity is 0
+   so reduced-motion (animation: none) simply never shows it. */
+@keyframes memory-fold {
+  0%   { opacity: 0; transform: translateY(10px) scale(0.8); }
+  25%  { opacity: 1; transform: translateY(0) scale(1.06); }
+  70%  { opacity: 1; transform: translateY(-6px) scale(1); }
+  100% { opacity: 0; transform: translateY(-14px) scale(0.9); }
+}
+.memory-fold {
+  opacity: 0;
+  animation: memory-fold 1.8s ease-out forwards;
+}
+
+/* Slow amber glow-breathe — the onboarding logo tile’s living hive glow. */
+@keyframes glow-breathe {
+  0%, 100% { box-shadow: 0 0 45px hsl(var(--primary) / 0.22); }
+  50%      { box-shadow: 0 0 75px hsl(var(--primary) / 0.42); }
+}
+.glow-breathe { animation: glow-breathe 4.5s ease-in-out infinite; }
+
 /* Honey streaming cursor */
 @keyframes blink-hex {
   0%, 100% { opacity: 1; }
@@ -549,4 +571,7 @@
     animation: none;
     box-shadow: 0 0 0 1px rgba(233, 165, 44, 0.4), 0 8px 40px -8px rgba(233, 165, 44, 0.5);
   }
+  .memory-fold { animation: none; } /* base opacity 0 → particle never shows */
+  .glow-breathe { animation: none; }
+  .dot-live { animation: none; }
 }
