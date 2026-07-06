@@ -431,38 +431,17 @@ const scopedCss = `
     align-items: center;
     justify-content: center;
   }
-  /* Soft dark vignette behind the art so the masked PNG edges dissolve
-     into depth instead of meeting the card gradient in a hard step. */
-  .waggle-persona-asset-frame::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(
-      circle at 50% 46%,
-      rgba(0, 0, 0, 0.5) 0%,
-      rgba(0, 0, 0, 0.22) 52%,
-      transparent 76%
-    );
-    pointer-events: none;
-  }
   .waggle-persona-asset {
     position: relative;
     width: 100%;
     height: 100%;
     object-fit: contain;
     display: block;
-    /* The mascot PNGs are opaque squares with baked-in near-black
-       backgrounds. Fade all four edges so the square never seams against
-       the warm card gradient. Two orthogonal gradients intersected keep
-       the center untouched (some assets carry full-bleed art). */
-    -webkit-mask-image:
-      linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%),
-      linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
-    -webkit-mask-composite: source-in;
-    mask-image:
-      linear-gradient(to right, transparent 0, #000 12%, #000 88%, transparent 100%),
-      linear-gradient(to bottom, transparent 0, #000 12%, #000 88%, transparent 100%);
-    mask-composite: intersect;
+    /* The mascot PNGs are background-transparent (2026-07-06 flood-fill) —
+       they sit directly on the card gradient. The old dark vignette +
+       edge-fade masks compensated for baked-black squares and are gone:
+       with real alpha they READ as a dark box behind the art. */
+    filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.35));
   }
   .waggle-persona-placeholder {
     width: 100%;
