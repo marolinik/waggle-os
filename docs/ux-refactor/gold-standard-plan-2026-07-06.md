@@ -507,3 +507,46 @@ own sidebar and never flips theme mid-recording.
 → Wave T re-scoped around the five convergent gaps (spec: wave-T-spec-2026-07-06.md).
 R12 static nits that don't touch judged journeys (settings Show containment, light
 input tokens, www landing diagram) DEFERRED to a later polish wave.
+
+## Round 14-V2 verdict (post-Wave-T, product @ c9cea553, kit v2)
+
+**design 7.5 · kw 7.4 · competitor 7.3 · a11y 7.2 · brand 7.5 — min 7.2, avg 7.38**
+(V1 baseline: min 7.0, avg 7.08 → +0.2 min / +0.30 avg. The video regime RESPONDS
+to fixes — first cross-round improvement signal since the static plateau.)
+
+Wave T fixes verified landed by judges: boot dark pre-paint + no wizard flash, briefing
+opens full (~3.5s), theme swap atomic ("commits <500ms, no partial frames, light theme
+is true craft parity"), memory false-zero gone, workspace hover grammar praised,
+onboarding mascot breathing now VISIBLE (frame-luminance cycling), s06 still the
+gold standard (8.5 design).
+
+### Orchestrator verification pass (critical — 3 "repeat findings" were capture blind spots)
+- **Agents hover tier + bee response WORK** (live before/after screenshots: honey
+  border + hairline bloom + lift on hover). The s07 script's `getByRole('heading')`
+  locator matched NOTHING on the real page → the glide silently no-oped in BOTH V1
+  and V2 → judges graded an unhovered page. Capture bug, not product bug.
+- **Chat action row WORKS** (DOM probe: rest opacity 0.6 + translateY(2px) → hover
+  1.0 + 0; focus-within parity live). s04's hover target missed the turn; a 16px row
+  also under-reads in 400px contact-sheet cells. Part capture bug, part real ask
+  (judges want Claude/ChatGPT-level action visibility — legit escalation).
+- **Marketplace NL bridge RENDERS** ("Press Enter — Waggle matches skills to this
+  job." live; R14 frames show it under a gray "No job matches … by name" line).
+  Judges saw it and want more: auto-run the semantic match / real CTA / nearest
+  matches. Legit escalation, not a regression.
+
+### R14-V2 convergent asks (Wave U scope)
+1. s03 flash-of-empty-state (5/5 HIGH): "No workspaces yet" renders ~0.5s before data
+   → loading/empty/error must be three distinct states; skeleton cards.
+2. Briefing interruption discipline (4/5 HIGH): fires on first Home visit even when
+   the session started elsewhere (s02 Settings→Home); duplicates the home hero story;
+   modal "2 workspaces" vs hero "6 workspaces waiting" number mismatch.
+3. Marketplace NL escalation (4/5): run the promised matching, don't hint at it.
+4. Boot warm-start (competitor HIGH): ~3.5s branded boot before every journey vs
+   Claude/ChatGPT ~1s time-to-content.
+5. a11y text floor: agent-card 2nd lines ~2.3:1 dark; light amber tier labels ~3.1:1.
+6. Memory: port BeeLoader/skeleton to "Loading memories…"; Memories tab hard cut into
+   a sparse composition; row actions visible-at-rest + focus parity.
+7. One micro-motion tier on tab/panel swaps (Memory tabs, provider key panel).
+
+Kit v3 (for R15): s07 hovers via data-testid card geometry; s04 hovers the real turn
+(copy-button ancestor); every scenario logs HOVER-MISS instead of silently skipping.
