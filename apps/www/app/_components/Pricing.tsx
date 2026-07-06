@@ -22,7 +22,8 @@ interface TierDef {
  * system): SOLO is free forever with full memory + Harvest, unlimited
  * workspaces, marketplace, all connectors, and BYO cloud models; TEAMS adds
  * shared workspaces, WaggleDance, and governance. No bullets beyond what
- * tiers.ts encodes.
+ * tiers.ts encodes. The 15-day Team trial lives in the section subhead —
+ * it applies to every install, so listing it as a Solo feature misreads.
  */
 const TIER_DEFS: readonly TierDef[] = [
   {
@@ -35,7 +36,6 @@ const TIER_DEFS: readonly TierDef[] = [
       'bullet_marketplace',
       'bullet_models',
       'bullet_skills',
-      'bullet_trial',
     ],
     ctaType: 'download',
   },
@@ -212,6 +212,28 @@ export default function Pricing() {
               </div>
             );
           })}
+
+          {/* Enterprise = KVARK sovereign deployment. A quieter third card
+              (description, no checklist) so the grid fills its row without
+              inventing a tier — pricing stays consultative. */}
+          <div className={[styles.tierCard, styles.tierCardQuiet].join(' ')}>
+            <h3 className={styles.tierName}>{t('enterprise.name')}</h3>
+            <p className={styles.tierTagline}>{t('enterprise.tagline')}</p>
+
+            <p className={styles.price}>{t('enterprise.price')}</p>
+            <p className={styles.priceNote}>{t('enterprise.note')}</p>
+
+            <p className={styles.enterpriseBody}>{t('enterprise.text')}</p>
+
+            <a
+              href={KVARK_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={['btn', 'btn-ghost', styles.tierCta].join(' ')}
+            >
+              {t('enterprise.cta')}
+            </a>
+          </div>
         </div>
 
         {error ? (
@@ -219,18 +241,6 @@ export default function Pricing() {
             {error}
           </p>
         ) : null}
-
-        <div className={styles.enterprise}>
-          <p className={styles.enterpriseText}>{t('enterprise.text')}</p>
-          <a
-            href={KVARK_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-ghost btn-small"
-          >
-            {t('enterprise.cta')}
-          </a>
-        </div>
       </div>
     </section>
   );

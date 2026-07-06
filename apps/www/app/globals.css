@@ -116,6 +116,12 @@ p { text-wrap: pretty; }
   border-radius: 4px;
 }
 
+/* Fixed 64px navbar: anchor-jump targets (/#pricing, /#personas, …) must
+   land with their headline clear of the nav, not occluded under it. */
+[id] {
+  scroll-margin-top: 80px;
+}
+
 /* ── Skip link (a11y) ── */
 .skip-link {
   position: absolute;

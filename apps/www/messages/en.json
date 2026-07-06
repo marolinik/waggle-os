@@ -214,8 +214,7 @@
           "bullet_workspaces": "Unlimited workspaces & agents",
           "bullet_marketplace": "Skills marketplace & all connectors",
           "bullet_models": "Any model & embeddings, your keys",
-          "bullet_skills": "Custom skills, PDF & JSON export",
-          "bullet_trial": "15-day Team trial on install"
+          "bullet_skills": "Custom skills, PDF & JSON export"
         },
         "teams": {
           "name": "Team",
@@ -231,7 +230,11 @@
         }
       },
       "enterprise": {
-        "text": "Need it sovereign, on your own infrastructure? KVARK runs everything Waggle does inside your perimeter — your permissions, full audit trail, complete governance.",
+        "name": "Enterprise",
+        "tagline": "Sovereign, on your own infrastructure.",
+        "price": "Custom",
+        "note": "Consultative — KVARK",
+        "text": "KVARK runs everything Waggle does inside your perimeter — your permissions, full audit trail, complete governance. Your data never leaves your infrastructure.",
         "cta": "Talk to KVARK"
       },
       "errors": {
