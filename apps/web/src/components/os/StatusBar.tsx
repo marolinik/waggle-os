@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { WifiOff, Search, Bell, Brain } from "lucide-react";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
@@ -31,6 +32,7 @@ interface StatusBarProps {
 
 const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costUsd, offline, unreadNotifications = 0, trialDaysRemaining: trialDays, trialExpired, onSearchClick, onNotificationClick }: StatusBarProps) => {
   const [time, setTime] = useState(new Date());
+  const navigate = useNavigate();
   const isLight = useIsLightTheme();
   const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
   // M-20 / UX-5: token + cost are developer-facing signal. Hidden by
@@ -150,9 +152,14 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           </span>
         )}
         {trialExpired && (
-          <span className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-honey whitespace-nowrap" title="Your trial ended — you're on the free Solo plan. Upgrade anytime.">
-            Trial ended
-          </span>
+          <button
+            type="button"
+            onClick={() => navigate('/settings?tab=billing')}
+            className="text-[10px] font-display font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-honey whitespace-nowrap transition-colors hover:bg-primary/25"
+            title="Your trial ended — you're on the free Solo plan. See plans."
+          >
+            Trial ended · Solo
+          </button>
         )}
         <HintTooltip content="Search (Ctrl+K)">
           <button
