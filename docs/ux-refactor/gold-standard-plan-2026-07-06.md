@@ -405,3 +405,58 @@ re-inserting bench frames; recheck before any future capture.
   blue ring GONE (error+selected states called "excellent") · workspace
   cards still the floor (6.8 — "Last:" prefix read as debris; bar keeps
   rising: now they want fixed slots + a live signal per card).
+
+---
+
+## Round 12 verdict + PLATEAU ANALYSIS #2 — founder decision point (2026-07-06 ~19:00)
+
+**R12: design 7.6 · kw 7.6 · competitor 7.7 · a11y 7.5 · brand 7.8 (min 7.5,
+avg 7.64).** Full trajectory:
+6.7 → 6.9 → 7.24 → 7.44 → 7.36 → 7.7 → 7.68 → 7.58 → 7.52 → 7.64 → 7.74 → 7.64.
+
+### The measurement is now conclusive
+R6-R12 = seven rounds oscillating in a **±0.1 band around ~7.65**, through FOUR
+executed convergent waves (P/Q/R/S — every #1 ask of every round shipped and
+verified fixed the following round: provider tiles, one-voice failure states,
+blue-ring root cause, server-enriched living cards, logomarks, chip grammar,
+emoji purge, light AA passes). Surfaces judged 8+ when captured clean: memory
+8.4-8.5 · landing 8.4-8.6 · home 8.4 · onboarding 8.2 · chat 8.0. The panel's
+own verdicts converge on one sentence: **beats Codex/Hermes/Odyssey outright on
+identity and coherence; Claude/ChatGPT keep a micro-refinement edge on the
+boring surfaces.**
+
+### Why 5×9/10 is not reachable under THIS regime (evidence, not excuse)
+1. **Whack-a-mole is measured**: each round's fixes verify green, and new
+   equal-weight nits appear (R10 asked Show→content-header; R11 called that
+   "floating"; R12 wants it "a contained segmented control"). Cross-round judge
+   self-disagreement is now documented in three consecutive rounds.
+2. **The rubric pins the ceiling**: judges are instructed "9 = clearly
+   best-in-class, do NOT be generous" — under min-of-5 with ±0.2 per-judge
+   noise, a ~7.5 floor is the stable fixed point once real defects are gone.
+3. **Static shots can't see the product's strongest layer**: motion, hover
+   tiers, streaming, transitions — the panel repeatedly withholds 8-9 for
+   "feel" that screenshots structurally cannot show (motion inventory
+   disclosure only partially compensates).
+4. **Capture fragility costs real points**: two of the last four rounds lost
+   home points to TRANSIENT states caught mid-capture (R9 triple stack, R12
+   error-toast collision — the collision itself was a real Wave-Q defect, now
+   fixed: toast docked bottom-right).
+
+### Decision needed (founder)
+- **A. Accept & merge** — take the arc's result (6.7 → ~7.7 sustained, four
+  judges at 7.8, five surfaces at 8+; ~45 local commits, all gates green) and
+  merge `feat/ux-gold-standard-2026-07-06` after review. Remaining R12 nits
+  can ride normal polish waves on main.
+- **B. Regime switch** — video/live walkthrough judging (shows motion, hover,
+  streaming). Requires new capture tooling (screen recording); scores would
+  not be comparable to the static trajectory. This is the only honest path
+  that could still move the number materially.
+- **C. Continue static waves** — the data above says expected value per wave
+  is now ≈0 (±0.1 noise); not recommended.
+
+### R12 asks banked for whatever comes next (all legitimate, none gate-moving)
+marketplace metadata budget (dedupe connector chips, cap tags at 3+N) ·
+workspace one-slot-order grammar + duplicate-chip → tooltip · real hover tier
+(elevation+actions) across cards · memory triple-nav collapse · Show control
+containment · dark agents search-input border · light input borders + mono-chip
+contrast · landing diagram line weight + orphaned arrow.
