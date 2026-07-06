@@ -30,6 +30,31 @@ const personaByOrder = new Map<number, Persona>(
   personas.map((p) => [p.order, p]),
 );
 
+/**
+ * Per-persona accent — a curated, warm-Hive-cohesive palette (honey/amber/
+ * copper family with a few muted cool notes for rhythm; no purple, no
+ * gradients). Each tile gets its own hue on the title, top hairline, and hover
+ * border/glow so the grid reads as a cast of characters, not a spreadsheet.
+ * Hues are chosen so horizontally/vertically adjacent tiles never repeat, and
+ * a few map to meaning (confused → terracotta flag, sleeping → night blue,
+ * analyst/team → data green, researcher → analytical blue).
+ */
+const PERSONA_ACCENTS: Readonly<Record<PersonaSlug, string>> = {
+  hunter: '#f6c45a',
+  researcher: '#7aa6d6',
+  analyst: '#6cb78c',
+  connector: '#f2b950',
+  architect: '#d98a3d',
+  builder: '#e9a52c',
+  writer: '#e0916f',
+  orchestrator: '#7aa6d6',
+  marketer: '#f6c45a',
+  team: '#6cb78c',
+  celebrating: '#f9d27e',
+  confused: '#db8068',
+  sleeping: '#86a9d1',
+};
+
 export interface BrandPersonasCardProps {
   /** Optional uppercase kicker rendered above the heading (e.g. "Built for"). */
   eyebrow?: string;
@@ -229,12 +254,17 @@ function PersonaTile({
     </figure>
   );
 
+  const tileStyle = {
+    '--accent': PERSONA_ACCENTS[persona.slug],
+  } as CSSProperties;
+
   return (
     <li
       data-testid={`persona-tile-${persona.slug}`}
       data-slug={persona.slug}
       data-placeholder={hasError ? 'true' : undefined}
       className="waggle-persona-tile"
+      style={tileStyle}
       onMouseEnter={handleHover}
       onFocus={handleFocus}
     >
@@ -331,17 +361,36 @@ const scopedCss = `
   .waggle-persona-tile {
     position: relative;
     list-style: none;
+    overflow: hidden;
     background: linear-gradient(180deg, #14110b 0%, #0e0c07 100%);
     border: 1px solid #1f1a12;
     border-radius: 16px;
     padding: 20px;
     min-height: 260px;
-    transition: border-color 200ms ease-out, transform 200ms ease-out;
+    transition: border-color 200ms ease-out, transform 200ms ease-out,
+      box-shadow 200ms ease-out;
+  }
+  /* Per-role accent hairline across the top edge of each tile. */
+  .waggle-persona-tile::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent, #e9a52c);
+    opacity: 0.5;
+    transition: opacity 200ms ease-out;
   }
   .waggle-persona-tile:hover,
   .waggle-persona-tile:focus-within {
-    border-color: #e9a52c;
-    transform: scale(1.02);
+    border-color: var(--accent, #e9a52c);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 34px -16px color-mix(in srgb, var(--accent, #e9a52c) 55%, transparent);
+  }
+  .waggle-persona-tile:hover::before,
+  .waggle-persona-tile:focus-within::before {
+    opacity: 1;
   }
   @media (prefers-reduced-motion: reduce) {
     .waggle-persona-tile,
@@ -359,7 +408,7 @@ const scopedCss = `
     border-radius: 12px;
   }
   .waggle-persona-button:focus-visible {
-    outline: 2px solid #e9a52c;
+    outline: 2px solid var(--accent, #e9a52c);
     outline-offset: 2px;
   }
   .waggle-persona-figure {
@@ -414,7 +463,7 @@ const scopedCss = `
     font-family: var(--sans);
     font-size: 16px;
     font-weight: 600;
-    color: #f6c45a;
+    color: var(--accent, #f6c45a);
     letter-spacing: 0.01em;
   }
   .waggle-persona-role {
@@ -424,14 +473,38 @@ const scopedCss = `
     color: #c8bfa9;
     line-height: 1.45;
   }
+  /* Filler slots are intentional "empty comb" cells — a honey-lit hex motif,
+     not dead space. Decorative only (aria-hidden on the element). */
   .waggle-persona-filler {
+    position: relative;
     list-style: none;
     min-height: 260px;
     border-radius: 16px;
+    border: 1px solid #241d12;
+    overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 42%, rgba(233, 165, 44, 0.12), rgba(233, 165, 44, 0) 60%),
+      linear-gradient(180deg, #14110b 0%, #0e0c07 100%);
+  }
+  .waggle-persona-filler::before {
+    content: "";
+    position: absolute;
+    inset: 0;
     background-image: url("${HEX_TEXTURE_PATH}");
     background-size: cover;
     background-position: center;
+    opacity: 0.2;
+  }
+  .waggle-persona-filler::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 42px;
+    height: 46px;
+    transform: translate(-50%, -50%);
+    background: no-repeat center / contain
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='46' viewBox='0 0 42 46' fill='none'%3E%3Cpath d='M21 2 L39 12.5 V33.5 L21 44 L3 33.5 V12.5 Z' stroke='%23e9a52c' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E");
     opacity: 0.4;
-    border: 1px solid #1f1a12;
   }
 `;
