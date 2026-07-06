@@ -152,10 +152,19 @@ interface ArtifactRow {
  *  (PR3.5 keystone). Rows whose source is absent fall back to the REAL date
  *  only — never a fabricated source. */
 function FactsSection({ ctx }: { ctx: WorkspaceContext | null }) {
+  // The server-composed summary card above often quotes the newest memory
+  // verbatim — don't render the identical string twice on one screen (2026-07
+  // judge finding). Substring test on normalized text, display-only.
+  const summaryNorm = (ctx?.summary ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const inSummary = (text: string) => {
+    if (!summaryNorm) return false;
+    const t = text.replace(/\s+/g, ' ').trim().toLowerCase();
+    return t.length > 20 && summaryNorm.includes(t);
+  };
   const facts = [
     ...(ctx?.recentDecisions ?? []).map((d) => ({ text: d.content, source: d.source, when: relativeTime(d.date) })),
     ...(ctx?.recentMemories ?? []).map((m) => ({ text: m.content, source: m.source, when: relativeTime(m.date) })),
-  ].slice(0, 6);
+  ].filter((f) => !inSummary(f.text)).slice(0, 6);
   if (facts.length === 0) return null;
   return (
     <section>
