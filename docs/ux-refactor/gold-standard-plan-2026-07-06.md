@@ -550,3 +550,31 @@ gold standard (8.5 design).
 
 Kit v3 (for R15): s07 hovers via data-testid card geometry; s04 hovers the real turn
 (copy-button ancestor); every scenario logs HOVER-MISS instead of silently skipping.
+
+## Round 15-V3 verdict (post-Wave-U, product @ b1505f90, kit v3)
+
+**design 7.5 · kw 7.8 · competitor 7.6 · a11y 7.3 · brand 7.4 — min 7.3, avg 7.52.**
+Regime-B trajectory: 7.08 → 7.38 → 7.52 avg; min 7.0 → 7.2 → 7.3. Still climbing.
+kw 7.8 = highest single score of the regime. s07 agents 6.5→8 (hover finally SEEN),
+s04 chat 7→7.5, s06 settings 8.5 again ("best-in-class"), s09 onboarding 8
+("award-adjacent"). Judges called the briefing skeleton→content shape continuity
+"genuine choreography" and the count-up + boot brand moment real wins.
+
+Convergent asks (Wave V scope):
+1. s03 empty-flash moved but survived (skeleton→empty→grid, cold-fetch vs 800ms floor
+   — the exact residual Wave U Lane A flagged). **FIXED inline post-round** (`32507dd9`):
+   ShellContext now forwards the real `loading` flag; heuristic deleted.
+2. s05 memory (5/5): hero count must never paint 0 mid-load (recurs on tab return);
+   count-up once per session; Memories tab to Trust-hero parity (designed container,
+   result-count header, skeleton list — "one card floating in a black void").
+3. Settings verdict double-truth (kw+competitor HIGH): banner flips "No working model"
+   → "ready" → error; resolve provider health once ("Checking…" → single verdict).
+4. Motion tier 2 (design+brand HIGH): hover lift 2-4px + glow bloom on cards; a
+   signature 300-400ms warm theme crossfade; choreographed (not hard-cut) surface
+   transitions; onboarding keeps the mascot across steps + eased step slide.
+5. Loading vocabulary: chat "Loading workspace…" → parallelize with boot + thread
+   skeleton; marketplace keeps prior results dimmed during debounce (no list collapse);
+   MATCHES section stability.
+6. a11y utility-text sweep (HIGH): Skip setup / Don't show again / statusbar chrome /
+   marketplace pills / sidebar section labels to AA; rest-state hints for hover-reveals;
+   tooltips+aria on composer chips and message actions.
