@@ -43,11 +43,18 @@ function heuristicLabel(rawId: string): string {
   // Strip a trailing 8-digit date stamp (e.g. -20260115).
   id = id.replace(/-\d{8}$/, '');
 
-  const label = id
-    .split(/[-_]/)
-    .filter(Boolean)
-    .map(titleCaseToken)
-    .join(' ');
+  // Re-join dash-separated version digits with a dot: claude-opus-4-6 →
+  // "Claude Opus 4.6", not "Claude Opus 4 6" (ids encode dots as dashes).
+  const merged: string[] = [];
+  for (const tok of id.split(/[-_]/).filter(Boolean)) {
+    const prev = merged[merged.length - 1];
+    if (prev !== undefined && /^\d+$/.test(tok) && /^\d+(\.\d+)*$/.test(prev)) {
+      merged[merged.length - 1] = `${prev}.${tok}`;
+    } else {
+      merged.push(tok);
+    }
+  }
+  const label = merged.map(titleCaseToken).join(' ');
 
   return (label || id) + suffix;
 }
