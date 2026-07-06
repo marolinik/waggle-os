@@ -120,16 +120,17 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         {model && (
           <>
             <span className="text-muted-foreground text-[11px] hidden lg:inline">·</span>
-            {/* I1 fix 3: "Default:" prefix — an open chat can run a different
-                model (shown in its own header), so this chip and the thread
-                chip must read as two different things, not a contradiction. */}
+            {/* R9 kw judge: "Default: Haiku" beside a thread running Opus read as
+                two contradictory truths. The label now states its SCOPE — this
+                chip is the new-chat default; an open thread's model lives in the
+                chat header. Scoping, not fake agreement. */}
             <HintTooltip content={`${modelLabel} (${model}) — default model for new chats in this workspace. An open chat may use its own model (shown in the chat header); the global default lives in Settings → Models.`}>
               <span
                 className="text-[11px] text-honey/80 font-display hidden lg:inline cursor-help"
                 data-testid="statusbar-model"
                 tabIndex={0}
               >
-                Default: {modelLabel}
+                New chats: {modelLabel}
               </span>
             </HintTooltip>
           </>

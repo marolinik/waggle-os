@@ -345,3 +345,29 @@ benchmarks/ + hive-mind-* in this same worktree, uncommitted as of 15:45) is
 re-inserting bench frames; recheck before any future capture.
 
 **R9 judging in flight** (5-persona panel, wf_6ee59488-f11).
+
+**Round 9 verdict + Wave Q (2026-07-06 ~16:00-16:45):**
+- R9: design 7.7 · kw 7.4 · competitor 7.5 · a11y 7.6 · brand 7.4 (min 7.4,
+  avg 7.52) — statistically flat, BUT the home capture accidentally recorded a
+  REAL degraded boot (NoModelBanner + error glyph + "Catching you up" modal,
+  sidecar hiccup under concurrent-BEAM load) → all 5 judges made the
+  interruption stack their #1 ask; home-briefing-modal scored 6.5 (new worst).
+  R9's home number is not comparable to R8's clean 8.5.
+- Wave Q (`1dc07a0f`, 4 Opus lanes): one-voice failure states (briefing error
+  = slim dismissible row, never a blocking modal; offline suppresses briefing;
+  modal recomposed opaque/one-grid) · provider tiles rest NEUTRAL (honey =
+  selection only, risk = error only; real segmented Show control; light
+  tablist cells; quiet-outline Validate) · memory humanizeMemoryTitle (slug →
+  meta chip) + one headline count + quiet zero chips + violet folded ·
+  status-bar chip scoped "New chats:" (relabel had to be re-applied by hand —
+  Lane D's claim didn't survive its own formatter) · solo self-presence 'Y'
+  chip dropped · theme-aware --user-bubble · trial pill → quiet "Solo plan" ·
+  light --honey #b57d12→#c07f00 (full-sat, AA 5.47/3.18).
+- `fd6b0980`: ALL 22 persona avatars redrawn flat-geometric (4/5 judges:
+  "two mascot languages") — nano-banana pro + style refs + deterministic
+  hue-correction 30°→40°; personas.ts imports 1:1 by id. Landing Writer +
+  Night Shift mascots fixed earlier (`1fbb9cc2`).
+- Gates: web tsc 0 · vitest 1362/1362.
+- R10 capture: home CLEAN (modal dismissed; healthy content modal captured
+  separately as 142) · settings back at Essential tier · label-consistent
+  set (130-132 recaptured after the StatusBar relabel). Judging in flight.
