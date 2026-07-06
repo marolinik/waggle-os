@@ -601,3 +601,26 @@ Convergent asks (Wave V scope):
 Wins confirmed: s06 8.2 "best interaction of the set"; s05 Trust hero 7.8 with the
 count-up "caught mid-flight — a felt moment"; s07 lift tier now SEEN ("card visually
 raised, honey top edge"); light theme "a true second theme".
+
+## Round 17-V5 verdict (clean round, product @ 08bc3632, kit v4)
+
+**design 7.7 · kw 7.7 · competitor 7.6 · a11y 7.5 · brand 7.9 — min 7.5, avg 7.68.**
+NEW REGIME HIGH. Clean trajectory: 7.08 → 7.38 → 7.52 → [7.40 contaminated] → 7.68;
+min 7.0 → 7.2 → 7.3 → [7.1] → 7.5. Brand 7.9 = highest single judge score of the
+entire arc (both regimes). Panel verdict shifted: "now beats Codex, Hermes, Odyssey";
+Claude/ChatGPT hold the streaming + micro-choreography edge only.
+
+Convergent asks (Wave W):
+1. Signature entrance choreography (design HIGH): stagger card entrances ~40ms apart
+   with 8px rise+fade after skeletons resolve (recall cards, workspace grid, agent
+   cards); 150ms scale/fade menu entrance from its trigger. Long enough to read at 2fps.
+2. Marketplace matching state: purpose-built result-row skeletons (the stale-dim fix
+   registered but "user stares at dimmed wrong content"); denser results layout.
+3. Chat streaming arc UNPROVEN — s04 never sends (capture gap, kit v5) + make sure
+   the streaming visual state holds up when recorded.
+4. Memory counter: a 2fps frame catches the count-up near 0 ("reads as a data bug") —
+   never paint a literal 0; skeleton→count-up starting visibly above zero.
+5. Memories tab density (still "one card in a dark field") — default the tab to the
+   full recent list, curation as a filter, not the landing view.
+6. Onboarding: amplify glow breathing (~3s cycle, visible at 2fps); directional slide
+   welcome→step 1. (low)
