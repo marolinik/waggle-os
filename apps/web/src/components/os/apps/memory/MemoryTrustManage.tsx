@@ -35,6 +35,9 @@ interface MemoryTrustManageProps {
   openMemoryId?: string | null;
   /** Called once the openMemoryId request has been handled (one-shot). */
   onOpenConsumed?: () => void;
+  /** Reports the live working-set size after each load — the host sizes the
+   *  hero from it (full manifesto only while the store is effectively empty). */
+  onTotal?: (total: number) => void;
 }
 
 type TrustFilter = 'all' | 'stale' | 'needs_confirm';
@@ -134,7 +137,9 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
               {memory.content}
             </p>
           </button>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[10.5px] text-[var(--text-dim)]">
+          {/* Provenance micro-metadata is trust-critical — 12px + --text-muted
+              (AA), not the sub-11px --text-dim decoration tier (a11y review). */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[12px] text-[var(--text-muted)]">
             <span className="text-[var(--intel)]">⬡ M-{memory.id}</span>
             {srcLabel && <span>source: {srcLabel}</span>}
             <span className={fresh.state === 'fresh' ? 'text-[var(--healthy)]' : 'text-[var(--attention)]'}>
@@ -222,7 +227,7 @@ const FILTERS: { id: TrustFilter; label: string }[] = [
   { id: 'needs_confirm', label: 'Needs confirm' },
 ];
 
-export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, openMemoryId, onOpenConsumed }: MemoryTrustManageProps) {
+export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, openMemoryId, onOpenConsumed, onTotal }: MemoryTrustManageProps) {
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -291,6 +296,11 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     () => memories.filter((m) => m.status !== 'archived' && m.status !== 'deprecated'),
     [memories],
   );
+
+  // Report the settled working-set size to the host (deterministic hero sizing).
+  useEffect(() => {
+    if (!loading) onTotal?.(live.length);
+  }, [live, loading, onTotal]);
 
   const stats = useMemo(() => {
     const total = live.length >= FETCH_LIMIT ? `${FETCH_LIMIT}+` : String(live.length);
@@ -537,7 +547,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
               />
             </div>
             <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} />
-            <p className="text-[11px] text-[var(--text-muted)]">
+            <p className="text-[12px] text-[var(--text-muted)]">
               Created {new Date(selected.createdAt).toLocaleString(DATE_LOCALE)}
               {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString(DATE_LOCALE)}`}
             </p>

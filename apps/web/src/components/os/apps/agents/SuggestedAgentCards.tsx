@@ -4,6 +4,10 @@ import { getPersonaAvatar, type PersonaConfig } from '@/lib/personas';
 interface SuggestedAgentCardsProps {
   personas: PersonaConfig[];
   onPick: (persona: PersonaConfig) => void;
+  /** Full persona catalog for the quiet below-the-fold roster strip (round-4);
+   *  omit either prop to hide it. The parent owns navigation to Templates. */
+  allPersonas?: PersonaConfig[];
+  onBrowseAll?: () => void;
 }
 
 /** One warm "why this one" line per curated persona (H2: cards need a reason,
@@ -21,7 +25,7 @@ const WHY: Record<string, string> = {
  * AgentBuilder → adapter.createAgent). H2 redesign: full-width, left-aligned
  * header, responsive card grid with the bee mascots front and center.
  */
-const SuggestedAgentCards = ({ personas, onPick }: SuggestedAgentCardsProps) => {
+const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: SuggestedAgentCardsProps) => {
   if (personas.length === 0) return null;
   return (
     <div className="mt-5" data-testid="suggested-agents">
@@ -54,6 +58,29 @@ const SuggestedAgentCards = ({ personas, onPick }: SuggestedAgentCardsProps) => 
           </li>
         ))}
       </ul>
+      {/* Round-4: quiet full-roster strip — every specialist at a glance, one
+          tap into the Templates catalog. No new data fetch (static PERSONAS). */}
+      {allPersonas && allPersonas.length > 0 && onBrowseAll && (
+        <div className="mt-5" data-testid="persona-roster">
+          <p className="text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+            Meet all {allPersonas.length} specialists
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {allPersonas.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={onBrowseAll}
+                title={p.name}
+                aria-label={`${p.name} — browse all templates`}
+                className="rounded-full transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                <img src={getPersonaAvatar(p.id)} alt="" className="h-7 w-7 rounded-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -157,6 +157,20 @@ describe('AgentsApp — Agent Center', () => {
     expect(screen.getByText(/Acme Research/)).toBeInTheDocument();
   });
 
+  it('sparse fleet shows the full-roster strip that opens the Templates view', async () => {
+    mocks.adapter.listAgents.mockResolvedValue([]);
+    renderApp();
+    await screen.findByText(/No custom agents yet/);
+
+    const roster = screen.getByTestId('persona-roster');
+    expect(roster).toHaveTextContent('Meet all 22 specialists');
+    // One thumbnail per canonical persona, each named for its tooltip.
+    expect(within(roster).getAllByRole('button')).toHaveLength(22);
+
+    fireEvent.click(within(roster).getByRole('button', { name: /Verifier — browse all templates/ }));
+    expect(screen.getByRole('button', { name: /Templates/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('shows the error state with a Retry that reloads', async () => {
     mocks.adapter.listAgents.mockRejectedValueOnce(new Error('listAgents failed: 500'));
     renderApp();

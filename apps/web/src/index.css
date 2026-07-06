@@ -373,12 +373,19 @@
 
   /* ── Onboarding full-screen scrim — theme-aware (was hard-coded black,
         which left the light-mode welcome dark-on-dark). Warm near-black in
-        dark, warm ivory in light, so the first-run screen matches the theme. */
+        dark, warm ivory in light, so the first-run screen matches the theme.
+        Both variants carry the honeycomb data-URI (round-4 brand finding: the
+        flat scrim was the only Waggle surface WITHOUT the hive texture) —
+        dark sits slightly above the surface-level 0.03 so it survives the
+        0.92 scrim + backdrop blur; light stays whisper-subtle below the 0.10
+        surface variant. */
   .onboarding-scrim {
     background-color: rgba(8, 9, 12, 0.92);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23e9a52c' fill-opacity='0.05'/%3E%3C/svg%3E");
   }
   :root[data-theme="light"] .onboarding-scrim {
     background-color: rgba(250, 247, 240, 0.95);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9z' fill='%23b57d12' fill-opacity='0.06'/%3E%3C/svg%3E");
   }
 
   /* ── Honeycomb background pattern (the hex mesh) ────────────────────── */
@@ -422,6 +429,14 @@
 ::-webkit-scrollbar-thumb:hover {
   background: var(--hive-500);
   background-clip: padding-box;
+}
+::-webkit-scrollbar-corner { background: transparent; }
+/* Firefox (no ::-webkit-scrollbar support): same warm thumb on a transparent
+   track so no light strip cuts the canvas in either theme. Scoped with
+   @supports so Chromium keeps the richer webkit styling above (setting
+   scrollbar-color unconditionally would disable it). */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-color: var(--hive-600) transparent; }
 }
 
 /* ── Hive Animations ──────────────────────────────────────────────────── */

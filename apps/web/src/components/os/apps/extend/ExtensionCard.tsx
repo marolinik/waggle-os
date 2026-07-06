@@ -9,7 +9,7 @@
  * keeps its consequence dialog; install/connect/enable are one-click (§09).
  */
 import { useState } from 'react';
-import { Download, ExternalLink, Loader2, Plug, Trash2, Zap } from 'lucide-react';
+import { Download, ExternalLink, Loader2, Plug, Shield, Trash2, Zap } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
 import type { Extension } from '@/lib/extension-catalog';
@@ -29,11 +29,16 @@ export function displayExtensionName(name: string): string {
     .join(' ');
 }
 
+/** Scan outcomes with a real verdict. "not_scanned" is rendered separately as
+ *  a NEUTRAL outline chip (round-4: unknown ≠ alarm — the amber chip made
+ *  every unscanned entry read as a warning; "Scan failed" stays the alarm). */
 const SCAN_LABELS: Record<string, { tone: 'healthy' | 'attention' | 'risk'; label: string }> = {
   passed: { tone: 'healthy', label: 'Scan passed' },
   failed: { tone: 'risk', label: 'Scan failed' },
-  not_scanned: { tone: 'attention', label: 'Not scanned' },
 };
+
+const NOT_SCANNED_TOOLTIP =
+  "This package hasn't been security-scanned yet — installs are recorded in the audit trail";
 
 /** Which one-click verb a togglable extension shows, by kind/type. */
 type ActionKey = 'package' | 'connector' | 'mcp';
@@ -49,6 +54,13 @@ function actionKey(ext: Extension): ActionKey | null {
   if (ext.type === 'mcp') return 'mcp';
   return null;
 }
+
+/** FOUNDER CONSTRAINT (round-4): Add / Connect / Enable KEEP their distinct
+ *  words (renaming declined) — instead the three verbs share ONE visual
+ *  weight, so the action rail reads as a single system. Every primary action
+ *  (verb button + inline token submit) uses this exact treatment. */
+const PRIMARY_ACTION_CLASS =
+  'flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50';
 
 /** Human labels for the dedup provenance forms (`ext.sources`). */
 const SOURCE_LABELS: Record<string, string> = { connector: 'Connector', mcp: 'MCP', package: 'Package', pack: 'Pack' };
@@ -113,7 +125,18 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
             tone={installed ? 'healthy' : 'neutral'}
             label={installed ? (verb?.installed ?? 'Installed') : 'Available'}
           />
-          {scan && <StatusBadge tone={scan.tone} label={scan.label} />}
+          {ext.scanStatus === 'not_scanned' ? (
+            <span title={NOT_SCANNED_TOOLTIP}>
+              <StatusBadge
+                tone="neutral"
+                icon={<Shield className="w-3 h-3" aria-hidden />}
+                label="Not scanned"
+                className="bg-transparent"
+              />
+            </span>
+          ) : scan ? (
+            <StatusBadge tone={scan.tone} label={scan.label} />
+          ) : null}
         </div>
         <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{ext.description}</p>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -147,7 +170,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
               onClick={() => void submitToken()}
               disabled={busy || token.trim() === ''}
               data-testid="connector-token-submit"
-              className="px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50"
+              className={PRIMARY_ACTION_CLASS}
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Connect'}
             </button>
@@ -190,7 +213,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
             onClick={() => void runPrimary()}
             disabled={busy || showToken}
             data-testid={`extension-install-${ext.id}`}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50"
+            className={PRIMARY_ACTION_CLASS}
           >
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <verb.Icon className="w-3 h-3" />}
             {busy ? verb.busy : verb.idle}

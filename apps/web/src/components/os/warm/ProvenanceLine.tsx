@@ -24,7 +24,9 @@ export function ProvenanceLine({ source, when, onClick, className }: ProvenanceL
       title={label}
       onClick={onClick}
       className={cn(
-        'font-mono text-[var(--intel)] border-[var(--intel-wash)] bg-transparent',
+        // 12px (overrides the chip's 11px base) — provenance is trust-critical
+        // micro-metadata and must not sit on the sub-12px decoration tier (a11y).
+        'font-mono text-[12px] text-[var(--intel)] border-[var(--intel-wash)] bg-transparent',
         className,
       )}
     />

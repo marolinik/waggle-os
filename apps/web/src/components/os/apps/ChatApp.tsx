@@ -3,10 +3,9 @@ import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDo
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { getPersonaById, PERSONAS } from '@/lib/personas';
+import { getPersonaAvatar, getPersonaById, PERSONAS } from '@/lib/personas';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
-import { cmdKLabel } from '@/lib/platform';
 import { formatModelLabel } from '@/lib/model-label';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
@@ -1109,7 +1108,12 @@ const ChatApp = ({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-auto p-4 space-y-3">
+        <div ref={scrollRef} className="flex-1 overflow-auto p-4">
+          {/* Round-4 craft (I1 fix 1): hold the reading measure to ~760px like
+              Claude/ChatGPT instead of letting turns run the full panel width.
+              The wrapper turns h-full flex-col only in the empty state so
+              WorkspaceBriefing's h-full/flex-1 roots keep filling the viewport. */}
+          <div className={`mx-auto w-full max-w-[760px] space-y-3 ${messages.length === 0 ? 'h-full flex flex-col' : ''}`}>
           {messages.length === 0 && workspaceId && (
             <WorkspaceBriefing
               workspaceId={workspaceId}
@@ -1159,13 +1163,21 @@ const ChatApp = ({
                   onContextRail({ type: 'message', id: msg.id, label: msg.content.slice(0, 60) });
                 }
               }}>
-              {msg.role === 'assistant' && persona && (
+              {msg.role === 'assistant' && (
                 <Avatar className="w-6 h-6 mt-1 shrink-0">
-                  <AvatarImage src={persona.avatar} />
-                  <AvatarFallback className="text-[11px] bg-primary/20">{persona.name[0]}</AvatarFallback>
+                  {/* I1 fix 2: the active persona's bee sprite on every assistant
+                      turn (22 unique mascots); unknown/custom personas fall back
+                      to the letter/Bot mark below. */}
+                  {persona && <AvatarImage src={getPersonaAvatar(persona.id)} alt={`${persona.name} avatar`} />}
+                  <AvatarFallback className="text-[11px] bg-primary/20">
+                    {persona ? persona.name[0] : <Bot className="w-3.5 h-3.5" aria-hidden="true" />}
+                  </AvatarFallback>
                 </Avatar>
               )}
-              <div className="max-w-[80%]">
+              {/* I1 fix 1: assistant turns span the full reading column so code
+                  blocks/tables get the whole measure; user/system bubbles stay
+                  shrink-to-fit capped at 80%. */}
+              <div className={msg.role === 'assistant' ? 'w-full min-w-0' : 'max-w-[80%]'}>
                 {msg.role === 'assistant' && (
                   <div className="mb-1 flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-dim)]">
                     <span className="font-semibold text-[var(--text-2)]">Waggle</span>
@@ -1257,12 +1269,15 @@ const ChatApp = ({
           {pendingApproval && (
             <ApprovalGate request={pendingApproval} onRespond={onApprove} />
           )}
+          </div>
         </div>
 
         {/* Input area */}
-        <div className="p-3 border-t border-border/30 relative">
+        <div className="p-3 border-t border-border/30">
+          {/* I1 fix 1: composer shares the ~760px reading column with the thread. */}
+          <div className="relative mx-auto w-full max-w-[760px]">
           {showSlash && filteredCommands.length > 0 && (
-            <div className="absolute bottom-full left-3 right-3 mb-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
+            <div className="absolute bottom-full left-0 right-0 mb-1 bg-card border border-border rounded-xl shadow-xl overflow-hidden z-10 max-h-48 overflow-y-auto">
               {filteredCommands.map((c, idx) => (
                 <button
                   key={c.cmd}
@@ -1295,16 +1310,27 @@ const ChatApp = ({
               rows={3}
             />
             <div className="flex items-center gap-2.5 pb-0.5">
-              <span className="hidden font-mono text-[11px] text-[var(--text-dim)] sm:inline">⏎ send · {cmdKLabel}</span>
+              {/* I1 fix 4b: Ctrl K here was the same global palette the top bar
+                  already labels "Search Ctrl K" — dropped to kill the conflict. */}
+              <span className="hidden font-mono text-[11px] text-[var(--text-dim)] sm:inline">⏎ send</span>
+              {/* I1 fix 4a: --honey darkens in light theme, so the enabled state
+                  read washed there. bg-primary is the theme-decoupled vibrant CTA
+                  fill (2026-07-06) in BOTH themes; disabled goes neutral instead
+                  of low-opacity honey so the two states are unmistakable. */}
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
                 aria-label="Send"
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--honey)] text-[#1a1407] transition-opacity hover:opacity-90 disabled:opacity-30"
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-colors ${
+                  input.trim() && !isLoading
+                    ? 'bg-primary text-[#1a1407] hover:opacity-90'
+                    : 'bg-[var(--surface-2)] text-[var(--text-dim)]'
+                }`}
               >
                 <Send className="w-4 h-4" />
               </button>
             </div>
+          </div>
           </div>
         </div>
       </div>

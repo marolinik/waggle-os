@@ -8,7 +8,7 @@
  * pinned in pr4-install-store; this file pins the surface wiring.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
@@ -210,6 +210,31 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
     // Still installed: the Remove affordance survives the failed uninstall.
     expect(await screen.findByRole('button', { name: /Remove/ })).toBeInTheDocument();
+  });
+
+  it('the Start-here band surfaces curated matches on the All shelf only — no duplicate rows', async () => {
+    renderApp();
+    await screen.findByText('Web Scraper');
+    // GitHub (connector) + PostgreSQL (mcp) match the curated list → band shows.
+    const band = screen.getByTestId('start-here-band');
+    expect(within(band).getByText('GitHub')).toBeInTheDocument();
+    expect(within(band).getByText('PostgreSQL')).toBeInTheDocument();
+    // Banded entries are lifted OUT of the grid — exactly one row each.
+    expect(screen.getAllByText('GitHub')).toHaveLength(1);
+    expect(screen.getAllByText('PostgreSQL')).toHaveLength(1);
+    // Uncurated entries stay in the grid, not the band.
+    expect(within(band).queryByText('Web Scraper')).not.toBeInTheDocument();
+    // Off the All facet the band disappears.
+    fireEvent.click(screen.getByRole('button', { name: 'Skills' }));
+    await waitFor(() => expect(screen.queryByTestId('start-here-band')).not.toBeInTheDocument());
+  });
+
+  it('the Start-here band stays hidden under 2 curated matches (never fabricated)', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([]); // drop GitHub → only PostgreSQL matches
+    renderApp();
+    await screen.findByText('Web Scraper');
+    expect(screen.queryByTestId('start-here-band')).not.toBeInTheDocument();
+    expect(screen.getByText('PostgreSQL')).toBeInTheDocument(); // still in the grid
   });
 
   it('the Audit tab reads the C18 shared feed and the type filter re-queries', async () => {

@@ -16,7 +16,7 @@ import {
   shouldSuggestAgents,
   SUGGESTED_PERSONA_IDS,
 } from '@/lib/agent-center-display';
-import { getPersonaById, type PersonaConfig } from '@/lib/personas';
+import { getPersonaById, PERSONAS, type PersonaConfig } from '@/lib/personas';
 import AgentCenterRow from './agents/AgentCenterRow';
 import AgentCenterDetail from './agents/AgentCenterDetail';
 import WorkspacePickerDialog from './agents/WorkspacePickerDialog';
@@ -367,7 +367,12 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               </ul>
             )}
             {sparse && (
-              <SuggestedAgentCards personas={suggestedPersonas} onPick={startFromPersona} />
+              <SuggestedAgentCards
+                personas={suggestedPersonas}
+                onPick={startFromPersona}
+                allPersonas={PERSONAS}
+                onBrowseAll={() => setView('templates')}
+              />
             )}
           </div>
         </>

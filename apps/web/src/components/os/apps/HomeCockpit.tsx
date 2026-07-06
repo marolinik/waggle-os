@@ -371,11 +371,13 @@ function RecentWorkspacesPanel({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15.5px] font-semibold leading-tight text-[var(--text)]">{ws.name}</div>
                   {(() => {
-                    // Disambiguate same-named workspaces with their group so two
-                    // "Research Hub"s aren't indistinguishable (issue 2b).
+                    // Disambiguate same-named workspaces with their group — or a
+                    // short id suffix when the group is missing — so two
+                    // "Research Hub"s are ALWAYS tellable apart (issue 2b).
                     const dupe = dupes.has(ws.name.trim().toLowerCase());
                     const rel = ws.lastActive ? formatRelative(ws.lastActive) : '';
-                    const label = dupe && ws.group ? (rel ? `${ws.group} · ${rel}` : ws.group) : rel;
+                    const disambig = dupe ? (ws.group?.trim() ? ws.group : `#${ws.id.slice(0, 6)}`) : '';
+                    const label = disambig ? (rel ? `${disambig} · ${rel}` : disambig) : rel;
                     return label
                       ? <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-dim)]">{label}</div>
                       : null;
@@ -722,8 +724,13 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           data-testid="home-cockpit-review-banner"
         >
           <Brain className="h-4 w-4 shrink-0 text-[var(--attention)]" />
+          {/* Scope stated explicitly ("from your imports") — this counts ONLY
+              import-sourced unreviewed memories, a subset of the Memory Center's
+              "awaiting your confirm" total, so the two numbers don't read as a
+              contradiction. */}
           <p className="flex-1 text-[13.5px] text-[var(--text-2)]">
-            {needsReviewCount} imported {needsReviewCount === 1 ? 'memory needs' : 'memories need'} your review.
+            {needsReviewCount} {needsReviewCount === 1 ? 'memory' : 'memories'} from your imports{' '}
+            {needsReviewCount === 1 ? 'needs' : 'need'} your review.
           </p>
           <button
             type="button"
@@ -738,18 +745,50 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
 
       <div className="mb-9">
         <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} />
-        {failureCount > 0 && (
+        {failureCount > 0 ? (
+          /* Compact result rows (what ran · status) under the story — real
+             failure rows from the payload only; successes arrive as bare counts,
+             so no fabricated rows. Each row deep-links to the Automation Center. */
+          <div className="mt-2.5 space-y-1" data-testid="home-cockpit-overnight-runs">
+            {(overnight?.failures ?? []).slice(0, 2).map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={openAutomationLogs}
+                className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]"
+                data-testid={`home-cockpit-overnight-run-${f.id}`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--risk)]" />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-2)]">{f.label}</span>
+                <span className="shrink-0 font-mono text-[12px] text-[var(--risk)]">failed</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-dim)]" />
+              </button>
+            ))}
+            {failureCount > 2 && (
+              <button
+                type="button"
+                onClick={openAutomationLogs}
+                className="inline-flex items-center gap-1.5 px-2 text-[13px] text-[var(--risk)] transition-opacity hover:opacity-80"
+                data-testid="home-cockpit-attention-banner"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                View all {failureCount} snags in the Automation Center
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ) : hasOvernight && overnight.automationsCompleted > 0 ? (
+          /* Automations ran clean — the payload carries only counts (no per-run
+             rows), so offer a quiet link into the runs instead of invented rows. */
           <button
             type="button"
             onClick={openAutomationLogs}
-            className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] text-[var(--risk)] transition-opacity hover:opacity-80"
-            data-testid="home-cockpit-attention-banner"
+            className="mt-2.5 inline-flex items-center gap-0.5 text-[13px] text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"
+            data-testid="home-cockpit-see-runs"
           >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            View {failureCount === 1 ? 'the snag' : `${failureCount} snags`} in the Automation Center
-            <ChevronRight className="h-3.5 w-3.5" />
+            See runs <ChevronRight className="h-3.5 w-3.5" />
           </button>
-        )}
+        ) : null}
       </div>
 
       <RecentWorkspacesPanel

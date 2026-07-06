@@ -50,7 +50,7 @@ import {
   // Security
   siVault, siSnyk, si1password, siBitwarden, siKeycloak,
   // Media
-  siFigma, siYoutube, siSpotify, siUnsplash, siApacheecharts,
+  siFigma, siYoutube, siSpotify, siUnsplash, siApacheecharts, siP5dotjs,
   // Utilities
   siAnthropic, siXcode,
 } from 'simple-icons';
@@ -266,6 +266,7 @@ const REGISTRY: Record<string, BrandIdentity> = {
   'dall-e': brand('412991', 'DE'),
   'videodb': brand('F472B6', 'VD'),
   'echarts': si(siApacheecharts, 'EC'),
+  'p5js': si(siP5dotjs, 'P5'),
 
   // Utilities ───────────────────────────────────────────────────────────────
   'memory-mcp': brand('E5A000', 'ME'),
@@ -323,6 +324,11 @@ const ID_ALIASES: Record<string, string> = {
   // Files
   'dropbox': 'dropbox-mcp',
   'onedrive': 'onedrive-mcp',
+  // Marketplace registry slugs (round-4: dev-catalog entries that resolved to
+  // bare monograms — map them onto marks that already exist above).
+  '1password': 'onepassword',
+  'agent-skills': 'vercel',
+  'algorithmic-art': 'p5js',
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -348,6 +354,18 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Utilities': 'E5A000',
 };
 
+/** The shared id → REGISTRY resolution chain: direct hit, explicit alias,
+ *  then the ±`-mcp` suffix variants. Undefined when nothing matches. */
+function resolveRegistry(id: string): BrandIdentity | undefined {
+  const direct = REGISTRY[id];
+  if (direct) return direct;
+  const aliased = ID_ALIASES[id];
+  if (aliased && REGISTRY[aliased]) return REGISTRY[aliased];
+  const withMcp = REGISTRY[`${id}-mcp`];
+  if (withMcp) return withMcp;
+  return REGISTRY[id.replace(/-mcp$/, '')];
+}
+
 /**
  * Resolve a brand identity for any connector or MCP server.
  *
@@ -355,7 +373,9 @@ const CATEGORY_COLORS: Record<string, string> = {
  *   1. Direct REGISTRY hit
  *   2. ID_ALIASES mapping (native `github` → `github-mcp`)
  *   3. With/without `-mcp` suffix variants
- *   4. Category-hashed fallback with auto-monogram
+ *   4. Name-derived slug through the same chain (marketplace `pkg:` rows
+ *      carry numeric ids — only the name identifies the brand)
+ *   5. Category-hashed fallback with auto-monogram
  *
  * Always returns a valid identity — there is no null case.
  */
@@ -364,21 +384,21 @@ export function getBrandIdentity(
   name: string,
   category: string,
 ): BrandIdentity {
-  // 1. Direct hit
-  const direct = REGISTRY[serverId];
-  if (direct) return direct;
+  // Strip the marketplace's namespaced-id prefixes (connector:github,
+  // mcp:postgres, pkg:12) so grid rows resolve like their Hub twins.
+  const id = serverId.replace(/^(connector|mcp|pkg|pack):/, '');
 
-  // 2. Explicit alias (native connector id → mcp catalog entry)
-  const aliased = ID_ALIASES[serverId];
-  if (aliased && REGISTRY[aliased]) return REGISTRY[aliased];
+  // 1–3. The shared resolution chain over the (bare) id.
+  const byId = resolveRegistry(id);
+  if (byId) return byId;
 
-  // 3. Try common suffix variants without duplicating REGISTRY entries
-  const withMcp = REGISTRY[`${serverId}-mcp`];
-  if (withMcp) return withMcp;
-  const stripped = REGISTRY[serverId.replace(/-mcp$/, '')];
-  if (stripped) return stripped;
+  // 4. Name-derived slug ('1Password' → '1password', 'Agent Skills' →
+  //    'agent-skills') through the same chain — covers numeric package ids.
+  const nameSlug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const byName = nameSlug && nameSlug !== id ? resolveRegistry(nameSlug) : undefined;
+  if (byName) return byName;
 
-  // 4. Category-hashed fallback — first 1–2 letters of the brand name.
+  // 5. Category-hashed fallback — first 1–2 letters of the brand name.
   const color = CATEGORY_COLORS[category] ?? 'E5A000';
   const monogram = name
     .replace(/[^a-zA-Z0-9]/g, '')
@@ -396,14 +416,5 @@ export function getBrandIdentity(
  * direct REGISTRY hits and alias hits so it stays accurate across both tabs.
  */
 export function countWithRealLogos(ids: readonly string[]): number {
-  return ids.filter((id) => {
-    if (REGISTRY[id]?.svgPath != null) return true;
-    const aliased = ID_ALIASES[id];
-    if (aliased && REGISTRY[aliased]?.svgPath != null) return true;
-    const withMcp = REGISTRY[`${id}-mcp`];
-    if (withMcp?.svgPath != null) return true;
-    const stripped = REGISTRY[id.replace(/-mcp$/, '')];
-    if (stripped?.svgPath != null) return true;
-    return false;
-  }).length;
+  return ids.filter((id) => resolveRegistry(id)?.svgPath != null).length;
 }

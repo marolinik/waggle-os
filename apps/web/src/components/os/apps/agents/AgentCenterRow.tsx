@@ -42,10 +42,17 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
           <span className="text-[10px] text-muted-foreground/70">run {formatRelativeTime(agent.lastRunAt)}</span>
         </span>
         <span className="hidden md:flex items-center gap-1.5 shrink-0 w-20" title="Success rate over recorded runs">
-          <span className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden" aria-hidden>
-            {rate !== null && <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(rate * 100)}%` }} />}
-          </span>
-          <span className="text-[10px] text-muted-foreground tabular-nums">{formatSuccessRate(agent.successRate)}</span>
+          {rate !== null ? (
+            <>
+              <span className="flex-1 h-1 rounded-full bg-muted/60 overflow-hidden" aria-hidden>
+                <span className="block h-full rounded-full bg-primary" style={{ width: `${Math.round(rate * 100)}%` }} />
+              </span>
+              <span className="text-[10px] text-muted-foreground tabular-nums">{formatSuccessRate(agent.successRate)}</span>
+            </>
+          ) : (
+            // Round-4: a bare '—' placeholder read as broken data — say what it means.
+            <span className="text-[10px] text-muted-foreground/70">no runs yet</span>
+          )}
         </span>
         <StatusBadge tone={meta.tone} label={meta.label} />
       </button>

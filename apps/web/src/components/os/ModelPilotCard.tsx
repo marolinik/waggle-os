@@ -52,14 +52,19 @@ const LANES: LaneConfig[] = [
     key: 'fallback',
     label: 'Fallback',
     icon: Shield,
-    rail: 'var(--risk)', // terracotta/clay
+    // Warm copper — role identity deliberately OFF the semantic palette
+    // (round-4: the --risk rail read as "this lane is failing"). Mixed from
+    // the theme tokens so it tracks both themes; the Shield icon carries the
+    // role, and red/green stay reserved for real states.
+    rail: 'color-mix(in srgb, var(--honey) 55%, var(--risk) 45%)',
     description: 'Used when primary is down or rate-limited',
   },
   {
     key: 'budget',
     label: 'Budget Saver',
     icon: Coins,
-    rail: 'var(--healthy)', // sage/moss
+    // Warm sand/stone — NOT --healthy (green read as "success", not a role).
+    rail: 'var(--text-muted)',
     description: 'Activates when daily spend exceeds threshold',
   },
 ];

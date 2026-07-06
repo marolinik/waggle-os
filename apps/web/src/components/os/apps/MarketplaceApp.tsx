@@ -70,6 +70,23 @@ export function buildRemoveRequest(ext: Extension): ApprovalRequest {
   };
 }
 
+/** Curated "Start here" shelf (round-4 merchandising) — a handful of
+ *  well-known marks lifted above the All grid so a first visit has an obvious
+ *  entry point. Honest by construction: matched against the LOADED list only
+ *  (first 3 hits, band hidden under 2 matches) — never fabricated entries. */
+const START_HERE_IDS = ['1password', 'github', 'slack', 'notion', 'postgres', 'airtable'] as const;
+
+export function startHerePicks(list: Extension[]): Extension[] {
+  const norm = (s: string) => s.toLowerCase().replace(/^(connector|mcp|pkg|pack):/, '').replace(/-mcp$/, '');
+  const picks: Extension[] = [];
+  for (const key of START_HERE_IDS) {
+    const hit = list.find(e => norm(e.id) === key || (e.name ?? '').trim().toLowerCase() === key);
+    if (hit && !picks.includes(hit)) picks.push(hit);
+    if (picks.length === 3) break;
+  }
+  return picks.length >= 2 ? picks : [];
+}
+
 /** Structured install risk/provenance (regression-locked by p7-issue17). */
 export function buildInstallRequest(ext: Extension): ApprovalRequest {
   return {
@@ -197,6 +214,13 @@ const MarketplaceApp = () => {
   };
 
   const visible = filterExtensions(extensions, query);
+  // Round-4 merchandising: the band renders on the default All browse only
+  // (no active query); banded entries are lifted OUT of the grid below so
+  // each integration keeps exactly one row + one action.
+  const startHere = facet === 'all' && !query ? startHerePicks(extensions) : [];
+  const gridVisible = startHere.length > 0
+    ? visible.filter(e => !startHere.some(f => f.id === e.id))
+    : visible;
 
   return (
     <div className="flex flex-col h-full">
@@ -263,6 +287,23 @@ const MarketplaceApp = () => {
             <AgentSearchBox onQueryChange={setQuery} />
             <div className="border-t border-border/20 my-1" />
 
+            {startHere.length > 0 && (
+              <div data-testid="start-here-band" className="space-y-2">
+                <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider">
+                  Start here
+                </p>
+                {startHere.map(ext => (
+                  <ExtensionCard
+                    key={ext.id}
+                    ext={ext}
+                    onRemove={setRemoveTarget}
+                    onOpenIn={handleOpenIn}
+                  />
+                ))}
+                <div className="border-t border-border/20" aria-hidden />
+              </div>
+            )}
+
             {shelfNote && (
               <p data-testid="federated-note" className="text-[11px] text-muted-foreground bg-muted/40 border border-border/30 rounded-lg px-2.5 py-1.5">
                 {shelfNote}
@@ -297,7 +338,7 @@ const MarketplaceApp = () => {
               </div>
             )}
 
-            {visible.map(ext => (
+            {gridVisible.map(ext => (
               <ExtensionCard
                 key={ext.id}
                 ext={ext}
