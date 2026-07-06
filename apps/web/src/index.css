@@ -203,7 +203,7 @@
     --secondary: 41 55% 92%;          /* --surface-2 #f6efe0 */
     --secondary-foreground: 38 32% 10%;
     --muted: 41 48% 88%;              /* --surface-3 #efe6d2 */
-    --muted-foreground: 41 14% 45%;   /* --text-muted #847a64 */
+    --muted-foreground: 41 15% 38%;   /* --text-muted #6e6552 — AA 5.4:1 on cream (2026-07-06; was #847a64 ≈3.8:1) */
 
     --accent: 41 55% 92%;             /* warm-neutral hover */
     --accent-foreground: 38 32% 10%;
@@ -229,8 +229,8 @@
     --hive-800: #efe6d2;   /* = --surface-3 */
     --hive-700: #e4d8be;   /* = --line      */
     --hive-600: #d2c3a2;   /* = --line-strong */
-    --hive-500: #a99e85;   /* = --text-dim  */
-    --hive-400: #847a64;   /* = --text-muted */
+    --hive-500: #786e59;   /* = --text-dim — AA 4.7:1 on cream (was #a99e85 ≈2.4:1, failed on micro-labels) */
+    --hive-400: #6e6552;   /* = --text-muted — AA 5.4:1 (was #847a64) */
     --hive-300: #5a5140;   /* = --text-2    */
     --hive-200: #3a3327;
     --hive-100: #2a2419;
