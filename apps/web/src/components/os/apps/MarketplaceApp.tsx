@@ -70,11 +70,13 @@ export function buildRemoveRequest(ext: Extension): ApprovalRequest {
   };
 }
 
-/** Curated "Start here" shelf (round-4 merchandising) — a handful of
- *  well-known marks lifted above the All grid so a first visit has an obvious
- *  entry point. Honest by construction: matched against the LOADED list only
- *  (first 3 hits, band hidden under 2 matches) — never fabricated entries. */
-const START_HERE_IDS = ['1password', 'github', 'slack', 'notion', 'postgres', 'airtable'] as const;
+/** Curated "Start here" shelf — a handful of well-known marks lifted above the
+ *  All grid so a first visit has an obvious entry point. R10: lead with the
+ *  memory-feeding connectors (Gmail / Drive / Notion / Slack) — the ones that
+ *  make Waggle's memory richer — and demote 1Password. Honest by construction:
+ *  matched against the LOADED list only (first 3 hits, band hidden under 2
+ *  matches) — never fabricated entries. */
+const START_HERE_IDS = ['gmail', 'gdrive', 'notion', 'slack', 'github', '1password', 'postgres', 'airtable'] as const;
 
 export function startHerePicks(list: Extension[]): Extension[] {
   const norm = (s: string) => s.toLowerCase().replace(/^(connector|mcp|pkg|pack):/, '').replace(/-mcp$/, '');

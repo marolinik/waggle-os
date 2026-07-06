@@ -9,7 +9,7 @@
  * keeps its consequence dialog; install/connect/enable are one-click (§09).
  */
 import { useState } from 'react';
-import { Download, ExternalLink, Loader2, Plug, Shield, Trash2, Zap } from 'lucide-react';
+import { Download, ExternalLink, Loader2, Plug, Trash2, Zap } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
 import type { Extension } from '@/lib/extension-catalog';
@@ -61,6 +61,12 @@ function actionKey(ext: Extension): ActionKey | null {
  *  (verb button + inline token submit) uses this exact treatment. */
 const PRIMARY_ACTION_CLASS =
   'flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50';
+
+/** ONE chip grammar (R10 Lane C): every tag lozenge (type / category / trust /
+ *  source form) uses the app-wide quiet chip — line-soft border, surface-2 fill,
+ *  muted text — so the row stops carrying a second competing lozenge style. */
+const TAG_CHIP =
+  'rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]';
 
 /** User-language nouns for the dedup provenance forms (`ext.sources`) —
  *  registry jargon translated to what each form DOES for the user: a package
@@ -130,7 +136,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   return (
     <div
       data-testid="extension-card"
-      className={`flex items-start gap-3 p-3 rounded-xl border bg-card transition-colors ${
+      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-colors ${
         connectedRow
           // Rest elevation folded INTO the inset honey hairline (one combined
           // box-shadow — two shadow-* utilities on one element would collide).
@@ -142,25 +148,35 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
           one-generic-cube-for-everything (2026-07-06 judge finding). */}
       <BrandTile
         identity={getBrandIdentity(ext.id, ext.name, ext.category ?? '')}
-        size={36}
+        size={40}
         connected={!!installed && ext.type === 'connector'}
         className="mt-0.5"
       />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-display font-medium text-foreground truncate">{displayExtensionName(ext.name)}</span>
-          <StatusBadge
-            tone={installed ? 'healthy' : 'neutral'}
-            label={installed ? (verb?.installed ?? 'Installed') : 'Available'}
-          />
+          {installed ? (
+            // Warm sage healthy grammar (--healthy / --healthy-wash) — the same
+            // token agents/home chips use. NOT --sem-healthy (emerald), which
+            // read as off-palette teal here (R10 Lane C, brand judge).
+            <span
+              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+              style={{
+                color: 'var(--healthy)',
+                borderColor: 'color-mix(in srgb, var(--healthy) 35%, transparent)',
+                backgroundColor: 'var(--healthy-wash)',
+              }}
+            >
+              <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--healthy)' }} />
+              {verb?.installed ?? 'Installed'}
+            </span>
+          ) : (
+            <StatusBadge tone="neutral" label="Available" />
+          )}
           {ext.scanStatus === 'not_scanned' ? (
             <span title={NOT_SCANNED_TOOLTIP}>
-              <StatusBadge
-                tone="neutral"
-                icon={<Shield className="w-3 h-3" aria-hidden />}
-                label="Not scanned"
-                className="bg-transparent"
-              />
+              {/* Neutral quiet chip — "pending", not a shield-warning (R10 kw). */}
+              <StatusBadge tone="neutral" label="Safety scan pending" />
             </span>
           ) : scan ? (
             <StatusBadge tone={scan.tone} label={scan.label} />
@@ -168,13 +184,13 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
         </div>
         <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{ext.description}</p>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{ext.type}</span>
-          {ext.category && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{ext.category}</span>}
-          {ext.trust && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground capitalize">{ext.trust}</span>}
+          <span className={TAG_CHIP}>{ext.type}</span>
+          {ext.category && <span className={TAG_CHIP}>{ext.category}</span>}
+          {ext.trust && <span className={`${TAG_CHIP} capitalize`}>{ext.trust}</span>}
           {/* Genuinely multi-form integration (dedup winner absorbed ≥1 twin) —
               name the forms so the merge is legible, not silently hidden. */}
           {ext.sources && ext.sources.length > 1 && (
-            <span data-testid="extension-sources" className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
+            <span data-testid="extension-sources" className={TAG_CHIP}>
               {describeSourceForms(ext.sources)}
             </span>
           )}

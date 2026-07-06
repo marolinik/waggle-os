@@ -11,6 +11,7 @@ import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
   Loader2, X, AlertTriangle, Lightbulb,
 } from 'lucide-react';
+import beeMascot from '@/assets/personas/general-purpose.png';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { useService } from '@/providers/ServiceProvider';
@@ -270,7 +271,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               against the two-line title (Wave Q Lane A item 3). */}
           <div className="flex items-start justify-between mb-4">
             <div className="min-w-0">
-              <h2 id="login-briefing-title" className="text-lg font-display font-bold text-foreground">Catching you up</h2>
+              {/* Wave R Lane E — brand moment: a small hex-bee mascot beside the
+                  title so the briefing greets like a colleague catching you up.
+                  Decorative (alt=""); the title carries the accessible name. */}
+              <div className="flex items-center gap-2">
+                <img src={beeMascot} alt="" aria-hidden className="w-7 h-7 shrink-0" />
+                <h2 id="login-briefing-title" className="text-lg font-display font-bold text-foreground">Catching you up</h2>
+              </div>
               <p className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-1 gap-y-0.5" data-testid="login-briefing-brag-line">
                 <Brain className="w-3 h-3 inline mr-0.5 shrink-0" />
                 <span>{bragLine ?? 'Loading…'}</span>
@@ -348,7 +355,10 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: 0.3 + i * 0.15 }}
-                      className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/10"
+                      // Wave R Lane E: the "I remember" recall cards wear a
+                      // honey-wash tint so they read as a distinct species from
+                      // the neutral-surface workspace rows below (brand judge).
+                      className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-[var(--honey-wash)] border border-[var(--honey-line)]"
                     >
                       <Sparkles className="w-3 h-3 text-honey/60 mt-0.5 shrink-0" />
                       <div className="min-w-0">
@@ -370,7 +380,10 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                   <p className="text-sm text-muted-foreground">No active workspaces yet. Create one to get started!</p>
                 </div>
               ) : (
-                <div className="space-y-2 max-h-60 overflow-auto">
+                // Wave R Lane E: a bottom edge-fade signals "more below" when
+                // the list overflows its cap (>3 rows overflow max-h-60).
+                <div className="relative">
+                  <div className="space-y-2 max-h-60 overflow-auto">
                   {summaries.map(ws => (
                     <button
                       key={ws.id}
@@ -407,8 +420,21 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       ) : null}
 
                       <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                        <span><Brain className="w-2.5 h-2.5 inline mr-0.5" />{ws.memoryCount}</span>
-                        <span><MessageSquare className="w-2.5 h-2.5 inline mr-0.5" />{ws.sessionCount}</span>
+                        {/* Wave R Lane E: the bare glyph+number pairs were an
+                            unlabelled ⬡/💬 count — name them for screen readers
+                            and on hover (a11y). Icons are decorative. */}
+                        <span
+                          title={`${ws.memoryCount} ${ws.memoryCount === 1 ? 'memory' : 'memories'}`}
+                          aria-label={`${ws.memoryCount} ${ws.memoryCount === 1 ? 'memory' : 'memories'}`}
+                        >
+                          <Brain className="w-2.5 h-2.5 inline mr-0.5" aria-hidden />{ws.memoryCount}
+                        </span>
+                        <span
+                          title={`${ws.sessionCount} ${ws.sessionCount === 1 ? 'session' : 'sessions'}`}
+                          aria-label={`${ws.sessionCount} ${ws.sessionCount === 1 ? 'session' : 'sessions'}`}
+                        >
+                          <MessageSquare className="w-2.5 h-2.5 inline mr-0.5" aria-hidden />{ws.sessionCount}
+                        </span>
                         {/* FR #24/#26: only render the lastActive chip when the
                             workspace has actual activity. For a brand-new
                             workspace `lastActive` reflects creation time, not
@@ -423,6 +449,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       </div>
                     </button>
                   ))}
+                  </div>
+                  {summaries.length > 3 && (
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-0 bottom-0 h-6 rounded-b-xl bg-gradient-to-t from-[var(--surface)] to-transparent"
+                    />
+                  )}
                 </div>
               )}
             </>

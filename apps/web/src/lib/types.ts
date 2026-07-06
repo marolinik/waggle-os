@@ -237,6 +237,11 @@ export interface Workspace {
   hue?: number;
   memoryCount?: number;
   sessionCount?: number;
+  /** Wave R (Lane B): title of the most-recent session, when the list route can
+   *  read one cheaply. Feeds the card's "Last: <title> · Nw ago" activity body.
+   *  Absent when the workspace has no sessions or the title can't be read —
+   *  never fabricated. */
+  lastSessionTitle?: string;
   lastActive?: string;
   health?: 'healthy' | 'degraded' | 'error';
   budget?: { used: number; limit: number };

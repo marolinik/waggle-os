@@ -51,9 +51,14 @@ export default async function Hero() {
           </ul>
 
           {/* Round-7: the hero's dead bottom quarter carries the product's
-              strongest proof — one quiet benchmark strip, linking to #proof. */}
+              strongest proof — one benchmark strip, linking to #proof.
+              Wave R Lane E: the 86.49% number is lifted to a flagship stat
+              (larger mono, honey) so the leaderboard claim carries visual
+              weight near the CTAs; the rest stays quiet supporting copy. */}
           <a href="#proof" className={styles.proofStrip}>
-            {t('proof_strip')} <span aria-hidden="true">→</span>
+            <span className={styles.proofStat}>{t('proof_stat')}</span>
+            <span className={styles.proofLabel}>{t('proof_strip')}</span>
+            <span aria-hidden="true">→</span>
           </a>
         </div>
 

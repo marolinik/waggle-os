@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { MindDB, createFileStore, reconcileFtsIndex } from '@waggle/core';
@@ -171,6 +172,73 @@ const TEMPLATE_WELCOME: Record<string, string> = {
   'agency-consulting': "Consulting workspace set up. I can research clients, draft deliverables, plan projects, and prepare presentations. Who's the client?",
 };
 
+/**
+ * Wave R (Lane B): cheap per-workspace memory count for the list route. Opens a
+ * READONLY raw sqlite connection (no MindDB schema-init, no sqlite-vec load) and
+ * runs a single COUNT(*) — far lighter than the full MindDB the /:id/context
+ * route uses, and it never touches the MultiMindCache, so the LRU-eviction
+ * hazard that originally kept memoryCount off this route does not apply. Returns
+ * undefined on any error (missing file / table / lock) so the card omits the
+ * count rather than fabricating a 0.
+ */
+function countWorkspaceMemories(mindPath: string): number | undefined {
+  if (!fs.existsSync(mindPath)) return undefined;
+  let db: import('better-sqlite3').Database | undefined;
+  try {
+    db = new Database(mindPath, { readonly: true, fileMustExist: true });
+    const row = db.prepare('SELECT COUNT(*) as cnt FROM memory_frames').get() as { cnt: number };
+    return row.cnt;
+  } catch {
+    return undefined;
+  } finally {
+    try { db?.close(); } catch { /* already closed / never opened */ }
+  }
+}
+
+/**
+ * Wave R (Lane B): title of the most-recent session, for the list card's
+ * activity body. Stats the session files (cheap) to find the newest, then reads
+ * just that ONE jsonl for its meta/first-message title — bounded per workspace.
+ * Returns undefined when there are no sessions or no readable title (never the
+ * raw session-<uuid> id, never fabricated).
+ */
+function readLastSessionTitle(sessionsDir: string): string | undefined {
+  try {
+    if (!fs.existsSync(sessionsDir)) return undefined;
+    const files = fs.readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl'));
+    if (files.length === 0) return undefined;
+    let newest: { file: string; mtime: number } | undefined;
+    for (const file of files) {
+      try {
+        const mtime = fs.statSync(path.join(sessionsDir, file)).mtimeMs;
+        if (!newest || mtime > newest.mtime) newest = { file, mtime };
+      } catch { /* skip unreadable */ }
+    }
+    if (!newest) return undefined;
+    const content = fs.readFileSync(path.join(sessionsDir, newest.file), 'utf-8').trim();
+    if (!content) return undefined;
+    const lines = content.split('\n').filter((l) => l.trim());
+    let title: string | undefined;
+    if (lines.length > 0) {
+      try {
+        const first = JSON.parse(lines[0]);
+        if (first.type === 'meta' && first.title) title = String(first.title);
+        else if (first.content) title = String(first.content).slice(0, 60);
+      } catch { /* fall through */ }
+    }
+    if (!title && lines.length > 1) {
+      try {
+        const msg = JSON.parse(lines[1]);
+        if (msg.content) title = String(msg.content).slice(0, 60);
+      } catch { /* fall through */ }
+    }
+    const trimmed = title?.trim();
+    return trimmed ? trimmed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const workspaceRoutes: FastifyPluginAsync = async (server) => {
   // GET /api/workspaces — list all workspaces (F6: optional ?group and ?teamId filters)
   server.get<{
@@ -186,19 +254,30 @@ export const workspaceRoutes: FastifyPluginAsync = async (server) => {
     if (teamFilter) {
       workspaces = workspaces.filter((ws) => ws.teamId === teamFilter || ws.team === teamFilter);
     }
-    // Wave F (fix 1a): enrich each row with a cheap sessionCount — a readdir of
-    // the same sessions dir the /:id/context stats count. Deliberately NO
-    // memoryCount here: that would open every workspace's mind DB on every list
-    // call (expensive + the MultiMindCache LRU-eviction hazard), so cards only
-    // show memory counts where a richer per-workspace source provides them.
-    // An unreadable dir omits the field — never fabricate a 0 from an error.
+    // Wave F (fix 1a) + Wave R (Lane B): enrich each row with real card signal.
+    // - sessionCount: a readdir of the same sessions dir /:id/context counts.
+    // - memoryCount: a readonly COUNT(*) over the workspace mind (countWorkspace-
+    //   Memories) — this is the R-round "living identity" unlock. It opens a
+    //   lightweight readonly connection per row (no schema init, no vec load) and
+    //   never touches the MultiMindCache, sidestepping the LRU hazard the prior
+    //   comment warned about. Bounded to the user's own handful of workspaces.
+    // - lastSessionTitle: the newest session's title, for the card's "Last: …"
+    //   activity body.
+    // Every enrichment omits its field on any error — never a fabricated 0/string.
     return workspaces.map((ws) => {
       try {
         const sessionsDir = path.join(server.localConfig.dataDir, 'workspaces', ws.id, 'sessions');
         const sessionCount = fs.existsSync(sessionsDir)
           ? fs.readdirSync(sessionsDir).filter((f) => f.endsWith('.jsonl')).length
           : 0;
-        return { ...ws, sessionCount };
+        const memoryCount = countWorkspaceMemories(server.workspaceManager.getMindPath(ws.id));
+        const lastSessionTitle = readLastSessionTitle(sessionsDir);
+        return {
+          ...ws,
+          sessionCount,
+          ...(typeof memoryCount === 'number' ? { memoryCount } : {}),
+          ...(lastSessionTitle ? { lastSessionTitle } : {}),
+        };
       } catch {
         return ws;
       }

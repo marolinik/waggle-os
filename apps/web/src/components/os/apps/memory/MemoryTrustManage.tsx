@@ -374,6 +374,38 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     return { total, freshCount, highConf, staleCount, needsConfirm };
   }, [live]);
 
+  // Wave R Lane E: order the subordinate dimension chips by value desc so the
+  // row never LEADS with a zero (the round-10 shot opened on "0 fresh"). Zero
+  // and not-applicable ("—") chips sink to the end, where their already-quiet
+  // styling reads as a calm "nothing here" rather than a headline. Ties keep
+  // the source order (Array.sort is stable).
+  const dimensionChips = useMemo(() => {
+    const chips: {
+      key: string;
+      value: string;
+      label: string;
+      tone: 'default' | 'healthy' | 'attention';
+      title?: string;
+      onClick?: () => void;
+    }[] = [
+      { key: 'fresh', value: stats.freshCount, label: 'fresh (last 7 days)', tone: stats.freshCount === '0' ? 'default' : 'healthy' },
+      { key: 'highConf', value: stats.highConf, label: 'high confidence', tone: stats.highConf === '—' || stats.highConf === '0' ? 'default' : 'healthy' },
+      { key: 'stale', value: stats.staleCount, label: 'stale · worth a review', tone: 'attention' },
+      // Round-6 fix 2c: "to review" jumps straight to the needs-confirm filter.
+      // Round-7 fix 4: the tooltip reframes a big count honestly (imported backlog).
+      {
+        key: 'review',
+        value: stats.needsConfirm,
+        label: 'to review',
+        tone: 'attention',
+        title: 'Most of these are imported memories waiting for a first look — reviewing a few at a time is plenty.',
+        onClick: () => setFilter('needs_confirm'),
+      },
+    ];
+    const rank = (v: string) => { const n = parseInt(v, 10); return Number.isNaN(n) ? -1 : n; };
+    return [...chips].sort((a, b) => rank(b.value) - rank(a.value));
+  }, [stats]);
+
   const shown = useMemo(() => {
     let set = live;
     if (filter === 'stale') set = set.filter(isStale);
@@ -442,22 +474,11 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           </span>
         </div>
         <div className="mt-3.5 flex flex-wrap gap-2">
-          {/* W2D: two independent dimensions instead of a near-always-0 conjunction. */}
-          <DimensionChip value={stats.freshCount} label="fresh (last 7 days)" tone={stats.freshCount === '0' ? 'default' : 'healthy'} />
-          <DimensionChip value={stats.highConf} label="high confidence" tone={stats.highConf === '—' || stats.highConf === '0' ? 'default' : 'healthy'} />
-          <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
-          {/* Round-6 fix 2c: "awaiting your confirm" read alarming next to the
-              total — calmer "to review", and the chip now jumps straight to
-              the needs-confirm filter. Count stays real.
-              Round-7 fix 4: a big count here read as "your memory is broken" —
-              the tooltip reframes it honestly (imported backlog, no urgency). */}
-          <DimensionChip
-            value={stats.needsConfirm}
-            label="to review"
-            tone="attention"
-            title="Most of these are imported memories waiting for a first look — reviewing a few at a time is plenty."
-            onClick={() => setFilter('needs_confirm')}
-          />
+          {/* W2D: independent (non-summing) dimensions; Wave R Lane E orders them
+              by value desc so a zero never leads the row (see dimensionChips). */}
+          {dimensionChips.map((c) => (
+            <DimensionChip key={c.key} value={c.value} label={c.label} tone={c.tone} title={c.title} onClick={c.onClick} />
+          ))}
         </div>
         <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
           Overlapping views — a memory can be counted in more than one.

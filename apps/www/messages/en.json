@@ -38,7 +38,8 @@
       "microcopy_free": "Solo — free forever",
       "microcopy_platforms": "Windows & macOS",
       "microcopy_oss": "Apache-2.0 memory substrate",
-      "proof_strip": "86.49% on LoCoMo — state-of-the-art long-term memory, on the previous leader's own protocol"
+      "proof_stat": "86.49%",
+      "proof_strip": "on LoCoMo — state-of-the-art long-term memory, on the previous leader's own protocol"
     },
     "hero_visual": {
       "aria_label": "Diagram of Waggle's local memory serving four AI models",

@@ -146,6 +146,10 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
               >
                 <Brain className="w-3 h-3" aria-hidden="true" />
                 {memoryFrameCount.toLocaleString()} memories
+                {/* R10 Lane D (kw #1): the status bar counts ALL minds while the
+                    Memory page counts the personal mind — two honest numbers that
+                    read as a contradiction unscoped. Name the scope in the chip. */}
+                <span className="opacity-60"> · all minds</span>
                 {foldDelta !== null && (
                   <span aria-hidden className="memory-fold absolute -top-3 right-0 text-[10px] font-semibold text-honey whitespace-nowrap pointer-events-none">
                     +{foldDelta} ⬡

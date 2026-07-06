@@ -1,8 +1,6 @@
 import { motion } from 'framer-motion';
 import { ShieldCheck, Lock, Globe } from 'lucide-react';
-import waggleLogoDark from '@/assets/waggle-logo.jpeg';
-import waggleLogoLight from '@/assets/waggle-logo.png';
-import { useIsLightTheme } from '@/hooks/useIsLightTheme';
+import beeMascot from '@/assets/personas/general-purpose.png';
 import { fadeSlide } from './constants';
 import type { WelcomeStepProps } from './types';
 
@@ -15,8 +13,6 @@ import type { WelcomeStepProps } from './types';
  * works locally.
  */
 const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
-  const isLight = useIsLightTheme();
-  const waggleLogo = isLight ? waggleLogoLight : waggleLogoDark;
   return (
   <motion.div
     key="step-first-launch"
@@ -24,14 +20,18 @@ const WelcomeStep = ({ onClickAnywhere, offline }: WelcomeStepProps) => {
     className="text-center"
   >
     <div className="relative w-24 h-24 mx-auto mb-6">
-      {/* glow-breathe: the hive is alive — slow amber pulse (reduced-motion
-          drops the animation and keeps a static glow via the keyframe base). */}
+      {/* Wave R Lane E — brand moment: the canonical flat-geometric hex-bee
+          mascot (the same set the persona picker + landing use) opens
+          onboarding, a warm greeting instead of a generic app-icon tile. The
+          transparent mascot reads on both themes. glow-breathe keeps the slow
+          amber pulse (reduced-motion drops the animation via the keyframe
+          base). */}
       <img
-        src={waggleLogo}
+        src={beeMascot}
         alt="Waggle"
-        className="w-24 h-24 rounded-2xl glow-breathe"
+        className="w-24 h-24 glow-breathe"
         style={{
-          boxShadow: '0 0 60px hsl(var(--primary) / 0.3)',
+          filter: 'drop-shadow(0 0 42px hsl(var(--primary) / 0.32))',
         }}
       />
     </div>

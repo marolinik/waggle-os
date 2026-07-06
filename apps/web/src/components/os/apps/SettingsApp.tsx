@@ -219,8 +219,9 @@ const SettingsApp = () => {
 
   return (
     <div className="flex h-full">
-      {/* Tab sidebar — tabs scroll; the density control is anchored to its foot
-          (Wave P: it gates which tabs exist, so it lives with what it controls). */}
+      {/* Tab sidebar — just the section tabs now; the "Show" disclosure control
+          moved to the content header (R10: it reads as a section control above
+          what it gates, not a rail-foot afterthought). */}
       <div className="w-36 border-r border-border/50 shrink-0 flex flex-col">
         <div className="flex-1 overflow-auto p-2 space-y-0.5" role="tablist" aria-label="Settings sections">
           {visibleTabs.map(tab => {
@@ -243,18 +244,19 @@ const SettingsApp = () => {
             );
           })}
         </div>
+      </div>
 
-        {/* PR5 D6 / Wave P — the "Show" disclosure control. Anchored to the foot
-            of the rail it governs (was a floating top-right segmented control).
-            One dial governs both the dock and this Settings rail's depth; reuses
-            useOnboarding().tier — no second key. */}
-        <div className="border-t border-border/50 p-2 space-y-1.5">
-          <span className="block px-0.5 text-[11px] font-medium text-muted-foreground">Show</span>
-          {/* R9: a real bordered-track segmented control (was a bare stack that
-              read as stray text) — one track, one filled active cell. Same aria +
-              tier mechanics. */}
+      {/* Content column: a compact "Show" disclosure control in the header row
+          (right-aligned) sits visually above the sections it gates, then the
+          scrollable panel. PR5 D6 / Wave P mechanics unchanged — one dial governs
+          both the dock and this rail's depth via useOnboarding().tier. */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <div className="flex items-center justify-end gap-2 px-4 pt-3 pb-2.5 border-b border-border/40 shrink-0">
+          <span className="text-[11px] font-medium text-muted-foreground">Show</span>
+          {/* R9 grammar: one bordered track, one filled active cell — now
+              horizontal to sit in the header. Same aria + tier mechanics. */}
           <div
-            className="flex flex-col gap-0.5 rounded-lg border border-[var(--line-soft)] bg-muted/40 p-1"
+            className="flex gap-0.5 rounded-lg border border-[var(--line-soft)] bg-muted/40 p-0.5"
             role="group"
             aria-label="Settings detail level"
           >
@@ -270,9 +272,9 @@ const SettingsApp = () => {
                   type="button"
                   aria-pressed={active}
                   onClick={() => updateOnboarding({ tier: opt.id as UserTier })}
-                  className={`w-full text-left px-2 py-1 rounded-md text-[11px] font-medium transition-colors ${
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
                     active
-                      ? 'bg-card text-foreground shadow-sm'
+                      ? 'bg-card text-foreground shadow-sm ring-1 ring-[var(--honey-line)]'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                   }`}
                 >
@@ -282,10 +284,9 @@ const SettingsApp = () => {
             })}
           </div>
         </div>
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 p-4 overflow-auto" role="tabpanel">
+        {/* Content */}
+        <div className="flex-1 p-4 overflow-auto" role="tabpanel">
 
         {/* ═══ GENERAL ═══ */}
         {activeTab === 'general' && (
@@ -312,13 +313,13 @@ const SettingsApp = () => {
 
             {/* PR5 D10 — local-first reassurance + the dock/plan distinction. The
                 disclosure selector that used to live here is now the "Show"
-                control at the foot of the settings rail (D6/Wave P); QW-5's
+                control in the settings content header (R10; D6/Wave P); QW-5's
                 "dock tier ≠ billing plan" note is preserved here so the
                 distinction isn't lost. */}
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <p className="text-xs font-display font-medium text-foreground mb-1">Local-first</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (at the foot of the settings sidebar) sets how much of the app and these settings you see; it’s independent of your Pro/Teams plan, and every app stays reachable via Ctrl+K.
+                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (top-right of Settings) sets how much of the app and these settings you see; it’s independent of your Pro/Teams plan, and every app stays reachable via Ctrl+K.
               </p>
             </div>
 
@@ -1134,6 +1135,7 @@ const SettingsApp = () => {
             {saveMsg}
           </div>
         )}
+        </div>
       </div>
 
       {/* Phase 4.1 erasure dialog — mounted at root so the modal layer

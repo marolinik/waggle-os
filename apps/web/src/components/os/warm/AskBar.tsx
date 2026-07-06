@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, ArrowUp } from 'lucide-react';
+import { Plus, ArrowUp, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { cmdKLabel } from '@/lib/platform';
 
@@ -13,6 +13,10 @@ interface AskBarProps {
    *  (Marketplace single smart input). Fires with '' when the bar clears. */
   onChange?: (text: string) => void;
   cmdkHint?: boolean;
+  /** Submit affordance intent. 'send' (default) is the Home composer up-arrow;
+   *  'search' swaps to a magnifier + "Search" label so a search bar doesn't read
+   *  as a scroll-to-top control (R10 Lane C). */
+  submitVariant?: 'send' | 'search';
   className?: string;
 }
 
@@ -27,6 +31,7 @@ export function AskBar({
   onPlus,
   onChange,
   cmdkHint = true,
+  submitVariant = 'send',
   className,
 }: AskBarProps) {
   const [value, setValue] = useState('');
@@ -75,15 +80,28 @@ export function AskBar({
         className="min-w-0 flex-1 bg-transparent px-2 text-[15px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none"
       />
       {cmdkHint && <kbd className="kbd hidden sm:inline-block">{cmdKLabel}</kbd>}
-      <button
-        type="button"
-        aria-label="Send"
-        onClick={submit}
-        disabled={!value.trim()}
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--honey)] text-[#1a1407] transition-opacity disabled:opacity-40"
-      >
-        <ArrowUp className="h-5 w-5" />
-      </button>
+      {submitVariant === 'search' ? (
+        <button
+          type="button"
+          aria-label="Search"
+          onClick={submit}
+          disabled={!value.trim()}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[var(--honey)] px-3.5 text-[13px] font-medium text-[#1a1407] transition-opacity disabled:opacity-40"
+        >
+          <Search className="h-4 w-4" />
+          <span className="hidden sm:inline">Search</span>
+        </button>
+      ) : (
+        <button
+          type="button"
+          aria-label="Send"
+          onClick={submit}
+          disabled={!value.trim()}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[var(--honey)] text-[#1a1407] transition-opacity disabled:opacity-40"
+        >
+          <ArrowUp className="h-5 w-5" />
+        </button>
+      )}
     </div>
   );
 }

@@ -312,11 +312,15 @@ const ModelPilotCard = ({
                     </p>
                     <div className="flex items-center justify-end gap-1">
                       {cost && (
-                        <HintTooltip content={COST_TOOLTIPS[cost] ?? ''}>
-                          <span className="text-[11px] text-muted-foreground" tabIndex={0}>
-                            {cost}
-                          </span>
-                        </HintTooltip>
+                        // R10: the bare `$$$` glyph read as cryptic — surface the
+                        // explicit per-message cost inline (+ aria-label) so the
+                        // tier is legible without a hover or a foot-of-card legend.
+                        <span
+                          className="text-[11px] text-muted-foreground"
+                          aria-label={`Cost tier ${cost}${COST_TOOLTIPS[cost] ? ` — ${COST_TOOLTIPS[cost]}` : ''}`}
+                        >
+                          {cost}{COST_TOOLTIPS[cost] ? ` · ${COST_TOOLTIPS[cost]}` : ''}
+                        </span>
                       )}
                       {isFree && (
                         <span className="px-1 rounded text-[11px] font-display font-bold bg-[var(--healthy-wash)] text-[var(--healthy)] leading-none">
@@ -399,15 +403,8 @@ const ModelPilotCard = ({
           </div>
         </div>
       )}
-
-      {/* Cost legend — neutral: the $ count is the encoding, not a color. */}
-      <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
-        {Object.entries(COST_TOOLTIPS).map(([tier, tooltip]) => (
-          <span key={tier} className="flex items-center gap-0.5">
-            <span className="text-foreground">{tier}</span> {tooltip}
-          </span>
-        ))}
-      </div>
+      {/* Cost legend removed (R10): each lane row now carries the explicit
+          per-message cost inline, so a foot-of-card key is redundant. */}
     </div>
   );
 };

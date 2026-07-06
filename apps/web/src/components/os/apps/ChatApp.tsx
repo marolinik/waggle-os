@@ -943,8 +943,16 @@ const ChatApp = ({
           )}
           {messages.length === 0 && !workspaceId && (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <p className="text-sm font-display text-foreground mb-1">Ready to assist</p>
-              <p className="text-xs text-muted-foreground">Select a workspace to get started</p>
+              {/* R10 Lane D fix 5 (brand: "free the mascots"): one calm flat-
+                  geometric bee anchors the empty state ChatApp owns directly. */}
+              <img
+                src={getPersonaAvatar('general-purpose')}
+                alt=""
+                aria-hidden="true"
+                className="w-14 h-14 mb-3 opacity-90 float"
+              />
+              <p className="text-sm font-display text-foreground mb-1">Pick a workspace and Waggle's ready</p>
+              <p className="text-xs text-muted-foreground">Your memory and agents live inside a workspace</p>
             </div>
           )}
           {messages.map((msg, msgIdx) => (
@@ -978,8 +986,11 @@ const ChatApp = ({
                   blocks/tables get the whole measure; user/system bubbles stay
                   shrink-to-fit capped at 80%. */}
               <div className={msg.role === 'assistant' ? 'w-full min-w-0' : 'max-w-[80%]'}>
+                {/* R10 Lane D (a11y): the provenance line is the only signal of
+                    who/which-model authored a turn — one size + contrast step up
+                    (text-dim → text-muted) so it clears comfort on both themes. */}
                 {msg.role === 'assistant' && (
-                  <div className="mb-1 flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-dim)]">
+                  <div className="mb-1 flex items-center gap-1.5 font-mono text-[11.5px] text-[var(--text-muted)]">
                     <span className="font-semibold text-[var(--text-2)]">Waggle</span>
                     {persona?.name && <span>· {persona.name}</span>}
                     {currentModel && <span>· {formatModelLabel(currentModel)}</span>}
@@ -1162,15 +1173,19 @@ const ChatApp = ({
             data-compact={isStripCompact ? 'true' : 'false'}
           >
             {sessions && (
-              <button
-                onClick={() => setShowSessions(p => !p)}
-                aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
-                aria-expanded={showSessions}
-                title={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}
-                className={STRIP_ICON_PILL}
-              >
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
-              </button>
+              /* R10 Lane D fix 2: the bare '>' toggle read as unlabeled chrome —
+                 a styled hover tooltip (matching the strip family) names what it
+                 does; aria-label + aria-expanded keep the a11y contract. */
+              <HintTooltip content={showSessions ? 'Hide chat history' : `Show chat history${sessions.length > 0 ? ` (${sessions.length})` : ''}`}>
+                <button
+                  onClick={() => setShowSessions(p => !p)}
+                  aria-label={showSessions ? 'Hide chat history' : 'Show chat history'}
+                  aria-expanded={showSessions}
+                  className={STRIP_ICON_PILL}
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSessions ? 'rotate-0' : '-rotate-90'}`} />
+                </button>
+              </HintTooltip>
             )}
 
             {/* Persona picker */}

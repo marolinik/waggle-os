@@ -33,7 +33,10 @@
     --secondary-foreground: 43 50% 93%;
 
     --muted: 37 27% 15%;              /* --surface-3 #322a1d */
-    --muted-foreground: 42 13% 52%;   /* --text-muted #948a73 */
+    /* R10 Lane D: --text-muted (= muted-foreground) is the chip-text token the
+       quiet filter chips use; one legibility step up (52→57%) lifts inactive
+       chips above comfort in dark WITHOUT touching --text-dim (already tuned). */
+    --muted-foreground: 42 13% 57%;   /* --text-muted ≈ #a3987f */
 
     --accent: 38 26% 12%;             /* warm-neutral hover (was purple) */
     --accent-foreground: 43 50% 93%;
@@ -282,7 +285,9 @@
     --glass-border: 39 50% 45% / 0.22;
 
     /* ── Shadows (warm light) ─────────────────────────────────────────── */
-    --shadow-card: 0 1px 3px rgba(60,45,20,0.06), 0 1px 2px rgba(60,45,20,0.04);
+    /* R10 Lane D: light cards read flush on ivory — one elevation step up so
+       they seat on the page (dark keeps its own --shadow-card untouched). */
+    --shadow-card: 0 1px 3px rgba(60,45,20,0.09), 0 2px 6px rgba(60,45,20,0.06);
     --shadow-elevated: 0 4px 12px rgba(60,45,20,0.08), 0 2px 4px rgba(60,45,20,0.04);
     --shadow-overlay: 0 8px 32px rgba(60,45,20,0.15);
     --shadow-honey: 0 0 0 1px rgba(192,127,0,0.22), 0 8px 30px -12px rgba(192,127,0,0.30);
@@ -290,7 +295,7 @@
     /* ── Warm-Hive named tokens (light) ───────────────────────────────── */
     --bg-2:        #f1e9d8;
     --line:        #e4d8be;
-    --line-soft:   #ede3cd;
+    --line-soft:   #e7dcc4;   /* R10 Lane D: one step firmer on ivory so card edges hold (was #ede3cd) */
     --line-strong: #d2c3a2;
     --text-2:      #5a5140;
 
@@ -313,7 +318,7 @@
     --work:      #3f72b0;
     --intel:     #7d57b8;
     --healthy:   #3c8a5f;
-    --attention: #b57d12;
+    --attention: #9a6408;   /* R10 Lane D: matches --honey-text light, 4.64:1 AA on ivory — fixes the "added 2w ago" micro-text (was #b57d12 ≈3.2:1) */
     --risk:      #c0573c;
     --work-wash:    rgba(63, 114, 176, 0.10);
     --intel-wash:   rgba(125, 87, 184, 0.10);
@@ -378,11 +383,15 @@
      and the CENTER calm (judges: texture must never compete with content),
      so the dark wash eases back to 0.3 — enough to seat content, without
      erasing the corner glow the new asset carries. */
+  /* R10 Lane D: radial falloff turns the edge-to-edge tiling into a composition
+     — the wash thickens toward the centered content column (texture fades behind
+     content) and thins at the edges where the corner glow lives. Subtle, both
+     themes; edge alpha ≈ the prior flat wash so nothing gets busier. */
   .desktop-overlay {
-    background: hsl(var(--background) / 0.3);
+    background: radial-gradient(ellipse 72% 68% at 50% 44%, hsl(var(--background) / 0.52) 22%, hsl(var(--background) / 0.2) 74%);
   }
   :root[data-theme="light"] .desktop-overlay {
-    background: hsl(var(--background) / 0.15);
+    background: radial-gradient(ellipse 72% 68% at 50% 44%, hsl(var(--background) / 0.4) 22%, hsl(var(--background) / 0.08) 74%);
   }
 
   /* ── Onboarding full-screen scrim — theme-aware (was hard-coded black,

@@ -122,6 +122,7 @@ const AgentSearchBox = ({ onQueryChange }: AgentSearchBoxProps = {}) => {
         onSubmit={(t) => void run(t)}
         onChange={onQueryChange}
         cmdkHint={false}
+        submitVariant="search"
       />
 
       {!result && !searching && !error && (

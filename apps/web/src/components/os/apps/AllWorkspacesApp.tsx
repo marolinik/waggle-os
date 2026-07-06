@@ -156,6 +156,13 @@ function WorkspaceCard({
   // is conditional; an all-absent card renders no body line at all.
   const activityLine =
     [createdLine, activeAgo ? `active ${activeAgo}` : null].filter(Boolean).join(' · ') || null;
+  // Wave R (Lane B) fix 2: when the server surfaces the newest session's title,
+  // it's the most alive thing the card can say — "Last: <title> · 2w ago". Real
+  // string from the list payload only (lastSessionTitle); absent → fall through
+  // to the created/last-active activity line.
+  const lastSessionLine = ws.lastSessionTitle
+    ? `Last: ${ws.lastSessionTitle}${activeAgo ? ` · ${activeAgo}` : ''}`
+    : null;
 
   // Honesty: only render a memory count when the field actually exists.
   const hasMemoryCount = typeof ws.memoryCount === 'number';
@@ -164,6 +171,9 @@ function WorkspaceCard({
   return (
     // Wave F (fix 1b): the ENTIRE card is the open target — no floating "Open >"
     // link. The actions menu inside stops propagation so managing never opens.
+    // Wave R (Lane B) fix 5: the rest border steps --line-soft → --line in DARK
+    // ONLY (`:root:not([data-theme=light]) &:not(:hover)`) so dark cards stop
+    // vanishing on hive-950; light keeps --line-soft and hover keeps honey.
     <div
       role="button"
       tabIndex={0}
@@ -175,7 +185,7 @@ function WorkspaceCard({
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
       }}
       aria-label={`Open ${ws.name}`}
-      className="group relative flex min-h-[132px] cursor-pointer flex-col rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="group relative flex min-h-[132px] cursor-pointer flex-col rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       <div className="mb-3 flex items-center gap-3">
@@ -190,15 +200,17 @@ function WorkspaceCard({
             {ws.name}
           </h3>
           {/* Disambiguate same-named workspaces with their group (issue 2b);
-              when the group ALSO collides, append the workspace's FULL slug in
-              a quiet mono chip (round-7: the truncated "#-hub"/"#ub-2" chip
-              read as a bug — full slugs are readable and honest, and BOTH
-              cards in a collision set carry theirs). */}
+              when the group ALSO collides, append the workspace's FULL slug in a
+              mono chip. Wave R (Lane B) fix 4: two identically-named cards used
+              to differ only by a 10px text-dim whisper — the disambiguator is now
+              promoted to readable weight (11.5px, text-muted, a bordered slug
+              chip) so the difference registers at a glance. BOTH cards in a
+              collision set carry theirs. */}
           {isDuplicateName && (ws.group || isDuplicateNameAndGroup) && (
-            <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-[var(--text-dim)]">
+            <span className="mt-0.5 flex items-center gap-1.5 text-[11.5px] text-[var(--text-muted)]">
               {ws.group && <span className="truncate">{ws.group}</span>}
               {isDuplicateNameAndGroup && (
-                <span className="min-w-0 truncate rounded-[5px] border border-[var(--line-soft)] bg-[var(--surface-2)] px-1 font-mono text-[10px]">
+                <span className="min-w-0 truncate rounded-[5px] border border-[var(--line)] bg-[var(--surface-2)] px-1.5 py-px font-mono text-[11.5px] text-[var(--text-muted)]">
                   {ws.id}
                 </span>
               )}
@@ -225,6 +237,8 @@ function WorkspaceCard({
         <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
           {ws.description}
         </p>
+      ) : lastSessionLine ? (
+        <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">{lastSessionLine}</p>
       ) : activityLine ? (
         <p className="text-[13px] leading-[1.5] text-[var(--text-muted)]">{activityLine}</p>
       ) : null}
@@ -250,12 +264,14 @@ function WorkspaceCard({
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {/* Round-8 fix 3: a quiet "Open →" cue on hover/focus makes the
-              whole-card open target legible. Decorative — the card already
-              carries the "Open <name>" aria-label — so it's aria-hidden. */}
+          {/* Wave R (Lane B) fix 3: a PERSISTENT quiet "Open →" cue — text-dim at
+              rest so the whole-card target is always legible, warming to honey on
+              hover/focus. No longer opacity-0 (the hover-only reveal read as a
+              missing affordance). Decorative — the card carries the "Open <name>"
+              aria-label — so it's aria-hidden. */}
           <span
             aria-hidden
-            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--honey-text)] opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--text-dim)] transition-colors duration-150 group-hover:text-[var(--honey-text)] group-focus-within:text-[var(--honey-text)]"
           >
             Open <ArrowRight className="h-3 w-3" />
           </span>

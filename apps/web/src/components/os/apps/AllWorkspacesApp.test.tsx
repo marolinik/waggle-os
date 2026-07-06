@@ -73,6 +73,25 @@ describe('AllWorkspacesApp', () => {
     expect(screen.getByText(/12 sessions/)).toBeInTheDocument();
   });
 
+  it('renders the newest session title as the card body ("Last: …") when present (Wave R)', () => {
+    mocks.shell.workspaces = [
+      ws({ id: 's1', name: 'Sessioned', lastSessionTitle: 'Draft the launch email', lastActive: new Date().toISOString() }),
+    ];
+    render(<AllWorkspacesApp />);
+    const card = screen.getByTestId('all-workspaces-card-s1');
+    expect(card.textContent).toContain('Last: Draft the launch email');
+  });
+
+  it('a description still wins over the session-title body line (Wave R priority)', () => {
+    mocks.shell.workspaces = [
+      ws({ id: 's2', name: 'Described', description: 'A real description', lastSessionTitle: 'Some session' }),
+    ];
+    render(<AllWorkspacesApp />);
+    const card = screen.getByTestId('all-workspaces-card-s2');
+    expect(card.textContent).toContain('A real description');
+    expect(card.textContent).not.toContain('Last: Some session');
+  });
+
   it('does NOT fabricate a count for a workspace with undefined memoryCount', () => {
     render(<AllWorkspacesApp />);
     const card = screen.getByTestId('all-workspaces-card-w4');
