@@ -119,6 +119,9 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
         compact: Boolean(values['compact']),
         wipeImports: Boolean(values['wipe-imports']),
         reconcile: Boolean(values['reconcile']),
+        reembedAll: Boolean(values['reembed-all']),
+        rechunkAll: Boolean(values['rechunk-all']),
+        dedupeEntities: Boolean(values['dedupe-entities']),
         consolidate: Boolean(values['consolidate']),
         consolidateModel: typeof values['consolidate-model'] === 'string' ? values['consolidate-model'] : undefined,
         consolidateLimit: intArg(values, 'consolidate-limit'),
@@ -126,6 +129,8 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
         wiki: Boolean(values['wiki']),
         maxTempAgeDays: intArg(values, 'max-temp-age-days'),
         maxDeprecatedAgeDays: intArg(values, 'max-deprecated-age-days'),
+        workspace: typeof values['workspace'] === 'string' ? values['workspace'] : undefined,
+        allWorkspaces: Boolean(values['all-workspaces']),
         env,
       });
       if (fmt === 'json') return json(result);
@@ -133,6 +138,9 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
       if (result.compact) lines.push(`  compact:      temp=${result.compact.temporaryPruned} deprecated=${result.compact.deprecatedPruned} pframes=${result.compact.pframesMerged}`);
       if (result.wipeImports) lines.push(`  wipeImports:  ${result.wipeImports.framesDeleted} frames`);
       if (result.reconcile) lines.push(`  reconcile:    fts=${result.reconcile.ftsFixed} vec=${result.reconcile.vecFixed}`);
+      if (result.reembedAll) lines.push(`  reembed-all:  ${result.reembedAll.framesEmbedded} frames via ${result.reembedAll.activeProvider}/${result.reembedAll.modelName} in ${(result.reembedAll.durationMs / 1000).toFixed(1)}s`);
+      if (result.rechunkAll) lines.push(`  rechunk-all:  ${result.rechunkAll.framesProcessed} frames → ${result.rechunkAll.chunksCreated} chunks via ${result.rechunkAll.activeProvider}/${result.rechunkAll.modelName} in ${(result.rechunkAll.durationMs / 1000).toFixed(1)}s`);
+      if (result.dedupeEntities) lines.push(`  dedupe-entities: merged ${result.dedupeEntities.merged} dup(s) across ${result.dedupeEntities.groups} group(s)`);
       if (result.consolidate) lines.push(`  consolidate:  ${result.consolidate.chains} chain(s) → ${result.consolidate.pframes} P-frame(s) (${result.consolidate.deprecated} deprecated), ${result.consolidate.groups} group(s) → ${result.consolidate.bframes} B-frame(s)`);
       if (result.cognify) lines.push(`  cognify:      ${result.cognify.framesScanned} frames, ${result.cognify.entitiesCreated} new, ${result.cognify.entitiesUpdated} updated`);
       if (result.wiki) lines.push(`  wiki:         ${result.wiki.pagesCreated} created, ${result.wiki.pagesUpdated} updated, provider=${result.wiki.provider}`);
