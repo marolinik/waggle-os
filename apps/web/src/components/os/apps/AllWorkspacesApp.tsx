@@ -231,9 +231,17 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   // in-app frame, so the grid now filters too. Real installs carry no dev noise,
   // so a real user sees no change; it also makes the shelf count agree with home.)
   const shelfWorkspaces = useMemo(
-    () => workspaces.filter(w => !isDevNoiseWorkspace(w.name)),
+    () => workspaces.filter(w => !isDevNoiseWorkspace(w.name) && w.status !== 'archived'),
     [workspaces],
   );
+  // Archived workspaces live under a collapsed disclosure at the bottom of the
+  // shelf — hidden from the working grid, but still reachable so unarchive
+  // (via the card's actions menu) stays possible in-UI.
+  const archivedWorkspaces = useMemo(
+    () => workspaces.filter(w => !isDevNoiseWorkspace(w.name) && w.status === 'archived'),
+    [workspaces],
+  );
+  const [showArchived, setShowArchived] = useState(false);
 
   // W2B: storageType is persisted only when explicitly set at create (0/56 live
   // today); the runtime treats absent as 'virtual' (storage/index.ts default), so
@@ -377,6 +385,35 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
               isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}
             />
           ))}
+        </div>
+      )}
+
+      {/* Archived — collapsed disclosure so the working shelf stays clean but
+          unarchive (card actions menu) remains reachable in-UI. */}
+      {archivedWorkspaces.length > 0 && (
+        <div className="mt-8">
+          <button
+            type="button"
+            onClick={() => setShowArchived(v => !v)}
+            aria-expanded={showArchived}
+            data-testid="all-workspaces-archived-toggle"
+            className="text-[12.5px] font-semibold text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"
+          >
+            {showArchived ? '▾' : '▸'} Archived ({archivedWorkspaces.length})
+          </button>
+          {showArchived && (
+            <div className="mt-3 grid grid-cols-1 gap-3.5 opacity-70 sm:grid-cols-2 lg:grid-cols-3" data-testid="all-workspaces-archived-grid">
+              {archivedWorkspaces.map(ws => (
+                <WorkspaceCard
+                  key={ws.id}
+                  ws={ws}
+                  onOpen={() => handleOpen(ws.id)}
+                  onChanged={() => { void refreshWorkspaces(); }}
+                  isDuplicateName={false}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
