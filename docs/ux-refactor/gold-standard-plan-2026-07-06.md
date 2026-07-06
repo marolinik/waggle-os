@@ -460,3 +460,50 @@ workspace one-slot-order grammar + duplicate-chip → tooltip · real hover tier
 (elevation+actions) across cards · memory triple-nav collapse · Show control
 containment · dark agents search-input border · light input borders + mono-chip
 contrast · landing diagram line weight + orphaned arrow.
+
+---
+
+## REGIME B — video/interaction judging (founder re-armed the goal 2026-07-06 S3)
+
+Founder directive: continue to 5×9/10. Static waves measured EV≈0 → regime switch
+executed (option B). Evidence: 9 Playwright-recorded user journeys (real app, real
+data, human-cadence input), ffmpeg-decomposed to 2fps contact sheets + keyframes.
+Tooling: scratchpad/{video-journey.mjs, make-filmstrips.py, judge-workflow-video.mjs}.
+Scores NOT comparable to the static R1-R12 trajectory.
+
+## Round 13-V1 verdict (video-regime BASELINE, product @ 74f95c73)
+
+**design 7.0 · kw 7.1 · competitor 7.0 · a11y 7.0 · brand 7.3 — min 7.0, avg 7.08.**
+
+Panel converges on five systemic gaps (each named by 4-5 of 5 judges):
+1. **Interaction hygiene / state honesty**: returning-user boot flashes the wizard
+   (~1s); briefing modal = bare spinner ~4s with a blank region while cards stream;
+   memory hero renders a false "0 Memories in this hive" for ~3s on a TRUST surface
+   and re-spins on every tab switch (no cache).
+2. **Hover tier is uneven**: workspace cards = best-in-app (honey hairline + Open→ +
+   overflow reveal); agents bee cards + "Browse all 22" strip = inert across 65s of
+   scripted hovering; chat message actions = two ~2:1 invisible icons.
+3. **Theme switch**: judged worst scenario (4.5-5.5) — but the white flash/reload/
+   briefing-re-run/mixed-end-state were CAPTURE ARTIFACTS (script used page.goto +
+   end-of-recording theme flip; both fixed in kit v2). REAL s02 findings that stand:
+   BootScreen ignores theme (always dark), light "Start Working" CTA likely <4.5:1,
+   dark-hardcoded skeleton surfaces should be audited.
+4. **Marketplace NL dead-end**: typing the promised natural-language query live-filters
+   to "No results" with no bridge to the semantic search the placeholder promises.
+5. **No signature brand motion**: bees never respond to the cursor, hero moments load
+   behind generic arc spinners, the 448-counter pops instead of landing. Brand judge:
+   "competent plumbing wearing a honey coat."
+
+What the regime CONFIRMED as wins: s06 settings "Fix it now" error→focus choreography
+("best-in-class, period" — design 8.5), workspace-card hover grammar (8/7.5), memory
+trust VOICE (8.5 brand), onboarding welcome + live greeting preview (8/8.5), honest
+labeled loading with live escape hatches.
+
+Capture-kit v2 changes (disclosed to judges next round): returning-user journeys seed
+returning-user localStorage (wizard flash was fresh-profile-only — though the defect is
+real for new-device users and is being fixed in product); s02 navigates via the app's
+own sidebar and never flips theme mid-recording.
+
+→ Wave T re-scoped around the five convergent gaps (spec: wave-T-spec-2026-07-06.md).
+R12 static nits that don't touch judged journeys (settings Show containment, light
+input tokens, www landing diagram) DEFERRED to a later polish wave.

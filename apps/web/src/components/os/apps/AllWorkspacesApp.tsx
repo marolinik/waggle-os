@@ -248,22 +248,29 @@ function WorkspaceCard({
         )}
       </div>
 
-      {/* Slot 3 — preview line. It grows (flex-1 via the flex-col root) so the
-          footer pins to a shared baseline. Real data only: a description (2-line
-          clamp), else the quote-styled newest-session title, else the honest
-          created/last-active line. Never a dead band, never invented copy. */}
-      {ws.description ? (
-        <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
-          {ws.description}
-        </p>
-      ) : sessionPreview ? (
-        <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
-          “{sessionPreview}”
-          {activeAgo && <span className="text-[var(--text-dim)]"> · {activeAgo}</span>}
-        </p>
-      ) : activityLine ? (
-        <p className="text-[13px] leading-[1.5] text-[var(--text-muted)]">{activityLine}</p>
-      ) : null}
+      {/* Slot 3 — preview line, RESERVED not collapsed (Wave T Lane C fix 1).
+          The slot always holds a two-line body region so every card shares one
+          geometry (identity → tags → preview → metrics) whether or not it has a
+          preview to show — a card with no description/session/activity keeps the
+          reserved height rather than letting its footer float up out of grammar.
+          Real data only: a description (2-line clamp), else the quote-styled
+          newest-session title, else the honest created/last-active line; never a
+          dead band, never invented copy. The footer's mt-auto still pins metrics
+          to the shared bottom baseline. */}
+      <div className="min-h-[39px]" data-testid={`all-workspaces-preview-${ws.id}`}>
+        {ws.description ? (
+          <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+            {ws.description}
+          </p>
+        ) : sessionPreview ? (
+          <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+            “{sessionPreview}”
+            {activeAgo && <span className="text-[var(--text-dim)]"> · {activeAgo}</span>}
+          </p>
+        ) : activityLine ? (
+          <p className="text-[13px] leading-[1.5] text-[var(--text-muted)]">{activityLine}</p>
+        ) : null}
+      </div>
 
       {/* Slot 4 — metrics footer, pinned to the card's bottom baseline (mt-auto)
           so EVERY card's meta row aligns regardless of body length. Real fields

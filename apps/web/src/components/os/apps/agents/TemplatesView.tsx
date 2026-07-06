@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Bot, Plus, Search, Loader2, Users, X, AlertCircle, RefreshCw, Copy } from 'lucide-react';
+import { Bot, Plus, Search, Users, X, AlertCircle, RefreshCw, Copy } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import BeeLoader from '@/components/ui/BeeLoader';
 import { adapter } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import type { BackendPersona, AgentGroup, ToolDef, GroupExecState, MemberExecState } from './types';
@@ -170,9 +171,10 @@ const TemplatesView = ({ onUseTemplate }: TemplatesViewProps) => {
   };
 
   if (loading) {
+    // Wave T Lane F item 3: the signature waggle-dance loader (was a generic arc spinner).
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-5 h-5 animate-spin text-honey" />
+        <BeeLoader label="Loading templates…" />
       </div>
     );
   }

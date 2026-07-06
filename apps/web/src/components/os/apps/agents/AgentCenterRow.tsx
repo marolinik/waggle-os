@@ -29,7 +29,7 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
     ? formatRelativeTime(agent.lastRunAt)
     : null;
   return (
-    <li className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card/40 px-2.5 py-2 hover:bg-muted/50 transition-colors">
+    <li className="group flex items-center gap-2.5 rounded-lg border border-border/60 bg-card/40 px-2.5 py-2 hover:bg-muted/50 transition-colors">
       <button
         onClick={() => onOpen(agent)}
         className="flex-1 min-w-0 flex items-center gap-2.5 text-left"
@@ -40,11 +40,14 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
             "Editorial Critic" previously fell back to 🤖). Bare transparent PNG
             (no tile) so it reads as the same mascot family as the persona picker
             and chat turns; unmapped/custom personas fall back to general-purpose. */}
+        {/* Wave T Lane F item 2: the bee responds on row hover — a 2px lift +
+            ~3° tilt (transform only, motion-safe so reduced-motion stays still)
+            so the daily fleet surface feels alive, not frozen. */}
         <img
           src={getPersonaAvatar(agent.personaId || 'general-purpose')}
           alt=""
           aria-hidden
-          className="w-7 h-7 shrink-0 rounded-lg object-contain"
+          className="w-7 h-7 shrink-0 rounded-lg object-contain transition-transform duration-200 ease-out motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:-rotate-3"
         />
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-1.5">

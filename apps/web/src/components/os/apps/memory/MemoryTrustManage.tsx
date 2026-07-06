@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { Search, Loader2, Brain, Pencil, Trash2, Clock, Check, Save, Tag } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { memoryListCacheKey, readMemoryListCache, writeMemoryListCache } from './memory-list-cache';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryStatus } from '@/lib/types';
@@ -131,6 +133,64 @@ function DimensionChip({ value, label, tone = 'default', onClick, title }: Dimen
   return <span title={title} className={className}>{inner}</span>;
 }
 
+/** Wave T Lane D (item 3) — the hero total LANDS instead of popping: a ~600ms
+ *  ease-out count-up the first time a real count arrives, then snaps on later
+ *  refreshes. Honors prefers-reduced-motion (instant set, no animation). `0` is
+ *  a legitimate landed value here — the loading/unknown state is gated upstream
+ *  (StatBarSkeleton), so this never renders a false loading-zero. */
+function HeroCount({ total, capped, reduceMotion }: { total: number; capped: boolean; reduceMotion: boolean }) {
+  const [display, setDisplay] = useState(() => (reduceMotion ? total : 0));
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (reduceMotion || startedRef.current) {
+      startedRef.current = true;
+      setDisplay(total);
+      return;
+    }
+    startedRef.current = true;
+    const durationMs = 600;
+    const start = performance.now();
+    let raf = requestAnimationFrame(function tick(now: number) {
+      const p = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic — decisive, then settles
+      setDisplay(Math.round(total * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else setDisplay(total);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [total, reduceMotion]);
+  const text = capped && display >= FETCH_LIMIT ? `${FETCH_LIMIT}+` : String(display);
+  return (
+    <span
+      data-testid="memory-trust-total"
+      className="text-[34px] font-[750] leading-none tracking-[-0.02em] text-[var(--text)]"
+    >
+      {text}
+    </span>
+  );
+}
+
+/** Wave T Lane D (item 1) — the loading state for the stat bar. A trust surface
+ *  must never show a false "0 Memories in this hive" while the count is still in
+ *  flight, so the whole stat block renders as a shimmer skeleton until the real
+ *  numbers land. Decorative (aria-hidden) — the row list below owns the
+ *  "Loading memories…" live announcement. */
+function StatBarSkeleton() {
+  return (
+    <div data-testid="memory-trust-stat-skeleton" aria-hidden="true" className="animate-pulse motion-reduce:animate-none">
+      <div className="flex items-center gap-3">
+        <div className="h-[34px] w-16 rounded-[10px] bg-[var(--surface-2)]" />
+        <div className="h-3.5 w-52 max-w-[60%] rounded bg-[var(--surface-2)]" />
+      </div>
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        {[64, 88, 96, 72].map((w) => (
+          <div key={w} className="h-7 rounded-full bg-[var(--surface-2)]" style={{ width: w }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── Memory row (§5) ──────────────────────────────────────────────────────────
 
 interface MemoryRowProps {
@@ -143,9 +203,13 @@ interface MemoryRowProps {
    *  this row represents. When > 1 an "×N" badge renders — purely informational,
    *  nothing is merged or deleted in the store. */
   duplicateCount?: number;
+  /** Wave T Lane D (item 3): staggered entrance delay (ms) so the confidence-ring
+   *  rows draw in one after another as the data lands. Undefined → no animation
+   *  (reduced-motion). CSS runs once per row mount; persisted rows never re-run. */
+  enterDelayMs?: number;
 }
 
-function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }: MemoryRowProps) {
+function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, enterDelayMs }: MemoryRowProps) {
   const fresh = freshness(memory.createdAt);
   const srcLabel = frameSourceLabel(memory.source);
   const stale = isStale(memory);
@@ -168,6 +232,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount }
   const provShort = srcLabel ?? preview.titleMeta?.split('·')[0].trim();
   return (
     <li
+      style={enterDelayMs != null ? { animation: 'card-enter 0.32s ease-out both', animationDelay: `${enterDelayMs}ms` } : undefined}
       className={cn(
         'rounded-[18px] border bg-[var(--surface)] p-4 transition-colors',
         stale ? 'border-[color-mix(in_srgb,var(--attention)_30%,var(--line-soft))]' : 'border-[var(--line-soft)]',
@@ -299,8 +364,14 @@ const FILTERS: { id: TrustFilter; label: string }[] = [
 
 export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, openMemoryId, onOpenConsumed, onTotal }: MemoryTrustManageProps) {
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const reduceMotion = !!useReducedMotion();
+  // Wave T Lane D (item 2): session cache key — the Trust list fetches the whole
+  // working set (no server-side filters), so (mind, workspace) fully identifies
+  // it. Seeding from cache lets a tab-switch remount show its last rows instantly
+  // (no re-spin) while it refreshes silently underneath.
+  const cacheKey = memoryListCacheKey(['trust', mind, wsParam]);
+  const [memories, setMemories] = useState<Memory[]>(() => readMemoryListCache(cacheKey) ?? []);
+  const [loading, setLoading] = useState(() => readMemoryListCache(cacheKey) === undefined);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<TrustFilter>('all');
@@ -322,13 +393,13 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       // Fetch the whole working set (no q) so the stat bar reflects the HIVE,
       // not the current search (review M). Search filters client-side below.
       const res = await adapter.listMemories({ mind, workspaceId: wsParam, limit: FETCH_LIMIT });
-      if (seq === loadSeq.current) setMemories(res);
+      if (seq === loadSeq.current) { setMemories(res); writeMemoryListCache(cacheKey, res); }
     } catch (e) {
       if (seq === loadSeq.current) setError(e instanceof Error ? e.message : 'Failed to load memories');
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [mind, wsParam]);
+  }, [mind, wsParam, cacheKey]);
 
   // Defer to a macrotask so load() captures loadSeq AFTER the mind-reset effect
   // below bumps it on mount — otherwise the reset invalidates the in-flight load
@@ -338,11 +409,18 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     return () => clearTimeout(t);
   }, [load, reloadTick]);
 
-  // Mind switch clears everything in flight + on screen (ids collide across stores).
+  // Mind switch invalidates everything in flight + on screen (ids collide across
+  // stores). Wave T Lane D (item 2): reseed the new mind's rows from cache
+  // instead of blanking to a spinner — a scope the user has already visited this
+  // session re-shows instantly; a first visit still shows the honest loader.
   useEffect(() => {
     loadSeq.current++;
-    setSelected(null); setMemories([]); setLoading(true); setFilter('all');
-  }, [mind, wsParam]);
+    const cached = readMemoryListCache(cacheKey);
+    setSelected(null);
+    setMemories(cached ?? []);
+    setLoading(cached === undefined);
+    setFilter('all');
+  }, [cacheKey]);
 
   // J08 deep-link: Home's "N need review" banner lands here (Trust is the default
   // landing) → seed the "Needs confirm" filter.
@@ -387,6 +465,14 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     const needsConfirm = String(live.filter((m) => m.status === 'unreviewed').length);
     return { total, freshCount, highConf, staleCount, needsConfirm };
   }, [live]);
+
+  // Wave T Lane D (item 1): the count is UNKNOWN only while the first load is in
+  // flight with nothing on screen. Once loaded, 0 is a real value (empty hive),
+  // never a loading placeholder — so the stat bar shows a skeleton in that window
+  // instead of a false "0 Memories in this hive".
+  const totalUnknown = loading && memories.length === 0;
+  const totalNum = Math.min(live.length, FETCH_LIMIT);
+  const totalCapped = live.length >= FETCH_LIMIT;
 
   // Wave R Lane E: order the subordinate dimension chips by value desc so the
   // row never LEADS with a zero (the round-10 shot opened on "0 fresh"). Zero
@@ -481,22 +567,28 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
           chips. The three views overlap (a memory can be fresh AND awaiting
           confirm), so they must never read as a partition of the total. */}
       <div className="rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-4 sm:p-5">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-[34px] font-[750] leading-none tracking-[-0.02em] text-[var(--text)]">{stats.total}</span>
-          <span className="text-[13.5px] text-[var(--text-muted)]">
-            Memories in this hive · {mind === 'workspace' ? 'this workspace' : 'personal mind'}
-          </span>
-        </div>
-        <div className="mt-3.5 flex flex-wrap gap-2">
-          {/* W2D: independent (non-summing) dimensions; Wave R Lane E orders them
-              by value desc so a zero never leads the row (see dimensionChips). */}
-          {dimensionChips.map((c) => (
-            <DimensionChip key={c.key} value={c.value} label={c.label} tone={c.tone} title={c.title} onClick={c.onClick} />
-          ))}
-        </div>
-        <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
-          Overlapping views — a memory can be counted in more than one.
-        </p>
+        {totalUnknown ? (
+          <StatBarSkeleton />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <HeroCount total={totalNum} capped={totalCapped} reduceMotion={reduceMotion} />
+              <span className="text-[13.5px] text-[var(--text-muted)]">
+                Memories in this hive · {mind === 'workspace' ? 'this workspace' : 'personal mind'}
+              </span>
+            </div>
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              {/* W2D: independent (non-summing) dimensions; Wave R Lane E orders them
+                  by value desc so a zero never leads the row (see dimensionChips). */}
+              {dimensionChips.map((c) => (
+                <DimensionChip key={c.key} value={c.value} label={c.label} tone={c.tone} title={c.title} onClick={c.onClick} />
+              ))}
+            </div>
+            <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
+              Overlapping views — a memory can be counted in more than one.
+            </p>
+          </>
+        )}
       </div>
 
       {/* §4 search + filters */}
@@ -571,12 +663,13 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
         </div>
       ) : (
         <ul className="grid gap-2.5">
-          {shownDeduped.map(({ memory: m, duplicateCount }) => (
+          {shownDeduped.map(({ memory: m, duplicateCount }, i) => (
             <MemoryRow
               key={m.id}
               memory={m}
               duplicateCount={duplicateCount}
               busy={busy}
+              enterDelayMs={reduceMotion ? undefined : Math.min(i, 10) * 40}
               onOpen={() => openDetail(m)}
               onForget={() => forget(m)}
               onConfirm={() => confirm(m)}

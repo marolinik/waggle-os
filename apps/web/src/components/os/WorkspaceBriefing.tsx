@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Brain, Clock, CheckCircle2, AlertTriangle, MessageSquare,
-  Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp, Wrench,
+  Lightbulb, ChevronRight, Sparkles, ChevronDown, ChevronUp, Wrench,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -68,10 +68,37 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
   };
 
   if (loading) {
+    // Wave T Lane E fix 3: the chat's entry loading is a thread-shaped skeleton
+    // (message rhythm: bee-avatar + assistant lines, a right-aligned user bubble)
+    // instead of a bare centered spinner + "Loading workspace…" — so entering a
+    // chat reads as "your conversation is loading", not a lie about an empty box.
+    // sr-only text keeps the screen-reader announcement; reduced-motion stills it.
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        <span className="text-sm">Loading workspace...</span>
+      <div
+        className="mx-auto w-full max-w-[680px] space-y-4 py-2 animate-pulse motion-reduce:animate-none"
+        role="status"
+        aria-label="Loading conversation"
+        data-testid="chat-thread-skeleton"
+      >
+        <span className="sr-only">Loading conversation…</span>
+        <div className="flex gap-2" aria-hidden="true">
+          <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+          <div className="flex-1 space-y-2 pt-0.5">
+            <div className="h-3 w-28 rounded bg-[var(--surface-2)]" />
+            <div className="h-3 w-full rounded bg-[var(--surface-2)]" />
+            <div className="h-3 w-4/5 rounded bg-[var(--surface-2)]" />
+          </div>
+        </div>
+        <div className="flex justify-end" aria-hidden="true">
+          <div className="h-10 w-2/5 rounded-[4px_14px_14px_14px] bg-[var(--surface-2)]" />
+        </div>
+        <div className="flex gap-2" aria-hidden="true">
+          <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+          <div className="flex-1 space-y-2 pt-0.5">
+            <div className="h-3 w-32 rounded bg-[var(--surface-2)]" />
+            <div className="h-3 w-11/12 rounded bg-[var(--surface-2)]" />
+          </div>
+        </div>
       </div>
     );
   }

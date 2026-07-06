@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { stashDeepLink, consumeDeepLink } from '@/lib/app-deeplink';
+import { clearMemoryListCache } from '@/components/os/apps/memory/memory-list-cache';
 import type { Memory } from '@/lib/types';
 
 const mocks = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   consumeDeepLink('memory'); // drop any stash a test left behind
+  clearMemoryListCache(); // Wave T Lane D: reset the module-level list cache between tests
 });
 
 describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {

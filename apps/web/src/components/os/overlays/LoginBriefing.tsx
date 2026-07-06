@@ -55,6 +55,12 @@ interface MemoryHighlight {
   timestamp: string;
 }
 
+interface BriefingData {
+  highlights: MemoryHighlight[];
+  summaries: WorkspaceSummary[];
+  brag: BragSummary | null;
+}
+
 // timeAgo was moved into @/lib/login-briefing-brag (shared with the brag
 // summary so the header and per-frame labels use one formatter). Keep a
 // local alias so callsites below read naturally.
@@ -87,6 +93,99 @@ const CANNED_SUMMARY_TAIL =
   'stays in context — decisions, research, and progress are remembered across sessions';
 const isCannedWorkspaceSummary = (summary?: string): boolean =>
   typeof summary === 'string' && summary.includes(CANNED_SUMMARY_TAIL);
+
+// Wave T Lane A (item 2): the full briefing fetch + shaping, hoisted to module
+// scope so it can be prefetched while the BootScreen runs (fired from AppShell).
+// Throws only on a hard failure (getWorkspaces reject) so the caller renders the
+// slim error row; the soft sources (memory search / stats) already degrade to
+// []/null inline. Byte-for-byte the logic the component's loadBriefing used to
+// run inline — moved, not changed.
+async function fetchBriefingData(): Promise<BriefingData> {
+  const [workspaces, frames, stats] = await Promise.all([
+    adapter.getWorkspaces(),
+    adapter.searchMemory('important decision project plan', 'global').catch(() => []),
+    adapter.getMemoryStats().catch(() => null),
+  ]);
+
+  // L-22: rank by importance desc, break ties by recency. Concrete content only
+  // (≥20 chars), living frames only — deprecated/archived and extraction echoes
+  // are filtered inside the ranker.
+  const ranked = selectBriefingHighlights(
+    (frames as Array<{ content?: string; importance?: number; timestamp?: string; metadata?: Record<string, unknown> }>).map((f) => ({
+      content: f.content,
+      importance: f.importance,
+      timestamp: f.timestamp,
+      status: typeof f.metadata?.status === 'string' ? f.metadata.status : undefined,
+    })),
+  );
+  const highlights: MemoryHighlight[] = ranked.map((f) => ({
+    content: truncateHighlight(f.content ?? ''),
+    timestamp: (typeof f.timestamp === 'string' ? f.timestamp : '') ?? '',
+  }));
+
+  // Workspace summaries — show all, not just ones with content. Drop E2E/test
+  // workspaces that leaked into the real store so the briefing surfaces only
+  // user work.
+  const sorted = workspaces
+    .filter((ws: Workspace) => !isTestWorkspace(ws.name))
+    .slice(0, 5);
+
+  const contextPromises = sorted.map(async (ws: Workspace): Promise<WorkspaceSummary> => {
+    try {
+      const ctx = await adapter.getWorkspaceContext(ws.id);
+      return {
+        id: ws.id,
+        name: ws.name,
+        group: ws.group ?? 'Personal',
+        memoryCount: ctx.stats?.memoryCount ?? ctx.memoryCount ?? 0,
+        sessionCount: ctx.stats?.sessionCount ?? ctx.sessionCount ?? 0,
+        // USER activity from the workspace store — machine cron writes are not
+        // "active" (ws.lastActive, not ctx.lastActive).
+        lastActive: ws.lastActive ?? '',
+        summary: ctx.summary,
+        pendingTasks: ctx.pendingTasks,
+      };
+    } catch {
+      return {
+        id: ws.id,
+        name: ws.name,
+        group: ws.group ?? 'Personal',
+        memoryCount: 0,
+        sessionCount: 0,
+        lastActive: '',
+      };
+    }
+  });
+
+  const summaries = await Promise.all(contextPromises);
+  // Most recent first — a two-month-stale workspace above yesterday's work
+  // contradicted the Home grid's recency ordering.
+  summaries.sort((a, b) => Date.parse(b.lastActive || '0') - Date.parse(a.lastActive || '0'));
+
+  return { highlights, summaries, brag: computeBragSummary(stats, summaries) };
+}
+
+// Prefetch cache: a single in-flight/settled briefing promise the BootScreen
+// warms via prefetchBriefing(). takeBriefingData() consumes it ONCE, then falls
+// back to a fresh fetch — so retries/revalidation always re-fetch, and a direct
+// component render with no prefetch (unit tests) is unaffected. A failed
+// prefetch is dropped so the component's own load fetches fresh.
+let prefetchedBriefing: Promise<BriefingData> | null = null;
+
+export function prefetchBriefing(): void {
+  if (prefetchedBriefing) return;
+  prefetchedBriefing = fetchBriefingData();
+  prefetchedBriefing.catch(() => { prefetchedBriefing = null; });
+}
+
+function takeBriefingData(): Promise<BriefingData> {
+  if (prefetchedBriefing) {
+    const pending = prefetchedBriefing;
+    prefetchedBriefing = null;
+    return pending;
+  }
+  return fetchBriefingData();
+}
 
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
@@ -127,76 +226,13 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
     if (loadInFlight.current) return;
     loadInFlight.current = true;
     try {
-      const [workspaces, frames, stats] = await Promise.all([
-        adapter.getWorkspaces(),
-        adapter.searchMemory('important decision project plan', 'global').catch(() => []),
-        adapter.getMemoryStats().catch(() => null),
-      ]);
-
-      // L-22: rank by importance desc, break ties by recency. Concrete
-      // content only (≥20 chars), living frames only — deprecated/archived
-      // and extraction echoes are filtered inside the ranker.
-      const ranked = selectBriefingHighlights(
-        (frames as Array<{ content?: string; importance?: number; timestamp?: string; metadata?: Record<string, unknown> }>).map((f) => ({
-          content: f.content,
-          importance: f.importance,
-          timestamp: f.timestamp,
-          status: typeof f.metadata?.status === 'string' ? f.metadata.status : undefined,
-        })),
-      );
-      const topFrames = ranked.map((f) => ({
-        content: truncateHighlight(f.content ?? ''),
-        timestamp: (typeof f.timestamp === 'string' ? f.timestamp : '') ?? '',
-      }));
-      setHighlights(topFrames);
-
-      // Workspace summaries — show all, not just ones with content.
-      // Drop E2E/test workspaces that leaked into the real store (see
-      // TEST_WORKSPACE_PATTERNS) so the briefing surfaces only user work.
-      const sorted = workspaces
-        .filter((ws: Workspace) => !isTestWorkspace(ws.name))
-        .slice(0, 5);
-
-      const contextPromises = sorted.map(async (ws: Workspace) => {
-        try {
-          const ctx = await adapter.getWorkspaceContext(ws.id);
-          return {
-            id: ws.id,
-            name: ws.name,
-            group: ws.group ?? 'Personal',
-            memoryCount: ctx.stats?.memoryCount ?? ctx.memoryCount ?? 0,
-            sessionCount: ctx.stats?.sessionCount ?? ctx.sessionCount ?? 0,
-            // USER activity from the workspace store — the same source the
-            // Home greeting uses. ctx.lastActive is refreshed by overnight
-            // cron memory writes, so it said "active yesterday" while the
-            // headline said "away 10 days". Machine activity is not "active".
-            lastActive: ws.lastActive ?? '',
-            summary: ctx.summary,
-            pendingTasks: ctx.pendingTasks,
-          };
-        } catch {
-          return {
-            id: ws.id,
-            name: ws.name,
-            group: ws.group ?? 'Personal',
-            memoryCount: 0,
-            sessionCount: 0,
-            lastActive: '',
-          };
-        }
-      });
-
-      const resolved = await Promise.all(contextPromises);
-      // Most recent first — listing a two-month-stale workspace above
-      // yesterday's work contradicted the Home grid's recency ordering.
-      resolved.sort((a, b) => Date.parse(b.lastActive || '0') - Date.parse(a.lastActive || '0'));
-      setSummaries(resolved);
-
-      // L-22: build the richer "N memories · N entities · N relations
-      // across N workspaces · active Xago" header. computeBragSummary
-      // reads adapter.getMemoryStats()'s normalised shape and the
-      // workspace summaries we just built.
-      setBrag(computeBragSummary(stats, resolved));
+      // Wave T Lane A (item 2): consume the BootScreen-warmed cache when present
+      // (content is already there → no spinner), else fetch fresh. The shaping
+      // lives in fetchBriefingData; this just lands it in React state.
+      const data = await takeBriefingData();
+      setHighlights(data.highlights);
+      setSummaries(data.summaries);
+      setBrag(data.brag);
       setErrored(false);
     } catch {
       // P1b D3: surface the failure — do not let it fall through to the
@@ -321,8 +357,22 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
           </div>
 
           {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-honey" />
+            // Wave T Lane A (item 2): a progressive reveal, not a spinner in an
+            // empty box — two honey-wash highlight placeholders + two neutral
+            // workspace-row placeholders at the real heights, so the shape is
+            // already right when the (usually prefetched) content lands.
+            // aria-hidden: the header's aria-live region already speaks for load.
+            <div className="space-y-4" data-testid="login-briefing-skeleton" aria-hidden>
+              <div className="space-y-1.5">
+                {[0, 1].map(i => (
+                  <div key={i} className="h-[42px] rounded-lg border border-[var(--honey-line)] bg-[var(--honey-wash)] animate-pulse" />
+                ))}
+              </div>
+              <div className="space-y-2">
+                {[0, 1].map(i => (
+                  <div key={i} className="h-[76px] rounded-xl border border-border/30 bg-secondary/30 animate-pulse" />
+                ))}
+              </div>
             </div>
           ) : highlights.length === 0 && summaries.length === 0 ? (
             // Day-0 user — no workspaces AND no memory yet. The bare

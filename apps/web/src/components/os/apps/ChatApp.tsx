@@ -88,12 +88,16 @@ const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
  * Round-7 fix 2a: ONE pill grammar for every chip on the composer agent strip —
  * same height (h-6), radius (rounded-full), type size (text-[11px]), border and
  * fill. Accent lives ONLY in text/icon color (and the model pill keeps mono).
+ * Wave T Lane E fix 2: a perceivable hover step (border honey-line + surface-3
+ * fill) and a pressed state (honey-wash fill) so every chip answers the cursor —
+ * uniform across chips, so the per-chip semantic accent still reads only in
+ * text/icon color. Color-only (no transform) → no reduced-motion handling needed.
  */
 const STRIP_PILL =
-  'inline-flex h-6 items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 text-[11px] transition-colors hover:border-[var(--honey-line)]';
+  'inline-flex h-6 items-center gap-1.5 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 text-[11px] transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--surface-3)] active:bg-[var(--honey-wash)]';
 /** Icon-only variant of the strip pill (chevron, overflow, profile toggles). */
 const STRIP_ICON_PILL =
-  'grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:text-foreground';
+  'grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--surface-3)] hover:text-foreground active:bg-[var(--honey-wash)]';
 
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Switch model' },
@@ -211,11 +215,17 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
   };
 
   return (
-    <div className="flex items-center gap-1 mt-1 relative">
+    // Wave T Lane E fix 1: one discoverable action row. At rest it holds a
+    // persistent low-opacity hint (~3:1) so copy/retry are findable without
+    // hover; the whole row lifts to full contrast (>4.5:1) with a 150ms
+    // slide/fade on turn hover AND on :focus-within (keyboard parity). Icons
+    // rest at --text-dim (AA-tuned) and brighten to --text on direct hover.
+    // Reduced-motion drops the slide (opacity-only), honoring the guard.
+    <div className="flex items-center gap-1 mt-1 relative opacity-60 translate-y-0.5 transition-[opacity,transform] duration-150 ease-out group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
       <HintTooltip content="Good response">
         <button
           onClick={() => handleVote('up')}
-          className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+          className={`p-0.5 rounded transition-colors ${vote === 'up' ? 'text-emerald-400' : 'text-[var(--text-dim)] hover:text-[var(--text)]'}`}
         >
           <ThumbsUp className="w-3 h-3" />
         </button>
@@ -226,23 +236,24 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
             if (vote === 'down') { handleVote('down'); return; }
             setShowReasons(s => !s);
           }}
-          className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-muted-foreground/40 hover:text-muted-foreground'}`}
+          className={`p-0.5 rounded transition-colors ${vote === 'down' ? 'text-destructive' : 'text-[var(--text-dim)] hover:text-[var(--text)]'}`}
         >
           <ThumbsDown className="w-3 h-3" />
         </button>
       </HintTooltip>
-      {/* Round-6 fix 2: quiet hover-revealed actions co-located with the
-          thumbs row — Copy (checkmark flash) + Retry (last turn only). */}
+      {/* Round-6 fix 2 / Wave T Lane E: Copy (checkmark flash) + Retry (last
+          turn only) share the row's reveal — the container fades/slides them
+          in together, so no per-button opacity toggle is needed. */}
       {content && (
         <HintTooltip content={copied ? 'Copied' : 'Copy response'}>
           <button
             onClick={handleCopy}
             aria-label="Copy response"
             data-testid="chat-msg-copy"
-            className={`p-0.5 rounded transition-opacity ${
+            className={`p-0.5 rounded transition-colors ${
               copied
-                ? 'text-emerald-400 opacity-100'
-                : 'text-muted-foreground/40 hover:text-muted-foreground opacity-0 group-hover/turn:opacity-100 focus-visible:opacity-100'
+                ? 'text-emerald-400'
+                : 'text-[var(--text-dim)] hover:text-[var(--text)]'
             }`}
           >
             {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
@@ -255,7 +266,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
             onClick={onRetry}
             aria-label="Retry response"
             data-testid="chat-msg-retry"
-            className="p-0.5 rounded text-muted-foreground/40 hover:text-muted-foreground opacity-0 group-hover/turn:opacity-100 focus-visible:opacity-100 transition-opacity"
+            className="p-0.5 rounded text-[var(--text-dim)] hover:text-[var(--text)] transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
           </button>

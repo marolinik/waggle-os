@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Network, ArrowRight } from 'lucide-react';
+import { Bot, Plus, Search, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Network, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import BeeLoader from '@/components/ui/BeeLoader';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -248,8 +249,11 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               ))}
             </div>
             {/* Search row — KPIs moved to the page header (round-7 fix 3b),
-                so the field gets the full row to itself. */}
-            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
+                so the field gets the full row to itself. Wave T Lane F item 4:
+                a visible `--line` border + honey focus ring (focus-within, since
+                the inner Input suppresses its own ring) so the field holds its
+                edge on dark — consistent with the marketplace search bar. */}
+            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg border border-[var(--line)] px-2 py-1 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
               <Search className="w-3.5 h-3.5 text-muted-foreground" />
               <Input
                 value={search}
@@ -303,9 +307,12 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               </div>
             )}
             {loading && agents.length === 0 ? (
-              <div role="status" aria-live="polite" className="text-center py-12">
-                <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
-                <p className="text-xs text-muted-foreground">Loading agents…</p>
+              // Wave T Lane F item 3: the signature waggle-dance loader replaces
+              // the generic arc spinner. BeeLoader owns the status role + SR
+              // label; the visible caption is aria-hidden to avoid a double read.
+              <div className="flex flex-col items-center py-12">
+                <BeeLoader label="Loading agents…" />
+                <p className="mt-2.5 text-xs text-muted-foreground" aria-hidden>Loading agents…</p>
               </div>
             ) : error && agents.length === 0 ? (
               <div role="alert" className="text-center py-12">

@@ -113,6 +113,11 @@ const MarketplaceApp = () => {
   const [tab, setTab] = useState<Tab>('browse');
   const [facet, setFacet] = useState<Facet>('all');
   const [query, setQuery] = useState('');
+  // ~150ms-debounced mirror of `query` for the CLIENT grid filter + view mode,
+  // so the first keystroke doesn't flash the full list before it narrows (Wave
+  // T Lane B §1). `query` itself still drives the (separately 300ms-debounced)
+  // server load below and the input's own value.
+  const [filterQuery, setFilterQuery] = useState('');
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -200,6 +205,14 @@ const MarketplaceApp = () => {
     return () => clearTimeout(t);
   }, [connecting, facet, query, loadFacet]);
 
+  // Debounce the CLIENT grid filter (Wave T Lane B §1) — the grouped view + the
+  // narrowed list hold steady until typing settles, so the first keystroke no
+  // longer flashes a near-full flat list before it filters down.
+  useEffect(() => {
+    const t = setTimeout(() => setFilterQuery(query), 150);
+    return () => clearTimeout(t);
+  }, [query]);
+
   /** Remove confirmed → uninstall through the store so the count bar + every
    *  other view reflect it. The store toasts + reconciles on failure. */
   const handleUninstall = async (ext: Extension) => {
@@ -215,11 +228,15 @@ const MarketplaceApp = () => {
     window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId } }));
   };
 
-  const visible = filterExtensions(extensions, query);
+  const visible = filterExtensions(extensions, filterQuery);
+  // NL dead-end bridge (Wave T Lane B §1): a query that reads like a described
+  // need (≥3 words) with no keyword match hands off to the semantic engine
+  // instead of dead-ending — that engine already answers on Enter.
+  const isNlQuery = filterQuery.trim().split(/\s+/).filter(Boolean).length >= 3;
   // Round-4 merchandising: the band renders on the default All browse only
   // (no active query); banded entries are lifted OUT of the grid below so
   // each integration keeps exactly one row + one action.
-  const startHere = facet === 'all' && !query ? startHerePicks(extensions) : [];
+  const startHere = facet === 'all' && !filterQuery ? startHerePicks(extensions) : [];
   const gridVisible = startHere.length > 0
     ? visible.filter(e => !startHere.some(f => f.id === e.id))
     : visible;
@@ -227,7 +244,7 @@ const MarketplaceApp = () => {
   // headers instead of one alphabetical mixed-type dump. A live query (or a
   // typed facet) keeps the flat relevance list.
   const groupedSections: Array<{ label: string; items: Extension[] }> =
-    facet === 'all' && !query
+    facet === 'all' && !filterQuery
       ? (['skill', 'connector', 'mcp'] as const)
           .map(t => ({ label: FACET_LABELS[t], items: gridVisible.filter(e => e.type === t) }))
           .concat([{ label: 'More', items: gridVisible.filter(e => !['skill', 'connector', 'mcp'].includes(e.type)) }])
@@ -350,9 +367,20 @@ const MarketplaceApp = () => {
             {!loading && !loadError && visible.length === 0 && (
               <div className="text-center py-8">
                 <Package className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
-                  {query ? `No results for "${query}"` : 'No extensions available for this facet'}
-                </p>
+                {isNlQuery ? (
+                  // The moment the brand should feel magical: bridge the miss to
+                  // the semantic search that answers on Enter (Wave T Lane B §1).
+                  <>
+                    <p className="text-xs text-muted-foreground">{`No skill matches "${filterQuery}" by name.`}</p>
+                    <p data-testid="nl-search-bridge" className="mt-1 text-xs text-honey">
+                      Press Enter — Waggle matches skills to this job.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {filterQuery ? `No results for "${filterQuery}"` : 'No extensions available for this facet'}
+                  </p>
+                )}
               </div>
             )}
 

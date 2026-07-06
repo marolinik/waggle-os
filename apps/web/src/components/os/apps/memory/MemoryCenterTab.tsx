@@ -6,6 +6,7 @@ import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
 import { MEMORY_KIND_META, memoryKindLabel } from '@/lib/harvest-kind-map';
 import { MemoryCard } from './MemoryCard';
+import { memoryListCacheKey, readMemoryListCache, writeMemoryListCache } from './memory-list-cache';
 import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { ConfidenceBadge } from '@/components/ui/confidence-badge';
@@ -65,8 +66,14 @@ export default function MemoryCenterTab({
 }: MemoryCenterTabProps = {}) {
   // Workspace-mind ops carry the workspace param; personal ops must not.
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Wave T Lane D (item 2): seed the initial list from the session cache so a
+  // Trust ↔ Memories tab switch re-shows its rows instantly instead of re-
+  // spinning (R13-V1 finding). A fresh remount always lands on the default
+  // filters, so the initial seed keys on those; the live key (below) also folds
+  // in the active filters for the mid-session mind-switch path.
+  const initialCacheKey = memoryListCacheKey(['mc', mind, wsParam, 'active', '', 0, '']);
+  const [memories, setMemories] = useState<Memory[]>(() => readMemoryListCache(initialCacheKey) ?? []);
+  const [loading, setLoading] = useState(() => readMemoryListCache(initialCacheKey) === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState('');
@@ -76,6 +83,14 @@ export default function MemoryCenterTab({
   // full of junk" to a first-time user. 'All' stays one click away.
   const [status, setStatus] = useState<'' | MemoryStatus>('active');
   const [minConfidence, setMinConfidence] = useState(0);
+
+  // Wave T Lane D (item 2): the live cache key folds in the server-side filters
+  // (this list fetches filtered). Held in a ref (updated every render) so the
+  // mind-switch reset effect can reseed without taking a filter dependency —
+  // reseeding on every keystroke would fight the debounced fetch.
+  const cacheKey = memoryListCacheKey(['mc', mind, wsParam, status, kind, minConfidence, q.trim()]);
+  const cacheKeyRef = useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
 
   const [selected, setSelected] = useState<Memory | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -168,13 +183,13 @@ export default function MemoryCenterTab({
         minConfidence: minConfidence || undefined,
         limit: 200,
       });
-      if (seq === loadSeq.current) setMemories(res);
+      if (seq === loadSeq.current) { setMemories(res); writeMemoryListCache(cacheKey, res); }
     } catch (e) {
       if (seq === loadSeq.current) setError(e instanceof Error ? e.message : 'Failed to load memories');
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [q, kind, status, minConfidence, mind, wsParam]);
+  }, [q, kind, status, minConfidence, mind, wsParam, cacheKey]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0); // debounce text search only
@@ -192,10 +207,15 @@ export default function MemoryCenterTab({
   //    a misleading "No memories match these filters." empty state.
   useEffect(() => {
     loadSeq.current++;
+    // Wave T Lane D (item 2): reseed the new mind's rows from cache when the user
+    // has already visited this scope+filter this session — no re-spin — else fall
+    // back to the honest loader. (cacheKeyRef, not a dep, so a filter change here
+    // doesn't wipe selection/checklist.)
+    const cached = readMemoryListCache(cacheKeyRef.current);
     setSelected(null);
     setChecked(new Set());
-    setMemories([]);
-    setLoading(true);
+    setMemories(cached ?? []);
+    setLoading(cached === undefined);
     setEraseNotice(null);   // a receipt for the prior mind must not persist across the switch
     setSuppressionOpen(false); // the erased-source list is per-mind — collapse + drop stale rows
     setSuppressed([]);

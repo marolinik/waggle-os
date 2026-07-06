@@ -3,6 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Wave T Lane A (items 3-4): paint the pre-hydration frames in the hive
+         palette, not white, and honor the persisted theme so a light user never
+         sees a dark boot → light home whiplash. The inline script mirrors
+         ThemeProvider's readStored()/resolve() (localStorage 'waggle-theme');
+         applyStoredThemeEarly re-applies the same value once the bundle runs.
+         The hardcoded hexes match index.css --background (dark #14110b / light
+         #f7f1e4) — the CSS-var tokens don't exist until the stylesheet loads, so
+         this one place must inline them. -->
+    <script>
+      (function () {
+        try {
+          var v = localStorage.getItem('waggle-theme');
+          var light = v === 'light' ||
+            (v === 'system' && window.matchMedia &&
+             !window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (light) document.documentElement.setAttribute('data-theme', 'light');
+        } catch (e) { /* storage blocked — default to dark */ }
+      })();
+    </script>
+    <style>
+      html { background-color: #14110b; }
+      html[data-theme="light"] { background-color: #f7f1e4; }
+    </style>
+
     <link rel="icon" type="image/png" href="/waggle-logo.png" />
     <link rel="apple-touch-icon" href="/waggle-logo.png" />
     <title>Waggle OS</title>

@@ -237,6 +237,20 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     expect(screen.getByText('PostgreSQL')).toBeInTheDocument(); // still in the grid
   });
 
+  it('an NL query with no keyword match bridges to the semantic search (Wave T Lane B §1)', async () => {
+    renderApp();
+    await screen.findByText('Web Scraper');
+    // ≥3-word described need that no loaded row matches by name/description.
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), {
+      target: { value: 'send a slide deck to my whole team' },
+    });
+    const bridge = await screen.findByTestId('nl-search-bridge');
+    expect(bridge).toHaveTextContent(/Press Enter/i);
+    // A one-word miss stays the plain "no results" copy — no bridge.
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), { target: { value: 'zzzznope' } });
+    await waitFor(() => expect(screen.queryByTestId('nl-search-bridge')).not.toBeInTheDocument());
+  });
+
   it('the Audit tab reads the C18 shared feed and the type filter re-queries', async () => {
     mocks.adapter.getExtendAudit.mockResolvedValue([{
       id: 3, timestamp: '2026-06-01T09:00:00.000Z', capabilityName: 'web-scraper',

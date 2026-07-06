@@ -60,7 +60,7 @@ function actionKey(ext: Extension): ActionKey | null {
  *  weight, so the action rail reads as a single system. Every primary action
  *  (verb button + inline token submit) uses this exact treatment. */
 const PRIMARY_ACTION_CLASS =
-  'flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50';
+  'flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 group-hover:bg-primary/10 group-focus-within:bg-primary/10 transition-colors disabled:opacity-50';
 
 /** ONE chip grammar (R10 / Wave-S Lane C) — TWO species, app-wide:
  *   FILLED  (category / type / trust / source form): line-soft border,
@@ -106,6 +106,45 @@ export function describeSourceForms(sources: string[]): string {
   return `Works as ${list}`;
 }
 
+/** One metadata chip descriptor. Glyph chips (multi-form source markers) carry
+ *  an Icon; the rest are plain FILLED lozenges — still the two Wave-S species. */
+interface MetaChip {
+  key: string;
+  label: string;
+  Icon?: typeof Download;
+  capitalize?: boolean;
+  sourceForm?: boolean;
+}
+
+/** Number of metadata chips shown before the rest fold into a "+N" chip. */
+export const META_VISIBLE_CAP = 3;
+
+/** Metadata budget (Wave T Lane B §2): one priority-ordered, deduped chip set —
+ *  type, then the multi-form source glyphs (the differentiator), then category,
+ *  trust, and the registry source. Deduped by label (case-insensitive) so a
+ *  connector that also runs as an MCP no longer shows "connector" twice; the
+ *  caller caps the result to META_VISIBLE_CAP + a "+N" overflow chip. */
+export function buildMetaChips(ext: Extension): MetaChip[] {
+  const raw: MetaChip[] = [{ key: 'type', label: ext.type }];
+  if (ext.sources && ext.sources.length > 1) {
+    for (const s of [...new Set(ext.sources)]) {
+      const meta = SOURCE_FORM_META[s];
+      raw.push({ key: `form-${s}`, label: meta?.label ?? s, Icon: meta?.Icon, sourceForm: true });
+    }
+  }
+  if (ext.category) raw.push({ key: 'category', label: ext.category });
+  if (ext.trust) raw.push({ key: 'trust', label: ext.trust, capitalize: true });
+  if (ext.source) raw.push({ key: 'source', label: ext.source });
+
+  const seen = new Set<string>();
+  return raw.filter(c => {
+    const n = c.label.trim().toLowerCase();
+    if (seen.has(n)) return false;
+    seen.add(n);
+    return true;
+  });
+}
+
 interface ExtensionCardProps {
   ext: Extension;
   /** Destructive uninstall — opens the parent's consequence dialog. */
@@ -134,6 +173,11 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   // Connected connectors read alive at a glance: the BrandTile gets its
   // connected ring AND the row warms up (quiet honey left hairline + wash).
   const connectedRow = !!installed && ext.type === 'connector';
+  // Metadata budget (Wave T Lane B §2): deduped, capped chip set + overflow.
+  const metaChips = buildMetaChips(ext);
+  const shownChips = metaChips.slice(0, META_VISIBLE_CAP);
+  const overflowChips = metaChips.slice(META_VISIBLE_CAP);
+  const firstSourceFormKey = shownChips.find(c => c.sourceForm)?.key;
 
   const runPrimary = async () => {
     if (ext.type === 'connector') {
@@ -152,12 +196,16 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   return (
     <div
       data-testid="extension-card"
-      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-colors ${
+      // Row hover tier (Wave T Lane B §3): rest flat → hover/focus-within lifts
+      // one elevation step (shadow-sm → shadow) + warms the border to honey,
+      // 150ms ease-out. `group` lets the primary action gain full contrast on
+      // row hover (see PRIMARY_ACTION_CLASS).
+      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-150 ease-out ${
         connectedRow
           // Rest elevation folded INTO the inset honey hairline (one combined
           // box-shadow — two shadow-* utilities on one element would collide).
-          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
-          : 'border-border/30 hover:border-border/60 shadow-[var(--shadow-sm)]'
+          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] hover:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow)] focus-within:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
+          : 'border-border/30 shadow-[var(--shadow-sm)] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)] focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow)]'
       }`}
     >
       {/* Brand identity tile (simple-icons mark or monogram) — no more
@@ -199,30 +247,34 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
           ) : null}
         </div>
         <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{ext.description}</p>
+        {/* Metadata row (Wave T Lane B §2): the deduped chip set, capped at
+            META_VISIBLE_CAP with a "+N" overflow chip (tooltip lists the rest).
+            Two species only (Wave-S grammar): FILLED lozenge + FILLED glyph —
+            the multi-form source glyphs keep ONE shared "Works as …" tooltip. */}
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className={TAG_CHIP}>{ext.type}</span>
-          {ext.category && <span className={TAG_CHIP}>{ext.category}</span>}
-          {ext.trust && <span className={`${TAG_CHIP} capitalize`}>{ext.trust}</span>}
-          {/* Genuinely multi-form integration (dedup winner absorbed ≥1 twin) —
-              one FILLED glyph chip per form, all sharing ONE tooltip (Wave-S
-              Lane C: no sentence chips). */}
-          {ext.sources && ext.sources.length > 1 && (
-            <span data-testid="extension-sources" className="inline-flex items-center gap-1.5" title={describeSourceForms(ext.sources)}>
-              {[...new Set(ext.sources)].map(s => {
-                const meta = SOURCE_FORM_META[s];
-                return (
-                  <span key={s} className={TAG_CHIP_GLYPH}>
-                    {meta && <meta.Icon className="w-3 h-3 shrink-0" aria-hidden />}
-                    {meta?.label ?? s}
-                  </span>
-                );
-              })}
+          {shownChips.map(c => {
+            const Icon = c.Icon;
+            return (
+              <span
+                key={c.key}
+                {...(c.key === firstSourceFormKey ? { 'data-testid': 'extension-sources' } : {})}
+                className={Icon ? TAG_CHIP_GLYPH : (c.capitalize ? `${TAG_CHIP} capitalize` : TAG_CHIP)}
+                title={c.sourceForm ? describeSourceForms(ext.sources ?? []) : undefined}
+              >
+                {Icon && <Icon className="w-3 h-3 shrink-0" aria-hidden />}
+                {c.label}
+              </span>
+            );
+          })}
+          {overflowChips.length > 0 && (
+            <span
+              data-testid="extension-tags-overflow"
+              className={TAG_CHIP}
+              title={overflowChips.map(c => c.label).join(', ')}
+            >
+              +{overflowChips.length}
             </span>
           )}
-          {/* Registry/source token — FILLED chip species (Wave-S Lane C: was an
-              orphan plain-text token; the chip also clears the 2.27:1 light-theme
-              contrast the old muted text measured at). */}
-          {ext.source && <span className={TAG_CHIP}>{ext.source}</span>}
         </div>
 
         {/* In-place connector token-paste (bearer/api_key/basic). OAuth never

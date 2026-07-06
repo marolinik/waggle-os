@@ -32,13 +32,14 @@ import NotificationInbox from './overlays/NotificationInbox';
 import KeyboardShortcutsHelp from './overlays/KeyboardShortcutsHelp';
 import OnboardingWizard from './overlays/OnboardingWizard';
 import OnboardingTooltips from './overlays/OnboardingTooltips';
-import LoginBriefing from './overlays/LoginBriefing';
+import LoginBriefing, { prefetchBriefing } from './overlays/LoginBriefing';
 import ContextRail from './overlays/ContextRail';
 import UpgradeModal from './overlays/UpgradeModal';
 import TrialExpiredModal from './overlays/TrialExpiredModal';
 import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
-import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '@/lib/login-briefing';
+import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt, readLoginBriefingDismissed, readSkipBriefingParam } from '@/lib/login-briefing';
+import { resolveReturningUserOnboarding, isOnboardingStatusKnownSync } from '@/hooks/useOnboarding';
 import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
@@ -531,6 +532,15 @@ const AppShell = () => {
   // always wins — acceptance check 2).
   useState(() => bootWindowStateMigration(window.location.pathname));
 
+  // Wave T Lane A (item 2): warm the LoginBriefing payload cache while the boot
+  // sequence runs (~4s), so the briefing greets with content instead of opening
+  // as a bare spinner. Skipped when the user turned the briefing off. Fire-and-
+  // forget; the adapter's connect gate defers the requests until the sidecar is
+  // reachable, and prefetchBriefing swallows its own rejection.
+  useEffect(() => {
+    if (!readLoginBriefingDismissed() && !readSkipBriefingParam()) prefetchBriefing();
+  }, []);
+
   const [initialBooted] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const shouldSkipBoot = params.get('skipOnboarding') === 'true' || params.get('skipBoot') === 'true';
@@ -540,18 +550,49 @@ const AppShell = () => {
     }
     return localStorage.getItem(BOOT_KEY) !== null;
   });
+
+  // Wave T Lane A (item 1): the onboarding wizard flashes for ~1s for a
+  // server-onboarded user whose webview localStorage is fresh — the P4
+  // /api/onboarding/status probe only resolves AFTER the shell mounts, so the
+  // wizard paints before the auto-complete lands. Hold boot until the decision
+  // is KNOWN: sync when localStorage already settles it, else probe the server
+  // (capped so a dead endpoint can't brick boot — 3s, inside the boot screen's
+  // own 3-4s runtime, because a 1.5s cap still let the wizard flash on a cold
+  // dev server where the status roundtrip runs long). resolveReturningUser-
+  // Onboarding persists the completed flag so useOnboarding reads it
+  // synchronously and never renders the wizard for an onboarded user.
+  const [onboardingResolved, setOnboardingResolved] = useState(isOnboardingStatusKnownSync);
+  useEffect(() => {
+    if (onboardingResolved) return;
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; setOnboardingResolved(true); } };
+    void resolveReturningUserOnboarding().finally(finish);
+    const cap = window.setTimeout(finish, 3000);
+    return () => window.clearTimeout(cap);
+  }, [onboardingResolved]);
+
   const [booted, setBooted] = useState(initialBooted);
-  const [showShell, setShowShell] = useState(initialBooted);
+  const [showShell, setShowShell] = useState(() => initialBooted && isOnboardingStatusKnownSync());
+
+  // Fast path with no BootScreen to animate out (already booted this session):
+  // reveal the shell once onboarding resolves, since onExitComplete never fires.
+  useEffect(() => {
+    if (initialBooted && onboardingResolved) setShowShell(true);
+  }, [initialBooted, onboardingResolved]);
 
   const handleBootComplete = () => {
     localStorage.setItem(BOOT_KEY, 'true');
     setBooted(true);
   };
 
+  // Hold the BootScreen until BOTH the boot sequence finished AND onboarding
+  // status is known (item 1) — only then may it animate out and the shell mount.
+  const bootComplete = booted && onboardingResolved;
+
   return (
     <>
       <AnimatePresence onExitComplete={() => setShowShell(true)}>
-        {!booted && <BootScreen onComplete={handleBootComplete} />}
+        {!bootComplete && <BootScreen onComplete={handleBootComplete} />}
       </AnimatePresence>
       {showShell && (
         <ShellProvider>

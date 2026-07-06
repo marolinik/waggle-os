@@ -20,6 +20,7 @@ vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/lib/app-deeplink', () => ({ consumeDeepLink: () => null }));
 
 import MemoryTrustManage from '@/components/os/apps/memory/MemoryTrustManage';
+import { clearMemoryListCache } from '@/components/os/apps/memory/memory-list-cache';
 
 const DAY = 86_400_000;
 const iso = (ageDays: number) => new Date(Date.now() - ageDays * DAY).toISOString();
@@ -34,7 +35,7 @@ function mem(over: Partial<Memory> & Pick<Memory, 'id'>): Memory {
   } as Memory;
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); clearMemoryListCache(); });
 beforeEach(() => {
   mocks.adapter.deleteMemoryById.mockResolvedValue(undefined);
   mocks.adapter.confirmMemory.mockResolvedValue({});

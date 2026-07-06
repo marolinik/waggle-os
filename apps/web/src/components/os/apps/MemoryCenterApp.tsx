@@ -105,8 +105,13 @@ const MemoryCenterApp = ({
         onOpenHarvest={() => onViewChange('harvest')}
       />
 
-      {/* Tab bar — Trust first, the core views, then the Advanced flyout. */}
-      <div role="tablist" aria-label="Memory views" className="flex items-center border-b border-border/50 bg-background/60">
+      {/* Tab bar + mind scope — Wave T Lane D (item 4): the memory surface stacked
+          THREE control tiers (tabs · mind pills · the Trust Manage/Why switch).
+          Fold the weakest full-width tier — the mind pills — up onto the tab-bar
+          row as a right-aligned scope control, so the surface reads as two tiers,
+          not three. Every destination is preserved; only the chrome collapses. */}
+      <div className="flex flex-wrap items-center gap-y-1 border-b border-border/50 bg-background/60">
+        <div role="tablist" aria-label="Memory views" className="flex items-center">
         {PRIMARY_TABS.map((tab, i) => {
           const Icon = tab.icon;
           const active = view === tab.id;
@@ -194,14 +199,15 @@ const MemoryCenterApp = ({
             )}
           </div>
         </div>
-      </div>
+        </div>
 
-      {/* Mind pills — only on the Memories view (D2 two-mind split). The
-          workspace pill is never pressed AND disabled at once: without a
-          workspace there is no workspace mind to be "on", even if the URL says
-          /memory/workspace (the list shows the no-workspace hint instead). */}
-      {(view === 'memories' || view === 'trust') && (
-        <div role="group" aria-label="Which mind to show" className="flex items-center gap-1.5 px-2.5 py-2 border-b border-border/30 bg-background/40">
+        {/* Mind pills — folded onto the tab row (Wave T Lane D item 4). Only on
+            the Trust/Memories views (D2 two-mind split). The workspace pill is
+            never pressed AND disabled at once: without a workspace there is no
+            workspace mind to be "on", even if the URL says /memory/workspace (the
+            list shows the no-workspace hint instead). */}
+        {(view === 'memories' || view === 'trust') && (
+        <div role="group" aria-label="Which mind to show" className="ml-auto flex items-center gap-1.5 border-l border-border/40 px-2.5 py-1.5">
           <button
             onClick={() => onMindChange('personal')}
             aria-pressed={mind === 'personal'}
@@ -233,7 +239,8 @@ const MemoryCenterApp = ({
             </button>
           </HintTooltip>
         </div>
-      )}
+        )}
+      </div>
 
       <div className="flex-1 overflow-auto">
         {view === 'trust' ? (

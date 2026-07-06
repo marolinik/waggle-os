@@ -11,7 +11,7 @@
  *    link); the actions menu inside stops propagation so managing never opens
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
 import type { Workspace } from '@/lib/types';
 
 const mocks = vi.hoisted(() => ({
@@ -101,6 +101,33 @@ describe('AllWorkspacesApp', () => {
     const card = screen.getByTestId('all-workspaces-card-s3');
     // Template text is not data — omitted, never paraphrased.
     expect(card.textContent).not.toContain('Hello! What can you help me with?');
+  });
+
+  it('reserves the preview slot even when a card has no description/session/activity (Wave T Lane C fix 1 — reserve, don\'t collapse)', () => {
+    // No description, no session title, no created/lastActive → nothing to preview.
+    mocks.shell.workspaces = [ws({ id: 'bare', name: 'Bare' })];
+    render(<AllWorkspacesApp />);
+    const slot = screen.getByTestId('all-workspaces-preview-bare');
+    // The slot still renders (its reserved height holds the identity→tags→
+    // preview→metrics grammar) but carries no fabricated copy — an empty band.
+    expect(slot).toBeInTheDocument();
+    expect(slot.textContent).toBe('');
+  });
+
+  it('a duplicate-named card keeps the "duplicate name" pill and rides the slug in its tooltip, never as visible text (Wave T Lane C item 2)', () => {
+    mocks.shell.workspaces = [
+      ws({ id: 'twin-alpha', name: 'Twin' }),
+      ws({ id: 'twin-beta', name: 'Twin' }),
+    ];
+    render(<AllWorkspacesApp />);
+    // Both same-named cards keep the collision flag (the pill is kept, not removed).
+    expect(screen.getAllByText('duplicate name')).toHaveLength(2);
+    const card = screen.getByTestId('all-workspaces-card-twin-alpha');
+    const pill = within(card).getByText('duplicate name');
+    // R12: raw slug = data debris — it rides the pill's tooltip for
+    // disambiguation, never the resting card face.
+    expect(pill).toHaveAttribute('title', 'Workspace ID: twin-alpha');
+    expect(card.textContent).not.toContain('twin-alpha');
   });
 
   it('does NOT fabricate a count for a workspace with undefined memoryCount', () => {
