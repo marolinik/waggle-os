@@ -47,10 +47,15 @@ describe('theme crossfade — CSS shape', () => {
     }
   });
 
-  it('uses a 300-400ms duration', () => {
-    const m = body.match(/transition-duration:\s*(\d+)ms/);
-    expect(m).not.toBeNull();
-    const ms = Number(m![1]);
+  it('drives its duration from the --mo-slow motion token (one source of truth with ThemeProvider)', () => {
+    // R3 motion sweep: the crossfade window is no longer a bespoke literal — it
+    // resolves to var(--mo-slow), the SAME token ThemeProvider's JS cleanup timer
+    // reads via DUR.slow, so the CSS and JS can never drift.
+    expect(body).toMatch(/transition-duration:\s*var\(--mo-slow\)/);
+    // …and that token sits in the intended 300-400ms band.
+    const tok = css.match(/--mo-slow:\s*(\d+)ms/);
+    expect(tok).not.toBeNull();
+    const ms = Number(tok![1]);
     expect(ms).toBeGreaterThanOrEqual(300);
     expect(ms).toBeLessThanOrEqual(400);
   });

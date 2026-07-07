@@ -228,7 +228,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
           <div className="relative group">
             <button className="flex items-center gap-1 text-destructive" aria-label="Backend offline — messages will be queued">
               <WifiOff className="w-3.5 h-3.5" />
-              <span className="text-[10px] font-display animate-pulse">Offline</span>
+              <span className="text-[10px] font-display animate-pulse motion-reduce:animate-none">Offline</span>
             </button>
             <div className="absolute top-full right-0 mt-2 w-48 p-2.5 rounded-xl glass-strong border border-border/50 shadow-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
               <p className="text-[11px] font-display font-semibold text-foreground mb-1">Backend Unreachable</p>

@@ -254,7 +254,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, 
   const provShort = srcLabel ?? preview.titleMeta?.split('·')[0].trim();
   return (
     <li
-      style={enterDelayMs != null ? { animation: 'card-enter 0.32s ease-out both', animationDelay: `${enterDelayMs}ms` } : undefined}
+      style={enterDelayMs != null ? { animation: 'card-enter var(--mo-slow) var(--mo-ease) both', animationDelay: `${enterDelayMs}ms` } : undefined}
       className={cn(
         'rounded-[18px] border bg-[var(--surface)] p-4 transition-colors',
         stale ? 'border-[color-mix(in_srgb,var(--attention)_30%,var(--line-soft))]' : 'border-[var(--line-soft)]',
@@ -602,7 +602,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     // motion keeps the instant swap.
     <div
       className="space-y-6"
-      style={reduceMotion ? undefined : { animation: 'card-enter 0.15s ease-out both' }}
+      style={reduceMotion ? undefined : { animation: 'card-enter var(--mo-fast) var(--mo-ease) both' }}
     >
       {/* §3 stat bar — one TOTAL headline + subordinate, non-summing dimension
           chips. The three views overlap (a memory can be fresh AND awaiting

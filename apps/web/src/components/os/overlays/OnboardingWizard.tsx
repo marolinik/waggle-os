@@ -17,6 +17,7 @@ import {
 import type { OnboardingProfileFields } from './onboarding';
 import { CURATED_ONBOARDING_TEMPLATES, TEMPLATE_PERSONA, TEMPLATE_SUGGESTIONS } from './onboarding/constants';
 import { recommendTemplateId } from './onboarding/recommend-template';
+import { DUR, EASE_OUT } from '@/lib/motion/tokens';
 
 /* ─── Props ─── */
 interface OnboardingWizardProps {
@@ -313,7 +314,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
           className="h-full bg-primary"
           initial={{ width: 0 }}
           animate={{ width: `${progressPct}%` }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
+          transition={{ duration: DUR.settle, ease: EASE_OUT }}
         />
       </div>
 
@@ -346,6 +347,9 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
               transition={
                 reduceMotion
                   ? { duration: 0 }
+                  // Ambient breathing loop — deliberately outside the --mo interaction
+                  // tiers (a 4.5s symmetric easeInOut pulse, not a fast/base/slow/settle
+                  // gesture); REDUCED.ambient='off' is honoured by the reduceMotion branch.
                   : { duration: 4.5, repeat: Infinity, ease: 'easeInOut' }
               }
             />

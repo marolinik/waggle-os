@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
+import { DUR, EASE_OUT } from '@/lib/motion/tokens';
 import type { BackendPersona, GroupExecState, MemberExecStatus, AgentGroup } from './types';
 
 const STATUS_ICON: Record<MemberExecStatus, React.ReactNode> = {
@@ -71,7 +72,7 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
           className={`h-full ${exec.status === 'failed' ? 'bg-destructive' : 'bg-primary'}`}
           initial={{ width: 0 }}
           animate={{ width: `${isFinished ? 100 : progress}%` }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
+          transition={{ duration: DUR.settle, ease: EASE_OUT }}
         />
       </div>
 

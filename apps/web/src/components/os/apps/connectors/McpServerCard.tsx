@@ -42,7 +42,7 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
   };
 
   return (
-    <div className="group relative flex flex-col gap-2.5 rounded-2xl border border-border/40 bg-secondary/20 p-3 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary/40 hover:shadow-[0_12px_32px_-16px_rgba(229,160,0,0.35)]">
+    <div className="group relative flex flex-col gap-2.5 rounded-2xl border border-border/40 bg-secondary/20 p-3 transition-all duration-[var(--mo-base)] hover:-translate-y-0.5 hover:border-primary/40 hover:bg-secondary/40 hover:shadow-[0_12px_32px_-16px_rgba(229,160,0,0.35)]">
       {/* Top row — tile + meta */}
       <div className="flex items-start gap-3">
         <BrandTile identity={identity} size={48} official={server.official} />

@@ -152,6 +152,8 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
           </span>
         </div>
         <div className="h-1 rounded-full bg-muted overflow-hidden">
+          {/* duration-500 is deliberate: a data-driven progress fill reads as a
+              slow reveal, one tier beyond the --mo-settle (400ms) interaction band. */}
           <div
             className="h-full bg-primary transition-[width] duration-500"
             style={{ width: `${brainScore}%` }}
@@ -202,7 +204,7 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                   onClick={() => onSelectWorkspace(ws.id)}
                   onMouseEnter={() => setHoveredId(ws.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className={`relative text-left p-3 rounded-xl border transition-all duration-200 ${
+                  className={`relative text-left p-3 rounded-xl border transition-all duration-[var(--mo-base)] ${
                     isActive
                       ? 'border-primary/50 bg-primary/10 shadow-lg shadow-primary/10'
                       : 'border-border/50 bg-secondary/30 hover:bg-secondary/50 hover:border-border'

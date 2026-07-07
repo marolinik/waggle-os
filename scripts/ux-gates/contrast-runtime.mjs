@@ -5,9 +5,12 @@
  * Pillar 4.2(b) + 4.3. Token-pair math (contrast-tokens.mjs) proves the tokens
  * are AA in isolation; this proves it AFTER composition — opacity stacked up the
  * DOM tree, and text painted over the wallpaper/gradient. Against a running dev
- * server it walks every visible text node on each judged surface, computes the
- * EFFECTIVE foreground/background (ancestor-opacity composited; a real screenshot
- * pixel sampled when an ancestor paints a background-image), and reports:
+ * server it walks every visible text node on each judged surface (after finite
+ * entrance animations settle), computes the EFFECTIVE foreground/background
+ * (ancestor-opacity composited; a real screenshot pixel sampled when an ancestor
+ * paints an image, blurs the backdrop, or the stack never reaches an opaque
+ * background — i.e. glass/scrim overlay subtrees CSS math cannot reconstruct),
+ * and reports:
  *
  *   text nodes         effective contrast < 4.5:1  (< 3:1 for WCAG-large text)
  *   focus indicators   ring/outline contrast < 3:1 vs adjacent effective bg
@@ -102,6 +105,16 @@ function decodePixel(buf) {
 function collectTextNodes(maxNodes) {
   const parseColor = (str) => {
     if (!str || str === 'transparent' || str === 'none') return { r: 0, g: 0, b: 0, a: 0 };
+    // Modern engines serialize computed colours from color-mix()/wide-gamut/
+    // color() as `color(srgb r g b / a)` (0–1 floats) rather than rgb()/rgba().
+    // The rgb() regex misses it, so such a foreground parsed to transparent-black
+    // → composite === bg → a fabricated 1.0:1 (the 'Fallback' rail is a
+    // color-mix()). Handle both notations.
+    const cm = str.match(/color\(srgb\s+([^)]+)\)/i);
+    if (cm) {
+      const q = cm[1].split(/[\s/]+/).map((s) => parseFloat(s)).filter((n) => !Number.isNaN(n));
+      return { r: q[0] * 255, g: q[1] * 255, b: q[2] * 255, a: q[3] === undefined ? 1 : q[3] };
+    }
     const m = str.match(/rgba?\(([^)]+)\)/i);
     if (!m) return { r: 0, g: 0, b: 0, a: 0 };
     const p = m[1].split(/[,/]/).map((s) => parseFloat(s));
@@ -136,19 +149,46 @@ function collectTextNodes(maxNodes) {
     const fg = parseColor(cs.color); fg.a *= opacity;
     const fontPx = parseFloat(cs.fontSize) || 14;
     const bold = (parseInt(cs.fontWeight, 10) || 400) >= 700;
-    // Effective bg: composite backgrounds up the tree; if any ancestor paints an
-    // image, defer to a real screenshot pixel.
-    let imageBg = false;
+    // Effective bg: composite backgrounds up the tree. Defer to a real screenshot
+    // pixel when — and only when — CSS compositing can't be trusted AND the node
+    // is the topmost thing painted at its position (see occlusion below):
+    //   • an ancestor paints an image (wallpaper/gradient), OR
+    //   • an ancestor blurs the backdrop (glass — the effective bg is the blurred
+    //     content behind it, which no colour math can reconstruct), OR
+    //   • the walk never reaches an opaque background (a semi-transparent overlay
+    //     subtree — compositing the stack onto assumed-white is wrong, and in dark
+    //     theme wildly so).
+    let imageBg = false, backdrop = false, foundOpaque = false;
     const layers = [];
     for (let a = el; a; a = a.parentElement) {
       const acs = getComputedStyle(a);
       if (acs.backgroundImage && acs.backgroundImage !== 'none') imageBg = true;
+      if ((acs.backdropFilter && acs.backdropFilter !== 'none') ||
+          (acs.webkitBackdropFilter && acs.webkitBackdropFilter !== 'none')) backdrop = true;
       const bgc = parseColor(acs.backgroundColor);
       if (bgc.a > 0) layers.push(bgc);
-      if (bgc.a >= 1 && !(acs.backgroundImage && acs.backgroundImage !== 'none')) break;
+      if (bgc.a >= 1 && !(acs.backgroundImage && acs.backgroundImage !== 'none')) { foundOpaque = true; break; }
+    }
+    // Occlusion: is a higher overlay (a modal scrim, a toast) painted over this
+    // node? If so, a screenshot at its position samples the OVERLAY, not the
+    // node's own background — so we MUST trust the CSS composite (its real design
+    // bg) instead. This is what stops the content BEHIND the TrialExpiredModal
+    // scrim (the 'Fallback' row + the whole /home cluster — real CSS contrast
+    // 4.8–6.7:1, but a screenshot scores them against the black scrim → ~1.0:1)
+    // from being frozen as fabricated failures. `elementFromPoint` returns the
+    // topmost painted element; the node is occluded unless that element is itself,
+    // a descendant, or an ancestor of it.
+    const px = Math.round(rect.left + Math.min(rect.width / 2, 4));
+    const py = Math.round(rect.top + rect.height / 2);
+    const top = document.elementFromPoint(px, py);
+    let occluded = false;
+    if (top && top !== el) {
+      occluded = true;
+      for (let a = top; a; a = a.parentElement) { if (a === el) { occluded = false; break; } }
+      if (occluded) for (let a = el; a; a = a.parentElement) { if (a === top) { occluded = false; break; } }
     }
     const snippet = txt.slice(0, 60);
-    if (imageBg) {
+    if (!occluded && (imageBg || backdrop || !foundOpaque)) {
       // Sample the top-left leading (line-height puts blank space above the cap
       // height) — likelier to be background than a glyph stroke.
       results.push({
@@ -170,6 +210,13 @@ function collectTextNodes(maxNodes) {
 function collectFocusRing() {
   const parseColor = (str) => {
     if (!str || str === 'transparent' || str === 'none') return null;
+    // color(srgb …) as well as rgb()/rgba() — see collectTextNodes.
+    const cm = str.match(/color\(srgb\s+([^)]+)\)/i);
+    if (cm) {
+      const q = cm[1].split(/[\s/]+/).map((s) => parseFloat(s)).filter((n) => !Number.isNaN(n));
+      const a = q[3] === undefined ? 1 : q[3];
+      return a === 0 ? null : { r: q[0] * 255, g: q[1] * 255, b: q[2] * 255, a };
+    }
     const m = str.match(/rgba?\(([^)]+)\)/i);
     if (!m) return null;
     const p = m[1].split(/[,/]/).map((s) => parseFloat(s));
@@ -181,8 +228,8 @@ function collectFocusRing() {
     for (let a = el; a; a = a.parentElement) {
       const acs = getComputedStyle(a);
       if (acs.backgroundImage && acs.backgroundImage !== 'none') return null; // sample
-      const m = acs.backgroundColor.match(/rgba?\(([^)]+)\)/i);
-      if (m) { const p = m[1].split(/[,/]/).map((s) => parseFloat(s)); const al = p[3] === undefined ? 1 : p[3]; if (al >= 1) return { r: p[0], g: p[1], b: p[2], a: 1 }; }
+      const c = parseColor(acs.backgroundColor); // color(srgb)-aware
+      if (c && c.a >= 1) return { r: c.r, g: c.g, b: c.b, a: 1 };
     }
     return { r: 255, g: 255, b: 255, a: 1 };
   };
@@ -216,6 +263,31 @@ async function samplePixel(page, sx, sy) {
 function floorFor(node) {
   const large = node.fontPx >= 24 || (node.bold && node.fontPx >= 18.66);
   return large ? LARGE_FLOOR : TEXT_FLOOR;
+}
+
+/** Wait out finite entrance animations before measuring. framer-motion modals /
+ *  toasts animate opacity via the Web Animations API; measuring mid-fade
+ *  multiplies every foreground by the transient ancestor opacity AND skews the
+ *  bg composite — that, not a real contrast defect, is what produced the
+ *  TrialExpiredModal 1.1–2.1:1 cluster and the 1.0:1 'Fallback' rows (verified:
+ *  at 700ms the modal sat at 0.79 opacity, at rest 1.0 → AA). Infinite ambient
+ *  loops (honey-pulse, float) are skipped so they can't hang the gate, and the
+ *  whole wait is hard-capped. */
+async function settleAnimations(page, capMs = 2500) {
+  await page.evaluate(async (cap) => {
+    const deadline = performance.now() + cap;
+    const pending = () => (document.getAnimations ? document.getAnimations() : []).filter((a) => {
+      if (a.playState !== 'running' || !a.effect) return false;
+      const timing = a.effect.getComputedTiming ? a.effect.getComputedTiming() : {};
+      return timing.iterations !== Infinity; // ignore ambient/infinite loops
+    });
+    while (pending().length && performance.now() < deadline) {
+      await Promise.race([
+        Promise.allSettled(pending().map((a) => a.finished)),
+        new Promise((r) => setTimeout(r, 100)),
+      ]);
+    }
+  }, capMs).catch(() => { /* animation API unavailable — fall through to fixed wait */ });
 }
 
 async function auditSurface(page, surface, theme) {
@@ -305,6 +377,7 @@ async function main() {
           }, theme);
           await page.waitForSelector('main, [role="navigation"], .waggle-sidebar', { timeout: 12000 }).catch(() => {});
           await page.waitForTimeout(700);
+          await settleAnimations(page);
           const failures = await auditSurface(page, surface, theme);
           allFailures.push(...failures);
           process.stdout.write(`  ${theme}/${surface.id}: ${failures.length} finding(s)\n`);

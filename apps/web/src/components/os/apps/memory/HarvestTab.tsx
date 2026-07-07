@@ -438,7 +438,7 @@ const HarvestTab = () => {
           </div>
           <div className="h-1 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full bg-primary transition-[width] duration-200"
+              className="h-full bg-primary transition-[width] duration-[var(--mo-base)]"
               style={{
                 width: `${Math.min(100, (progress.current / Math.max(1, progress.total)) * 100)}%`,
               }}

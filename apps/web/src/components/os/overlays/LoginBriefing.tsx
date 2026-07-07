@@ -6,6 +6,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion, type MotionProps } from 'framer-motion';
+import { STAGGER, DUR, EASE_OUT } from '@/lib/motion/tokens';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import {
   Brain, Clock, MessageSquare, Sparkles, ChevronRight,
@@ -283,18 +284,19 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const shownHighlights = highlights.slice(0, 2);
 
   // Wave W Lane B (item 1): the product's hero moment deserves an entrance beat
-  // that survives 2fps. Recall cards then workspace rows rise 8px + fade, ~80ms
-  // apart, after a short base delay so the beat reads AFTER the modal itself
-  // arrives. Reduced motion → instant (no rise/fade), honoring the header rule.
+  // that survives 2fps. Recall cards then workspace rows rise 8px + fade,
+  // STAGGER.brief (80ms) apart, after a short base delay so the beat reads AFTER
+  // the modal itself arrives. Duration/easing/stagger now resolve to the motion
+  // vocabulary (DUR.base / EASE_OUT / STAGGER.brief) — one source of truth.
+  // Reduced motion → instant (no rise/fade), honoring the header rule.
   const ENTER_BASE = 0.12;
-  const ENTER_STAGGER = 0.08;
   const entranceProps = (index: number): MotionProps =>
     reduceMotion
       ? { initial: false, animate: { opacity: 1, y: 0 } }
       : {
           initial: { opacity: 0, y: 8 },
           animate: { opacity: 1, y: 0 },
-          transition: { delay: ENTER_BASE + index * ENTER_STAGGER, duration: 0.2, ease: 'easeOut' },
+          transition: { delay: ENTER_BASE + index * STAGGER.brief, duration: DUR.base, ease: EASE_OUT },
         };
 
   // Wave Q Lane A (item 1): a failed briefing must never boot a blocking modal

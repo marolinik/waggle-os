@@ -396,7 +396,7 @@ export default function MemoryCenterTab({
     // timing). motion-safe — reduced-motion keeps the instant swap.
     <div
       className="flex flex-col h-full"
-      style={reduceMotion ? undefined : { animation: 'card-enter 0.15s ease-out both' }}
+      style={reduceMotion ? undefined : { animation: 'card-enter var(--mo-fast) var(--mo-ease) both' }}
     >
       {/* Filter bar */}
       <div className="border-b border-border/50 p-2.5 space-y-2 bg-background/60">

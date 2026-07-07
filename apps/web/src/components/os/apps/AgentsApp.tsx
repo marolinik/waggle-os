@@ -287,7 +287,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               </span>
               <span
                 className="inline-flex items-center gap-1 text-[11px] font-display font-semibold shrink-0"
-                style={{ color: 'var(--honey)' }}
+                style={{ color: 'var(--honey-text)' }}
               >
                 Start a swarm <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
               </span>

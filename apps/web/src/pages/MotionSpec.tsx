@@ -24,8 +24,9 @@ import {
  * useReducedMotion — so the page is proof the mappings are implemented, not just
  * documented.
  *
- * Note: Lane R3 owns the FINAL inventory content (path-exec-phase-A spec);
- * the table below is the starter it finalizes as it migrates each family.
+ * Note: the inventory (section 7) reflects the ACTUAL post-Phase-A tree state
+ * — every row grep-verified against the shipped components, dead classes marked
+ * honestly rather than fabricated.
  */
 
 const SPRING_ORDER: readonly SpringVariant[] = ["micro", "standard", "expressive"];
@@ -54,41 +55,45 @@ type InventoryRow = {
   status: string;
 };
 
-// THE INVENTORY (Lane R3 owns the final content). Every motion on the judged
-// surfaces, grouped: discrete-transition retrofits (migrated onto --mo-* / DUR /
-// SPRING), then signature moments, ambient loops, and the streaming caret.
+// THE INVENTORY — every motion on the judged surfaces, rebuilt from the ACTUAL
+// tree state at the end of Phase A (all retrofit lanes merged), not a per-lane
+// contract. Each row was verified by grep against the shipped components; a
+// reviewer can spot-check any file/token/class named here. Grouped: discrete-
+// transition retrofits (migrated onto --mo-* / DUR / STAGGER / SPRING), then
+// signature moments, ambient loops, the streaming caret, and — kept honest —
+// the CSS animation classes that are DEFINED but no longer applied by any
+// component (dead classes; they produce no motion).
 //
-// Honesty note: R3 rows (chat · status chrome · streaming bar) are applied in
-// THIS commit and verified here. R1/R2 rows state the Phase-A retrofit contract
-// their lanes own; the whole phase ships together and the reviewer grep gates
-// "zero non-token durations/easings on judged surfaces". Ambient loops keep
-// their multi-second cadence ON PURPOSE — those seconds are loop rhythm, not a
-// discrete-transition duration, so no --mo-* token applies (documented, not a gap).
+// Ambient loops keep their multi-second cadence ON PURPOSE — those seconds are
+// loop rhythm, not a discrete-transition duration, so no --mo-* token applies
+// (documented, not a gap). "live ✓" = the motion is wired and verified in the
+// tree; "compliant" = a bare token/keyword transition with no magic number.
 const INVENTORY: readonly InventoryRow[] = [
   // ── Discrete-transition retrofits (magic durations → tokens) ──────────────
-  { motion: "Card hover — lift + honey bloom", file: "AllWorkspacesApp · SuggestedAgentCards · ExtensionCard", tier: "hover", token: "--mo-fast + --mo-ease", reduced: "color + shadow, no transform", status: "✓ R1" },
-  { motion: "Shelf / card entrance stagger", file: "AllWorkspacesApp · SuggestedAgentCards", tier: "standard (entrance)", token: "DUR.slow + STAGGER.list", reduced: "instant set (no delay travel)", status: "✓ R1" },
-  { motion: "Memory Trust count-up", file: "MemoryTrustManage · MemoryCenterTab", tier: "countUp", token: "DUR.settle", reduced: "instant-set (source number)", status: "✓ R2" },
-  { motion: "Briefing entrance staggers", file: "LoginBriefing", tier: "brief (entrance)", token: "STAGGER.brief + DUR.slow", reduced: "crossfade-only", status: "✓ R2" },
-  { motion: "Theme crossfade (“sunset”)", file: "ThemeProvider · index.css .theme-transition", tier: "routeTransition", token: "--mo-slow †", reduced: "instant token swap", status: "✓ R2" },
-  { motion: "Boot phase transitions", file: "BootScreen", tier: "standard / expressive", token: "DUR.base – DUR.settle", reduced: "crossfade", status: "✓ R2" },
-  { motion: "Chat action-row reveal (Copy / Retry toolbar)", file: "ChatApp", tier: "standard", token: "--mo-fast + --mo-ease", reduced: "opacity only, no slide", status: "✓ R3" },
-  { motion: "Send button — colour / fill / scale transition", file: "ChatApp", tier: "standard + micro (send-arm)", token: "--mo-base (pulse timer = DUR.base)", reduced: "colour only, no scale (motion-safe)", status: "✓ R3" },
-  { motion: "Disclosure / chevron rotate (pins · sessions · tabs)", file: "ChatApp · WorkspaceDesktopApp · StatusBar", tier: "micro", token: "bare transition (no magic number)", reduced: "transform-only — unchanged", status: "compliant" },
+  { motion: "Card hover — lift + honey bloom", file: "AllWorkspacesApp · SuggestedAgentCards · ExtensionCard", tier: "hover", token: "--mo-fast + --mo-ease", reduced: "color + shadow, no transform (motion-safe)", status: "live ✓" },
+  { motion: "Shelf / card entrance stagger", file: "AllWorkspacesApp · SuggestedAgentCards", tier: "standard (entrance)", token: "card-enter · --mo-slow + --mo-ease + STAGGER.list", reduced: "instant set (reduceMotion → no delay travel)", status: "live ✓" },
+  { motion: "Memory hero count-up", file: "MemoryTrustManage (HeroCount)", tier: "countUp", token: "600ms easeOutCubic rAF (bespoke landing, justified)", reduced: "instant-set (source number)", status: "live ✓" },
+  { motion: "Trust ↔ Memories card-enter frame", file: "MemoryTrustManage · MemoryCenterTab", tier: "standard (entrance)", token: "card-enter · --mo-fast/--mo-slow + --mo-ease", reduced: "instant (reduceMotion → no style)", status: "live ✓" },
+  { motion: "Briefing entrance staggers", file: "LoginBriefing", tier: "brief (entrance)", token: "STAGGER.brief + DUR.base + EASE_OUT", reduced: "instant (reduceMotion crossfade)", status: "live ✓" },
+  { motion: "Theme crossfade (“sunset”)", file: "ThemeProvider · index.css .theme-transition", tier: "routeTransition", token: "var(--mo-slow) — shared w/ ThemeProvider DUR.slow", reduced: "off — instant token swap (no-preference gated)", status: "live ✓" },
+  { motion: "Boot phase transitions", file: "BootScreen", tier: "standard / expressive", token: "DUR.base – DUR.settle (+ 2 justified bespoke boot beats)", reduced: "crossfade / instant", status: "live ✓" },
+  { motion: "Chat action-row reveal (Copy / Retry toolbar)", file: "ChatApp", tier: "standard", token: "--mo-fast + --mo-ease", reduced: "opacity only, no slide (motion-reduce:transition-none)", status: "live ✓" },
+  { motion: "Send button — colour / fill / scale transition", file: "ChatApp", tier: "standard + micro (send-arm)", token: "--mo-base (pulse timer = DUR.base)", reduced: "colour only, no scale (motion-safe)", status: "live ✓" },
+  { motion: "Disclosure / chevron rotate (pins · sessions)", file: "ChatApp", tier: "micro", token: "bare transition-transform (no magic number)", reduced: "transform-only — unchanged", status: "compliant" },
   // ── Signature moments (SIGNATURE tier; guarded) ───────────────────────────
-  { motion: "Memory “+N ⬡” fold-into-hive", file: "StatusBar (.memory-fold)", tier: "settle · SIGNATURE.full", token: "memory-fold 1.8s keyframe", reduced: "off — particle never shows (opacity 0)", status: "signature ✓" },
-  { motion: "Memory-count honey-pulse", file: "StatusBar (.honey-pulse)", tier: "settle · signature", token: "honey-pulse 0.6s keyframe", reduced: "pulse skipped", status: "signature" },
-  { motion: "Send-flash input border", file: "index.css .send-flash", tier: "settle · signature", token: "send-flash 0.3s keyframe", reduced: "instant", status: "signature" },
+  { motion: "Memory “+N ⬡” fold-into-hive", file: "StatusBar (.memory-fold)", tier: "settle · SIGNATURE.full", token: "memory-fold 1.8s keyframe", reduced: "off — particle never shows (opacity 0, reduce block)", status: "live ✓" },
+  { motion: "Memory-count honey-pulse", file: "StatusBar (.honey-pulse)", tier: "settle · signature", token: "honey-pulse 0.6s keyframe", reduced: "off — pulse skipped (reduce block)", status: "live ✓" },
   // ── Ambient loops (loop cadence — no discrete token by design; reduced = off) ─
-  { motion: "Bee “thinking” ring while streaming", file: "ChatApp (.dot-live → breathe)", tier: "ambient", token: "breathe 2.4s loop", reduced: "off — static ring", status: "ambient ✓" },
-  { motion: "Empty-state bee float", file: "ChatApp (.float)", tier: "ambient", token: "float 3s loop", reduced: "off", status: "ambient" },
-  { motion: "Streaming bar slide", file: "ChatApp · index.css .chat-stream-shimmer", tier: "ambient", token: "shimmer 1.5s loop", reduced: "off — static segment", status: "✓ R3 (relocated + guarded)" },
-  { motion: "Workspace loading skeleton", file: "WorkspaceDesktopApp (animate-pulse)", tier: "ambient", token: "Tailwind pulse 2s loop", reduced: "off (motion-reduce:animate-none)", status: "ambient ✓" },
-  { motion: "Onboarding hive glow-breathe", file: "index.css .glow-breathe", tier: "ambient", token: "glow-breathe 4.5s loop", reduced: "off", status: "ambient ✓" },
-  { motion: "Health heartbeat dot", file: "index.css .heartbeat", tier: "ambient", token: "heartbeat 2s loop", reduced: "off", status: "ambient" },
+  { motion: "Bee “thinking” ring while streaming", file: "ChatApp · ChatWorkCanvas · DotLive (.dot-live → breathe)", tier: "ambient", token: "breathe 2.4s loop", reduced: "off — static ring (reduce block + motion-reduce)", status: "live ✓" },
+  { motion: "Empty-state bee float", file: "ChatApp (.float)", tier: "ambient", token: "float 3s loop", reduced: "off — stilled (reduce block)", status: "live ✓" },
+  { motion: "Streaming bar slide", file: "ChatApp · index.css .chat-stream-shimmer", tier: "ambient", token: "shimmer 1.5s loop", reduced: "off — static segment (reduce block)", status: "live ✓" },
+  { motion: "Skeleton loaders (workspace · memory · briefing)", file: "WorkspaceDesktopApp · MemoryCenterTab · LoginBriefing (animate-pulse)", tier: "ambient", token: "Tailwind pulse 2s loop", reduced: "off (motion-reduce:animate-none)", status: "live ✓" },
+  { motion: "Onboarding hero bee pulse", file: "onboarding/WelcomeStep (framer-motion drop-shadow)", tier: "ambient", token: "3s filter loop (reduceMotion → static drop-shadow)", reduced: "off — single static drop-shadow", status: "live ✓" },
+  { motion: "Boot showcase hex pulse", file: "PlatformApp (.boot-hex-pulse)", tier: "ambient", token: "boot-hex-pulse 2.2s loop", reduced: "off — static shadow (reduce block)", status: "live ✓" },
   // ── Streaming caret ───────────────────────────────────────────────────────
-  { motion: "Streaming caret (hex-cursor blink)", file: "index.css .hex-cursor", tier: "streamingCaret", token: "blink-hex 1s loop", reduced: "static caret", status: "caret" },
-  { motion: "Token fade-in", file: "index.css .token-stream", tier: "streamingCaret", token: "token-fade 0.04s", reduced: "instant", status: "caret" },
+  { motion: "Streaming block caret", file: "ChatWorkCanvas · chat-blocks/TextBlock (animate-pulse)", tier: "streamingCaret", token: "Tailwind pulse (block cursor)", reduced: "static (motion-reduce:animate-none)", status: "live ✓" },
+  // ── Dead CSS animation classes (defined in index.css, applied by NO component) ─
+  { motion: "Unused animation classes", file: "index.css .hex-cursor · .token-stream · .send-flash · .heartbeat · .hex-spin · .glow-breathe", tier: "—", token: "@keyframes exist, no component applies the class", reduced: "n/a — produce no motion", status: "N/A — dead class" },
 ];
 
 function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
@@ -364,7 +369,7 @@ export default function MotionSpec() {
 
         <Section
           title="7 · The inventory — every motion on the judged surfaces"
-          subtitle="The Phase-A end-state (Lane R3 owns this content). Discrete transitions (hover tiers, entrances, chrome, count-ups, boot, theme crossfade) migrated onto the tokens above — acceptance = ZERO non-token durations/easings on judged surfaces. Signature moments and ambient loops keep their keyframe cadence on purpose (loop rhythm is not a discrete-transition duration); every one degrades per the reduced-motion column."
+          subtitle="The Phase-A end-state, rebuilt from the shipped tree (every row grep-verified). Discrete transitions (hover tiers, entrances, chrome, count-ups, boot, theme crossfade) resolve to the tokens above — acceptance = ZERO non-token durations/easings on judged surfaces. Signature moments and ambient loops keep their keyframe cadence on purpose (loop rhythm is not a discrete-transition duration); every one degrades per the reduced-motion column. The final row lists CSS animation classes that are defined but no longer applied — kept honest, not hidden."
         >
           <div className="overflow-x-auto rounded-[14px] border border-[var(--line)]">
             <table className="w-full border-collapse text-left text-[12px]">
@@ -393,10 +398,15 @@ export default function MotionSpec() {
             </table>
           </div>
           <p className="mt-3 max-w-[68ch] text-[11.5px] leading-relaxed text-[var(--text-dim)]">
-            † The theme crossfade’s shipped 360ms window is the nearest step above
-            <span className="font-mono"> --mo-slow </span>(320ms); Lane R2 owns whether it snaps to
-            the token or keeps 360ms as a justified value. R1/R2 rows state the retrofit contract
-            their lanes apply — the reviewer grep gates the whole phase together.
+            The theme crossfade now resolves to
+            <span className="font-mono"> var(--mo-slow) </span>(320ms) — the same token
+            ThemeProvider’s JS cleanup timer reads via
+            <span className="font-mono"> DUR.slow</span>, so the CSS window and the JS timer share
+            one source of truth (was a bespoke 360ms literal). Boot keeps a handful of
+            comment-justified bespoke cinematic beats in <span className="font-mono">BootScreen</span>
+            (entrance spring ζ≈0.707, ambient glow loop — reduced-motion-gated, exit/fade literals);
+            the memory hero count-up is a deliberate ~600ms rAF landing. Everything else on the
+            judged surfaces resolves to a token or carries a one-line justification at the site.
           </p>
         </Section>
       </div>

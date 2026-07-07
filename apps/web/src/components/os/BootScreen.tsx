@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import waggleLogoDark from "@/assets/waggle-logo.jpeg";
 import waggleLogoLight from "@/assets/waggle-logo.png";
 import { useIsLightTheme } from "@/hooks/useIsLightTheme";
+import { DUR, EASE_OUT } from "@/lib/motion/tokens";
 
 const PHASES = [
   "Initializing core systems…",
@@ -84,7 +85,11 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
     <motion.div
       initial={{ opacity: 1 }}
       // Item 2: the exit stays choreographed (fade) at the shorter floor; under
-      // reduced motion it becomes an instant swap (no fade, no scale).
+      // reduced motion it becomes an instant swap (no fade, no scale). The 0.5s
+      // easeInOut is a deliberate bespoke boot exit — a cinematic hand-off that
+      // sits OFF the standard DUR grid on purpose (no symmetric in-out easing
+      // token exists, and the 0.4 settle grade would clip the fade). Pinned by
+      // wave-u-boot-warm-start.test.tsx.
       exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 1.05 }}
       transition={reduceMotion ? { duration: 0 } : { duration: 0.5, ease: "easeInOut" }}
       className="fixed inset-0 z-[9999] bg-background flex flex-col items-center justify-center cursor-pointer"
@@ -103,12 +108,18 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
       <motion.div
         initial={{ opacity: 0, scale: 0.5, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
+        // Justified off-family spring (ζ≈0.707 vs the token band 0.74–0.77): the
+        // boot logo is the one bespoke cinematic entrance — slightly bouncier by
+        // design; not a reusable UI tier, so it stays a literal (Phase-0 rule).
         transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.1 }}
         className="relative mb-8"
       >
         <motion.div
-          animate={{ boxShadow: ["0 0 0px hsl(var(--primary) / 0)", "0 0 40px hsl(var(--primary) / 0.3)", "0 0 0px hsl(var(--primary) / 0)"] }}
-          transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          // REDUCED('ambient') → off: the infinite glow loop must not run for
+          // reduced-motion users (A2 V1' catch). 2s/easeInOut are justified
+          // literals — ambient breathing has no DUR token by design.
+          animate={reduceMotion ? undefined : { boxShadow: ["0 0 0px hsl(var(--primary) / 0)", "0 0 40px hsl(var(--primary) / 0.3)", "0 0 0px hsl(var(--primary) / 0)"] }}
+          transition={reduceMotion ? undefined : { duration: 2, repeat: Infinity, ease: "easeInOut" }}
           className="rounded-3xl"
         >
           <img
@@ -141,6 +152,9 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
       <motion.div
         initial={{ opacity: 0, width: 0 }}
         animate={{ opacity: 1, width: 240 }}
+        // Boot cinematic beat: the 0.3s reveal + 0.4s delay ride the boot
+        // surface's own timeline (glow loop + staggered logo/title reveals),
+        // deliberately off the standard DUR grid.
         transition={{ delay: 0.4, duration: 0.3 }}
         className="h-1 rounded-full bg-muted overflow-hidden mb-4"
       >
@@ -148,7 +162,7 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
           className="h-full bg-primary rounded-full"
           initial={{ width: "0%" }}
           animate={{ width: `${progress}%` }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
+          transition={{ duration: DUR.settle, ease: EASE_OUT }}
         />
       </motion.div>
 
@@ -160,7 +174,7 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: DUR.base }}
             className={`text-xs font-mono ${
               phase === PHASES.length - 1 ? "text-honey" : "text-muted-foreground"
             }`}
@@ -179,7 +193,7 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
               i <= phase ? "bg-primary" : "bg-muted-foreground/30"
             }`}
             animate={i === phase ? { scale: [1, 1.4, 1] } : {}}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: DUR.settle }}
           />
         ))}
       </div>
@@ -191,6 +205,8 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            // Boot cinematic beat: 0.3s hint fade, intentionally off the DUR grid
+            // (part of the boot surface's bespoke timeline).
             transition={{ duration: 0.3 }}
             className="absolute bottom-8 text-xs text-muted-foreground/50"
           >

@@ -246,7 +246,7 @@ function GreetingHeader({
         <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--honey-text)]">
           <DotLive tone="healthy" size={7} />
           <span>{formatBriefingDate(date)}</span>
-          {formatClock(date) && <span className="text-[var(--text-dim)]">· {formatClock(date)}</span>}
+          {formatClock(date) && <span className="text-[var(--text-tertiary)]">· {formatClock(date)}</span>}
         </div>
         {SHOW_STREAK && <StreakChip days={STREAK_DAYS} />}
       </div>
@@ -386,7 +386,7 @@ function RecentWorkspacesPanel({
                     const disambig = dupe ? (ws.group?.trim() ? ws.group : `#${ws.id.slice(0, 6)}`) : '';
                     const label = disambig ? (rel ? `${disambig} · ${rel}` : disambig) : rel;
                     return label
-                      ? <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-dim)]">{label}</div>
+                      ? <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-tertiary)]">{label}</div>
                       : null;
                   })()}
                 </div>
@@ -479,7 +479,7 @@ function UpNextPanel({ items, onOpen }: { items: UpNextItem[]; onOpen: (id?: str
               >
                 <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--text-dim)]" />
                 <span className="flex-1 truncate">{item.label}</span>
-                {item.at && <span className="shrink-0 font-mono text-[11px] text-[var(--text-dim)]">{item.at}</span>}
+                {item.at && <span className="shrink-0 font-mono text-[11px] text-[var(--text-tertiary)]">{item.at}</span>}
               </button>
             </li>
           );

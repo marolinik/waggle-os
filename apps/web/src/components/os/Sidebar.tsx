@@ -140,7 +140,10 @@ const Sidebar = ({
             <span className="block truncate text-[13px] font-semibold leading-tight">
               {workspaceName ?? "Workspace"}
             </span>
-            <span className="text-[11px] text-[var(--text-dim)]">workspace</span>
+            {/* Lane F2: --text-dim measured 4.38:1 on --surface (bg-card) in dark
+                — sub-AA at 11px. --text-tertiary is the AA-on-every-surface tier
+                (5.98:1 dark / 5.68:1 light) and stays quieter than the name above. */}
+            <span className="text-[11px] text-[var(--text-tertiary)]">workspace</span>
           </span>
           <ChevronDown className="hidden h-4 w-4 shrink-0 text-[var(--text-dim)] lg:block" />
         </button>
@@ -204,7 +207,9 @@ const Sidebar = ({
             <span className="block truncate text-[13px] font-semibold">
               {userName ?? "Account"}
             </span>
-            <span className="font-mono text-[10.5px] text-[var(--text-dim)]">{tierLabel}</span>
+            {/* Lane F2: --text-dim measured 4.47:1 on --bg-2 (nav) in light — sub-AA.
+                --text-tertiary clears it (4.77:1 light / 6.31:1 dark). */}
+            <span className="font-mono text-[10.5px] text-[var(--text-tertiary)]">{tierLabel}</span>
           </span>
         </button>
       </HintTooltip>

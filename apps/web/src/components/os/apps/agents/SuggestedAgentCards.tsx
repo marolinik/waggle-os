@@ -91,7 +91,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
                 // the 12px description without falling below the AA text floor.
                 <span className="mt-1.5 block text-[11px] leading-snug text-muted-foreground">{WHY[p.id]}</span>
               )}
-              <span className="mt-auto inline-flex items-center gap-1 pt-3 text-[12px] font-display font-semibold text-honey opacity-80 transition-opacity group-hover:opacity-100">
+              <span className="mt-auto inline-flex items-center gap-1 pt-3 text-[12px] font-display font-semibold text-honey">
                 <Plus className="h-3.5 w-3.5" /> Create
               </span>
             </button>

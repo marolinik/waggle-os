@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { DUR } from "@/lib/motion/tokens";
 
 /**
  * Warm-Hive theme provider.
@@ -99,7 +100,13 @@ function resolve(mode: ThemeMode): ResolvedTheme {
  * users never get the class (belt) AND the CSS is `no-preference`-gated
  * (suspenders), so their swap stays instant.
  */
-const THEME_TRANSITION_MS = 360;
+// The theme crossfade rides the standard "slow" motion tier: sourced from the
+// motion vocabulary (DUR.slow → --mo-slow = 320ms) so the JS cleanup window and
+// the CSS `.theme-transition` duration in index.css share ONE source of truth
+// (was a bespoke 360ms literal). `Math.round` keeps the float-scaled ms an
+// integer. The +60ms buffer below outlives the CSS transition regardless of
+// whether index.css resolves `.theme-transition` to var(--mo-slow) (320) yet.
+const THEME_TRANSITION_MS = Math.round(DUR.slow * 1000);
 let themeTransitionTimer: ReturnType<typeof setTimeout> | undefined;
 // Last theme actually stamped onto <html>. Lets applyTheme distinguish a real
 // swap (crossfade) from the initial apply / a no-op re-apply (instant), so the

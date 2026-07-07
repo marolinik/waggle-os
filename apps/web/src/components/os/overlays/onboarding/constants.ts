@@ -4,6 +4,7 @@ import {
   Hexagon, Zap, Crown, HeadphonesIcon, Settings, Database, Users,
   Palette, DollarSign, Briefcase,
 } from 'lucide-react';
+import { DUR } from '@/lib/motion/tokens';
 import type { OnboardingTemplate, OnboardingPersona, ValueProp, TierOption } from './types';
 import type { UserTier } from '@/lib/dock-tiers';
 
@@ -182,5 +183,5 @@ export const fadeSlide = {
   initial: { opacity: 0, x: 24 },
   animate: { opacity: 1, x: 0 },
   exit: { opacity: 0, x: -24 },
-  transition: { duration: 0.2 },
+  transition: { duration: DUR.base },
 } as const;

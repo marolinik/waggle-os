@@ -278,7 +278,7 @@
     /* ── Honey (warm light) ───────────────────────────────────────────── */
     --honey-600: #92620a;  /* deep   */
     --honey-500: #b57d12;  /* honey  */
-    --honey-text: #9a6408; /* honey-as-TEXT on ivory — darkened for AA (4.64:1 on --background); the --primary fill stays vibrant */
+    --honey-text: #8a5a06; /* honey-as-TEXT on ivory. A2 V2' catch: the prior #9a6408 comment claimed 4.64:1 but the real math is 4.43:1 on --bg (sub-AA — measured 4.44 live). #8a5a06 = 5.25:1 on --bg, 4.87:1 on --bg-2 (AA). The --primary fill stays vibrant. */
     --honey-400: #cf932a;  /* bright */
     --honey-300: #e0b25e;
     --honey-200: #ecd09a;
@@ -362,7 +362,7 @@
     --work:      #3f72b0;
     --intel:     #7d57b8;
     --healthy:   #3c8a5f;
-    --attention: #9a6408;   /* R10 Lane D: matches --honey-text light, 4.64:1 AA on ivory — fixes the "added 2w ago" micro-text (was #b57d12 ≈3.2:1) */
+    --attention: #8a5a06;   /* R10 Lane D lineage; A2: follows --honey-text light (the 4.64 claim was wrong math — real 4.43, sub-AA). Now 5.25:1 on --bg / 4.87:1 on --bg-2. */
     --risk:      #c0573c;
     --work-wash:    rgba(63, 114, 176, 0.10);
     --intel-wash:   rgba(125, 87, 184, 0.10);
@@ -683,6 +683,8 @@
   .glow-breathe { animation: none; }
   .dot-live { animation: none; }
   .chat-stream-shimmer { animation: none; } /* static segment, no slide */
+  .honey-pulse { animation: none; } /* StatusBar memory-count save pulse — signature, skipped */
+  .float { animation: none; }       /* ChatApp empty-state bee hover — ambient, stilled */
 }
 
 /* Lane D (Wave V) — signature theme crossfade ("sunset over the hive").
@@ -695,7 +697,13 @@
   html.theme-transition,
   html.theme-transition * {
     transition-property: background-color, border-color, color, fill, stroke;
-    transition-duration: 360ms;
+    /* R3 motion sweep: the crossfade window resolves to the motion vocabulary
+       (var(--mo-slow) = 320ms), the SAME token ThemeProvider's JS cleanup timer
+       reads via DUR.slow — one source of truth, so CSS and JS can never drift
+       (was a bespoke 360ms literal). The easing stays the CSS ease-out keyword
+       ON PURPOSE: this gentle color sweep is not a discrete-UI transition, so it
+       deliberately does not adopt var(--mo-ease) (the sharper standard-out curve). */
+    transition-duration: var(--mo-slow);
     transition-timing-function: ease-out;
   }
 }

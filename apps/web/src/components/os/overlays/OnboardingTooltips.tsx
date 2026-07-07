@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DUR } from '@/lib/motion/tokens';
 
 // FR #47: previously two BASE_TIPS plus CLOSING_TIP gave a no-template flow
 // only three slides, and the second slide ("Your AI remembers everything")
@@ -102,7 +103,7 @@ const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingToo
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
-                transition={{ duration: 0.15 }}
+                transition={{ duration: DUR.fast }}
                 className="text-lg text-foreground mb-5 leading-relaxed"
               >
                 {tips[tipIndex]}

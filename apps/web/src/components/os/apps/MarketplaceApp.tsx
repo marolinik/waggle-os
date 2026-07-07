@@ -494,7 +494,7 @@ const MarketplaceApp = () => {
             <div
               data-testid="marketplace-results"
               aria-busy={busy || undefined}
-              className={`space-y-2 transition-opacity duration-150 motion-reduce:transition-none ${busy ? 'opacity-60' : ''}`}
+              className={`space-y-2 transition-opacity duration-[var(--mo-fast)] motion-reduce:transition-none ${busy ? 'opacity-60' : ''}`}
             >
               {groupedSections.length > 0
                 ? groupedSections.map(section => (

@@ -47,7 +47,7 @@ const BrandTile = ({
 
   return (
     <div
-      className={`relative shrink-0 overflow-hidden rounded-[14px] shadow-lg transition-all duration-200 group-hover:shadow-xl ${className}`}
+      className={`relative shrink-0 overflow-hidden rounded-[14px] shadow-lg transition-all duration-[var(--mo-base)] group-hover:shadow-xl ${className}`}
       style={{
         width: size,
         height: size,
@@ -100,7 +100,7 @@ const BrandTile = ({
 
       {/* Honey-tinted hover shimmer — only visible on group hover */}
       <div
-        className="pointer-events-none absolute inset-0 rounded-[14px] opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-0 rounded-[14px] opacity-0 transition-opacity duration-[var(--mo-base)] group-hover:opacity-100"
         style={{
           background:
             'radial-gradient(120% 80% at 50% 0%, rgba(229, 160, 0, 0.18) 0%, transparent 60%)',

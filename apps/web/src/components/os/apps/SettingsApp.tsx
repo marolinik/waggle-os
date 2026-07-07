@@ -233,8 +233,14 @@ const SettingsApp = () => {
                 role="tab"
                 aria-selected={activeTab === tab.id}
                 tabIndex={activeTab === tab.id ? 0 : -1}
+                // Lane F2: the active tab's honey wash (bg-primary/20) tints its own
+                // background toward honey, so text-honey measured only 3.88:1 on it in
+                // light (every honey token ≤4.10:1 on that same-hue wash — sub-AA at
+                // 12px). The wash alone carries the active/brand cue; text-foreground on
+                // it is AA in both themes (~9:1 light / ~10:1 dark). font-medium keeps
+                // the selected tab visually distinct from a hovered (text-foreground) one.
                 className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-                  activeTab === tab.id ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                  activeTab === tab.id ? 'bg-primary/20 text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
                 <tab.icon className="w-3.5 h-3.5" />

@@ -76,26 +76,26 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
 
             <div className="px-6 py-4 grid grid-cols-2 gap-4">
               <div>
-                <h3 className="text-xs font-display font-semibold text-emerald-400 uppercase tracking-wider mb-2">
+                <h3 className="text-xs font-display font-semibold text-[var(--text-2)] uppercase tracking-wider mb-2">
                   You keep
                 </h3>
                 <ul className="space-y-1.5">
                   {KEEP_FEATURES.map(f => (
                     <li key={f} className="flex items-start gap-2 text-[13px] text-foreground">
-                      <Check className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                      <Check className="w-3.5 h-3.5 text-[var(--healthy)] mt-0.5 shrink-0" />
                       {f}
                     </li>
                   ))}
                 </ul>
               </div>
               <div>
-                <h3 className="text-xs font-display font-semibold text-destructive uppercase tracking-wider mb-2">
+                <h3 className="text-xs font-display font-semibold text-[var(--text-2)] uppercase tracking-wider mb-2">
                   You lose
                 </h3>
                 <ul className="space-y-1.5">
                   {LOSE_FEATURES.map(f => (
                     <li key={f} className="flex items-start gap-2 text-[13px] text-muted-foreground">
-                      <X className="w-3.5 h-3.5 text-destructive/60 mt-0.5 shrink-0" />
+                      <X className="w-3.5 h-3.5 text-[var(--risk)] mt-0.5 shrink-0" />
                       {f}
                     </li>
                   ))}
