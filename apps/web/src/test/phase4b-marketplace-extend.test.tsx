@@ -93,7 +93,9 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     expect(screen.getByText('Research Pack')).toBeInTheDocument();
     expect(screen.queryByTestId('extension-install-pack:research-pack')).not.toBeInTheDocument();
     expect(screen.getByText('PostgreSQL')).toBeInTheDocument();
-    expect(screen.getByText('Pg Mcp Pkg')).toBeInTheDocument();
+    // Wave X Lane D: displayExtensionName now uppercases known acronyms, so the
+    // slug "pg-mcp-pkg" humanizes to "Pg MCP Pkg" (was "Pg Mcp Pkg").
+    expect(screen.getByText('Pg MCP Pkg')).toBeInTheDocument();
     expect(screen.getByText('GitHub')).toBeInTheDocument();
     // Agents/models/templates are NOT in the marketplace shelf (D2).
     expect(screen.queryByText('Researcher')).not.toBeInTheDocument();
