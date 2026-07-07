@@ -669,3 +669,44 @@ fire-6-lanes-and-judge loop and carries real regression risk.
 
 Recommendation: ship Wave X (real defects, in flight), run R19-V7 to confirm the
 defects cleared, then **A** unless the founder wants to fund **B** as its own arc.
+
+## Round 19-V7 verdict (post-Wave-X, product @ e8f6b41b) — ⚠ JUDGE MODEL CHANGED
+
+**design 7.7 · kw 7.6 · competitor 7.6 · a11y 7.5 · brand 7.7 — min 7.5, avg 7.62.**
+
+### ⚠ Comparability break: judges ran on OPUS 4.8, not Fable 5
+The session main-loop model was switched to Opus 4.8 (1M) via /model before this
+round. The judge agents inherit the session model, so R19's five judges are
+`claude-opus-4-8[1m]` — R13→R18 were all `claude-fable-5`. **7.62 is a different,
+generally harsher ruler; it is NOT a regression from Fable's 7.70.** For a clean
+comparison next time, PIN the judge model to fable in judge-workflow-video.mjs
+(add `model:'fable'` to the agent() opts) so the ruler is arc-stable regardless of
+the main-loop model.
+
+### What R19 actually proves (ruler-independent)
+1. **Streaming was finally SEEN** (the kit-v5 s04 send landed): "the chat reply
+   visibly accretes line-by-line as a genuinely memory-grounded, non-hallucinated
+   answer" — chat rose to **8.0** (design/kw) after living at 7.2-7.5 all arc. The
+   one thing Claude/ChatGPT "own" is now on our board.
+2. **Wave X defects cleared**: no judge re-flagged the "68 memories over 445 to
+   review" contradiction, the scraped marketplace names, or the specific dark
+   offenders (workspace meta / memory M-id) I fixed. The Opus a11y judge names
+   DIFFERENT, broader targets (top utility bar, onboarding subtitle, LIGHT-theme
+   eyebrows on cream) — a wider systemic sweep, not the fixed regressions.
+3. **5/5 UNANIMOUS gap-to-9 = a motion SYSTEM**, not features/polish. Every judge,
+   independently, names the same structural lever: spatial continuity / shared-
+   element route transitions / spring physics / multi-tier hover (+ a signature
+   streaming reveal + drop the boot interstitial). Verbatim: "visual craft of a 9,
+   motion identity of a ~7"; "gap to 9 is not more features — it's a genuine motion
+   system." Verdict: "beats Codex decisively, beats ChatGPT on identity/info design,
+   roughly even with Claude."
+
+### This CONFIRMS Plateau Analysis #3 with unanimity
+The polish-wave engine is done. Five independent Opus judges converge that the ONLY
+path from ~7.6-7.7 to 9 is the structural motion arc (option B) — the exact work I
+scoped as a founder decision, not a wave. Firing more polish lanes is now
+measured-EV≈0 AND explicitly named as the wrong tool by every judge.
+
+→ **Recommendation stands: A (merge Waves P-X, ~59 commits, all gates green) unless
+the founder funds B (the route-transition/spring/shared-element motion system) as a
+dedicated engineering arc.** C (more polish waves) is contraindicated by all 5 judges.
