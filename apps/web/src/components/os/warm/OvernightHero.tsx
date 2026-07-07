@@ -38,7 +38,7 @@ export function OvernightHero({
         className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(circle,var(--honey-glow),transparent_70%)]"
       />
       <div className="relative">
-        <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--text-dim)]">
+        <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)]">
           <DotLive tone="intel" size={7} />
           {eyebrow}
         </div>

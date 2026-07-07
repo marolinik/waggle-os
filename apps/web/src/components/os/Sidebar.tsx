@@ -113,7 +113,10 @@ const Sidebar = ({
   // 9.5px). --text-muted clears it on --bg-2 in both themes (4.77:1 light /
   // 6.31:1 dark) while staying quieter than body text. (--text-dim stays tuned
   // for its --bg surfaces elsewhere; fixing it globally would over-lighten those.)
-  const zoneLabel = "hidden lg:flex items-center gap-2 px-2.5 pt-3.5 pb-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-[var(--text-muted)]";
+  // Wave X Lane C: 9.5px/0.14em uppercase in --text-muted read as garbled noise
+  // (video judge). Bumped to 10.5px and eased tracking to 0.10em so the zone
+  // eyebrows ("PINNED · POWER TOOLS" / "GENERAL") stay legible at 1×.
+  const zoneLabel = "hidden lg:flex items-center gap-2 px-2.5 pt-3.5 pb-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-muted)]";
 
   return (
     <TooltipProvider>

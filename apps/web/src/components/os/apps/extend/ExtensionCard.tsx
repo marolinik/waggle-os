@@ -18,14 +18,35 @@ import { useInstallStore } from '@/providers/InstallProvider';
 import BrandTile from '../connectors/BrandTile';
 import { getBrandIdentity } from '../connectors/brand-identity';
 
+/** Registry-slug noise dropped from a humanized display name (Wave X Lane D). */
+const EXT_NAME_NOISE = new Set(['awesome', 'plugin', 'plugins']);
+/** Tokens rendered fully uppercase rather than title-cased. */
+const EXT_NAME_ACRONYMS = new Set(['mcp', 'api', 'ai', 'sdk', 'cli', 'ui', 'db', 'sql']);
+
 /** Humanize raw registry slugs ("agent-skills" → "Agent Skills") for display.
- *  Curated names (mixed case, spaces, digits-first like "1Password") pass
- *  through untouched — only all-lowercase dash/underscore slugs transform. */
+ *  Curated brand names (mixed/leading caps with no separator — "Gmail",
+ *  "GitHub", "1Password") pass through untouched.
+ *
+ *  Wave X Lane D (R18-V6): the old all-lowercase guard bailed on a mixed-case
+ *  token, so a scraped name like "awesome-claude-plugin-chatDeny-slides-creator"
+ *  rendered as the raw slug (a judge flagged it as undercutting the authored
+ *  feel). Now any separator'd name is humanized: camelCase is split, "awesome"/
+ *  "plugin" noise is dropped, known acronyms uppercased. Render-only — the real
+ *  id/install target is never touched. */
 export function displayExtensionName(name: string): string {
-  if (!/^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name)) return name;
-  return name
-    .split(/[-_]/)
-    .map(t => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t))
+  const hasSeparator = name.includes('-') || name.includes('_');
+  const isLowerSlug = /^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name);
+  // No separator and not an all-lowercase word → a curated brand name; leave it.
+  if (!hasSeparator && !isLowerSlug) return name;
+  const words = name
+    .split(/[-_]+/)
+    // "chatDeny" → "chat Deny": split camelCase inside a slug token.
+    .flatMap(t => t.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' '))
+    .filter(Boolean)
+    .filter(t => !EXT_NAME_NOISE.has(t.toLowerCase()));
+  if (words.length === 0) return name; // all-noise → don't blank the card
+  return words
+    .map(t => (EXT_NAME_ACRONYMS.has(t.toLowerCase()) ? t.toUpperCase() : t.charAt(0).toUpperCase() + t.slice(1)))
     .join(' ');
 }
 

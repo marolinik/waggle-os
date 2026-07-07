@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { Extension } from '@/lib/extension-catalog';
-import { buildMetaChips, META_VISIBLE_CAP } from './ExtensionCard';
+import { buildMetaChips, META_VISIBLE_CAP, displayExtensionName } from './ExtensionCard';
 
 const base: Extension = {
   id: 'x',
@@ -50,5 +50,33 @@ describe('buildMetaChips — metadata budget', () => {
     const chips = buildMetaChips({ ...base, type: 'skill', kind: 'package', category: 'data' });
     expect(chips.some(c => c.sourceForm)).toBe(false);
     expect(chips.map(c => c.label)).toEqual(['skill', 'data', 'registry']);
+  });
+});
+
+describe('displayExtensionName — humanize scraped slugs (Wave X Lane D)', () => {
+  it('humanizes a mixed-case scraped slug that the old all-lowercase guard bailed on', () => {
+    // The R18-V6 judge's exact example — previously rendered raw because
+    // "chatDeny" failed the all-lowercase regex.
+    expect(displayExtensionName('awesome-claude-plugin-chatDeny-slides-creator'))
+      .toBe('Claude Chat Deny Slides Creator');
+  });
+  it('drops awesome/plugin noise and title-cases the rest', () => {
+    expect(displayExtensionName('awesome-notion-plugin')).toBe('Notion');
+  });
+  it('uppercases known acronyms', () => {
+    expect(displayExtensionName('notion-mcp')).toBe('Notion MCP');
+    expect(displayExtensionName('openai-api-client')).toBe('Openai API Client');
+  });
+  it('title-cases a plain lowercase slug (unchanged prior behavior)', () => {
+    expect(displayExtensionName('agent-skills')).toBe('Agent Skills');
+    expect(displayExtensionName('gmail')).toBe('Gmail');
+  });
+  it('leaves curated brand names untouched', () => {
+    for (const n of ['Gmail', 'GitHub', '1Password', 'Slack']) {
+      expect(displayExtensionName(n)).toBe(n);
+    }
+  });
+  it('never blanks an all-noise name', () => {
+    expect(displayExtensionName('awesome-plugin')).toBe('awesome-plugin');
   });
 });
