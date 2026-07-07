@@ -278,8 +278,10 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, 
           <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[12px] text-[var(--text-muted)]">
             {/* Round-9 Lane C fix 4: the M-id used a violet (--intel) that read as
                 an unmanaged third hue on this warm surface — fold it into the
-                neutral --text-dim tier. */}
-            <span className="text-[var(--text-dim)]">⬡ M-{memory.id}</span>
+                neutral tier. Wave X Lane B: --text-dim is 4.09:1 on --surface-2
+                at 12px (sub-AA) and this is the memory's correction HANDLE, not
+                decoration — matched to its row's --text-muted (5.6:1). */}
+            <span className="text-[var(--text-muted)]">⬡ M-{memory.id}</span>
             {/* Wave-S Lane C: handoff meta + source folded into one glyph chip
                 (short label at rest, full provenance in the tooltip). */}
             {provShort && (

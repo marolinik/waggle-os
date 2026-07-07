@@ -305,7 +305,10 @@ function WorkspaceCard({
         ) : sessionPreview ? (
           <p className="line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
             “{sessionPreview}”
-            {activeAgo && <span className="text-[var(--text-dim)]"> · {activeAgo}</span>}
+            {/* Wave X Lane B: --text-dim fails AA (4.35:1) at 13px on --surface;
+                the "· 2w ago" suffix reads as secondary by position, not by a
+                sub-AA color. */}
+            {activeAgo && <span className="text-[var(--text-muted)]"> · {activeAgo}</span>}
           </p>
         ) : activityLine ? (
           <p className="text-[13px] leading-[1.5] text-[var(--text-muted)]">{activityLine}</p>
@@ -314,8 +317,10 @@ function WorkspaceCard({
 
       {/* Slot 4 — metrics footer, pinned to the card's bottom baseline (mt-auto)
           so EVERY card's meta row aligns regardless of body length. Real fields
-          only (W2B honesty: no fabricated count, no filler dash). */}
-      <div className="mt-auto flex items-center gap-3.5 pt-3 text-[12px] text-[var(--text-dim)]">
+          only (W2B honesty: no fabricated count, no filler dash).
+          Wave X Lane B: --text-dim (#8a8069) on the card's --surface is only
+          4.35:1 at 12px — below AA. --text-muted (#a3987f) = 5.95:1 on --surface.  */}
+      <div className="mt-auto flex items-center gap-3.5 pt-3 text-[12px] text-[var(--text-muted)]">
         {hasMemoryCount && (
           <span className="inline-flex items-center gap-1.5">
             <Hexagon className="h-3 w-3" strokeWidth={1.8} />

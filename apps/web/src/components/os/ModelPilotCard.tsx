@@ -158,7 +158,10 @@ const LaneDropdown = ({
                   {isSameAsPrimary ? (
                     <span className="text-muted-foreground/60">Same as Primary</span>
                   ) : disabled ? (
-                    <span className="text-muted-foreground/40">Add key in Vault</span>
+                    // Wave X Lane B: /40 read as broken; /60 matches the "Same as
+                    // Primary" sibling above (disabled-state label — WCAG-inactive
+                    // exempt, but should still be legible).
+                    <span className="text-muted-foreground/60">Add key in Vault</span>
                   ) : (
                     <HintTooltip content={COST_TOOLTIPS[m.cost] ?? ''}>
                       {/* The $ count already encodes cost — neutral text, no traffic-light colors. */}
