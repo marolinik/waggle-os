@@ -94,6 +94,23 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     expect(onToast).toHaveBeenCalledWith(expect.stringContaining('Forgotten M-5'));
   });
 
+  // R20 Lane CL (item 2, second surface): the memory-row actions are reachable
+  // without a mouse — they are always-rendered native <button>s with accessible
+  // names (not a hover-gated menu), so Tab lands on them and the systemic
+  // :focus-visible ring (index.css → --focus-ring) paints on focus.
+  it('the row Forget/Edit actions are keyboard-reachable buttons with accessible names', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([mem({ id: '5', createdAt: iso(1) })]);
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    await waitFor(() => expect(screen.getByText('⬡ M-5')).toBeTruthy());
+    const forget = screen.getByRole('button', { name: 'Forget memory M-5' });
+    const edit = screen.getByRole('button', { name: 'Edit or correct memory M-5' });
+    expect(forget.tagName).toBe('BUTTON');
+    expect(edit.tagName).toBe('BUTTON');
+    // Provably reachable: focus lands directly on the action (natural tab order).
+    forget.focus();
+    expect(document.activeElement).toBe(forget);
+  });
+
   it('Confirm on an unreviewed memory hits confirmMemory and fires a toast', async () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '8', status: 'unreviewed', createdAt: iso(1) })]);
     const onToast = vi.fn();

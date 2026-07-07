@@ -598,6 +598,28 @@
 }
 .glow-breathe { animation: glow-breathe 4.5s ease-in-out infinite; }
 
+/* Home ambient hive "breath" (Pillar 3.4) — a below-attention opacity swell on a
+   ~6s cycle behind the Home hero. Ambient tier: the cadence is a loop, not a
+   --mo interaction token, so it stays outside the fast/base/slow/settle scale.
+   Stilled under prefers-reduced-motion below (REDUCED.ambient = 'off'). */
+@keyframes hive-ambient-breath {
+  0%, 100% { opacity: 0.42; }
+  50%      { opacity: 0.72; }
+}
+.hive-ambient-breath { animation: hive-ambient-breath 6s ease-in-out infinite; }
+
+/* Surprise-recall bloom (Pillar 3.2) — the ~600ms honey glow fade behind the
+   Auto-Recall step when memory lands mid-chat. The scale pop is driven by
+   framer-motion SPRING.micro in ActivityStream; this keyframe carries only the
+   glow so the honey halo can bloom and fade. Skipped entirely under reduced
+   motion (ActivityStream renders a plain row there — no bloom). */
+@keyframes recall-bloom {
+  0%   { box-shadow: 0 0 0 0 rgba(233, 165, 44, 0); }
+  40%  { box-shadow: 0 0 16px 4px rgba(233, 165, 44, 0.30); }
+  100% { box-shadow: 0 0 0 0 rgba(233, 165, 44, 0); }
+}
+.recall-bloom { animation: recall-bloom 0.6s ease-out; }
+
 /* Honey streaming cursor */
 @keyframes blink-hex {
   0%, 100% { opacity: 1; }
@@ -617,6 +639,22 @@
 }
 .token-stream > * {
   animation: token-fade 0.04s ease-in forwards;
+}
+
+/* Honey streaming caret (Pillar 3.1) — a soft ~1s blink at the reveal head of a
+   streaming reply. Colour is token'd on the element (bg var(--honey-text), AA in
+   both themes); this keyframe is only the blink. NOT animate-pulse (a scale+opacity
+   throb reads as a warning) — a gentle opacity fade so the head reads as a living
+   cursor. The 1s cadence is a LOOP, not a discrete-transition token, so --mo-*
+   deliberately doesn't apply (same rationale as .chat-stream-shimmer / blink-hex).
+   Reduced-motion stills it to a static solid bar in the block below. */
+@keyframes caret-blink {
+  0%, 45%   { opacity: 1; }
+  55%, 100% { opacity: 0.2; }
+}
+.stream-caret {
+  border-radius: 1px;
+  animation: caret-blink 1s ease-in-out infinite;
 }
 
 /* Send satisfaction — input border flash */
@@ -685,6 +723,9 @@
   .chat-stream-shimmer { animation: none; } /* static segment, no slide */
   .honey-pulse { animation: none; } /* StatusBar memory-count save pulse — signature, skipped */
   .float { animation: none; }       /* ChatApp empty-state bee hover — ambient, stilled */
+  .stream-caret { animation: none; opacity: 1; } /* streaming caret — static solid bar (REDUCED.streamingCaret) */
+  .hive-ambient-breath { animation: none; opacity: 0.5; } /* Home ambient — static faint radial (REDUCED.ambient = off) */
+  .recall-bloom { animation: none; } /* surprise-recall glow — no bloom under reduce */
 }
 
 /* Lane D (Wave V) — signature theme crossfade ("sunset over the hive").

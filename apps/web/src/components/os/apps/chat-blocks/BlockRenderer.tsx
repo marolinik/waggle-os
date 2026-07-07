@@ -40,10 +40,17 @@ function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: bo
     const sourceLabels = (s.provenance?.sources ?? [])
       .map(frameSourceLabel)
       .filter((l): l is string => !!l);
+    // A memory-recall step carries provenance; on the ACTIVE turn it blooms honey
+    // as it lands (Pillar 3.2 "it remembered" moment). Off the active turn (history
+    // reload / a re-expanded prior card) it renders plain — the bloom is a
+    // just-happened signal, never a replay.
+    const isRecall = sourceLabels.length > 0;
     return {
       tone: s.status === 'running' ? 'honey' : 'intel',
       text: s.description,
-      ...(sourceLabels.length > 0 ? { provenance: { source: sourceLabels.join(' · ') } } : {}),
+      ...(isRecall
+        ? { provenance: { source: sourceLabels.join(' · ') }, bloom: isStreaming }
+        : {}),
     };
   });
   return (

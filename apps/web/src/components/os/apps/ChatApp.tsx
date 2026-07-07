@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal, Square } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -72,6 +72,10 @@ interface ChatAppProps {
   historyLoaded?: boolean;
   /** F4: re-issue the last failed turn (Retry button on error blocks). */
   onRetry?: () => void;
+  /** Lane S2 (Pillar 3.1): halt the in-flight reply mid-stream. Wired to the
+   *  useChat abort/cancel path; the partial answer stays and send returns. When
+   *  omitted, the Stop control is not rendered. */
+  onStopStreaming?: () => void;
 }
 
 const TEMPLATE_DISPLAY: Record<string, { label: string; desc: string }> = {
@@ -99,6 +103,13 @@ const STRIP_PILL =
 /** Icon-only variant of the strip pill (chevron, overflow, profile toggles). */
 const STRIP_ICON_PILL =
   'grid h-6 w-6 shrink-0 place-items-center rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] text-muted-foreground transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--surface-3)] hover:text-foreground active:bg-[var(--honey-wash)]';
+
+/**
+ * Lane S2 (Pillar 3.1): distance (px) from the thread's bottom within which the
+ * viewport counts as "pinned to latest". A programmatic scroll-to-bottom lands
+ * at ~0 (stays following); a user scroll-up past this window breaks auto-follow.
+ */
+const AUTOSCROLL_BOTTOM_THRESHOLD_PX = 48;
 
 const SLASH_COMMANDS = [
   { cmd: '/model', desc: 'Switch model' },
@@ -554,6 +565,7 @@ const ChatApp = ({
   autoSendInitial = false,
   historyLoaded = false,
   onRetry,
+  onStopStreaming,
 }: ChatAppProps) => {
   const [input, setInput] = useState(initialMessage ?? '');
   const [showSlash, setShowSlash] = useState(false);
@@ -576,6 +588,13 @@ const ChatApp = ({
   const [canvasOpen, setCanvasOpen] = useState(false);
   const lastCanvasPath = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Lane S2 (Pillar 3.1): auto-follow the stream while the viewport is pinned to
+  // the newest content; the moment the user scrolls up it breaks and a "Jump to
+  // latest" affordance appears. `followingRef` mirrors the state so the stable
+  // scroll handler compares without a stale closure.
+  const [following, setFollowing] = useState(true);
+  const followingRef = useRef(true);
+  useEffect(() => { followingRef.current = following; }, [following]);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const personaPickerRef = useRef<HTMLDivElement>(null);
@@ -713,11 +732,56 @@ const ChatApp = ({
   // suggested-action chips of the last turn render only AFTER streaming ends,
   // so a [messages]-only scroll left them straddling the container's bottom
   // edge (the hover Copy/Retry icons rendered visually cut above the composer).
+  // Lane S2 (Pillar 3.1): only auto-follow while pinned — a user who scrolled up
+  // keeps their position (input-primacy applied to the stream).
   useEffect(() => {
+    if (!following) return;
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, following]);
+
+  // Phase C fix (V1-streaming): the render-side cadence buffer (useStreamCadence)
+  // grows the thread's height frame-by-frame WITHOUT a `messages` reference change,
+  // so the effect above doesn't track the revealing text. While streaming AND
+  // pinned, an rAF loop keeps the viewport glued to the growing content head so
+  // the caret stays in view; it self-cancels the moment the stream ends or the
+  // user scrolls up (following flips false via handleThreadScroll).
+  useEffect(() => {
+    if (!isLoading || !following) return;
+    let raf = 0;
+    const pin = () => {
+      const el = scrollRef.current;
+      if (el && followingRef.current) el.scrollTop = el.scrollHeight;
+      raf = requestAnimationFrame(pin);
+    };
+    raf = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(raf);
+  }, [isLoading, following]);
+
+  // Lane S2: a fresh thread always starts following (a scroll-up from a previous
+  // thread must not suppress auto-follow on the next one).
+  useEffect(() => {
+    setFollowing(true);
+  }, [activeSessionId, workspaceId]);
+
+  // Lane S2: break auto-follow the instant the user scrolls up past the bottom
+  // window; re-pin automatically once they return to the bottom. Only flips state
+  // on a real transition so per-tick scroll events don't churn re-renders.
+  const handleThreadScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceFromBottom <= AUTOSCROLL_BOTTOM_THRESHOLD_PX;
+    if (atBottom !== followingRef.current) setFollowing(atBottom);
+  }, []);
+
+  // Lane S2: the "Jump to latest" affordance re-pins and snaps to the newest content.
+  const scrollToLatest = useCallback(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setFollowing(true);
+  }, []);
 
   // Wave U Lane F fix 2: a scale pop the moment the send button fills honey
   // (empty→ready). Fires once per empty→ready transition — the ref guard means
@@ -950,7 +1014,10 @@ const ChatApp = ({
           </div>
         )}
 
-        <div ref={scrollRef} className="flex-1 overflow-auto px-4 pb-4 pt-2">
+        {/* Lane S2 (Pillar 3.1): a relative frame around the scroll viewport so the
+            "Jump to latest" pill can float bottom-right of the thread. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div ref={scrollRef} onScroll={handleThreadScroll} data-testid="chat-scroll" className="flex-1 overflow-auto px-4 pb-4 pt-2">
           {/* Round-4 craft (I1 fix 1): hold the reading measure to ~760px like
               Claude/ChatGPT instead of letting turns run the full panel width.
               The wrapper turns h-full flex-col only in the empty state so
@@ -1173,6 +1240,22 @@ const ChatApp = ({
             <ApprovalGate request={pendingApproval} onRespond={onApprove} />
           )}
           </div>
+        </div>
+        {/* Lane S2 (Pillar 3.1): honey "Jump to latest" pill — shown only when the
+            user has scrolled up (auto-follow broken). Clicking it re-pins to the
+            newest content. Token-only colour (AA honey text); a color/border-only
+            affordance, so no reduced-motion handling is needed. */}
+        {!following && (
+          <button
+            type="button"
+            onClick={scrollToLatest}
+            data-testid="chat-jump-to-latest"
+            className="absolute bottom-3 right-4 z-10 inline-flex items-center gap-1 rounded-full border border-[var(--honey-line)] bg-[var(--surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--honey-text)] shadow-[var(--shadow-honey)] transition-colors hover:border-[var(--honey)] hover:bg-[var(--honey-wash)]"
+          >
+            Jump to latest
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        )}
         </div>
 
         {/* Input area */}
@@ -1513,6 +1596,23 @@ const ChatApp = ({
               rows={3}
             />
             <div className="flex items-center gap-2.5 pb-0.5">
+              {/* Lane S2 (Pillar 3.1): a visible Stop control while a reply streams.
+                  Halts the in-flight output immediately via the useChat abort path;
+                  the partial answer stays and the composer returns to send. It sits
+                  BESIDE send (Lane C keeps send live so a follow-up can queue
+                  mid-stream). Color/border-only affordance → no reduced-motion. */}
+              {isLoading && onStopStreaming && (
+                <HintTooltip content="Stop generating">
+                  <button
+                    onClick={onStopStreaming}
+                    aria-label="Stop generating"
+                    data-testid="chat-stop-stream"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+                  </button>
+                </HintTooltip>
+              )}
               {/* Round-6 fix 4: single send affordance — the circular button only.
                   Enter still submits (handleKeyDown); the "⏎ send" text hint and
                   the earlier Ctrl K hint (I1 fix 4b) are both gone. */}

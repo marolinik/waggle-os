@@ -208,7 +208,12 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     setIsLoading(true);
 
     abortRef.current?.abort();
-    abortRef.current = new AbortController();
+    // Lane S2 (Pillar 3.1): capture THIS stream's controller locally. The break
+    // guard below reads the local `controller`, not the shared `abortRef.current`
+    // — so a stop (or a fresh dispatch that reassigns abortRef) reliably halts
+    // THIS loop instead of racing whatever the ref now points at.
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     try {
       // Phase B.5: only forward autonomy when elevated — Normal is the
@@ -217,7 +222,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         ? { level: autonomy.level, expiresAt: autonomy.expiresAt ?? undefined }
         : undefined;
       for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona, autonomyPayload, opts?.retry)) {
-        if (abortRef.current?.signal.aborted) break;
+        if (controller.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
 
@@ -445,6 +450,23 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     void sendMessage(content, { retry: true });
   }, [messages, isLoading, sendMessage]);
 
+  // Lane S2 (Pillar 3.1): user-initiated halt of the in-flight reply. Aborts THIS
+  // stream's controller (the for-await breaks before appending the next event),
+  // flips the composer back to send at once, and best-effort tells the server
+  // agent loop to stop. The partial answer already rendered stays untouched — no
+  // rollback. Idempotent: the stream's own `finally` also clears these.
+  const stopStreaming = useCallback(() => {
+    if (!inFlightRef.current) return;
+    abortRef.current?.abort();
+    inFlightRef.current = false;
+    setIsLoading(false);
+    if (workspaceId) {
+      try {
+        void Promise.resolve(adapter.abortAgent(workspaceId)).catch(() => { /* best-effort */ });
+      } catch { /* adapter unavailable */ }
+    }
+  }, [workspaceId]);
+
   const clearHistory = useCallback(async () => {
     if (sessionId) {
       try {
@@ -472,5 +494,5 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     setPendingApproval(null);
   }, [pendingApproval]);
 
-  return { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, clearHistory, pendingApproval, approveAction };
+  return { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction };
 };

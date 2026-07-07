@@ -169,7 +169,10 @@ const BootScreen = ({ onComplete, ready = true, warm = false }: { onComplete: ()
           className="h-full bg-primary rounded-full"
           initial={{ width: "0%" }}
           animate={{ width: `${progress}%` }}
-          transition={{ duration: DUR.settle, ease: EASE_OUT }}
+          // R20 Lane CL (item 1): under prefers-reduced-motion the progress area
+          // must not animate — snap the fill to each step instantly (still shows
+          // progress, no lingering transition). Full ease otherwise.
+          transition={reduceMotion ? { duration: 0 } : { duration: DUR.settle, ease: EASE_OUT }}
         />
       </motion.div>
 
@@ -199,7 +202,11 @@ const BootScreen = ({ onComplete, ready = true, warm = false }: { onComplete: ()
             className={`w-1.5 h-1.5 rounded-full ${
               i <= phase ? "bg-primary" : "bg-muted-foreground/30"
             }`}
-            animate={i === phase ? { scale: [1, 1.4, 1] } : {}}
+            // R20 Lane CL (item 1): the active-dot pulse is a repeating keyframe
+            // loop — gate it under reduced motion so the progress area carries
+            // ZERO lingering animation (the logo glow loop was gated in A2; the
+            // background radial is a static div). Reduced motion → no pulse.
+            animate={!reduceMotion && i === phase ? { scale: [1, 1.4, 1] } : {}}
             transition={{ duration: DUR.settle }}
           />
         ))}

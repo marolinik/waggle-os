@@ -152,6 +152,39 @@ describe('WorkspaceActionsMenu', () => {
     expect(kebab.className).toContain('before:w-10');
   });
 
+  // ── R20 Lane CL (item 2 + 4) — reach card actions without a mouse ────────
+  // s10 acceptance made provable: Tab lands on the kebab (a native <button>, so
+  // Enter/Space activate it per the platform), the menu's arrow-key roving
+  // highlight walks down to Delete with a VISIBLE --focus-ring, and Enter on it
+  // opens the delete flow. No pointer touches this path.
+  it('reaches Delete by keyboard alone — focus kebab → open → ArrowDown to Delete (visible ring) → Enter opens the delete dialog', () => {
+    render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
+    const kebab = screen.getByTestId('workspace-actions-trigger');
+    // The action is Tab-reachable: it is a real focusable <button>.
+    expect(kebab.tagName).toBe('BUTTON');
+    kebab.focus();
+    expect(document.activeElement).toBe(kebab);
+    // Enter/Space on a focused native button dispatches click (platform behavior).
+    fireEvent.click(kebab);
+    expect(screen.getByText('Delete…')).toBeTruthy();
+
+    // Roving highlight: 4 ArrowDowns walk Rename → Archive → Export → Delete.
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    fireEvent.keyDown(document, { key: 'ArrowDown' });
+    // The Delete action carries a VISIBLE focus indicator on the ACTION itself,
+    // bound to the --focus-ring TOKEN (item 4: the token resolves to the light
+    // value #9a6408 in light theme — 4.14–4.91:1 over the menu's surfaces per
+    // contrast-tokens, well above the WCAG 1.4.11 3:1 floor; not a hardcoded
+    // dark-only hex, so the ring survives the theme switch).
+    expect(screen.getByText('Delete…').className).toContain('ring-[var(--focus-ring)]');
+
+    // Enter on the highlighted Delete opens the confirm-by-name flow.
+    fireEvent.keyDown(document, { key: 'Enter' });
+    expect(screen.getByTestId('workspace-delete-confirm-input')).toBeInTheDocument();
+  });
+
   it('does NOT fire onChanged when the mutation fails', async () => {
     mocks.shell.patchWorkspace.mockResolvedValue(false);
     const onChanged = vi.fn();

@@ -33,7 +33,7 @@ import { useToast } from '@/hooks/use-toast';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import {
   HexAvatar, SectionLabel, DotLive, RunChip, IconTile, OvernightHero, AskBar,
-  StreakChip, type RunChipProps,
+  StreakChip, AmbientHiveGlow, type RunChipProps,
 } from '../warm';
 import { RecallCard } from '../overlays/RecallCard';
 import { readHomeCache, writeHomeCache } from '@/lib/home-cache';
@@ -382,7 +382,11 @@ function StartHereCard({
             {move.title}
           </h2>
           {move.workspaceName && (
-            <p className="mt-1 font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
+            // R20 Lane CL (item 3): this uppercased workspace-name eyebrow (e.g.
+            // "RESEARCH HUB") sat at --text-dim, which measures 3.64:1 over the
+            // card's honey-wash→surface gradient in DARK (sub-AA). --text-tertiary
+            // lifts it to 4.99:1 dark / 5.27:1 light — AA on every region.
+            <p className="mt-1 font-mono text-[12px] uppercase tracking-[0.12em] text-[var(--text-tertiary)]">
               {move.workspaceName}
             </p>
           )}
@@ -567,13 +571,18 @@ function overnightHasActivity(o: OvernightSummary | null): o is OvernightSummary
 }
 
 function composeOvernightStory(o: OvernightSummary): ReactNode {
+  // Investment celebration (Pillar 3.3): the accrual figures — what the hive
+  // GAINED while you were away — reuse the DeltaNumber pulse, so a silent refresh
+  // that grows the number SHOWS it grow (bound to the exact source-of-truth count,
+  // no floor/estimate). The failure count stays a plain honey span: a snag is an
+  // attention concern, not an accrual to celebrate with a growth pulse.
   const clauses: ReactNode[] = [];
   if (o.consolidated > 0)
-    clauses.push(<>folded {honey(o.consolidated)} new {o.consolidated === 1 ? 'memory' : 'memories'} into the hive</>);
+    clauses.push(<>folded <DeltaNumber value={o.consolidated} /> new {o.consolidated === 1 ? 'memory' : 'memories'} into the hive</>);
   if (o.artifactsCreated > 0)
-    clauses.push(<>created {honey(o.artifactsCreated)} {o.artifactsCreated === 1 ? 'artifact' : 'artifacts'}</>);
+    clauses.push(<>created <DeltaNumber value={o.artifactsCreated} /> {o.artifactsCreated === 1 ? 'artifact' : 'artifacts'}</>);
   if (o.automationsCompleted > 0)
-    clauses.push(<>ran {honey(o.automationsCompleted)} {o.automationsCompleted === 1 ? 'automation' : 'automations'}</>);
+    clauses.push(<>ran <DeltaNumber value={o.automationsCompleted} /> {o.automationsCompleted === 1 ? 'automation' : 'automations'}</>);
   if (o.failures.length > 0)
     clauses.push(<>ran into {honey(o.failures.length)} {o.failures.length === 1 ? 'snag' : 'snags'} worth a look</>);
 
@@ -829,6 +838,10 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
 
   return (
     <div className="relative mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit">
+      {/* Pillar 3.4 — a below-attention honey "breath" behind the hero zone so
+          Home feels alive without competing with content. Home-only (gated here);
+          reduced-motion holds a static faint radial. */}
+      <AmbientHiveGlow />
       <GreetingHeader
         greeting={greeting}
         date={briefing.date}

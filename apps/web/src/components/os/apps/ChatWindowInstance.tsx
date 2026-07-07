@@ -111,7 +111,7 @@ const ChatWindowInstance = ({
       ? { ...s, title: 'New session' }
       : s,
   );
-  const { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, clearHistory, pendingApproval, approveAction } = useChat({
+  const { messages, isLoading, historyLoaded, sendMessage, retryLastFailed, stopStreaming, clearHistory, pendingApproval, approveAction } = useChat({
     workspaceId,
     sessionId: activeSessionId,
     persona: currentPersona,
@@ -263,6 +263,7 @@ const ChatWindowInstance = ({
       autoSendInitial={autoSendInitial}
       historyLoaded={historyLoaded}
       onRetry={retryLastFailed}
+      onStopStreaming={stopStreaming}
     />
   );
 };

@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { ChevronDown, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SPRING } from '@/lib/motion/tokens';
 import { DotLive } from './DotLive';
 import { ProvenanceLine } from './ProvenanceLine';
 import type { WarmTone } from './tones';
@@ -10,6 +12,13 @@ export interface ActivityStep {
   text: ReactNode;
   /** Provenance for the step — rendered only when real source data exists. */
   provenance?: { source: string; when?: string; onClick?: () => void };
+  /**
+   * Surprise-recall bloom (Pillar 3.2): when true, the step row blooms honey on
+   * mount — a SPRING.micro scale pop + a ~600ms honey glow that fades, drawing the
+   * eye to the "it remembered" moment. Set only for the memory-recall step of the
+   * ACTIVE turn; reduced-motion renders a plain row (no bloom).
+   */
+  bloom?: boolean;
 }
 
 interface ActivityStreamProps {
@@ -35,6 +44,7 @@ export function ActivityStream({
   className,
 }: ActivityStreamProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const reduce = useReducedMotion();
   const seconds = durationMs != null ? `${Math.max(1, Math.round(durationMs / 1000))}s` : null;
   const meta = [`${steps.length} step${steps.length === 1 ? '' : 's'}`, seconds].filter(Boolean).join(' · ');
   return (
@@ -59,19 +69,42 @@ export function ActivityStream({
       </button>
       {open && (
         <ul className="space-y-2 border-t border-[var(--line-soft)] px-3.5 py-3">
-          {steps.map((s, i) => (
-            <li key={i} className="flex items-start gap-2.5 text-[13px] text-[var(--text-2)]">
-              <DotLive tone={s.tone ?? 'intel'} live={false} size={7} className="mt-1.5" />
-              <span className="min-w-0 flex-1">
-                {s.text}
-                {s.provenance && (
-                  <span className="mt-1 block">
-                    <ProvenanceLine {...s.provenance} />
-                  </span>
-                )}
-              </span>
-            </li>
-          ))}
+          {steps.map((s, i) => {
+            const rowContent = (
+              <>
+                <DotLive tone={s.tone ?? 'intel'} live={false} size={7} className="mt-1.5" />
+                <span className="min-w-0 flex-1">
+                  {s.text}
+                  {s.provenance && (
+                    <span className="mt-1 block">
+                      <ProvenanceLine {...s.provenance} />
+                    </span>
+                  )}
+                </span>
+              </>
+            );
+            // Surprise-recall bloom: honey glow (CSS keyframe) + SPRING.micro scale
+            // pop on mount. Skipped under reduced-motion → a plain row (no bloom).
+            if (s.bloom && !reduce) {
+              return (
+                <motion.li
+                  key={i}
+                  data-recall-bloom="true"
+                  className="recall-bloom flex items-start gap-2.5 rounded-lg text-[13px] text-[var(--text-2)]"
+                  initial={{ scale: 0.96 }}
+                  animate={{ scale: 1 }}
+                  transition={SPRING.micro}
+                >
+                  {rowContent}
+                </motion.li>
+              );
+            }
+            return (
+              <li key={i} className="flex items-start gap-2.5 text-[13px] text-[var(--text-2)]">
+                {rowContent}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
