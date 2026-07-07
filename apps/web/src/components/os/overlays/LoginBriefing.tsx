@@ -586,7 +586,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               <button
                 onClick={() => onDismiss(true)}
                 data-testid="login-briefing-dont-show-again"
-                className="text-[11px] text-muted-foreground hover:text-foreground transition-colors font-display"
+                className="text-[11px] text-[var(--text-tertiary)] hover:text-foreground transition-colors font-display"
               >
                 Don't show again
               </button>

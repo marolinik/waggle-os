@@ -220,10 +220,10 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
       // Row hover tier (Wave T Lane B §3 · Wave V Lane C motion tier 2): rest
       // flat → hover/focus-within adds a motion-safe 2px lift + blooms the
       // elevation to the honey glow (--shadow-honey) and warms the border to
-      // honey, 150ms ease-out. Reduced motion keeps the color tier (border +
+      // honey, --mo-fast · --mo-ease. Reduced motion keeps the color tier (border +
       // bloom) and drops only the lift. `group` lets the primary action gain
       // full contrast on row hover (see PRIMARY_ACTION_CLASS).
-      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-within:-translate-y-0.5 ${
+      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:focus-within:-translate-y-0.5 ${
         connectedRow
           // Rest elevation folded INTO the inset honey hairline (one combined
           // box-shadow — two shadow-* utilities on one element would collide).

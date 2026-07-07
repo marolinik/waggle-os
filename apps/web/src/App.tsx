@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
@@ -43,6 +44,11 @@ import {
 // Theme is now owned by <ThemeProvider>; the pre-paint apply lives in main.tsx
 // (applyStoredThemeEarly) to avoid a flash of the wrong theme on load.
 
+// Phase-0 motion-spec (the single source of motion truth). DEV-only and
+// code-split so it never reaches the production bundle; the route below is
+// registered only under import.meta.env.DEV.
+const MotionSpec = import.meta.env.DEV ? lazy(() => import("./pages/MotionSpec")) : null;
+
 /**
  * Root application component — UX Refactor v2.1 P1a (conversion plan §1.1):
  * `/` mounts the AppShell layout route (BootScreen gate + onboarding takeover
@@ -68,6 +74,19 @@ const App = () => (
                   AppShell subtree (no sidebar / StatusBar / boot gate). Inherits the
                   warm tokens (ThemeProvider) + the top-level AppErrorBoundary above. ── */}
               <Route path="/auth" element={<AuthRoute />} />
+              {/* DEV-only motion vocabulary reference (Phase-0). Sibling OUTSIDE
+                  the AppShell subtree — no boot gate / onboarding — so it renders
+                  the demo directly. Stripped from production (see MotionSpec above). */}
+              {import.meta.env.DEV && MotionSpec && (
+                <Route
+                  path="/motion-spec"
+                  element={
+                    <Suspense fallback={null}>
+                      <MotionSpec />
+                    </Suspense>
+                  }
+                />
+              )}
               <Route path="/" element={<AppShell />}>
                 {/* §3.3/§2.2: index lands on the salvaged route once, /home after. */}
                 <Route index element={<IndexRedirect />} />

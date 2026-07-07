@@ -1,0 +1,5 @@
+{
+  "generatedAt": "",
+  "note": "Composition-aware runtime contrast ratchet. This baseline MUST be seeded against a running dev server on a FRESH build of the current source: `node scripts/ux-gates/contrast-runtime.mjs --update-baseline`. Until seeded it is empty, so the first real run reports every finding as NEW (exit 1) — review those findings, fix the true regressions, then freeze the residual as the baseline. The gate then fails only on NEW composition-aware failures.",
+  "keys": []
+}

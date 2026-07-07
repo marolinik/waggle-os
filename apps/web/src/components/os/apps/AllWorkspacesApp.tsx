@@ -25,11 +25,19 @@ import { Search, Plus, Hexagon, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
+import { STAGGER } from '@/lib/motion/tokens';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import CreateWorkspaceDialog from '../overlays/CreateWorkspaceDialog';
 import { HexAvatar, SectionLabel } from '../warm';
 import { accentFor } from '../warm/HexAvatar';
 import type { StorageType, Workspace } from '@/lib/types';
+
+/** Phase-0.6 retrofit: the shelf's per-card entrance cadence in ms, sourced from
+ *  the motion vocabulary (STAGGER.list = 0.04s). Pre-scale ONCE so `index * ms`
+ *  stays an exact integer — `index * STAGGER.list * 1000` drifts on float
+ *  (4 * 0.04 * 1000 = 160.00000000000003), which the animationDelay assertions
+ *  would catch. `STAGGER.list * 1000` alone is exactly 40. */
+const STAGGER_LIST_MS = STAGGER.list * 1000;
 
 // ── Wave U (Lane A) item 1: session-scoped shelf cache ─────────────────────
 // The shelf must show THREE distinct states — loading, empty, error — not
@@ -217,7 +225,7 @@ function WorkspaceCard({
     // Wave V (Lane C) motion tier 2: hover/focus-visible answer with a
     // motion-safe 2px lift + a honey glow bloom (--shadow-honey) ON TOP of the
     // border tier; reduced motion keeps the color tier (border + bloom) and
-    // drops only the lift (transform gated behind motion-safe), 150ms ease-out.
+    // drops only the lift (transform gated behind motion-safe), --mo-fast · --mo-ease.
     <div
       role="button"
       tabIndex={0}
@@ -230,13 +238,13 @@ function WorkspaceCard({
       }}
       aria-label={`Open ${ws.name}`}
       // Wave W (Lane A) item 1: the shelf's staggered entrance reuses the memory
-      // surface's `card-enter` keyframe (8px rise + fade, ease-out). Fill mode is
+      // surface's `card-enter` keyframe (8px rise + fade, --mo-ease). Fill mode is
       // `backwards` (NOT the memory row's `both`): this card carries a hover/focus
       // -translate-y lift, and a `forwards`/`both` fill would pin the transform and
       // break that tier — `backwards` only holds the hidden start-state during the
       // stagger delay, then hands transform back to the hover tier once it settles.
-      style={enterDelayMs != null ? { animation: 'card-enter 0.32s ease-out backwards', animationDelay: `${enterDelayMs}ms` } : undefined}
-      className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      style={enterDelayMs != null ? { animation: 'card-enter var(--mo-slow) var(--mo-ease) backwards', animationDelay: `${enterDelayMs}ms` } : undefined}
+      className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       {/* Wave S (Lane B) fix 2: the one live signal — a 2px top band in the
@@ -340,7 +348,7 @@ function WorkspaceCard({
               aria-label — so it's aria-hidden. */}
           <span
             aria-hidden
-            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--text-dim)] transition-colors duration-150 group-hover:text-[var(--honey-text)] group-focus-within:text-[var(--honey-text)]"
+            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--text-dim)] transition-colors duration-[var(--mo-fast)] group-hover:text-[var(--honey-text)] group-focus-within:text-[var(--honey-text)]"
           >
             Open <ArrowRight className="h-3 w-3" />
           </span>
@@ -354,7 +362,7 @@ function WorkspaceCard({
             <WorkspaceActionsMenu
               workspace={{ id: ws.id, name: ws.name, status: ws.status }}
               onChanged={onChanged}
-              buttonClassName="opacity-60 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100"
+              buttonClassName="opacity-60 transition-opacity duration-[var(--mo-fast)] group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100"
             />
           </span>
         </div>
@@ -624,9 +632,9 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
             <WorkspaceCard
               key={ws.id}
               ws={ws}
-              // ~40ms/card, capped so the last card settles ≤500ms (0.32s dur +
-              // 160ms max delay); frozen after the first paint (once-per-visit).
-              enterDelayMs={reduceMotion || entrancePlayedRef.current ? undefined : Math.min(i, 4) * 40}
+              // STAGGER.list/card, capped so the last card settles ≤500ms
+              // (--mo-slow dur + 160ms max delay); frozen after first paint (once-per-visit).
+              enterDelayMs={reduceMotion || entrancePlayedRef.current ? undefined : Math.min(i, 4) * STAGGER_LIST_MS}
               onOpen={() => handleOpen(ws.id)}
               onChanged={() => { void refreshWorkspaces(); }}
               isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}

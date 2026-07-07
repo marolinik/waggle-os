@@ -1,0 +1,583 @@
+{
+  "generatedAt": "2026-07-07",
+  "note": "Frozen grandfathered off-token text colours. Regenerate ONLY after a reviewed, intentional change. The gate fails on NEW instances beyond this multiset.",
+  "floor": 60,
+  "entries": [
+    {
+      "file": "apps/web/src/components/os/apps/agents/CreateGroupForm.tsx",
+      "line": 111,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AgentsApp.tsx",
+      "line": 278,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AgentsApp.tsx",
+      "line": 358,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AllWorkspacesApp.tsx",
+      "line": 561,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AllWorkspacesApp.tsx",
+      "line": 585,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ApprovalsApp.tsx",
+      "line": 279,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ApprovalsApp.tsx",
+      "line": 310,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ArtifactCenterApp.tsx",
+      "line": 256,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ArtifactCenterApp.tsx",
+      "line": 264,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AutomationCenterApp.tsx",
+      "line": 408,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AutomationCenterApp.tsx",
+      "line": 613,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/AutomationCenterApp.tsx",
+      "line": 623,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/automations/AutomationLogList.tsx",
+      "line": 28,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/BackupApp.tsx",
+      "line": 163,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/BenchmarkApp.tsx",
+      "line": 129,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "line": 497,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "line": 511,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "line": 539,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/CapabilitiesApp.tsx",
+      "line": 569,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "line": 364,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "line": 924,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ChatApp.tsx",
+      "line": 1505,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/connectors/McpCatalog.tsx",
+      "line": 276,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/ConnectorsApp.tsx",
+      "line": 246,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/DashboardApp.tsx",
+      "line": 286,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/DashboardApp.tsx",
+      "line": 297,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "line": 219,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "line": 275,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "line": 425,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/EventsApp.tsx",
+      "line": 436,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/files/FileActions.tsx",
+      "line": 100,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/files/FilePreview.tsx",
+      "line": 51,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/files/SyntaxPreview.tsx",
+      "line": 132,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/files/SyntaxPreview.tsx",
+      "line": 157,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/files/WorkspaceRail.tsx",
+      "line": 94,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "line": 212,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/HomeCockpit.tsx",
+      "line": 325,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/LauncherApp.tsx",
+      "line": 325,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "line": 395,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/MarketplaceApp.tsx",
+      "line": 444,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/mcp/InstalledMcpList.tsx",
+      "line": 141,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/EvolutionTab.tsx",
+      "line": 437,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/EvolutionTab.tsx",
+      "line": 482,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/EvolutionTab.tsx",
+      "line": 493,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/EvolutionTab.tsx",
+      "line": 549,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/EvolutionTab.tsx",
+      "line": 865,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/HarvestTab.tsx",
+      "line": 616,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/KnowledgeGraphViewer.tsx",
+      "line": 453,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/MemoryCenterTab.tsx",
+      "line": 566,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/MemoryTrustManage.tsx",
+      "line": 326,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/MemoryTrustManage.tsx",
+      "line": 694,
+      "snippet": "text-[var(--text-dim)]/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/MemoryTrustManage.tsx",
+      "line": 733,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/MemoryTrustWhy.tsx",
+      "line": 166,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/TimelineTab.tsx",
+      "line": 198,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/TimelineTab.tsx",
+      "line": 212,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/TimelineTab.tsx",
+      "line": 261,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/WikiTab.tsx",
+      "line": 362,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/WikiTab.tsx",
+      "line": 371,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/WikiTab.tsx",
+      "line": 390,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/memory/WikiTab.tsx",
+      "line": 483,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/MemoryTrust.tsx",
+      "line": 184,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/MissionControlApp.tsx",
+      "line": 175,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/MissionControlApp.tsx",
+      "line": 237,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/PlatformApp.tsx",
+      "line": 281,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/RoomApp.tsx",
+      "line": 228,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/RoomApp.tsx",
+      "line": 233,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/SettingsApp.tsx",
+      "line": 242,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/skills/SkillBuilder.tsx",
+      "line": 251,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/StorageAndFilesApp.tsx",
+      "line": 85,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/StorageApp.tsx",
+      "line": 158,
+      "kind": "inline-hex",
+      "snippet": "color:#1a1407"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/TeamGovernanceApp.tsx",
+      "line": 7,
+      "snippet": "text-muted-foreground/20",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/TelemetryApp.tsx",
+      "line": 212,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/TimelineApp.tsx",
+      "line": 171,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/TimelineApp.tsx",
+      "line": 226,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/WaggleDanceApp.tsx",
+      "line": 136,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/WorkspaceDesktopApp.tsx",
+      "line": 330,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/apps/WorkspaceDesktopApp.tsx",
+      "line": 659,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/BootScreen.tsx",
+      "line": 195,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/ModelPilotCard.tsx",
+      "line": 145,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/ModelSelector.tsx",
+      "line": 74,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/ModelSelector.tsx",
+      "line": 132,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/overlays/CommandCenter.tsx",
+      "line": 671,
+      "kind": "inline-hex",
+      "snippet": "color:#a78bfa"
+    },
+    {
+      "file": "apps/web/src/components/os/overlays/ContextRail.tsx",
+      "line": 88,
+      "snippet": "text-muted-foreground/30",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/overlays/ContextRail.tsx",
+      "line": 125,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/overlays/CreateWorkspaceDialog.tsx",
+      "line": 283,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/overlays/EraseDataDialog.tsx",
+      "line": 201,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/overlays/UpgradeModal.tsx",
+      "line": 32,
+      "snippet": "text-muted-foreground/40",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/os/Sidebar.tsx",
+      "line": 136,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/Sidebar.tsx",
+      "line": 200,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/StatusBar.tsx",
+      "line": 222,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/warm/AskBar.tsx",
+      "line": 89,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/warm/AskBar.tsx",
+      "line": 100,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/warm/HexAvatar.tsx",
+      "line": 73,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/os/warm/InlineApprovalCard.tsx",
+      "line": 46,
+      "kind": "hex-class",
+      "snippet": "text-[#1a1407]"
+    },
+    {
+      "file": "apps/web/src/components/ui/stepper.tsx",
+      "line": 112,
+      "snippet": "text-muted-foreground/50",
+      "kind": "low-opacity-token"
+    },
+    {
+      "file": "apps/web/src/components/ui/toast.tsx",
+      "line": 70,
+      "snippet": "text-foreground/50",
+      "kind": "low-opacity-token"
+    }
+  ]
+}

@@ -69,7 +69,9 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     // The Wave T reveal + keyboard parity survive unchanged.
     expect(row.className).toContain('group-hover/turn:opacity-100');
     expect(row.className).toContain('group-focus-within/turn:opacity-100');
-    expect(row.className).toContain('duration-150');
+    // R3 motion sweep: the raw 150ms reveal now resolves to the --mo-fast token
+    // (still 150ms) — the reveal timing is unchanged, only the source moved.
+    expect(row.className).toContain('duration-[var(--mo-fast)]');
     expect(row.className).toContain('motion-reduce:translate-y-0');
   });
 

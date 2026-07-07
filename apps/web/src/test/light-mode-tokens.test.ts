@@ -120,3 +120,55 @@ describe('honey button text contrast (--primary-foreground on --primary)', () =>
     expect(r, `${label} primary-foreground → ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+// ── Pillar 4 AA-floor tiers (Lane T, 2026-07-07) ──
+// --text-tertiary must be AA (>=4.5:1) on EVERY surface token in BOTH themes;
+// --focus-ring + --line-affordance are non-text tiers (WCAG 1.4.11, >=3:1).
+// The four surfaces a tier may sit over: --bg (--background), --bg-2,
+// --surface (--card), --surface-2 (--secondary). This freezes the guarantee
+// so a future edit that dims a tier below its floor fails CI.
+function hexToken(body: string, name: string): string | null {
+  const m = body.match(new RegExp(`${name}:\\s*(#[0-9a-fA-F]{6})`));
+  return m ? m[1] : null;
+}
+function surfaces(body: string): Record<string, [number, number, number]> {
+  const bg2 = hexToken(body, '--bg-2');
+  return {
+    '--bg': hslTriple(body, '--background')!,
+    '--bg-2': bg2 ? hexToRgb(bg2) : hslTriple(body, '--background')!,
+    '--surface': hslTriple(body, '--card')!,
+    '--surface-2': hslTriple(body, '--secondary')!,
+  };
+}
+
+describe('Pillar 4 AA-floor tiers (text-tertiary / focus-ring / line-affordance)', () => {
+  it.each([
+    ['dark', ':root'],
+    ['light', ':root[data-theme="light"]'],
+  ])('%s --text-tertiary is AA (>=4.5:1) on all four surfaces', (label, selector) => {
+    const body = block(selector);
+    const tier = hexToken(body, '--text-tertiary');
+    expect(tier, `${label} --text-tertiary must be a hex color`).toMatch(/^#[0-9a-fA-F]{6}$/);
+    const tierRgb = hexToRgb(tier!);
+    for (const [name, surf] of Object.entries(surfaces(body))) {
+      const r = ratio(tierRgb, surf);
+      expect(r, `${label} --text-tertiary ${tier} on ${name} → ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each([
+    ['dark', ':root'],
+    ['light', ':root[data-theme="light"]'],
+  ])('%s --focus-ring + --line-affordance meet WCAG 1.4.11 (>=3:1) on all four surfaces', (label, selector) => {
+    const body = block(selector);
+    for (const token of ['--focus-ring', '--line-affordance']) {
+      const val = hexToken(body, token);
+      expect(val, `${label} ${token} must be a hex color`).toMatch(/^#[0-9a-fA-F]{6}$/);
+      const rgb = hexToRgb(val!);
+      for (const [name, surf] of Object.entries(surfaces(body))) {
+        const r = ratio(rgb, surf);
+        expect(r, `${label} ${token} ${val} on ${name} → ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(3);
+      }
+    }
+  });
+});

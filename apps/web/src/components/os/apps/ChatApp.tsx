@@ -23,6 +23,7 @@ import {
   shouldFireMemoryRecall,
 } from '@/lib/memory-recall-toast';
 import { useToast } from '@/hooks/use-toast';
+import { DUR } from '@/lib/motion/tokens';
 
 export interface TeamMember {
   id: string;
@@ -228,7 +229,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
     // hover AND on :focus-within (keyboard parity). 16px icons rest at
     // --text-dim (AA-tuned) and brighten to --text on direct hover. Reduced-
     // motion drops the slide (opacity-only), honoring the guard.
-    <div data-testid="chat-action-row" className="inline-flex items-center gap-1 mt-1 relative rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 opacity-75 translate-y-0.5 transition-[opacity,transform] duration-150 ease-out group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
+    <div data-testid="chat-action-row" className="inline-flex items-center gap-1 mt-1 relative rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 opacity-75 translate-y-0.5 transition-[opacity,transform] duration-[var(--mo-fast)] ease-[var(--mo-ease)] group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
       <HintTooltip content="Good response">
         <button
           onClick={() => handleVote('up')}
@@ -718,17 +719,19 @@ const ChatApp = ({
     }
   }, [messages, isLoading]);
 
-  // Wave U Lane F fix 2: a ~200ms scale pop the moment the send button fills
-  // honey (empty→ready). Fires once per empty→ready transition — the ref guard
-  // means streaming/isLoading flips, prefilled-on-mount starters, and plain
-  // re-renders never re-pulse — and the scale class is motion-safe gated on the
-  // button, so reduced-motion never scales.
+  // Wave U Lane F fix 2: a scale pop the moment the send button fills honey
+  // (empty→ready). Fires once per empty→ready transition — the ref guard means
+  // streaming/isLoading flips, prefilled-on-mount starters, and plain re-renders
+  // never re-pulse — and the scale class is motion-safe gated on the button, so
+  // reduced-motion never scales. R3 motion sweep: the pulse window is bound to
+  // DUR.base (matches the button's --mo-base transition) — one dialect, not a
+  // hardcoded 200 that only happens to agree.
   const canSend = Boolean(input.trim()) && !isLoading;
   const prevCanSendRef = useRef(canSend);
   useEffect(() => {
     if (canSend && !prevCanSendRef.current) {
       setSendPulse(true);
-      const id = setTimeout(() => setSendPulse(false), 200);
+      const id = setTimeout(() => setSendPulse(false), DUR.base * 1000);
       prevCanSendRef.current = canSend;
       return () => clearTimeout(id);
     }
@@ -933,10 +936,13 @@ const ChatApp = ({
           // Wave W Lane E fix 1 (video legibility): the streaming bar read as a
           // near-invisible hairline at 2fps — h-0.5 (2px) with a /60 segment. One
           // visible tier up (h-1 + full-primary segment) so the send→streaming arc
-          // is legible on capture. The sliding shimmer motion is unchanged.
+          // is legible on capture. R3 motion sweep: the slide loop moved to the
+          // .chat-stream-shimmer utility (co-located with its @keyframes in
+          // index.css) so no magic duration/ease lives in the component, and
+          // reduced-motion stills the slide (REDUCED.ambient = off). The dead
+          // animate-pulse (the inline animation always overrode it) is dropped.
           <div className="shrink-0 h-1 w-full bg-muted/30 overflow-hidden">
-            <div className="h-full w-1/3 bg-primary animate-pulse rounded-full"
-              style={{ animation: 'shimmer 1.5s ease-in-out infinite', transformOrigin: 'left' }} />
+            <div className="h-full w-1/3 bg-primary rounded-full chat-stream-shimmer" />
           </div>
         )}
 
@@ -1500,7 +1506,7 @@ const ChatApp = ({
                 onClick={handleSend}
                 disabled={!canSend}
                 aria-label="Send"
-                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-200 ${
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-[var(--mo-base)] ${
                   canSend
                     ? 'bg-primary text-[#1a1407] hover:opacity-90'
                     : 'bg-[var(--surface-2)] text-[var(--text-dim)]'

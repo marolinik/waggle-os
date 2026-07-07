@@ -156,6 +156,28 @@
     --line-strong: #4a4030;
     --text-2:      #c8bfa9;
 
+    /* ═══════════════════════════════════════════════════════════════════
+     * AA FLOOR (Pillar 4 · Lane T 2026-07-07) — guaranteed-contrast tiers.
+     * Ratios are WCAG relative-luminance contrast vs the four surface tokens
+     * a tier may sit over: --bg #14110b · --bg-2 #1a160f · --surface #201b13
+     * · --surface-2 #272117. Guarded by test/light-mode-tokens.test.ts (CI
+     * fails if any (tier × surface) pair drops below its floor).
+     * ═══════════════════════════════════════════════════════════════════ */
+    /* --text-tertiary — the dimmest LEGIBLE text tier: AA (≥4.5:1) on EVERY
+       surface, and NEVER opacity-diluted. #a3987f →
+       6.61 / 6.31 / 5.98 / 5.61:1 (bg / bg-2 / surface / surface-2); min 5.61.
+       Onboarding footnotes/chips + "Don't show again" migrate onto this (they
+       were muted-fg at /60–/70, which composited to 3.1–3.8:1 over the scrim —
+       sub-AA). */
+    --text-tertiary: #a3987f;
+    /* --focus-ring — non-text focus indicator (WCAG 1.4.11, ≥3:1 vs adjacent
+       bg). Dark = honey-500 #e9a52c → 8.88 / 8.48 / 8.04 / 7.54:1; min 7.54. */
+    --focus-ring: #e9a52c;
+    /* --line-affordance — perceivable border for inputs/chips/state glyphs
+       (WCAG 1.4.11, ≥3:1). #807759 → 4.22 / 4.03 / 3.82 / 3.59:1; min 3.59.
+       (--line #38301f is a decorative hairline at ~1.3:1 — not an affordance.) */
+    --line-affordance: #807759;
+
     --honey:        #e9a52c;
     --honey-bright: #f6c45a;
     --honey-deep:   #c07e16;
@@ -189,6 +211,16 @@
     --sans:  'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --serif: var(--sans);
     --mono:  'JetBrains Mono', ui-monospace, monospace;
+
+    /* ── Motion vocabulary (Phase-0) — theme-invariant, so defined once in the
+       default :root and inherited by light (light overrides no --mo-* token).
+       Mirrors lib/motion/tokens.ts DUR (ms) + EASE_OUT; CSS-timed motion resolves
+       here, framer-motion motion resolves to the SPRING family in that file. */
+    --mo-fast: 150ms;
+    --mo-base: 200ms;
+    --mo-slow: 320ms;
+    --mo-settle: 400ms;
+    --mo-ease: cubic-bezier(0.22, 1, 0.36, 1);
 
     color-scheme: dark;
     font-family: var(--sans);
@@ -298,6 +330,18 @@
     --line-soft:   #e7dcc4;   /* R10 Lane D: one step firmer on ivory so card edges hold (was #ede3cd) */
     --line-strong: #d2c3a2;
     --text-2:      #5a5140;
+
+    /* ── AA FLOOR (Pillar 4 · Lane T) — light values. Surfaces: --bg #f7f1e4
+       · --bg-2 #f1e9d8 · --surface #fefdfa · --surface-2 #f6efdf. ── */
+    /* --text-tertiary #6e6552 → 5.10 / 4.77 / 5.68 / 5.02:1; min 4.77 (AA).
+       The darkest-surface pair (--bg-2) sets the floor. */
+    --text-tertiary: #6e6552;
+    /* --focus-ring #9a6408 — honey darkened for the honey-on-ivory known-risk
+       pair: 4.43 / 4.14 / 4.93 / 4.36:1; min 4.14. (honey-500 #b57d12 was only
+       2.86:1 min here — the sub-3:1 WCAG 1.4.11 failure this token fixes.) */
+    --focus-ring: #9a6408;
+    /* --line-affordance #877b58 → 3.72 / 3.47 / 4.14 / 3.66:1; min 3.47. */
+    --line-affordance: #877b58;
 
     /* R9 a11y+design judges: 85%-sat #b57d12 read as muddy mustard/olive next to
        dark's #e5a000. Full-saturation #c07f00 at the same ~40° hue keeps BOTH
@@ -461,8 +505,13 @@
 }
 
 /* ── Focus ────────────────────────────────────────────────────────────── */
+/* Lane T (Pillar 4.3, WCAG 1.4.11): the ring is --focus-ring, not raw
+   --honey-500. Dark they're identical (#e9a52c, 7.5:1+ on every surface); in
+   LIGHT --honey-500 #b57d12 was only 2.86:1 on ivory (sub-3:1) — --focus-ring
+   #9a6408 clears 3:1 (min 4.14:1). The 2px offset seats the ring over the page,
+   so the adjacent-bg comparison is the surface, not the (honey) element. */
 :focus-visible {
-  outline: 2px solid var(--honey-500);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -607,6 +656,15 @@
   0% { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
 }
+/* R3 motion sweep — the chat streaming-bar slide loop (was an inline animation
+   in ChatApp). Ambient tier: the 1.5s / ease-in-out are LOOP CADENCE, not a
+   discrete-transition token, so --mo-* / EASE_OUT deliberately don't apply.
+   Reduced motion stills the slide to a static segment (REDUCED.ambient = off),
+   handled in the prefers-reduced-motion block below. */
+.chat-stream-shimmer {
+  animation: shimmer 1.5s ease-in-out infinite;
+  transform-origin: left;
+}
 
 /* PR6a — Platform "Boot" showcase hex pulse (design platform.html:57-58) */
 @keyframes boot-hex-pulse {
@@ -624,6 +682,7 @@
   .memory-fold { animation: none; } /* base opacity 0 → particle never shows */
   .glow-breathe { animation: none; }
   .dot-live { animation: none; }
+  .chat-stream-shimmer { animation: none; } /* static segment, no slide */
 }
 
 /* Lane D (Wave V) — signature theme crossfade ("sunset over the hive").

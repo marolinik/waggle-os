@@ -113,7 +113,7 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
                 className={`px-3 py-1.5 rounded-lg text-xs font-display transition-colors ${
                   profile.workType === w.id
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    : 'bg-muted/50 text-[var(--text-tertiary)] hover:text-foreground'
                 }`}
               >
                 {w.label}
@@ -135,7 +135,7 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
                 className={`px-3 py-1.5 rounded-lg text-xs font-display transition-colors ${
                   profile.teamSize === t.id
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                    : 'bg-muted/50 text-[var(--text-tertiary)] hover:text-foreground'
                 }`}
               >
                 {t.label}
@@ -159,7 +159,7 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
                   className={`px-3 py-1.5 rounded-lg text-xs font-display transition-colors ${
                     on
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/50 text-muted-foreground hover:text-foreground'
+                      : 'bg-muted/50 text-[var(--text-tertiary)] hover:text-foreground'
                   }`}
                 >
                   {g.label}
@@ -171,7 +171,9 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
 
         {/* Live preview */}
         <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
-          <p className="text-[11px] uppercase tracking-wide text-muted-foreground/70 mb-1 font-display">Preview</p>
+          {/* Lane T: was text-muted-foreground/70 (~2.9:1 light over the tinted
+              preview panel — sub-AA). Full-opacity --text-tertiary → ≥5.2:1. */}
+          <p className="text-[11px] uppercase tracking-wide text-[var(--text-tertiary)] mb-1 font-display">Preview</p>
           <p className="text-sm text-foreground">{preview}</p>
         </div>
       </div>
