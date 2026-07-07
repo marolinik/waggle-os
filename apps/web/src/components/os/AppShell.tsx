@@ -32,13 +32,15 @@ import NotificationInbox from './overlays/NotificationInbox';
 import KeyboardShortcutsHelp from './overlays/KeyboardShortcutsHelp';
 import OnboardingWizard from './overlays/OnboardingWizard';
 import OnboardingTooltips from './overlays/OnboardingTooltips';
-import LoginBriefing, { prefetchBriefing } from './overlays/LoginBriefing';
+import LoginBriefing from './overlays/LoginBriefing';
 import ContextRail from './overlays/ContextRail';
 import UpgradeModal from './overlays/UpgradeModal';
 import TrialExpiredModal from './overlays/TrialExpiredModal';
 import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
 import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt, readLoginBriefingDismissed, readSkipBriefingParam } from '@/lib/login-briefing';
+import { prefetchBriefing, computeAwayDays, BRIEFING_ABSENCE_DAYS } from '@/lib/briefing-source';
+import { homeCacheExists } from '@/lib/home-cache';
 import { resolveReturningUserOnboarding, isOnboardingStatusKnownSync } from '@/hooks/useOnboarding';
 import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
@@ -321,6 +323,13 @@ const ShellLayout = () => {
     setBriefingLanding(prev => nextBriefingLanding(prev, location.pathname));
   }, [location.pathname]);
 
+  // Lane H item 4 — the "double catch-up collapse": the everyday catch-up is the
+  // home hero's recall strip, so the full modal is reserved for ≥7-day absences.
+  // Away time is derived from the SAME workspace lastActive stream the hero
+  // greeting reads (user activity, not machine cron writes); 0 when there is no
+  // activity yet, so a brand-new account never triggers it.
+  const briefingAwayDays = useMemo(() => computeAwayDays(workspaces), [workspaces]);
+
   // Five-place spine + a power-tier "Pinned" group. Chat resolves to the active
   // workspace's chat tab (routeFor falls back to /home with no workspace). The
   // Agents & tasks badge surfaces unacknowledged coordination signals for now;
@@ -507,9 +516,12 @@ const ShellLayout = () => {
           Wave U Lane B (item 1 — interruption discipline): gate on briefingLanding
           ('armed' = Home was the session's landing surface AND we haven't left it),
           NOT the live pathname alone — so a mid-session Settings→Home never re-pops
-          it. The trailing pathname check absorbs the one-frame effect lag. */}
+          it. The trailing pathname check absorbs the one-frame effect lag.
+          Lane H item 4: additionally require a ≥7-day absence — otherwise the home
+          hero's recall strip is the catch-up, and this modal stays closed. */}
       {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing
-        && briefingLanding === 'armed' && location.pathname.startsWith('/home') && !offline && (
+        && briefingLanding === 'armed' && location.pathname.startsWith('/home') && !offline
+        && briefingAwayDays >= BRIEFING_ABSENCE_DAYS && (
         <LoginBriefing
           onDismiss={(permanent) => {
             if (permanent) writeLoginBriefingDismissed(true);
@@ -614,6 +626,10 @@ const AppShell = () => {
 
   const [booted, setBooted] = useState(initialBooted);
   const [showShell, setShowShell] = useState(() => initialBooted && isOnboardingStatusKnownSync());
+  // Lane H item 5: a warm session (returning user WITH a cache-first Home payload
+  // to paint behind the boot screen) shortens the brand flash to ≤500ms. A cold /
+  // day-0 launch (nothing cached to paint) keeps the full brand moment.
+  const [warmBoot] = useState(() => initialBooted && homeCacheExists());
 
   // Fast path with no BootScreen to animate out (already booted this session):
   // reveal the shell once onboarding resolves, since onExitComplete never fires.
@@ -640,7 +656,7 @@ const AppShell = () => {
           (post-boot), so neither can gate the floor. While onboarding is
           unresolved the boot holds past the floor rather than flash the wizard. */}
       <AnimatePresence onExitComplete={() => setShowShell(true)}>
-        {!bootComplete && <BootScreen onComplete={handleBootComplete} ready={onboardingResolved} />}
+        {!bootComplete && <BootScreen onComplete={handleBootComplete} ready={onboardingResolved} warm={warmBoot} />}
       </AnimatePresence>
       {showShell && (
         <ShellProvider>

@@ -108,4 +108,16 @@ describe('BootScreen — perceptual warm-start floor (Wave U Lane D)', () => {
     expect(exit).toEqual({ opacity: 0 });
     expect(JSON.parse(root.getAttribute('data-motion-transition') ?? '{}').duration).toBe(0);
   });
+
+  // Lane H item 5 — a warm (cache-first) session exits at the shorter ≤500ms
+  // brand flash, well before the cold 850ms floor a returning-user boot used to
+  // sit through with content already waiting behind it.
+  it('warm session exits at the shorter ≤500ms floor when ready', () => {
+    const onComplete = vi.fn();
+    render(<BootScreen onComplete={onComplete} ready warm />);
+    act(() => { vi.advanceTimersByTime(450); }); // < WARM_BRAND_MS (500)
+    expect(onComplete).not.toHaveBeenCalled();
+    act(() => { vi.advanceTimersByTime(100); }); // now past 500 — a cold boot (850) would still be waiting
+    expect(onComplete).toHaveBeenCalledTimes(1);
+  });
 });

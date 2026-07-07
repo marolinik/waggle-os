@@ -33,7 +33,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
 import type { AgentSearchResponse } from '@/lib/agent-search';
-import MarketplaceApp from '@/components/os/apps/MarketplaceApp';
+import MarketplaceApp, { resetMarketplaceRouteCache } from '@/components/os/apps/MarketplaceApp';
 import { ServiceProvider } from '@/providers/ServiceProvider';
 import { InstallProvider } from '@/providers/InstallProvider';
 
@@ -61,6 +61,7 @@ const NO_MATCH: AgentSearchResponse = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetMarketplaceRouteCache(); // Pillar 2.6: reset the module-level route cache between tests
   mocks.adapter.connect.mockResolvedValue(undefined);
   mocks.adapter.forceReconnect.mockResolvedValue(undefined);
   mocks.adapter.getMarketplace.mockImplementation(async (params?: { type?: string }) => (

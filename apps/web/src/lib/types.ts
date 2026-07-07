@@ -435,6 +435,13 @@ export interface ChatMessage {
   feedback?: 'up' | 'down' | null;
   pinned?: boolean;
   persona?: string;
+  /**
+   * Lane C (Pillar 2.2/2.5): an optimistic user turn that was typed+sent while a
+   * previous reply was still streaming. It renders immediately with a truthful
+   * "waiting" marker and dispatches the moment the in-flight reply finishes —
+   * never errors, never drops. Cleared to `false`/absent once dispatched.
+   */
+  queued?: boolean;
 }
 
 export interface ToolExecution {

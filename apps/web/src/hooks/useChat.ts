@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { adapter } from '@/lib/adapter';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
+import {
+  chatThreadCacheKey,
+  readChatThreadCache,
+  writeChatThreadCache,
+} from '@/hooks/chat-thread-cache';
 import type {
   ChatMessage, StreamEvent, ApprovalRequest,
   ContentBlock, TextContentBlock, ToolExecution,
@@ -92,6 +97,17 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Lane C (Pillar 2.2/2.5): a send fired while a reply is still streaming must
+  // NOT lock the composer or spawn a second concurrent SSE stream. Such sends
+  // QUEUE behind the in-flight one — the optimistic user turn renders at once
+  // with a truthful `queued` marker and dispatches when the current reply ends.
+  const inFlightRef = useRef(false);
+  const queueRef = useRef<Array<{ id: string; content: string; retry?: boolean }>>([]);
+  // Late-bound so the dispatch loop can flush its own queue without a self-dep.
+  const runDispatchRef = useRef<
+    (content: string, opts: { retry?: boolean } | undefined, optimisticId?: string) => Promise<boolean>
+  >(async () => false);
+
   // Cancel any in-flight stream on unmount
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
@@ -99,11 +115,28 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
 
   // Load history when session changes
   useEffect(() => {
+    // Lane C: a message queued into the previous thread must never dispatch into
+    // a freshly loaded one — drop the pending queue on every thread change.
+    queueRef.current = [];
     if (workspaceId && sessionId) {
+      const cacheKey = chatThreadCacheKey(workspaceId, sessionId);
+      // Lane C (2.6-chat) cache-first paint: seed from the last-known thread so a
+      // return to a visited session renders instantly, then refresh silently.
+      const cached = readChatThreadCache(cacheKey);
+      if (cached) setMessages(cached);
       setHistoryLoaded(false);
       adapter.getHistory(workspaceId, sessionId)
-        .then((history) => setMessages(history.map(ensureBlocks)))
-        .catch((err) => { console.error('[useChat] history fetch failed:', err); setMessages([]); })
+        .then((history) => {
+          const shaped = history.map(ensureBlocks);
+          setMessages(shaped);
+          writeChatThreadCache(cacheKey, shaped);
+        })
+        .catch((err) => {
+          console.error('[useChat] history fetch failed:', err);
+          // Keep a good cached paint on a transient refresh failure; only clear
+          // when there was nothing to show.
+          if (!cached) setMessages([]);
+        })
         .finally(() => setHistoryLoaded(true));
     } else {
       // No session yet — leave historyLoaded false so an auto-send waits for a
@@ -112,22 +145,28 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     }
   }, [workspaceId, sessionId]);
 
-  const sendMessage = useCallback(async (content: string, opts?: { retry?: boolean }): Promise<boolean> => {
+  // Lane C: persist the SETTLED thread (never mid-stream partials or queued
+  // turns) so a remount/return paints instantly from the cache above.
+  useEffect(() => {
+    if (!workspaceId || !sessionId) return;
+    if (isLoading) return;
+    if (messages.length === 0) return;
+    if (messages.some((m) => m.queued)) return;
+    writeChatThreadCache(chatThreadCacheKey(workspaceId, sessionId), messages);
+  }, [messages, workspaceId, sessionId, isLoading]);
+
+  const runDispatch = useCallback(async (
+    content: string,
+    opts?: { retry?: boolean },
+    optimisticId?: string,
+  ): Promise<boolean> => {
     if (!workspaceId || !content.trim()) return false;
+    inFlightRef.current = true;
     // F2: report send success so the wizard auto-send knows whether to clear
     // the composer or leave the text for a manual retry. Error handling below
     // is unchanged — this only observes it.
     let failed = false;
-
-    const userMsg: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: content.trim(),
-      blocks: [{ type: 'text', blockId: nextBlockId('text'), content: content.trim() }],
-      timestamp: new Date().toISOString(),
-    };
-    setMessages(prev => [...prev, userMsg]);
-    setIsLoading(true);
+    const trimmed = content.trim();
 
     const assistantMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -137,7 +176,36 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
       timestamp: new Date().toISOString(),
       tools: [],
     };
-    setMessages(prev => [...prev, assistantMsg]);
+    // Target the assistant turn BY ID (not "last message"): a queued turn may
+    // sit after it in the list, so position is not stable during streaming.
+    const assistantId = assistantMsg.id;
+
+    if (optimisticId) {
+      // Flush path: the optimistic user turn is already rendered (queued while a
+      // prior reply streamed). Promote it (clear `queued`) and insert the
+      // assistant placeholder directly after it — position-stable so any later
+      // queued turn keeps its order. If the turn was dropped (a thread switch
+      // between queueing and flush — which also clears the queue, so an edge),
+      // append the assistant at the end so streaming still has a target.
+      setMessages(prev => {
+        const idx = prev.findIndex(m => m.id === optimisticId);
+        if (idx === -1) return [...prev, assistantMsg];
+        const next = [...prev];
+        next[idx] = { ...next[idx], queued: false };
+        next.splice(idx + 1, 0, assistantMsg);
+        return next;
+      });
+    } else {
+      const userMsg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: trimmed,
+        blocks: [{ type: 'text', blockId: nextBlockId('text'), content: trimmed }],
+        timestamp: new Date().toISOString(),
+      };
+      setMessages(prev => [...prev, userMsg, assistantMsg]);
+    }
+    setIsLoading(true);
 
     abortRef.current?.abort();
     abortRef.current = new AbortController();
@@ -155,10 +223,11 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
 
         setMessages(prev => {
           const msgs = [...prev];
-          const last = msgs[msgs.length - 1];
-          // Guard the empty-array case: a session/workspace switch mid-stream
-          // resets messages to [] (load effect), after which a late stream
-          // event would read `last.role` off undefined and crash the updater.
+          const targetIdx = msgs.findIndex(m => m.id === assistantId);
+          const last = targetIdx >= 0 ? msgs[targetIdx] : undefined;
+          // Guard the missing-target case: a session/workspace switch mid-stream
+          // resets messages via the load effect, after which a late stream event
+          // would read `last.role` off undefined and crash the updater.
           if (!last || last.role !== 'assistant') return msgs;
           const blocks = [...(last.blocks || [])];
           let toolsUpdate: ToolExecution[] | null = null;
@@ -291,7 +360,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
 
           const content = flattenBlocks(blocks);
           return msgs.map((m, i) =>
-            i === msgs.length - 1
+            i === targetIdx
               ? { ...m, blocks, content, ...(toolsUpdate && { tools: toolsUpdate }) }
               : m
           );
@@ -317,21 +386,49 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
           : 'Backend is offline. Connect to a Waggle server to start chatting.';
       setMessages(prev => {
         const msgs = [...prev];
-        const last = msgs[msgs.length - 1];
-        // Same empty-array guard as the stream updater: a session/workspace
-        // switch mid-flight resets messages to []. Return prev (not the
-        // clone) so React's setState bail-out skips the no-op re-render.
+        const targetIdx = msgs.findIndex(m => m.id === assistantId);
+        const last = targetIdx >= 0 ? msgs[targetIdx] : undefined;
+        // Same missing-target guard as the stream updater: a session/workspace
+        // switch mid-flight resets messages. Return prev (not the clone) so
+        // React's setState bail-out skips the no-op re-render.
         if (!last || last.role !== 'assistant') return prev;
         const blocks = [...(last.blocks || []), { type: 'error' as const, blockId: nextBlockId('error'), message }];
         return msgs.map((m, i) =>
-          i === msgs.length - 1 ? { ...m, blocks, content: message } : m
+          i === targetIdx ? { ...m, blocks, content: message } : m
         );
       });
     } finally {
       setIsLoading(false);
+      inFlightRef.current = false;
+      // Flush the next queued send (FIFO) now that the stream has ended.
+      const next = queueRef.current.shift();
+      if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id);
     }
     return !failed;
   }, [workspaceId, sessionId, persona, autonomy]);
+  runDispatchRef.current = runDispatch;
+
+  const sendMessage = useCallback(async (content: string, opts?: { retry?: boolean }): Promise<boolean> => {
+    if (!workspaceId || !content.trim()) return false;
+    const trimmed = content.trim();
+    // Lane C: if a reply is already streaming, QUEUE this send behind it instead
+    // of racing a second SSE stream. The optimistic user turn renders now with a
+    // truthful `queued` marker; it dispatches when the current reply finishes.
+    if (inFlightRef.current) {
+      const id = crypto.randomUUID();
+      queueRef.current.push({ id, content: trimmed, retry: opts?.retry });
+      setMessages(prev => [...prev, {
+        id,
+        role: 'user',
+        content: trimmed,
+        blocks: [{ type: 'text', blockId: nextBlockId('text'), content: trimmed }],
+        timestamp: new Date().toISOString(),
+        queued: true,
+      }]);
+      return true;
+    }
+    return runDispatch(content, opts);
+  }, [workspaceId, runDispatch]);
 
   // F4: re-issue the last user turn after a failure. Drops the failed
   // user+assistant pair from local state first, then sendMessage re-appends a

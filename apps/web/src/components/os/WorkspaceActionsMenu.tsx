@@ -154,7 +154,13 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
         onClick={openMenu}
         aria-label={`Workspace actions for ${workspace.name}`}
         data-testid="workspace-actions-trigger"
-        className={`p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${buttonClassName ?? ''}`}
+        // Pillar 2.7 (Lane K): keyboard parity for the hover-revealed kebab.
+        // `focus-visible:opacity-100` guarantees the kebab surfaces on Tab even
+        // if a host omits it from buttonClassName (the systemic `:focus-visible`
+        // ring in index.css then paints the --focus-ring outline); the centered
+        // 40px ::before lifts the effective hit target from 24px with no visual
+        // size change.
+        className={`relative p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:opacity-100 before:absolute before:left-1/2 before:top-1/2 before:h-10 before:w-10 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] ${buttonClassName ?? ''}`}
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>

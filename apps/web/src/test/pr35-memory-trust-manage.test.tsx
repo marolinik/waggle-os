@@ -141,6 +141,21 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     await waitFor(() => expect(screen.getByTestId('memory-trust-total').textContent).toBe('20'));
   });
 
+  // Pillar 2.7 (Lane K) — row-action keyboard/hit-area parity.
+  it('row actions carry a ≥40px hit area (centered 40px ::before, no visual size change)', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([mem({ id: '5', createdAt: iso(1) })]);
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    await waitFor(() => expect(screen.getByText('⬡ M-5')).toBeTruthy());
+    for (const title of ['Edit / correct', 'Forget this']) {
+      const btn = screen.getByTitle(title);
+      expect(btn.className).toContain('relative');
+      expect(btn.className).toContain('before:h-10');
+      expect(btn.className).toContain('before:w-10');
+      // Visual size is untouched — the 30px button box stays 30px.
+      expect(btn.className).toContain('h-[30px]');
+    }
+  });
+
   it('workspace mind passes the workspace param to mutations', async () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '9', createdAt: iso(1) })]);
     render(<MemoryTrustManage mind="workspace" workspaceId="w1" onToast={() => {}} />);

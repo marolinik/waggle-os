@@ -35,6 +35,9 @@ function isGlobalShortcut(e: KeyboardEvent): boolean {
   return (
     (ctrl && e.key === 'k')
     || (ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n'))
+    // Pillar 2.7: "open last workspace" is a from-anywhere power path, so it
+    // survives an input focus (parity with new-chat above).
+    || (ctrl && e.shiftKey && (e.key === 'O' || e.key === 'o'))
     || e.key === 'Escape'
   );
 }
@@ -75,6 +78,16 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
         return;
       }
 
+      // Ctrl+Shift+O: Open the last / active workspace's desktop from anywhere
+      // (Pillar 2.7 ≤2-keystroke power path). onOpenApp('workspace-desktop')
+      // resolves through routeFor, which lands the persisted active workspace
+      // (or Home when nothing is selected — Home IS the workspace selector).
+      if (ctrl && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
+        e.preventDefault();
+        opts.onOpenApp('workspace-desktop');
+        return;
+      }
+
       // Ctrl+Shift+0-9: Open apps
       if (ctrl && e.shiftKey && APP_SHORTCUTS[e.key]) {
         e.preventDefault();
@@ -106,6 +119,15 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
       // Ctrl+/ or Ctrl+?: Keyboard help. Browsers/OS layouts disagree on the
       // reported key for the shifted slash shortcut, so accept both forms.
       if (ctrl && (e.key === '?' || e.key === '/')) {
+        e.preventDefault();
+        opts.onToggleKeyboardHelp();
+        return;
+      }
+
+      // `?` (no modifier): the conventional "press ? for help" discoverability
+      // path (Pillar 2.7 cheat-sheet). The input-focus early return above keeps
+      // it from ever hijacking a literal "?" typed into a field.
+      if (!ctrl && e.key === '?') {
         e.preventDefault();
         opts.onToggleKeyboardHelp();
         return;

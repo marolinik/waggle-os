@@ -18,12 +18,15 @@
  */
 
 import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Sparkles, ChevronRight, Clock, Brain, AlertTriangle, Plus,
   Lightbulb, Calendar, ListTodo, WifiOff, RefreshCw,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { cn } from '@/lib/utils';
 import { DATE_LOCALE } from '@/lib/date-locale';
+import { SPRING, STAGGER, DUR, EASE_OUT } from '@/lib/motion/tokens';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -32,6 +35,10 @@ import {
   HexAvatar, SectionLabel, DotLive, RunChip, IconTile, OvernightHero, AskBar,
   StreakChip, type RunChipProps,
 } from '../warm';
+import { RecallCard } from '../overlays/RecallCard';
+import { readHomeCache, writeHomeCache } from '@/lib/home-cache';
+import { takeBriefingData, type MemoryHighlight } from '@/lib/briefing-source';
+import { timeAgo } from '@/lib/login-briefing-brag';
 import type {
   HomeBriefing,
   OvernightSummary,
@@ -99,6 +106,68 @@ function formatClock(iso: string): string {
 /** Honey-accented key number inside a composed sentence. */
 function honey(n: ReactNode): ReactNode {
   return <span className="font-semibold text-[var(--honey-text)]">{n}</span>;
+}
+
+/**
+ * A honey-accented count that pulses when its value changes over a cache-first
+ * paint (Pillar 2.3b / Pillar 3.3 delta pulse, born here). When fresh data
+ * lands with a different number, the digit does one SPRING.micro scale pulse and
+ * carries the `home-delta-pulse` marker class — so a silent refresh SHOWS its
+ * material deltas instead of silently swapping them. Reduced motion → instant
+ * set (REDUCED.countUp), no pulse.
+ */
+function DeltaNumber({ value }: { value: number }) {
+  const reduce = useReducedMotion();
+  const prevRef = useRef(value);
+  const [pulsing, setPulsing] = useState(false);
+  useEffect(() => {
+    if (prevRef.current === value) return;
+    prevRef.current = value;
+    if (reduce) return; // instant-set, no pulse
+    setPulsing(true);
+    const t = setTimeout(() => setPulsing(false), 1200);
+    return () => clearTimeout(t);
+  }, [value, reduce]);
+  return (
+    <motion.span
+      className={cn('font-semibold text-[var(--honey-text)]', pulsing && 'home-delta-pulse')}
+      animate={pulsing && !reduce ? { scale: [1, 1.14, 1] } : { scale: 1 }}
+      transition={SPRING.micro}
+      style={{ display: 'inline-block' }}
+    >
+      {value}
+    </motion.span>
+  );
+}
+
+/**
+ * The home hero recall strip (Pillar 2.4 — the "double catch-up collapse"): the
+ * "I remember" cards now land INSIDE the hero as its first staggered entrance,
+ * so the everyday catch-up is here (the full modal is reserved for ≥7-day
+ * absences). Fixed slot (cap 2, index keys) so a silent refresh swaps the text
+ * in place — no above-the-fold layout shift. Shares RecallCard with the modal.
+ */
+function RecallStrip({ highlights }: { highlights: MemoryHighlight[] }) {
+  const reduce = useReducedMotion();
+  if (highlights.length === 0) return null;
+  const shown = highlights.slice(0, 2);
+  return (
+    <section className="mb-8 space-y-1.5" data-testid="home-cockpit-recall">
+      <p className="mb-1.5 flex items-center gap-1.5 font-display text-[11px] font-semibold uppercase tracking-wider text-honey/80">
+        <Lightbulb className="h-3 w-3" aria-hidden /> I remember
+      </p>
+      {shown.map((h, i) => (
+        <motion.div
+          key={i}
+          initial={reduce ? false : { opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduce ? undefined : { delay: i * STAGGER.brief, duration: DUR.base, ease: EASE_OUT }}
+        >
+          <RecallCard highlight={h} timeLabel={h.timestamp ? timeAgo(h.timestamp) : undefined} />
+        </motion.div>
+      ))}
+    </section>
+  );
 }
 
 function rankTimestamp(iso?: string): number {
@@ -262,8 +331,11 @@ function GreetingHeader({
           className="mt-3 text-[clamp(16px,2vw,19px)] font-medium text-[var(--text-2)]"
           data-testid="home-cockpit-facts"
         >
-          {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you
-          {pendingTotal > 0 && <> · {pendingTotal} {pendingTotal === 1 ? 'item' : 'items'} to review</>}
+          {/* Cache-first paint: these counts pulse when a silent refresh changes
+              them (DeltaNumber), so a material delta is SHOWN, never silently
+              swapped, and the line's slot stays fixed (no above-fold shift). */}
+          <DeltaNumber value={workspaceCount} /> {workspaceCount === 1 ? 'workspace' : 'workspaces'} waiting for you
+          {pendingTotal > 0 && <> · <DeltaNumber value={pendingTotal} /> {pendingTotal === 1 ? 'item' : 'items'} to review</>}
           {lastActiveRel && <> · last active {lastActiveRel}</>}
         </p>
       ) : (
@@ -533,9 +605,14 @@ function buildRunChips(o: OvernightSummary): RunChipProps[] {
 
 // ── Root ─────────────────────────────────────────────────────────────────
 const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, userName, totalWorkspaceCount }: HomeCockpitProps) => {
-  const [briefing, setBriefing] = useState<HomeBriefing | null>(null);
-  const [overnight, setOvernight] = useState<OvernightSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Cache-first paint (Pillar 2.1): seed from the disk-persisted last-good Home
+  // payload so a returning / cold-start launch paints real content BEFORE the
+  // sidecar answers, then refreshes silently. Day-0 (no cache) keeps the skeleton.
+  const [cached] = useState(() => readHomeCache());
+  const [briefing, setBriefing] = useState<HomeBriefing | null>(cached?.briefing ?? null);
+  const [overnight, setOvernight] = useState<OvernightSummary | null>(cached?.overnight ?? null);
+  const [highlights, setHighlights] = useState<MemoryHighlight[]>(cached?.highlights ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [loadError, setLoadError] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
   const offline = useOfflineStatus();
@@ -545,25 +622,62 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
   // and yields malformed data. Defer load() until the attempt has settled.
   const { connecting } = useService();
   const cancelled = useRef(false);
+  // Paintable content already onscreen ⇒ a refresh must NOT re-skeleton, and a
+  // refresh FAILURE must NOT blow good content away (keep last-good, retry silently).
+  const hasContentRef = useRef(!!cached);
+  // Latest recall highlights for the cache write — avoids a stale closure when
+  // the recall fetch fails and we still want to persist the ones we already have.
+  const highlightsRef = useRef<MemoryHighlight[]>(cached?.highlights ?? []);
+  const applyHighlights = useCallback((h: MemoryHighlight[]) => {
+    highlightsRef.current = h;
+    setHighlights(h);
+  }, []);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Silent refresh over a cache-first paint keeps content up; only a cold miss
+    // (nothing to show) shows the skeleton.
+    if (!hasContentRef.current) setLoading(true);
     setLoadError(false);
     setPermissionDenied(false);
     try {
       const b = await adapter.getHomeBriefing();
       if (cancelled.current) return;
       setBriefing(b);
+      // First-run has no real payload to keep/cache; any other briefing is
+      // paintable content the next refresh/error must preserve.
+      hasContentRef.current = !b.isFirstRun;
+
       // Overnight is a secondary, best-effort tile — its failure must never
       // blank the whole cockpit (offline/local-only degrades it gracefully).
+      let o: OvernightSummary | null = null;
       try {
-        const o = await adapter.getHomeOvernight();
+        o = await adapter.getHomeOvernight();
         if (!cancelled.current) setOvernight(o);
       } catch {
         if (!cancelled.current) setOvernight(null);
       }
+
+      // Recall highlights for the hero strip (Pillar 2.4) — shared with the
+      // ≥7-day modal via briefing-source, best-effort: a failure just keeps the
+      // highlights we already have.
+      try {
+        const data = await takeBriefingData();
+        if (!cancelled.current) applyHighlights(data.highlights);
+      } catch {
+        /* keep prior highlights */
+      }
+
+      // Persist the last-good payload for the next cache-first paint (never a
+      // first-run payload — nothing real to show).
+      if (!cancelled.current && !b.isFirstRun) {
+        writeHomeCache({ briefing: b, overnight: o, highlights: highlightsRef.current });
+      }
     } catch (err: unknown) {
       if (cancelled.current) return;
+      // Silent-refresh failure over a cache-first paint: keep the last-good
+      // content (wrong-then-corrected / blank is worse than slightly stale).
+      // Only surface the error / permission state on a COLD miss.
+      if (hasContentRef.current) return;
       setBriefing(null);
       // PERMISSION-DENIED (PRD §12.1): a 403 gets a dedicated message rather
       // than the generic "couldn't load" / offline framing.
@@ -576,7 +690,7 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     } finally {
       if (!cancelled.current) setLoading(false);
     }
-  }, []);
+  }, [applyHighlights]);
 
   useEffect(() => {
     // Defer until the adapter's initial connect attempt has settled. Gates on
@@ -722,6 +836,11 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
         pendingTotal={heroPendingTotal}
         lastActive={heroLastActive}
       />
+
+      {/* Pillar 2.4 — the everyday catch-up lives HERE, in the hero (the full
+          "Catching you up" modal is reserved for ≥7-day absences). Same
+          RecallCard the modal renders. */}
+      <RecallStrip highlights={highlights} />
 
       <StartHereCard
         move={startHereMove}

@@ -726,7 +726,11 @@ const ChatApp = ({
   // reduced-motion never scales. R3 motion sweep: the pulse window is bound to
   // DUR.base (matches the button's --mo-base transition) — one dialect, not a
   // hardcoded 200 that only happens to agree.
-  const canSend = Boolean(input.trim()) && !isLoading;
+  // Lane C (Pillar 2.5 — composer never locks on send): send is enabled whenever
+  // there is text, INCLUDING while a previous reply streams. useChat queues a
+  // send fired mid-stream behind the in-flight one (optimistic `queued` turn),
+  // so there is no disabled window — the next message is accepted immediately.
+  const canSend = Boolean(input.trim());
   const prevCanSendRef = useRef(canSend);
   useEffect(() => {
     if (canSend && !prevCanSendRef.current) {
@@ -1105,6 +1109,20 @@ const ChatApp = ({
                     </HintTooltip>
                   )}
                 </div>
+                {/* Lane C (Pillar 2.5): an optimistic turn typed+sent while the
+                    previous reply was still streaming. Truthful "waiting" state —
+                    it dispatches the moment the current reply finishes, never
+                    errors, never drops. Color-only, no transform → no reduced-
+                    motion handling needed. */}
+                {msg.queued && (
+                  <div
+                    className="mt-1 flex items-center gap-1.5 text-[11px] text-[var(--text-dim)]"
+                    data-testid="chat-msg-queued"
+                  >
+                    <Clock className="h-3 w-3" aria-hidden="true" />
+                    <span>Waiting to send…</span>
+                  </div>
+                )}
                 {msg.tools && msg.tools.length > 0 && (!msg.blocks || msg.blocks.length === 0) && (
                   <div className="mt-1 space-y-1">
                     {msg.tools.map(tool => <ToolCard key={tool.id} tool={tool} />)}
@@ -1476,7 +1494,7 @@ const ChatApp = ({
             </div>
           </div>
 
-          <div className="flex items-end gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
+          <div className="flex items-end gap-2 rounded-[16px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2.5 transition-colors focus-within:border-[var(--focus-ring)] focus-within:shadow-[var(--shadow-honey)]">
             <button
               onClick={handleFileSelect}
               aria-label="Attach file"

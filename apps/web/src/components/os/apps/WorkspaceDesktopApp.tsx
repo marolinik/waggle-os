@@ -484,6 +484,56 @@ const WorkspaceDesktopApp = ({
     || (ctx?.recentMemories?.length ?? 0) > 0;
   const lastEvent = activity[0];
 
+  // Lane C (Pillar 2.2 — no dead clicks on cached surfaces): ONE interactive tab
+  // bar, rendered LIVE during the entry skeleton too, so switching tab while the
+  // Overview data loads acts immediately (URL-drives in controlled mode) instead
+  // of a swallowed click on a lookalike placeholder. Counts are ctx-derived → so
+  // simply absent until it lands. The entry variant OMITS the test hooks (nav +
+  // per-button `data-testid`/`id`) so the stable loaded bar is the only match
+  // for `ws-tab-bar` queries — the entry bar is a transient node that must never
+  // be grabbed by a test polling for the loaded one.
+  const renderTabBar = (withTestHooks: boolean) => (
+    <nav
+      className="shrink-0 flex items-center gap-1 border-b border-[var(--line-soft)] px-3 overflow-x-auto"
+      role="tablist"
+      {...(withTestHooks ? { 'data-testid': 'ws-tab-bar' } : {})}
+    >
+      {TABS.map(tab => {
+        const Icon = tab.icon;
+        const isActive = tab.id === activeTab;
+        const count =
+          tab.id === 'chat' ? ctx?.stats?.sessionCount
+          : tab.id === 'memory' ? ctx?.stats?.memoryCount
+          : tab.id === 'artifacts' ? (artifacts.length || undefined)
+          : tab.id === 'files' ? ctx?.stats?.fileCount
+          : tab.id === 'team' ? (members.length || undefined)
+          : undefined;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={isActive}
+            aria-controls="ws-tabpanel"
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition-colors ${
+              isActive
+                ? 'border-[var(--honey)] text-[var(--text)]'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
+            }`}
+            {...(withTestHooks ? { id: `ws-tab-${tab.id}`, 'data-testid': `ws-tab-${tab.id}` } : {})}
+          >
+            <Icon className="h-3.5 w-3.5" />
+            {tab.label}
+            {typeof count === 'number' && count > 0 && (
+              <span className="font-mono text-[11px] text-[var(--text-dim)]">{count}</span>
+            )}
+          </button>
+        );
+      })}
+    </nav>
+  );
+
   // ── Whole-screen states ────────────────────────────────────────────────
 
   if (loading) {
@@ -495,7 +545,7 @@ const WorkspaceDesktopApp = ({
     // role=status + sr-only keeps the announcement; reduced-motion stills it.
     return (
       <div
-        className="h-full flex flex-col overflow-hidden bg-background animate-pulse motion-reduce:animate-none"
+        className="h-full flex flex-col overflow-hidden bg-background"
         role="status"
         aria-label="Loading workspace"
         aria-busy="true"
@@ -503,7 +553,7 @@ const WorkspaceDesktopApp = ({
       >
         <span className="sr-only">Loading workspace…</span>
         {/* Header scaffold — mirrors the real header row (avatar + title). */}
-        <div className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5" aria-hidden="true">
+        <div className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5 animate-pulse motion-reduce:animate-none" aria-hidden="true">
           <div className="flex items-center gap-3">
             <div className="h-[46px] w-[46px] shrink-0 rounded-[14px] bg-[var(--surface-2)]" />
             <div className="space-y-2">
@@ -512,14 +562,12 @@ const WorkspaceDesktopApp = ({
             </div>
           </div>
         </div>
-        {/* Tab-bar scaffold — a row of pill placeholders. */}
-        <div className="shrink-0 flex items-center gap-4 border-b border-[var(--line-soft)] px-4 py-3.5" aria-hidden="true">
-          {[14, 10, 12, 12, 10].map((w, i) => (
-            <div key={i} className="h-3 rounded bg-[var(--surface-2)]" style={{ width: `${w * 4}px` }} />
-          ))}
-        </div>
+        {/* Lane C: the REAL tab bar (not a placeholder) — clicking a tab while the
+            Overview loads acts immediately instead of a dead click. Test hooks
+            omitted so this transient node never shadows the stable loaded bar. */}
+        {renderTabBar(false)}
         {/* Content — thread-shaped placeholders (WorkspaceBriefing idiom). */}
-        <div className="flex-1 min-h-0 overflow-hidden p-6" aria-hidden="true">
+        <div className="flex-1 min-h-0 overflow-hidden p-6 animate-pulse motion-reduce:animate-none" aria-hidden="true">
           <div className="mx-auto w-full max-w-[680px] space-y-4 py-2">
             <div className="flex gap-2">
               <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
@@ -675,43 +723,8 @@ const WorkspaceDesktopApp = ({
         </div>
       </header>
 
-      {/* Tab bar */}
-      <nav className="shrink-0 flex items-center gap-1 border-b border-[var(--line-soft)] px-3 overflow-x-auto" role="tablist" data-testid="ws-tab-bar">
-        {TABS.map(tab => {
-          const Icon = tab.icon;
-          const isActive = tab.id === activeTab;
-          const count =
-            tab.id === 'chat' ? ctx?.stats?.sessionCount
-            : tab.id === 'memory' ? ctx?.stats?.memoryCount
-            : tab.id === 'artifacts' ? (artifacts.length || undefined)
-            : tab.id === 'files' ? ctx?.stats?.fileCount
-            : tab.id === 'team' ? (members.length || undefined)
-            : undefined;
-          return (
-            <button
-              key={tab.id}
-              id={`ws-tab-${tab.id}`}
-              type="button"
-              role="tab"
-              aria-selected={isActive}
-              aria-controls="ws-tabpanel"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition-colors ${
-                isActive
-                  ? 'border-[var(--honey)] text-[var(--text)]'
-                  : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
-              }`}
-              data-testid={`ws-tab-${tab.id}`}
-            >
-              <Icon className="h-3.5 w-3.5" />
-              {tab.label}
-              {typeof count === 'number' && count > 0 && (
-                <span className="font-mono text-[11px] text-[var(--text-dim)]">{count}</span>
-              )}
-            </button>
-          );
-        })}
-      </nav>
+      {/* Tab bar (shared render — the entry skeleton uses the hookless variant). */}
+      {renderTabBar(true)}
 
       {/* Body: main canvas + right context panel */}
       <div className="flex-1 min-h-0 flex overflow-hidden">

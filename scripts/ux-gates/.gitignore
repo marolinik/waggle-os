@@ -1,2 +1,3 @@
 # Generated run artifacts (not source of truth — baselines are).
 .contrast-runtime-report.json
+.warm-interaction-report.json

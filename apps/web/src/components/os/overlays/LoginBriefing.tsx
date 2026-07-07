@@ -13,20 +13,25 @@ import {
   Loader2, X, AlertTriangle, Lightbulb,
 } from 'lucide-react';
 import beeMascot from '@/assets/personas/general-purpose.png';
-import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { useService } from '@/providers/ServiceProvider';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
-import type { Workspace } from '@/lib/types';
-import { selectBriefingHighlights } from '@/lib/briefing-highlights';
-import { isDevNoiseWorkspace, workspaceCounts } from '@/lib/workspace-counts';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import {
-  computeBragSummary,
   formatBragLine,
   timeAgo as bragTimeAgo,
   type BragSummary,
 } from '@/lib/login-briefing-brag';
+// Lane H item 3 — the ONE briefing truth: fetch/shape/count live in
+// briefing-source; the home hero recall strip and this modal both consume it,
+// so their catch-up numbers can never drift.
+import {
+  takeBriefingData,
+  isCannedWorkspaceSummary,
+  type WorkspaceSummary,
+  type MemoryHighlight,
+} from '@/lib/briefing-source';
+import { RecallCard } from './RecallCard';
 
 interface LoginBriefingProps {
   /**
@@ -39,169 +44,10 @@ interface LoginBriefingProps {
   onOpenWorkspace: (workspaceId: string) => void;
 }
 
-interface WorkspaceSummary {
-  id: string;
-  name: string;
-  group: string;
-  memoryCount: number;
-  sessionCount: number;
-  lastActive: string;
-  summary?: string;
-  pendingTasks?: string[];
-}
-
-interface MemoryHighlight {
-  content: string;
-  workspace?: string;
-  timestamp: string;
-}
-
-interface BriefingData {
-  highlights: MemoryHighlight[];
-  summaries: WorkspaceSummary[];
-  brag: BragSummary | null;
-}
-
-// timeAgo was moved into @/lib/login-briefing-brag (shared with the brag
-// summary so the header and per-frame labels use one formatter). Keep a
-// local alias so callsites below read naturally.
+// timeAgo lives in @/lib/login-briefing-brag (shared with the brag summary so
+// the header and per-frame labels use one formatter). Keep a local alias so
+// callsites below read naturally.
 const timeAgo = bragTimeAgo;
-
-function truncateHighlight(content: string): string {
-  // Plain text only — highlights render as text nodes, so markdown
-  // tokens (**bold**, # headings, `code`) would show literally.
-  const firstLine = content.split('\n')[0].trim()
-    .replace(/^#{1,3}\s+/, '')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/`(.+?)`/g, '$1');
-  return firstLine.length > 120 ? firstLine.slice(0, 117) + '...' : firstLine;
-}
-
-// Workspace names matching dev/test-artefact patterns leaked into the user's
-// real store and should not surface in the briefing's summary list. Filtered at
-// the UI layer (defensive), not deleted. W2B: consolidated into one shared
-// predicate (was a local copy that missed ai-os-audit-*/StressTest-*).
-const isTestWorkspace = isDevNoiseWorkspace;
-
-// Wave S Lane E (honesty): the server emits a brochure default summary
-// ("Everything you discuss in {name} stays in context — decisions, research,
-// and progress are remembered across sessions.") whenever a workspace has no
-// real generated summary yet (packages/server/.../workspaces.ts). That is
-// template copy, not the user's data — it must never render as a summary, and a
-// row whose ONLY content is that line (no memories) carries nothing to catch up
-// on. Matched on the name-invariant tail so it holds for any workspace name.
-const CANNED_SUMMARY_TAIL =
-  'stays in context — decisions, research, and progress are remembered across sessions';
-const isCannedWorkspaceSummary = (summary?: string): boolean =>
-  typeof summary === 'string' && summary.includes(CANNED_SUMMARY_TAIL);
-
-// Wave T Lane A (item 2): the full briefing fetch + shaping, hoisted to module
-// scope so it can be prefetched while the BootScreen runs (fired from AppShell).
-// Throws only on a hard failure (getWorkspaces reject) so the caller renders the
-// slim error row; the soft sources (memory search / stats) already degrade to
-// []/null inline. Byte-for-byte the logic the component's loadBriefing used to
-// run inline — moved, not changed.
-// Exported (not a component) so the numbers reconciliation is unit-tested at its
-// seam; the file already forgoes fast-refresh via prefetchBriefing below.
-// eslint-disable-next-line react-refresh/only-export-components
-export async function fetchBriefingData(): Promise<BriefingData> {
-  const [workspaces, frames, stats] = await Promise.all([
-    adapter.getWorkspaces(),
-    adapter.searchMemory('important decision project plan', 'global').catch(() => []),
-    adapter.getMemoryStats().catch(() => null),
-  ]);
-
-  // L-22: rank by importance desc, break ties by recency. Concrete content only
-  // (≥20 chars), living frames only — deprecated/archived and extraction echoes
-  // are filtered inside the ranker.
-  const ranked = selectBriefingHighlights(
-    (frames as Array<{ content?: string; importance?: number; timestamp?: string; metadata?: Record<string, unknown> }>).map((f) => ({
-      content: f.content,
-      importance: f.importance,
-      timestamp: f.timestamp,
-      status: typeof f.metadata?.status === 'string' ? f.metadata.status : undefined,
-    })),
-  );
-  const highlights: MemoryHighlight[] = ranked.map((f) => ({
-    content: truncateHighlight(f.content ?? ''),
-    timestamp: (typeof f.timestamp === 'string' ? f.timestamp : '') ?? '',
-  }));
-
-  // Workspace summaries — show all, not just ones with content. Drop E2E/test
-  // workspaces that leaked into the real store so the briefing surfaces only
-  // user work.
-  const sorted = workspaces
-    .filter((ws: Workspace) => !isTestWorkspace(ws.name))
-    .slice(0, 5);
-
-  const contextPromises = sorted.map(async (ws: Workspace): Promise<WorkspaceSummary> => {
-    try {
-      const ctx = await adapter.getWorkspaceContext(ws.id);
-      return {
-        id: ws.id,
-        name: ws.name,
-        group: ws.group ?? 'Personal',
-        memoryCount: ctx.stats?.memoryCount ?? ctx.memoryCount ?? 0,
-        sessionCount: ctx.stats?.sessionCount ?? ctx.sessionCount ?? 0,
-        // USER activity from the workspace store — machine cron writes are not
-        // "active" (ws.lastActive, not ctx.lastActive).
-        lastActive: ws.lastActive ?? '',
-        summary: ctx.summary,
-        pendingTasks: ctx.pendingTasks,
-      };
-    } catch {
-      return {
-        id: ws.id,
-        name: ws.name,
-        group: ws.group ?? 'Personal',
-        memoryCount: 0,
-        sessionCount: 0,
-        lastActive: '',
-      };
-    }
-  });
-
-  const summaries = await Promise.all(contextPromises);
-  // Most recent first — a two-month-stale workspace above yesterday's work
-  // contradicted the Home grid's recency ordering.
-  summaries.sort((a, b) => Date.parse(b.lastActive || '0') - Date.parse(a.lastActive || '0'));
-
-  // Wave U Lane B (item 2 — numbers reconciliation): the header's workspace count
-  // must equal Home's hero ("N workspaces waiting"). Both now read the SAME
-  // canonical visible count (non-archived, non-dev-noise) from workspaceCounts(),
-  // so the modal and the hero it overlays can never state two different totals for
-  // one store. computeBragSummary's own summaries.length was a capped, archived-
-  // inclusive subset — that mismatch is the "2 vs 6 workspaces" the judges caught.
-  // (The row list below stays a curated recency preview — a list, not a count claim.)
-  const brag = computeBragSummary(stats, summaries);
-  return {
-    highlights,
-    summaries,
-    brag: { ...brag, workspaceCount: workspaceCounts(workspaces).visible },
-  };
-}
-
-// Prefetch cache: a single in-flight/settled briefing promise the BootScreen
-// warms via prefetchBriefing(). takeBriefingData() consumes it ONCE, then falls
-// back to a fresh fetch — so retries/revalidation always re-fetch, and a direct
-// component render with no prefetch (unit tests) is unaffected. A failed
-// prefetch is dropped so the component's own load fetches fresh.
-let prefetchedBriefing: Promise<BriefingData> | null = null;
-
-export function prefetchBriefing(): void {
-  if (prefetchedBriefing) return;
-  prefetchedBriefing = fetchBriefingData();
-  prefetchedBriefing.catch(() => { prefetchedBriefing = null; });
-}
-
-function takeBriefingData(): Promise<BriefingData> {
-  if (prefetchedBriefing) {
-    const pending = prefetchedBriefing;
-    prefetchedBriefing = null;
-    return pending;
-  }
-  return fetchBriefingData();
-}
 
 const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
   const [summaries, setSummaries] = useState<WorkspaceSummary[]>([]);
@@ -468,23 +314,12 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                   {/* Cap to 2 on first paint (shownHighlights) so the briefing
                       greets rather than walls — the full memory list lives in
                       the Memory app. */}
+                  {/* Lane H item 4: the SAME RecallCard the home hero renders —
+                      one recall-card grammar wherever the memory moment lands.
+                      This modal owns only the STAGGER.brief entrance wrapper. */}
                   {shownHighlights.map((h, i) => (
-                    <motion.div
-                      key={`${revealKey}-h-${i}`}
-                      {...entranceProps(i)}
-                      // Wave R Lane E: the "I remember" recall cards wear a
-                      // honey-wash tint so they read as a distinct species from
-                      // the neutral-surface workspace rows below (brand judge).
-                      className="flex items-start gap-2 px-3 py-1.5 rounded-lg bg-[var(--honey-wash)] border border-[var(--honey-line)]"
-                    >
-                      <Sparkles className="w-3 h-3 text-honey/60 mt-0.5 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[12px] text-foreground leading-relaxed">{h.content}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {h.workspace && <span>{h.workspace} · </span>}
-                          {h.timestamp && timeAgo(h.timestamp)}
-                        </p>
-                      </div>
+                    <motion.div key={`${revealKey}-h-${i}`} {...entranceProps(i)}>
+                      <RecallCard highlight={h} timeLabel={h.timestamp ? timeAgo(h.timestamp) : undefined} />
                     </motion.div>
                   ))}
                 </div>

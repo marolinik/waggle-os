@@ -4,6 +4,7 @@ import { Bot, Plus, Search, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Ne
 import { Input } from '@/components/ui/input';
 import BeeLoader from '@/components/ui/BeeLoader';
 import { adapter } from '@/lib/adapter';
+import { createSurfaceCache } from '@/lib/surface-cache';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import type { Agent, Workspace } from '@/lib/types';
@@ -39,6 +40,21 @@ interface AgentsAppProps {
   workspaces?: Workspace[];
 }
 
+/**
+ * Pillar 2.6 route-cache: returning to Agents within the session repaints the
+ * last-loaded roster instantly and refreshes silently (no re-skeleton). The
+ * roster is a single list (the C22 tab + search filter client-side), so one
+ * slot suffices; the suggested cards derive from the roster count, so seeding
+ * the roster seeds them too.
+ */
+const rosterCache = createSurfaceCache<Agent[]>();
+const ROSTER_SLOT = 'roster';
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only reset for the module-scoped route cache (mirrors clearMemoryListCache)
+export function resetAgentsRouteCache(): void {
+  rosterCache.resetForTests();
+}
+
 const AgentsApp = ({ workspaces }: AgentsAppProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -48,8 +64,11 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
   const { connecting } = useService();
   const [view, setView] = useState<'center' | 'templates'>('center');
   const [tab, setTab] = useState<AgentCenterTab>('all');
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [loading, setLoading] = useState(true);
+  // Route-cache: seed the roster from the session cache so a return paints
+  // instantly; loading starts false once the roster has resolved this session
+  // (so an empty fleet returns to its empty-state, not a fresh BeeLoader).
+  const [agents, setAgents] = useState<Agent[]>(() => rosterCache.read(ROSTER_SLOT) ?? []);
+  const [loading, setLoading] = useState(() => !rosterCache.hasResolved(ROSTER_SLOT));
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Agent | null>(null);
@@ -60,11 +79,15 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
   const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Route-cache: only the genuine cold load shows the BeeLoader; once the
+    // roster has resolved this session a return/reload repaints in place and
+    // refreshes silently (no spinner over already-shown rows or empty-state).
+    if (!rosterCache.hasResolved(ROSTER_SLOT)) setLoading(true);
     setError(null);
     try {
       const rows = await adapter.listAgents();
       setAgents(rows);
+      rosterCache.write(ROSTER_SLOT, rows);
       // Keep an open detail drawer pointing at the FRESH record (a run/pause
       // reload would otherwise leave it showing the stale pre-action status).
       setSelected(prev => (prev ? rows.find(a => a.id === prev.id) ?? null : prev));

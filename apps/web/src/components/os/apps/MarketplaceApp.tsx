@@ -16,6 +16,7 @@ import { Store, Loader2, Package, Sparkles } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
 import { classifyInstallRisk, actionRisk, installTrustSource } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
+import { createSurfaceCache, surfaceCacheKey } from '@/lib/surface-cache';
 import { useService } from '@/providers/ServiceProvider';
 import { useInstallStore } from '@/providers/InstallProvider';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
@@ -41,6 +42,22 @@ const FACET_LABELS: Record<Facet, string> = {
   connector: 'Connectors',
   mcp: 'MCPs',
 };
+
+/**
+ * Pillar 2.6 route-cache: returning to Marketplace within the session repaints
+ * the last-loaded shelf + list instantly and refreshes silently (no
+ * re-skeleton). `listCache` keys the extensions payload by [facet, query];
+ * `facetCache` remembers which shelf was active so the return lands on it.
+ */
+const listCache = createSurfaceCache<Extension[]>();
+const facetCache = createSurfaceCache<Facet>();
+const FACET_SLOT = 'active';
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only reset for the module-scoped route cache (mirrors clearMemoryListCache)
+export function resetMarketplaceRouteCache(): void {
+  listCache.resetForTests();
+  facetCache.resetForTests();
+}
 
 /** Honest in-place note for the connectable/enableable shelves (D3). */
 const SHELF_NOTES: Partial<Record<Facet, string>> = {
@@ -129,14 +146,19 @@ const MarketplaceApp = () => {
   // The shared install store owns installed/installing state + the count (D1).
   const { installedCount, hydrate, uninstall } = useInstallStore();
   const [tab, setTab] = useState<Tab>('browse');
-  const [facet, setFacet] = useState<Facet>('all');
+  // Route-cache: land on the shelf the user left, not a reset to All.
+  const [facet, setFacet] = useState<Facet>(() => facetCache.read(FACET_SLOT) ?? 'all');
   const [query, setQuery] = useState('');
   // ~150ms-debounced mirror of `query` for the CLIENT grid filter + view mode,
   // so the first keystroke doesn't flash the full list before it narrows (Wave
   // T Lane B §1). `query` itself still drives the (separately 300ms-debounced)
   // server load below and the input's own value.
   const [filterQuery, setFilterQuery] = useState('');
-  const [extensions, setExtensions] = useState<Extension[]>([]);
+  // Route-cache: seed the grid from the last-loaded list for the restored shelf
+  // so a return paints instantly, ahead of the silent refresh below.
+  const [extensions, setExtensions] = useState<Extension[]>(
+    () => listCache.read(surfaceCacheKey([facet, ''])) ?? [],
+  );
   const [loading, setLoading] = useState(false);
   // Wave V Lane E §2: true from the keystroke until its debounced fetch settles
   // (covers the pre-fetch 300ms gap that `loading` alone misses). Drives the
@@ -197,11 +219,20 @@ const MarketplaceApp = () => {
       // Collapse the 3 catalog sources (connector / catalog-mcp / package) into
       // ONE entry per integration before sorting, so the grid shows one row +
       // one action instead of the same integration up to 3×.
-      setExtensions(sortExtensions(dedupeExtensions(merged)));
+      const sorted = sortExtensions(dedupeExtensions(merged));
+      const allRejected = settled.length > 0 && settled.every(s => s.status === 'rejected');
+      setExtensions(sorted);
       setShelfNote(f !== 'all' ? SHELF_NOTES[f] ?? null : null);
-      setLoadError(settled.length > 0 && settled.every(s => s.status === 'rejected')
+      setLoadError(allRejected
         ? 'Could not load extensions — the server may be unreachable.'
         : null);
+      // Route-cache: remember the shelf + list so a return within the session
+      // repaints instantly — but NEVER cache the all-backends-down state (an
+      // empty error result must re-fetch, not seed a healthy-looking empty grid).
+      if (!allRejected) {
+        listCache.write(surfaceCacheKey([f, q]), sorted);
+        facetCache.write(FACET_SLOT, f);
+      }
     } catch (err) {
       if (seq === requestSeq.current) {
         setExtensions([]);
@@ -260,6 +291,10 @@ const MarketplaceApp = () => {
   // the keystroke→fetch debounce gap. The results container stays mounted and
   // dims (aria-busy) rather than collapsing between keystrokes (Wave V Lane E §2).
   const busy = loading || searchPending;
+  // Route-cache: once the shelf has resolved this session, the cold spinner
+  // never returns — a silent refresh over a genuinely-empty catalog shows the
+  // empty state, not a fresh "Loading extensions…" (the shelf-cache lesson).
+  const surfaceResolved = facetCache.hasResolved(FACET_SLOT);
   // NL bridge (Wave U Lane C §1): a query that reads like a described need
   // (≥3 words) with no keyword match auto-runs the semantic engine instead of
   // dead-ending. The engine + results live in AgentSearchBox above; here we only
@@ -388,9 +423,10 @@ const MarketplaceApp = () => {
               </p>
             )}
 
-            {/* Cold load only — once ANY extensions are loaded, a reload dims the
-                existing list (below) instead of collapsing to this spinner. */}
-            {loading && extensions.length === 0 && (
+            {/* Cold load only — once ANY extensions are loaded (or the shelf has
+                resolved this session), a reload dims the existing list (below)
+                instead of collapsing to this spinner. */}
+            {loading && extensions.length === 0 && !surfaceResolved && (
               <div className="text-center py-8">
                 <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
                 <p className="text-xs text-muted-foreground">Loading extensions...</p>

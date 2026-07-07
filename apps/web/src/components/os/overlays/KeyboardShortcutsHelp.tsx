@@ -22,11 +22,12 @@ const shortcuts = [
   ]},
   { category: 'Quick Actions', items: [
     { keys: ['Ctrl', 'K'], action: 'Global Search' },
-    { keys: ['Ctrl', 'Shift', 'N'], action: 'Open Chat' },
+    { keys: ['Ctrl', 'Shift', 'N'], action: 'New chat' },
+    { keys: ['Ctrl', 'Shift', 'O'], action: 'Open last workspace' },
     { keys: ['Ctrl', 'Shift', 'R'], action: 'Room' },
     { keys: ['Ctrl', 'Shift', 'P'], action: 'Persona Switcher' },
     { keys: ['Ctrl', 'Tab'], action: 'Workspace Switcher' },
-    { keys: ['Ctrl', '/'], action: 'Keyboard Shortcuts' },
+    { keys: ['?'], action: 'Keyboard Shortcuts' },
   ]},
   { category: 'Chat', items: [
     { keys: ['Enter'], action: 'Send message' },
@@ -71,7 +72,9 @@ const KeyboardShortcutsHelp = ({ open, onClose }: KeyboardShortcutsHelpProps) =>
               <Keyboard className="w-5 h-5 text-honey" />
               <h2 id="keyboard-shortcuts-title" className="text-lg font-display font-semibold text-foreground">Keyboard Shortcuts</h2>
             </div>
-            <button onClick={onClose} aria-label="Close keyboard shortcuts" className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+            {/* Pillar 2.7 hit-area: a centered 40px ::before expands the effective
+                target from 24px without changing the visual size. */}
+            <button onClick={onClose} aria-label="Close keyboard shortcuts" className="relative p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors before:absolute before:left-1/2 before:top-1/2 before:h-10 before:w-10 before:-translate-x-1/2 before:-translate-y-1/2 before:content-['']">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -97,6 +100,14 @@ const KeyboardShortcutsHelp = ({ open, onClose }: KeyboardShortcutsHelpProps) =>
               </div>
             ))}
           </div>
+
+          {/* Pillar 2.7 — surface the keyboard-first reveal so it's discoverable:
+              every card kebab and memory-row action is reachable by Tab, no
+              mouse required. */}
+          <p className="mt-5 border-t border-border/40 pt-4 text-[11px] leading-relaxed text-muted-foreground">
+            Tab reaches every card &amp; memory-row action — the workspace kebab menu and the
+            confirm / edit / forget row controls reveal on keyboard focus, no mouse needed.
+          </p>
         </motion.div>
       </motion.div>
     </AnimatePresence>

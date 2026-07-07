@@ -92,7 +92,7 @@ const ContextMenu = ({ items, position, onClose, origin }: ContextMenuProps) => 
               ${cornered ? 'gap-2.5 px-3.5 py-2' : 'gap-2 px-3 py-1.5'}
               ${item.danger ? 'text-destructive hover:bg-destructive/10' : 'text-foreground hover:bg-muted/50'}
               ${item.disabled ? 'opacity-40 cursor-not-allowed' : ''}
-              ${focusIndex === currentActionIndex ? 'bg-muted/50' : ''}`}
+              ${focusIndex === currentActionIndex ? 'bg-muted/50 ring-1 ring-inset ring-[var(--focus-ring)]' : ''}`}
           >
             {item.icon && <span className="w-3.5 h-3.5 flex items-center justify-center">{item.icon}</span>}
             {item.label}

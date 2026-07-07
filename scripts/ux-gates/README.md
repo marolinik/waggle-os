@@ -1,20 +1,24 @@
-# ux-gates — the accessibility CI gates
+# ux-gates — the UX CI gates
 
-Three composable gates that hold the **Pillar 4 AA floor** (see
+Four composable gates. Three hold the **Pillar 4 AA floor** (see
 `docs/ux-refactor/path-to-9-2026-07-07.md` §Pillar 4 and the Phase-A spec
-`path-exec-phase-A-spec-2026-07-07.md` → Lane G). Token-pair math buys one clean
-round; the guard + runtime pass buy a *floor* by closing the generation vector
-and modelling composition.
+`path-exec-phase-A-spec-2026-07-07.md` → Lane G); the fourth (`warm-interaction`)
+holds the **Pillar 2 instant-power-feel** hard gate (§Pillar 2 + §3, Phase-B Lane
+G2). Token-pair math buys one clean round; the guard + runtime pass buy a *floor*
+by closing the generation vector and modelling composition; the warm-interaction
+gate measures the returning-user launch is fast and INTERACTIVE.
 
 | gate | npm script | what it proves | needs |
 |---|---|---|---|
 | `contrast-tokens.mjs` | `npm run ux:contrast` | every text/affordance **token** meets its WCAG floor over every allowed surface, both themes | nothing (static) |
 | `text-color-guard.mjs` | `npm run ux:color-guard` | no **new** off-token text colours are introduced (ratchet) | nothing (static) |
 | `contrast-runtime.mjs` | `npm run ux:contrast-runtime` | text & focus indicators pass **after composition** (opacity stacks, wallpaper) | a running dev server + `playwright` |
+| `warm-interaction-gate.mjs` | `npm run ux:warm-gate` | a seeded returning user lands on interactive content fast (home ≤1000ms, brand flash ≤500ms, composer typable at paint) + a cold start (sidecar down) still paints from cache and accepts typing | a running dev server + sidecar + `playwright` |
 
-All three are dependency-free except the runtime gate (Playwright, already a dev
-dependency). They live in `scripts/**`, which the root ESLint config intentionally
-ignores (same as every sibling tooling script), so `eslint .` never lints them.
+The two static gates are dependency-free; the runtime + warm-interaction gates
+need Playwright (already a dev dependency). They live in `scripts/**`, which the
+root ESLint config intentionally ignores (same as every sibling tooling script),
+so `eslint .` never lints them.
 
 ---
 
@@ -112,12 +116,73 @@ top-left leading (line-height space above the cap height) — likelier backgroun
 a glyph, but approximate. The ratchet absorbs any initial approximation; only *new*
 failures fail the gate.
 
+## 4. `warm-interaction` — the instant-power-feel gate (Playwright)
+
+The Pillar 2 hard gate. It mirrors the capture-kit convention of a **seeded
+returning user** — `waggle-booted` + `waggle_onboarding_complete` +
+`waggle:onboarding` (tier `power`) + `waggle:login-briefing-dismissed` in
+localStorage, **no bypass query params** — i.e. the authentic day-30 morning
+launch, not the E2E `?skipOnboarding` path. The seed is printed in the output so a
+reader knows exactly what user state was measured. All timings use the page's own
+`performance.now()` (ms since navigation start), captured in the same frame the
+target element appears.
+
+**WARM gate** (healthy sidecar) — app-start →
+
+- **home content visible** — `[data-testid="home-cockpit"|"home-cockpit-empty"]`;
+  FAIL if > **1000ms**.
+- **brand flash** — the boot-screen dwell; a correctly-seeded warm return skips
+  boot entirely → **0ms**. FAIL if > **500ms**.
+- **composer accepts a keystroke** — navigates to the first workspace chat and
+  types into the composer the moment it attaches (input-during-warmup). FAIL if
+  the first keystroke is rejected (a disabled/gated textarea).
+
+**COLD-start variant** (all `/api/**` aborted — sidecar "down") — a warm visit
+first (to settle the disk cache), then reload:
+
+- **cachedPaint** — cached home content still renders without the sidecar (Lane H
+  `home-cache.ts`).
+- **typingQueues** — the composer still accepts typing with the sidecar down
+  (Lane C input-during-warmup, cold path).
+
+The cold contracts are a **ratchet** against `warm-interaction-baseline.json`: the
+gate exits 1 only when a contract the baseline records as landed (`true`)
+regresses to `false`. `--strict` enforces *every* cold contract (flip once Lane
+H+C fully merge). The shipped baseline is absent by design — seed it during the
+verify/merge stage against a stable server, review the frozen state, then commit.
+
+```
+# start a dev server (npm run dev on :8080) AND the sidecar (npm run dev:server on :3333)
+npm run ux:warm-gate
+node scripts/ux-gates/warm-interaction-gate.mjs --report-only    # print table, exit 0 (don't gate)
+node scripts/ux-gates/warm-interaction-gate.mjs --warm-only      # skip the cold pass
+node scripts/ux-gates/warm-interaction-gate.mjs --strict         # enforce every cold contract
+node scripts/ux-gates/warm-interaction-gate.mjs --update-baseline # seed/freeze the cold ratchet
+WAGGLE_UX_BASE_URL=http://127.0.0.1:3333 npm run ux:warm-gate    # built app (single-origin)
+```
+
+Exit codes: `0` clean · `1` warm threshold breach / cold contract regression (or,
+under `--strict`, any cold contract not holding) · `2` infra (no server, no
+`playwright`, or home content never reached — an auth/sidecar problem).
+
+**Timing caveat — measure on a representative build.** The warm timing budgets are
+*production-representative*. The vite **dev** server (`:8080`, the default and the
+arc's live-source target) adds on-demand module-compile overhead, so home-content
+timing there runs ~2–3s regardless of the cache — valid for the brand-flash,
+composer, and cold **contracts**, but not for the sub-1s timing budget. The built
+app (`:3333`, single-origin) is closer, but in a **headless** browser its
+production Clerk auth is blocked by CSP (`failed_to_load_clerk_js_timeout`), which
+inflates timing and degrades the chat. A valid sub-1s timing pass therefore needs
+an environment where Clerk auth resolves (the Tauri shell, or a browser with the
+Clerk origin allow-listed). The gate is correct; point it at the right build for
+the official round measurement.
+
 ---
 
 ## CI wiring (deferred)
 
-Per the Lane G spec these scripts are **not** wired into `.github/workflows` yet —
-that is a follow-up once they are proven stable in local/reviewer runs. When wired:
-`ux:contrast` and `ux:color-guard` are cheap and belong in the lint/test job;
-`ux:contrast-runtime` needs a built app + dev server (reuse the Playwright
-`webServer` block) and a committed, seeded baseline.
+Per the Lane G/G2 spec these scripts are **not** wired into `.github/workflows` yet
+— that is a follow-up once they are proven stable in local/reviewer runs. When
+wired: `ux:contrast` and `ux:color-guard` are cheap and belong in the lint/test
+job; `ux:contrast-runtime` and `ux:warm-gate` need a built app + dev server (reuse
+the Playwright `webServer` block) and a committed, seeded baseline.

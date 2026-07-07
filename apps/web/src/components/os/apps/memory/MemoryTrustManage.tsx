@@ -340,7 +340,12 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, 
           )}
         </div>
 
-        <div className="flex shrink-0 gap-1.5">
+        {/* Pillar 2.7 (Lane K) hit-area: each 30px icon button carries a centered
+            40px ::before so the effective target clears 40px with no visual size
+            change. The cluster gap widens 6px→12px so the three 40px hit areas
+            stay non-overlapping (centers 42px apart). The systemic `:focus-visible`
+            ring (index.css) already paints the --focus-ring outline on Tab. */}
+        <div className="flex shrink-0 gap-3">
           {needsConfirm && !stale && (
             <button
               type="button"
@@ -348,7 +353,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, 
               disabled={busy}
               title="Confirm this memory"
               aria-label={`Confirm memory M-${memory.id}`}
-              className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--healthy)] hover:text-[var(--healthy)] disabled:opacity-50"
+              className="relative grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] before:absolute before:left-1/2 before:top-1/2 before:h-10 before:w-10 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:border-[var(--healthy)] hover:text-[var(--healthy)] disabled:opacity-50"
             >
               <Check className="h-[15px] w-[15px]" strokeWidth={1.8} />
             </button>
@@ -358,7 +363,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, 
             onClick={onOpen}
             title="Edit / correct"
             aria-label={`Edit or correct memory M-${memory.id}`}
-            className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--honey-line)] hover:text-[var(--honey-text)]"
+            className="relative grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] before:absolute before:left-1/2 before:top-1/2 before:h-10 before:w-10 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:border-[var(--honey-line)] hover:text-[var(--honey-text)]"
           >
             <Pencil className="h-[15px] w-[15px]" strokeWidth={1.8} />
           </button>
@@ -368,7 +373,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, 
             disabled={busy}
             title="Forget this"
             aria-label={`Forget memory M-${memory.id}`}
-            className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[color-mix(in_srgb,var(--risk)_45%,transparent)] hover:text-[var(--risk)] disabled:opacity-50"
+            className="relative grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] before:absolute before:left-1/2 before:top-1/2 before:h-10 before:w-10 before:-translate-x-1/2 before:-translate-y-1/2 before:content-[''] hover:border-[color-mix(in_srgb,var(--risk)_45%,transparent)] hover:text-[var(--risk)] disabled:opacity-50"
           >
             <Trash2 className="h-[15px] w-[15px]" strokeWidth={1.8} />
           </button>

@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
-import { fetchBriefingData } from '@/components/os/overlays/LoginBriefing';
+import { fetchBriefingData } from '@/lib/briefing-source';
 import { formatBragLine } from '@/lib/login-briefing-brag';
 import { workspaceCounts } from '@/lib/workspace-counts';
 

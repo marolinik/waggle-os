@@ -29,6 +29,7 @@
     "ux:contrast": "node scripts/ux-gates/contrast-tokens.mjs",
     "ux:color-guard": "node scripts/ux-gates/text-color-guard.mjs",
     "ux:contrast-runtime": "node scripts/ux-gates/contrast-runtime.mjs",
+    "ux:warm-gate": "node scripts/ux-gates/warm-interaction-gate.mjs",
     "test": "vitest run",
     "test:infra": "vitest run --config vitest.infra.config.ts",
     "test:watch": "vitest",

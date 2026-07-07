@@ -31,7 +31,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
-import AgentsApp from '@/components/os/apps/AgentsApp';
+import AgentsApp, { resetAgentsRouteCache } from '@/components/os/apps/AgentsApp';
 import AgentBuilder from '@/components/os/apps/agents/AgentBuilder';
 import { ServiceProvider } from '@/providers/ServiceProvider';
 
@@ -61,6 +61,7 @@ const renderApp = () => render(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetAgentsRouteCache(); // Pillar 2.6: reset the module-level route cache between tests
   mocks.adapter.connect.mockResolvedValue(undefined);
   mocks.adapter.getAgentTraces.mockResolvedValue([]);
   mocks.adapter.getPersonas.mockResolvedValue([{ id: 'researcher', name: 'Researcher', description: 'Digs deep' }]);

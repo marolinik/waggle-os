@@ -19,9 +19,15 @@ const PHASE_DURATION = 400;
 // shell's data dependencies are ready (`ready` prop). Replaces the old fixed
 // ~2.3s choreography floor that made returning users sit through dead air.
 const MIN_BRAND_MS = 850;
+// Lane H item 5: with cache-first paint there is real content waiting behind the
+// boot screen for a WARM session, so the brand moment drops to a ≤500ms flash —
+// no reason to dwell over content that's already there. COLD / day-0 keeps the
+// full 850ms floor (nothing to paint, so the brand moment earns its beat).
+const WARM_BRAND_MS = 500;
 const SKIP_HINT_DELAY = 1000;
 
-const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; ready?: boolean }) => {
+const BootScreen = ({ onComplete, ready = true, warm = false }: { onComplete: () => void; ready?: boolean; warm?: boolean }) => {
+  const floorMs = warm ? WARM_BRAND_MS : MIN_BRAND_MS;
   const [phase, setPhase] = useState(0);
   const [floorElapsed, setFloorElapsed] = useState(false);
   const [showSkipHint, setShowSkipHint] = useState(false);
@@ -45,12 +51,13 @@ const BootScreen = ({ onComplete, ready = true }: { onComplete: () => void; read
     finish();
   }, [finish]);
 
-  // Perceptual floor: hold the boot screen for at least MIN_BRAND_MS so the
-  // brand moment lands, no matter how fast deps resolve.
+  // Perceptual floor: hold the boot screen for at least floorMs (WARM_BRAND_MS
+  // for a cache-first warm session, MIN_BRAND_MS cold) so the brand moment lands,
+  // no matter how fast deps resolve.
   useEffect(() => {
-    const t = setTimeout(() => setFloorElapsed(true), MIN_BRAND_MS);
+    const t = setTimeout(() => setFloorElapsed(true), floorMs);
     return () => clearTimeout(t);
-  }, []);
+  }, [floorMs]);
 
   // Exit once the floor has elapsed AND the shell's deps are ready. While deps
   // are genuinely unresolved (ready=false) the boot holds past the floor — the

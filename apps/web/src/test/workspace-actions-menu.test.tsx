@@ -140,6 +140,18 @@ describe('WorkspaceActionsMenu', () => {
     expect(screen.queryByText('Rename')).toBeNull();
   });
 
+  // ── Pillar 2.7 (Lane K) — keyboard-power layer ───────────────────────────
+  it('the kebab trigger reveals on keyboard focus and carries a ≥40px hit area', () => {
+    render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
+    const kebab = screen.getByTestId('workspace-actions-trigger');
+    // focus-visible reveal (the systemic :focus-visible ring paints --focus-ring).
+    expect(kebab.className).toContain('focus-visible:opacity-100');
+    // Centered 40px ::before expands the effective target from 24px, no visual change.
+    expect(kebab.className).toContain('relative');
+    expect(kebab.className).toContain('before:h-10');
+    expect(kebab.className).toContain('before:w-10');
+  });
+
   it('does NOT fire onChanged when the mutation fails', async () => {
     mocks.shell.patchWorkspace.mockResolvedValue(false);
     const onChanged = vi.fn();
