@@ -624,3 +624,48 @@ Convergent asks (Wave W):
    full recent list, curation as a filter, not the landing view.
 6. Onboarding: amplify glow breathing (~3s cycle, visible at 2fps); directional slide
    welcome→step 1. (low)
+
+## Round 18-V6 verdict (post-Wave-W, product @ 58c23d29, kit v5) + PLATEAU ANALYSIS #3
+
+**design 7.8 · kw 7.7 · competitor 7.7 · a11y 7.5 · brand 7.8 — min 7.5, avg 7.70.**
+Per-surface JUMPS (the real signal): s04 chat 7.5→**8.3** (streaming arc finally
+recorded — "agentic transparency Claude/ChatGPT/Codex don't match"), s05 memory →8.2,
+s01 →8.2, s09 7.9. FIVE surfaces at 8.2-8.3. Verdict verbatim: "clearly BEATS Claude,
+ChatGPT, and Codex."
+
+### The aggregate has flattened — plateau signature #2 (video regime)
+Clean-round avg: 7.08 → 7.38 → 7.52 → 7.68 → **7.70**. Per-round delta: +0.30, +0.14,
++0.16, **+0.02**. Min: 7.0 → 7.2 → 7.3 → 7.5 → **7.5** (pinned two rounds). This is the
+SAME min-of-5 / "9 = do-not-be-generous" ceiling dynamic the static regime hit at
+~7.65 — now reached at 7.70 with a far stronger verdict. The video regime bought
+**+0.62 avg and a competitive-verdict flip** over four waves; it has now flattened.
+
+### The remaining asks split three ways
+1. **Verified-real defects** (ship regardless — Wave X): memory hero count-up shows a
+   floored "68" below its own "445 to review" (a Wave W Lane D REGRESSION — 15% floor
+   caught mid-count-up); dark-theme secondary-text AA; eyebrow micro-labels garbled at
+   9.5px/1.33px tracking; unselected onboarding chip contrast; scraped marketplace
+   names; memory scope-label clarity (449 "this hive" vs 553 "all minds").
+2. **Motion amplitude** (spring hover, glow bloom, streaming aliveness) — named HIGH
+   3× but this is the 4th motion pass (hover tiers T/U, lift+bloom V, entrance W).
+   Diminishing returns; a modest overshoot bump folded into Wave X, no more.
+3. **Structural** (the ONE material lever left): shared-element / route-transition
+   motion system across react-router changes (design+competitor HIGH). This is a real
+   framer-motion engineering arc, NOT a polish wave — plus ambient home-hex idle life
+   and true token-streaming (blocked by the dev echo provider returning whole blocks).
+
+### DECISION POINT (founder) — mirrors the static-plateau close-out
+The polish-wave engine has done its job: 6.7 static → 7.70 video, "beats the mainstream
+field," five surfaces at 8+. Reaching 5×9 from here needs the **structural motion arc**
+(route transitions + ambient life + real streaming), which is different work than the
+fire-6-lanes-and-judge loop and carries real regression risk.
+- **A. Accept & merge** the arc (Waves P-X, ~55 commits, all gates green) — the
+  evidence-recommended close: the number has flattened, the verdict is strong, the
+  remaining defects ship in Wave X.
+- **B. Commission the structural motion arc** — route-transition system as a scoped
+  engineering project (not a wave); the only path that could move 7.70 materially,
+  with real infra risk and no comparability guarantee.
+- **C. Keep firing polish waves** — measured EV ≈ +0.02/round; not recommended.
+
+Recommendation: ship Wave X (real defects, in flight), run R19-V7 to confirm the
+defects cleared, then **A** unless the founder wants to fund **B** as its own arc.
