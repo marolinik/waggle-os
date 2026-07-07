@@ -710,3 +710,27 @@ measured-EV≈0 AND explicitly named as the wrong tool by every judge.
 → **Recommendation stands: A (merge Waves P-X, ~59 commits, all gates green) unless
 the founder funds B (the route-transition/spring/shared-element motion system) as a
 dedicated engineering arc.** C (more polish waves) is contraindicated by all 5 judges.
+
+---
+
+## PATH-TO-9 REVIEW ROUNDS (goal: "judges agree on the path" — 2026-07-07)
+
+Founder re-armed /goal: deep analysis of what reaches 9 — premium UX + power feeling +
+earned addiction. Deliverable: docs/ux-refactor/path-to-9-2026-07-07.md, reviewed by the
+same 5-persona panel (pinned model:'fable') acting as adversarial path reviewers.
+
+- **PATH-1** (v1): 4/5 endorse (a11y withheld — the min gate, consistent). Predicted
+  8.3–9.0. 12 blocking amendments filed → ALL integrated in v2.
+- **PATH-2** (v2): **5/5 ENDORSE — GOAL MET.** design 8.8 (high) · kw 9.0 (medium) ·
+  competitor 8.8 (high) · a11y 8.7 (high) · brand 9.0 (medium). Seven endorsement
+  conditions → integrated in v3 (default route-transition tier; motion retrofit;
+  input-during-warmup contract + first-interaction gate; streaming interaction
+  contract; side-by-side competitor evidence; affordance floor; reduced-motion
+  enforcement).
+
+**v3 is the agreed executable contract**: Phase-0 motion vocabulary → Pillar 4 AA/
+affordance floor (parallel) → Pillar 2 instant power feel → Pillar 3 aliveness loop →
+Pillar 1 motion system, with kit v6 verification (≥12fps signature clips, keyboard-only
++ reduced-motion journeys, hard Playwright gates, Claude/ChatGPT side-by-sides) and
+per-round success gates (min ≥8.0 after P4+P2 · ≥8.5 after P3 · 9-attempt after P1;
+two flat rounds → stop and re-analyze).
