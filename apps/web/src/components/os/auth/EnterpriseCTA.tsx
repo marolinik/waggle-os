@@ -15,7 +15,7 @@ export default function EnterpriseCTA() {
         href="https://www.kvark.ai"
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-block mt-1.5 text-[12.5px] font-[650] text-primary hover:text-[var(--honey-bright)] transition-colors"
+        className="inline-block mt-1.5 text-[12.5px] font-[650] text-honey hover:text-[var(--honey-bright)] transition-colors"
       >
         Talk to sales →
       </a>

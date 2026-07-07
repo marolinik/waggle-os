@@ -33,7 +33,7 @@ export default function PaymentSuccessApp() {
         {/* Syncing — the real payment confirmation is in flight */}
         {billing.syncing ? (
           <div className="flex flex-col items-center gap-4" data-testid="payment-success-syncing">
-            <Loader2 className="w-9 h-9 animate-spin text-primary" />
+            <Loader2 className="w-9 h-9 animate-spin text-honey" />
             <p className="text-[15px] text-[var(--text-2)]">Confirming your payment…</p>
           </div>
         ) : billing.error ? (
@@ -46,7 +46,7 @@ export default function PaymentSuccessApp() {
             <p className="text-[14px] text-[var(--text-muted)] max-w-[42ch]">{billing.error}</p>
             <button
               onClick={() => navigate('/settings?tab=billing')}
-              className="mt-2 px-[22px] py-3 rounded-[11px] text-[14.5px] font-[650] bg-[var(--surface)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-primary transition-colors"
+              className="mt-2 px-[22px] py-3 rounded-[11px] text-[14.5px] font-[650] bg-[var(--surface)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-honey transition-colors"
             >
               Back to plans
             </button>
@@ -58,7 +58,7 @@ export default function PaymentSuccessApp() {
               <Check className="w-9 h-9 text-[var(--healthy)]" strokeWidth={2.2} />
             </div>
             <h1 className="text-[28px] font-[650] tracking-[-0.02em] mb-3 text-foreground">
-              You’re <span className="text-primary">{TIER_HEADLINE[billing.tier] ?? billing.tier}.</span>
+              You’re <span className="text-honey">{TIER_HEADLINE[billing.tier] ?? billing.tier}.</span>
             </h1>
             <p className="text-[15px] text-[var(--text-2)] leading-relaxed mx-auto mb-7 max-w-[42ch]">
               Your hive just leveled up — <b className="text-foreground">shared team memory, cross-device sync, and governance</b> are live.
@@ -72,7 +72,7 @@ export default function PaymentSuccessApp() {
               </button>
               <button
                 onClick={() => navigate('/settings?tab=billing')}
-                className="px-[22px] py-3 rounded-[11px] text-[14.5px] font-[650] bg-[var(--surface)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-primary transition-colors"
+                className="px-[22px] py-3 rounded-[11px] text-[14.5px] font-[650] bg-[var(--surface)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-honey transition-colors"
               >
                 Manage billing
               </button>
@@ -87,7 +87,7 @@ export default function PaymentSuccessApp() {
             </p>
             <button
               onClick={() => navigate('/settings?tab=billing')}
-              className="mt-2 px-[22px] py-3 rounded-[11px] text-[14.5px] font-[650] bg-[var(--surface)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-primary transition-colors"
+              className="mt-2 px-[22px] py-3 rounded-[11px] text-[14.5px] font-[650] bg-[var(--surface)] text-[var(--text-2)] border border-[var(--line-strong)] hover:border-[var(--honey-line)] hover:text-honey transition-colors"
             >
               Back to plans
             </button>

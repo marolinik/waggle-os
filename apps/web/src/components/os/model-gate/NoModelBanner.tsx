@@ -21,7 +21,7 @@ export function NoModelBanner({ onSetup }: NoModelBannerProps) {
       role="status"
       className="mx-auto mb-3 flex max-w-[920px] items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3"
     >
-      <AlertTriangle className="size-4 shrink-0 text-primary" aria-hidden />
+      <AlertTriangle className="size-4 shrink-0 text-honey" aria-hidden />
       <div className="flex-1 text-sm text-foreground">
         <span className="font-medium">No model yet.</span>{' '}
         <span className="text-muted-foreground">

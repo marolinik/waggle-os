@@ -32,13 +32,14 @@ import NotificationInbox from './overlays/NotificationInbox';
 import KeyboardShortcutsHelp from './overlays/KeyboardShortcutsHelp';
 import OnboardingWizard from './overlays/OnboardingWizard';
 import OnboardingTooltips from './overlays/OnboardingTooltips';
-import LoginBriefing from './overlays/LoginBriefing';
+import LoginBriefing, { prefetchBriefing } from './overlays/LoginBriefing';
 import ContextRail from './overlays/ContextRail';
 import UpgradeModal from './overlays/UpgradeModal';
 import TrialExpiredModal from './overlays/TrialExpiredModal';
 import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
-import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt } from '@/lib/login-briefing';
+import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt, readLoginBriefingDismissed, readSkipBriefingParam } from '@/lib/login-briefing';
+import { resolveReturningUserOnboarding, isOnboardingStatusKnownSync } from '@/hooks/useOnboarding';
 import { shouldShowCoachMarks, readOnboardedThisSession, readForceTour, clearForceTour } from '@/lib/coach-marks-gate';
 import { matchNavRoute, queryString, routeFor, routeForSearchResult } from '@/lib/routes';
 import { bootWindowStateMigration, indexLandingRoute } from '@/lib/window-state-migration';
@@ -78,6 +79,34 @@ function flattenAppEntries(entries: DockEntry[]): DockEntry[] {
     }
   }
   return out;
+}
+
+/**
+ * Wave U Lane B (item 1) — briefing-landing state machine (pure, unit-tested).
+ *
+ * The "Catching you up" briefing is the session's OPENING greeting: it may fire
+ * only during the initial landing visit, and only when that landing surface is
+ * Home. This reducer derives that discipline from the live pathname stream so the
+ * gate never reads the raw pathname at render (which re-popped the modal on any
+ * in-session navigation to Home — s02: Settings→Home — the "double catch-up"):
+ *   - 'pending' — pre-decision; the bare index '/' is transitional (IndexRedirect
+ *                 replaces it at once) so it never decides the landing.
+ *   - 'armed'   — the first real surface was Home and we have not since left it.
+ *   - 'spent'   — the landing surface was not Home, OR we have since left Home; a
+ *                 later return to Home can never re-arm it. Terminal.
+ * Held in React state ⇒ resets per app session (a fresh launch greets again),
+ * never persisted to localStorage.
+ */
+export type BriefingLanding = 'pending' | 'armed' | 'spent';
+
+// Exported (not a component) so the discipline is unit-tested without mounting the
+// shell — the lane owns no separate lib file to host it. Fast-refresh is a non-
+// concern for this top-level route module.
+// eslint-disable-next-line react-refresh/only-export-components
+export function nextBriefingLanding(prev: BriefingLanding, pathname: string): BriefingLanding {
+  if (pathname === '/') return prev;            // transitional index — no decision yet
+  if (prev === 'spent') return 'spent';         // opportunity already gone this session
+  return pathname.startsWith('/home') ? 'armed' : 'spent';
 }
 
 const ShellLayout = () => {
@@ -283,6 +312,15 @@ const ShellLayout = () => {
     setContextRailTarget(null);
   }, [location.pathname, setContextRailTarget]);
 
+  // Wave U Lane B (item 1): drive the briefing gate off the pathname STREAM via
+  // nextBriefingLanding, not the live pathname at render — so an in-session
+  // navigation to Home (Settings→Home) can never re-open the modal. The home hero
+  // already carries the catch-up when the landing surface wasn't Home.
+  const [briefingLanding, setBriefingLanding] = useState<BriefingLanding>('pending');
+  useEffect(() => {
+    setBriefingLanding(prev => nextBriefingLanding(prev, location.pathname));
+  }, [location.pathname]);
+
   // Five-place spine + a power-tier "Pinned" group. Chat resolves to the active
   // workspace's chat tab (routeFor falls back to /home with no workspace). The
   // Agents & tasks badge surfaces unacknowledged coordination signals for now;
@@ -461,9 +499,17 @@ const ShellLayout = () => {
       {/* FR #45: one post-onboarding overlay at a time — Tour first, then the
           briefing once Tour is dismissed (gating relocated from Desktop.tsx:621-637).
           Home-only: the greeting belongs to the cockpit — overlaying Memory or
-          Skills hides the very surfaces that prove the product's claims. */}
+          Skills hides the very surfaces that prove the product's claims.
+          Wave Q Lane A (item 2 — one problem, one voice): when the sidecar is
+          unreachable the SAME root cause already surfaces as Home's own error
+          state + the NoModelBanner, so suppress the briefing entirely rather than
+          stack a third symptom on top. The connection problem is announced once.
+          Wave U Lane B (item 1 — interruption discipline): gate on briefingLanding
+          ('armed' = Home was the session's landing surface AND we haven't left it),
+          NOT the live pathname alone — so a mid-session Settings→Home never re-pops
+          it. The trailing pathname check absorbs the one-frame effect lag. */}
       {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing
-        && location.pathname.startsWith('/home') && (
+        && briefingLanding === 'armed' && location.pathname.startsWith('/home') && !offline && (
         <LoginBriefing
           onDismiss={(permanent) => {
             if (permanent) writeLoginBriefingDismissed(true);
@@ -527,6 +573,15 @@ const AppShell = () => {
   // always wins — acceptance check 2).
   useState(() => bootWindowStateMigration(window.location.pathname));
 
+  // Wave T Lane A (item 2): warm the LoginBriefing payload cache while the boot
+  // sequence runs (~4s), so the briefing greets with content instead of opening
+  // as a bare spinner. Skipped when the user turned the briefing off. Fire-and-
+  // forget; the adapter's connect gate defers the requests until the sidecar is
+  // reachable, and prefetchBriefing swallows its own rejection.
+  useEffect(() => {
+    if (!readLoginBriefingDismissed() && !readSkipBriefingParam()) prefetchBriefing();
+  }, []);
+
   const [initialBooted] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const shouldSkipBoot = params.get('skipOnboarding') === 'true' || params.get('skipBoot') === 'true';
@@ -536,18 +591,56 @@ const AppShell = () => {
     }
     return localStorage.getItem(BOOT_KEY) !== null;
   });
+
+  // Wave T Lane A (item 1): the onboarding wizard flashes for ~1s for a
+  // server-onboarded user whose webview localStorage is fresh — the P4
+  // /api/onboarding/status probe only resolves AFTER the shell mounts, so the
+  // wizard paints before the auto-complete lands. Hold boot until the decision
+  // is KNOWN: sync when localStorage already settles it, else probe the server
+  // (capped so a dead endpoint can't brick boot — 3s, inside the boot screen's
+  // own 3-4s runtime, because a 1.5s cap still let the wizard flash on a cold
+  // dev server where the status roundtrip runs long). resolveReturningUser-
+  // Onboarding persists the completed flag so useOnboarding reads it
+  // synchronously and never renders the wizard for an onboarded user.
+  const [onboardingResolved, setOnboardingResolved] = useState(isOnboardingStatusKnownSync);
+  useEffect(() => {
+    if (onboardingResolved) return;
+    let settled = false;
+    const finish = () => { if (!settled) { settled = true; setOnboardingResolved(true); } };
+    void resolveReturningUserOnboarding().finally(finish);
+    const cap = window.setTimeout(finish, 3000);
+    return () => window.clearTimeout(cap);
+  }, [onboardingResolved]);
+
   const [booted, setBooted] = useState(initialBooted);
-  const [showShell, setShowShell] = useState(initialBooted);
+  const [showShell, setShowShell] = useState(() => initialBooted && isOnboardingStatusKnownSync());
+
+  // Fast path with no BootScreen to animate out (already booted this session):
+  // reveal the shell once onboarding resolves, since onExitComplete never fires.
+  useEffect(() => {
+    if (initialBooted && onboardingResolved) setShowShell(true);
+  }, [initialBooted, onboardingResolved]);
 
   const handleBootComplete = () => {
     localStorage.setItem(BOOT_KEY, 'true');
     setBooted(true);
   };
 
+  // Hold the BootScreen until BOTH the boot sequence finished AND onboarding
+  // status is known (item 1) — only then may it animate out and the shell mount.
+  const bootComplete = booted && onboardingResolved;
+
   return (
     <>
+      {/* Wave U Lane D: `ready` shortens the boot floor. The boot screen shows
+          its brand moment then exits the instant the shell's deps resolve —
+          onboarding resolution is the one genuinely-slow pre-boot dependency (a
+          server probe capped at 3s above). The briefing prefetch is fire-and-
+          forget on mount, and the workspace store warms inside ShellProvider
+          (post-boot), so neither can gate the floor. While onboarding is
+          unresolved the boot holds past the floor rather than flash the wizard. */}
       <AnimatePresence onExitComplete={() => setShowShell(true)}>
-        {!booted && <BootScreen onComplete={handleBootComplete} />}
+        {!bootComplete && <BootScreen onComplete={handleBootComplete} ready={onboardingResolved} />}
       </AnimatePresence>
       {showShell && (
         <ShellProvider>

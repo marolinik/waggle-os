@@ -103,7 +103,7 @@ const ImportReminderBanner = ({
         data-testid="import-reminder-banner-cc"
         className="px-4 py-2.5 border-b border-primary/30 bg-primary/10 flex items-center gap-3"
       >
-        <Zap className="w-4 h-4 text-primary shrink-0" />
+        <Zap className="w-4 h-4 text-honey shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-xs font-display font-medium text-foreground truncate">
             Found {ccDetect.itemCount} Claude Code conversations on this machine.
@@ -136,7 +136,7 @@ const ImportReminderBanner = ({
       data-testid="import-reminder-banner"
       className="px-4 py-2.5 border-b border-border/40 bg-secondary/40 flex items-center gap-3"
     >
-      <Upload className="w-4 h-4 text-primary shrink-0" />
+      <Upload className="w-4 h-4 text-honey shrink-0" />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-display font-medium text-foreground truncate">
           You can import 6 months of your AI history any time.

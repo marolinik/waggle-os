@@ -105,7 +105,7 @@ const PersonaAgentsList = ({
         <div>
           <div className="flex items-center justify-between mb-2 px-1">
             <h3 className="text-[11px] font-display font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              {hasMapping && <Sparkles className="w-3 h-3 text-primary" aria-hidden="true" />}
+              {hasMapping && <Sparkles className="w-3 h-3 text-honey" aria-hidden="true" />}
               {hasMapping ? 'Your Workspace Specialists' : 'Specialists'}
             </h3>
             {hasMapping && others.length > 0 && (
@@ -224,7 +224,7 @@ const PersonaSwitcher = ({
           </div>
           {tooltip.bestFor.length > 0 && (
             <div>
-              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-primary/80 mb-1">Best for</p>
+              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-honey/80 mb-1">Best for</p>
               <ul className="space-y-0.5">
                 {tooltip.bestFor.map(item => (
                   <li key={item} className="text-muted-foreground leading-tight">• {item}</li>
@@ -297,7 +297,7 @@ const PersonaSwitcher = ({
 
           {loading ? (
             <div className="flex items-center justify-center py-10">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <Loader2 className="w-5 h-5 animate-spin text-honey" />
             </div>
           ) : tab === 'agents' ? (
             <PersonaAgentsList
@@ -324,12 +324,12 @@ const PersonaSwitcher = ({
                   }`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                    <Users className="w-5 h-5 text-primary" />
+                    <Users className="w-5 h-5 text-honey" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-xs font-display font-medium text-foreground truncate">{g.name}</p>
                     <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{g.strategy}</span>
+                      <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-primary/10 text-honey capitalize">{g.strategy}</span>
                       <span className="text-[11px] text-muted-foreground">{g.members.length} agents</span>
                     </div>
                     {g.description && <p className="text-[11px] text-muted-foreground truncate mt-0.5">{g.description}</p>}

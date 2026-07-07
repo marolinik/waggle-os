@@ -1,7 +1,6 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 import { ShieldCheck, Info } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
-import { SectionLabel } from '../warm';
 import MemoryTrustManage from './memory/MemoryTrustManage';
 import MemoryTrustWhy from './memory/MemoryTrustWhy';
 import { cn } from '@/lib/utils';
@@ -37,37 +36,54 @@ const SEGMENTS: { id: TrustView; label: string }[] = [
   { id: 'why', label: 'Why did you do that?' },
 ];
 
-/** Editorial eyebrow + honey-accented H1 + body, per the §2 design contract. */
-function ManageHero() {
+/** Editorial eyebrow + honey-accented H1 + body, per the §2 design contract.
+ *  UX gold-standard H1 (deterministic): the full manifesto renders only while
+ *  the store is effectively empty; once real memories exist the compact form
+ *  (eyebrow + smaller H1, paragraph hidden) lets the stat block lead.
+ *  `controls` renders the Manage/Why segmented switch inline on the eyebrow
+ *  row — one register instead of a separate labelled strip above the hero. */
+function ManageHero({ compact, controls }: { compact: boolean; controls?: ReactNode }) {
   return (
-    <header className="mb-1">
-      <p className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
-        <span className="h-px w-5 bg-[var(--honey)]" aria-hidden="true" />
-        Trust · the thing that makes you stay
-      </p>
-      <h1 className="text-[28px] font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]">
-        Memory you can <span className="text-[var(--honey)]">correct, age, and forget.</span>
+    <header className="mb-1" data-testid="memory-trust-hero" data-compact={compact ? 'true' : 'false'}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        {/* --honey-text (theme-aware AA token) — raw --honey misses AA at caption size in light. */}
+        <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey-text)]">
+          <span className="h-px w-5 bg-[var(--honey)]" aria-hidden="true" />
+          Trust · inspect · correct · forget
+        </p>
+        {controls}
+      </div>
+      <h1 className={cn(
+        'font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]',
+        compact ? 'text-[20px]' : 'text-[28px]',
+      )}>
+        Memory you can <span className="text-[var(--honey-text)]">correct, age, and forget.</span>
       </h1>
-      <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
-        A memory that only grows is a liability. Waggle shows you{' '}
-        <b className="font-semibold text-[var(--text-2)]">how sure it is</b>,{' '}
-        <b className="font-semibold text-[var(--text-2)]">how fresh it is</b>, and{' '}
-        <b className="font-semibold text-[var(--text-2)]">where it came from</b> — and lets you fix or
-        forget anything. You&rsquo;re always in control of what the hive believes.
-      </p>
+      {!compact && (
+        <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
+          A memory that only grows is a liability. Waggle shows you{' '}
+          <b className="font-semibold text-[var(--text-2)]">how sure it is</b>,{' '}
+          <b className="font-semibold text-[var(--text-2)]">how fresh it is</b>, and{' '}
+          <b className="font-semibold text-[var(--text-2)]">where it came from</b> — and lets you fix or
+          forget anything. You&rsquo;re always in control of what the hive believes.
+        </p>
+      )}
     </header>
   );
 }
 
-function WhyHero() {
+function WhyHero({ controls }: { controls?: ReactNode }) {
   return (
     <header className="mb-1">
-      <p className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
-        <span className="h-px w-5 bg-[var(--honey)]" aria-hidden="true" />
-        Provenance · accountability
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey-text)]">
+          <span className="h-px w-5 bg-[var(--honey)]" aria-hidden="true" />
+          Provenance · accountability
+        </p>
+        {controls}
+      </div>
       <h1 className="text-[28px] font-[650] leading-tight tracking-[-0.02em] text-[var(--text)]">
-        Ask the agent <span className="text-[var(--honey)]">&ldquo;why did you do that?&rdquo;</span>
+        Ask the agent <span className="text-[var(--honey-text)]">&ldquo;why did you do that?&rdquo;</span>
       </h1>
       <p className="mt-3 max-w-[64ch] text-[15px] leading-[1.55] text-[var(--text-muted)]">
         Any action an agent takes can be traced back to the exact memories and sources behind it —
@@ -109,6 +125,12 @@ function TrustPrincipleFooter({ view }: { view: TrustView }) {
 
 export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
   const [view, setView] = useState<TrustView>('manage');
+  // Hero demote — DETERMINISTIC: full manifesto only while the store is
+  // effectively empty (total unknown or 0); compact once real memories exist.
+  // (Was a localStorage first-visit flag, which rendered different content
+  // across fresh audit profiles and read as a dark/light parity bug.)
+  const [storeTotal, setStoreTotal] = useState<number | null>(null);
+  const heroCompact = (storeTotal ?? 0) > 0;
   const [toast, setToast] = useState<string | null>(null);
   // Cross-view accountability loop: Manage row → "Why?" sets the trace target +
   // switches to Why; the Why view's "correct it" hands an id back to Manage's editor.
@@ -127,6 +149,7 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
   useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current); }, []);
 
   const clearPendingOpen = useCallback(() => setPendingOpenId(null), []);
+  const handleTotal = useCallback((n: number) => setStoreTotal(n), []);
   const goToTrace = useCallback((id: string) => { setTraceMemoryId(id); setView('why'); }, []);
   const correctFromTrace = useCallback((id: string) => { setPendingOpenId(id); setView('manage'); }, []);
   const forgetFromTrace = useCallback(async (id: string) => {
@@ -140,48 +163,42 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
     }
   }, [wsParam, mind, showToast]);
 
+  // Segmented Manage/Why switch — rendered INLINE on the hero eyebrow row (one
+  // register; the old labelled strip + helper sentence doubled what the hero and
+  // the trust footer already say). Plain toggle buttons (aria-pressed), NOT a
+  // role=tablist: it's nested inside the MemoryCenterApp tab bar and has no
+  // arrow-key tablist semantics — toggle buttons are natively keyboard-operable
+  // (review HIGH).
+  const segmented = (
+    <div role="group" aria-label="Memory Trust view" className="flex gap-0.5 rounded-[10px] border border-[var(--line-soft)] bg-[var(--surface-2)] p-[3px]">
+      {SEGMENTS.map((s) => {
+        const on = view === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            aria-pressed={on}
+            onClick={() => setView(s.id)}
+            className={cn(
+              'rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium transition-colors',
+              on ? 'bg-[var(--honey)] text-[#1a1407]' : 'text-[var(--text-muted)] hover:text-[var(--text)]',
+            )}
+          >
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="relative flex h-full flex-col">
-      {/* Sticky segmented control (§1) */}
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-[var(--line-soft)] bg-[var(--bg)]/80 px-5 py-3 backdrop-blur">
-        <SectionLabel>Memory Trust · view</SectionLabel>
-        {/* Plain toggle buttons (aria-pressed), NOT a role=tablist: it's nested
-            inside the MemoryCenterApp tab bar and has no arrow-key tablist
-            semantics — toggle buttons are natively keyboard-operable (review HIGH). */}
-        <div role="group" aria-label="Memory Trust view" className="flex gap-0.5 rounded-[10px] border border-[var(--line-soft)] bg-[var(--surface-2)] p-[3px]">
-          {SEGMENTS.map((s) => {
-            const on = view === s.id;
-            return (
-              <button
-                key={s.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => setView(s.id)}
-                className={cn(
-                  'rounded-[8px] px-3 py-1.5 text-[12.5px] font-medium transition-colors',
-                  on ? 'bg-[var(--honey)] text-[#1a1407]' : 'text-[var(--text-muted)] hover:text-[var(--text)]',
-                )}
-              >
-                {s.label}
-              </button>
-            );
-          })}
-        </div>
-        <span className="text-[12px] text-[var(--text-muted)]">
-          {view === 'manage' ? (
-            <><b className="font-semibold text-[var(--text-2)]">Manage</b> — forget, correct, confirm; see confidence &amp; freshness</>
-          ) : (
-            <><b className="font-semibold text-[var(--text-2)]">Why-trace</b> — every action explains itself</>
-          )}
-        </span>
-      </div>
-
       {/* Stage — single editorial scroll per view (§ screen-19 layout) */}
       <div className="min-h-0 flex-1 overflow-auto">
         <div className="mx-auto w-full max-w-[920px] space-y-6 px-8 py-7">
           {view === 'manage' ? (
             <>
-              <ManageHero />
+              <ManageHero compact={heroCompact} controls={segmented} />
               <MemoryTrustManage
                 mind={mind}
                 workspaceId={workspaceId}
@@ -189,11 +206,12 @@ export default function MemoryTrust({ mind, workspaceId }: MemoryTrustProps) {
                 onWhy={goToTrace}
                 openMemoryId={pendingOpenId}
                 onOpenConsumed={clearPendingOpen}
+                onTotal={handleTotal}
               />
             </>
           ) : (
             <>
-              <WhyHero />
+              <WhyHero controls={segmented} />
               <MemoryTrustWhy
                 mind={mind}
                 workspaceId={workspaceId}

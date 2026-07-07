@@ -98,7 +98,7 @@ function formatClock(iso: string): string {
 
 /** Honey-accented key number inside a composed sentence. */
 function honey(n: ReactNode): ReactNode {
-  return <span className="font-semibold text-[var(--honey)]">{n}</span>;
+  return <span className="font-semibold text-[var(--honey-text)]">{n}</span>;
 }
 
 function rankTimestamp(iso?: string): number {
@@ -146,7 +146,8 @@ function buildStartHereMove(briefing: HomeBriefing, wsById: Map<string, RecentWo
 
     return {
       title: `Continue ${workspace.name}`,
-      workspaceName: workspace.name,
+      // Wave F (fix 2a): the title already names the workspace — a second
+      // "WORKSPACE NAME" eyebrow under it was pure redundancy.
       reason: workspace.summary
         ? `Because you left off here: ${workspace.summary}`
         : 'Because this is your most recent workspace.',
@@ -179,10 +180,10 @@ function CockpitSkeleton() {
     <div className="mx-auto h-full max-w-[920px] animate-pulse overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit-loading">
       <div className="mb-2 h-4 w-44 rounded bg-[var(--surface-2)]" />
       <div className="mb-8 h-12 w-80 rounded-lg bg-[var(--surface-2)]" />
-      <div className="mb-8 h-40 rounded-[26px] border border-[var(--line-soft)] bg-[var(--surface)]" />
+      <div className="mb-8 h-40 rounded-[var(--r-xl)] border border-[var(--line-soft)] bg-[var(--surface)]" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[0, 1].map(i => (
-          <div key={i} className="h-28 rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)]" />
+          <div key={i} className="h-28 rounded-[var(--r-lg)] border border-[var(--line-soft)] bg-[var(--surface)]" />
         ))}
       </div>
     </div>
@@ -196,7 +197,7 @@ function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCr
       <h1 className="mb-1 font-display text-[clamp(28px,4vw,40px)] font-semibold leading-tight text-[var(--text)]">{greeting}</h1>
       <p className="mb-8 text-[15px] text-[var(--text-muted)]">Your AI should know how you work. Let's set up your first workspace.</p>
 
-      <div className="relative overflow-hidden rounded-[26px] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-8 text-center shadow-[var(--shadow)]">
+      <div className="relative overflow-hidden rounded-[var(--r-xl)] border border-[var(--line-soft)] bg-[linear-gradient(150deg,var(--surface),var(--surface-2))] p-7 text-center shadow-[var(--shadow-elevated)]">
         <span aria-hidden className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[radial-gradient(circle,var(--honey-glow),transparent_70%)]" />
         <div className="relative">
           <HexAvatar label="W" size={48} className="mx-auto mb-4" />
@@ -221,12 +222,28 @@ function FirstRunEmpty({ greeting, onCreateWorkspace }: { greeting: string; onCr
 
 // ── Greeting (mono date row + live dot + streak + two-line H1) ────────────
 function GreetingHeader({
-  greeting, date, workspaceCount,
-}: { greeting: string; date: string; workspaceCount: number }) {
+  greeting, date, workspaceCount, pendingTotal, lastActive,
+}: {
+  greeting: string;
+  date: string;
+  workspaceCount: number;
+  /** Sum of pendingCount across the briefing's workspace cards (real data). */
+  pendingTotal: number;
+  /** Most recent lastActive across the briefing's workspace cards. */
+  lastActive?: string;
+}) {
+  // Round-7 fix 1: the server-composed greeting may already carry an
+  // away/last-active statement ("You've been away 1 day, Marko") built from
+  // ITS OWN recency field. Repeating a client-computed "last active 2d ago"
+  // clause right below it showed two disagreeing truths in one viewport.
+  // ONE truth: when the greeting already says it, the factual line drops its
+  // recency clause (the workspace/review-count clauses stay).
+  const greetingStatesRecency = /been away|last active/i.test(greeting);
+  const lastActiveRel = greetingStatesRecency ? '' : formatRelative(lastActive);
   return (
     <header className="mb-9">
       <div className="mb-4 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--honey)]">
+        <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--honey-text)]">
           <DotLive tone="healthy" size={7} />
           <span>{formatBriefingDate(date)}</span>
           {formatClock(date) && <span className="text-[var(--text-dim)]">· {formatClock(date)}</span>}
@@ -236,16 +253,26 @@ function GreetingHeader({
       <h1 className="font-display text-[clamp(34px,5vw,52px)] font-semibold leading-[1.04] tracking-[-0.02em] text-[var(--text)]">
         {greeting}
       </h1>
-      <p
-        className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--text-muted)]"
-        data-testid="home-cockpit-positioning"
-      >
-        Waggle is your personal AI workspace: it remembers you, knows your projects, evolves with each decision,
-        guides the next step, and runs the right AI underneath.
-      </p>
-      {workspaceCount > 0 && (
-        <p className="mt-2 text-[clamp(17px,2.2vw,22px)] font-medium text-[var(--text-2)]">
-          {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you.
+      {/* Wave F (fix 2): a RETURNING user gets their real deltas, not marketing
+          copy — composed from data the briefing already carries (no new fetch).
+          The positioning paragraph stays only for the day-0 user (no workspaces),
+          who has nothing real to show yet. */}
+      {workspaceCount > 0 ? (
+        <p
+          className="mt-3 text-[clamp(16px,2vw,19px)] font-medium text-[var(--text-2)]"
+          data-testid="home-cockpit-facts"
+        >
+          {honey(`${workspaceCount} ${workspaceCount === 1 ? 'workspace' : 'workspaces'}`)} waiting for you
+          {pendingTotal > 0 && <> · {pendingTotal} {pendingTotal === 1 ? 'item' : 'items'} to review</>}
+          {lastActiveRel && <> · last active {lastActiveRel}</>}
+        </p>
+      ) : (
+        <p
+          className="mt-3 max-w-[62ch] text-[15px] leading-relaxed text-[var(--text-muted)]"
+          data-testid="home-cockpit-positioning"
+        >
+          Waggle is your personal AI workspace: it remembers you, knows your projects, evolves with each decision,
+          guides the next step, and runs the right AI underneath.
         </p>
       )}
     </header>
@@ -270,10 +297,10 @@ function StartHereCard({
 
   return (
     <section
-      className="mb-9 overflow-hidden rounded-[22px] border border-[var(--honey-line)] bg-[linear-gradient(145deg,var(--honey-wash),var(--surface))] p-5 shadow-[var(--shadow-honey)]"
+      className="mb-9 overflow-hidden rounded-[var(--r-xl)] border border-[var(--honey-line)] bg-[linear-gradient(145deg,var(--honey-wash),var(--surface))] p-6 shadow-[var(--shadow-elevated)]"
       data-testid="home-cockpit-start-here"
     >
-      <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey)]">
+      <div className="mb-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--honey-text)]">
         <Sparkles className="h-3.5 w-3.5" />
         <span>Start here</span>
       </div>
@@ -342,7 +369,7 @@ function RecentWorkspacesPanel({
         {cards.map(ws => (
           <div
             key={ws.id}
-            className="group relative rounded-[18px] border border-[var(--line-soft)] bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
+            className="group relative rounded-[var(--r-lg)] border border-[var(--line-soft)] bg-card p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
             data-testid={`home-cockpit-ws-${ws.id}`}
           >
             <button type="button" onClick={() => onOpenDesktop(ws.id)} className="block w-full text-left">
@@ -351,11 +378,13 @@ function RecentWorkspacesPanel({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[15.5px] font-semibold leading-tight text-[var(--text)]">{ws.name}</div>
                   {(() => {
-                    // Disambiguate same-named workspaces with their group so two
-                    // "Research Hub"s aren't indistinguishable (issue 2b).
+                    // Disambiguate same-named workspaces with their group — or a
+                    // short id suffix when the group is missing — so two
+                    // "Research Hub"s are ALWAYS tellable apart (issue 2b).
                     const dupe = dupes.has(ws.name.trim().toLowerCase());
                     const rel = ws.lastActive ? formatRelative(ws.lastActive) : '';
-                    const label = dupe && ws.group ? (rel ? `${ws.group} · ${rel}` : ws.group) : rel;
+                    const disambig = dupe ? (ws.group?.trim() ? ws.group : `#${ws.id.slice(0, 6)}`) : '';
+                    const label = disambig ? (rel ? `${disambig} · ${rel}` : disambig) : rel;
                     return label
                       ? <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--text-dim)]">{label}</div>
                       : null;
@@ -370,7 +399,7 @@ function RecentWorkspacesPanel({
               <button
                 type="button"
                 onClick={() => onContinue(ws.id, ws.continueSessionId)}
-                className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
+                className="inline-flex items-center gap-0.5 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
                 data-testid={`home-cockpit-continue-${ws.id}`}
               >
                 Continue <ChevronRight className="h-3.5 w-3.5" />
@@ -492,11 +521,14 @@ function composeOvernightStory(o: OvernightSummary): ReactNode {
 
 function buildRunChips(o: OvernightSummary): RunChipProps[] {
   const chips: RunChipProps[] = [];
-  if (o.consolidated > 0) chips.push({ label: `${o.consolidated} memories consolidated`, tone: 'intel' });
-  if (o.artifactsCreated > 0) chips.push({ label: `${o.artifactsCreated} artifacts created`, tone: 'work' });
-  if (o.automationsCompleted > 0) chips.push({ label: `${o.automationsCompleted} automations completed`, tone: 'healthy' });
+  if (o.consolidated > 0) chips.push({ label: `${o.consolidated} ${o.consolidated === 1 ? 'memory' : 'memories'} consolidated`, tone: 'intel' });
+  if (o.artifactsCreated > 0) chips.push({ label: `${o.artifactsCreated} ${o.artifactsCreated === 1 ? 'artifact' : 'artifacts'} created`, tone: 'work' });
+  if (o.automationsCompleted > 0) chips.push({ label: `${o.automationsCompleted} ${o.automationsCompleted === 1 ? 'automation' : 'automations'} completed`, tone: 'healthy' });
   if (o.failures.length > 0) chips.push({ label: `${o.failures.length} ${o.failures.length === 1 ? 'run' : 'runs'} failed`, tone: 'risk' });
-  return chips;
+  // H2: chips mirror the story clauses 1:1 — a lone chip would only repeat the
+  // single-clause hero sentence verbatim, so it's suppressed. Multi-clause
+  // stories keep the chip breakdown.
+  return chips.length === 1 ? [] : chips;
 }
 
 // ── Root ─────────────────────────────────────────────────────────────────
@@ -602,16 +634,21 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     return (
       <div className="mx-auto h-full max-w-[920px] overflow-auto px-8 pt-[46px]" data-testid="home-cockpit-error">
         <div className="flex flex-col items-center justify-center py-20 text-center">
+          {/* Wave Q Lane A (item 4): a calm honey-family glyph, not a red
+              triangle — a transient briefing miss is an attention moment, not a
+              failure alarm. */}
           {offline
             ? <WifiOff className="mb-3 h-10 w-10 text-[var(--attention)]" />
-            : <AlertTriangle className="mb-3 h-10 w-10 text-[var(--risk)]" />}
+            : <AlertTriangle className="mb-3 h-10 w-10 text-[var(--attention)]" />}
           <p className="mb-3 text-[14px] text-[var(--text-muted)]">
             {offline ? "You're offline — your daily briefing needs the local service." : "Couldn't load your briefing."}
           </p>
+          {/* Wave Q Lane A (item 4): a real secondary button (bordered, legible)
+              rather than a honey-filled chip that read as disabled/ghosted. */}
           <button
             type="button"
             onClick={() => void load()}
-            className="inline-flex items-center gap-1.5 rounded-[10px] bg-[var(--honey)] px-3.5 py-1.5 text-[13px] font-medium text-[#1a1407] transition-opacity hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-[10px] border border-[var(--line)] bg-[var(--surface)] px-3.5 py-1.5 text-[13px] font-medium text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
             data-testid="home-cockpit-retry"
           >
             <RefreshCw className="h-3.5 w-3.5" /> Retry
@@ -668,9 +705,23 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
     ? 'Your overnight summary needs the local service.'
     : 'A calm night — nothing ran while you were away.';
 
+  // Wave F (fix 2): factual hero deltas for a returning user — reuse the
+  // briefing's own card data (most recent activity + attention debt), no fetch.
+  const heroLastActive = recentWorkspaces.reduce<string | undefined>(
+    (best, w) => (w.lastActive && (!best || rankTimestamp(w.lastActive) > rankTimestamp(best)) ? w.lastActive : best),
+    undefined,
+  );
+  const heroPendingTotal = recentWorkspaces.reduce((n, w) => n + (w.pendingCount || 0), 0);
+
   return (
     <div className="relative mx-auto h-full max-w-[920px] overflow-auto px-8 pb-20 pt-[46px]" data-testid="home-cockpit">
-      <GreetingHeader greeting={greeting} date={briefing.date} workspaceCount={totalWorkspaceCount ?? recentWorkspaces.length} />
+      <GreetingHeader
+        greeting={greeting}
+        date={briefing.date}
+        workspaceCount={totalWorkspaceCount ?? recentWorkspaces.length}
+        pendingTotal={heroPendingTotal}
+        lastActive={heroLastActive}
+      />
 
       <StartHereCard
         move={startHereMove}
@@ -685,13 +736,18 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           data-testid="home-cockpit-review-banner"
         >
           <Brain className="h-4 w-4 shrink-0 text-[var(--attention)]" />
+          {/* Scope stated explicitly ("from your imports") — this counts ONLY
+              import-sourced unreviewed memories, a subset of the Memory Center's
+              "awaiting your confirm" total, so the two numbers don't read as a
+              contradiction. */}
           <p className="flex-1 text-[13.5px] text-[var(--text-2)]">
-            {needsReviewCount} imported {needsReviewCount === 1 ? 'memory needs' : 'memories need'} your review.
+            {needsReviewCount} {needsReviewCount === 1 ? 'memory' : 'memories'} from your imports{' '}
+            {needsReviewCount === 1 ? 'needs' : 'need'} your review.
           </p>
           <button
             type="button"
             onClick={openMemoryReview}
-            className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-[var(--honey)] transition-opacity hover:opacity-80"
+            className="inline-flex shrink-0 items-center gap-0.5 text-[13px] font-medium text-[var(--honey-text)] transition-opacity hover:opacity-80"
             data-testid="home-cockpit-review-cta"
           >
             Review <ChevronRight className="h-3.5 w-3.5" />
@@ -700,19 +756,51 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
       )}
 
       <div className="mb-9">
-        <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} emptyText={overnightEmpty} />
-        {failureCount > 0 && (
+        <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} />
+        {failureCount > 0 ? (
+          /* Compact result rows (what ran · status) under the story — real
+             failure rows from the payload only; successes arrive as bare counts,
+             so no fabricated rows. Each row deep-links to the Automation Center. */
+          <div className="mt-2.5 space-y-1" data-testid="home-cockpit-overnight-runs">
+            {(overnight?.failures ?? []).slice(0, 2).map(f => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={openAutomationLogs}
+                className="flex w-full items-center gap-2 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-[var(--surface-2)]"
+                data-testid={`home-cockpit-overnight-run-${f.id}`}
+              >
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[var(--risk)]" />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-2)]">{f.label}</span>
+                <span className="shrink-0 font-mono text-[12px] text-[var(--risk)]">failed</span>
+                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-[var(--text-dim)]" />
+              </button>
+            ))}
+            {failureCount > 2 && (
+              <button
+                type="button"
+                onClick={openAutomationLogs}
+                className="inline-flex items-center gap-1.5 px-2 text-[13px] text-[var(--risk)] transition-opacity hover:opacity-80"
+                data-testid="home-cockpit-attention-banner"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                View all {failureCount} snags in the Automation Center
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        ) : hasOvernight && overnight.automationsCompleted > 0 ? (
+          /* Automations ran clean — the payload carries only counts (no per-run
+             rows), so offer a quiet link into the runs instead of invented rows. */
           <button
             type="button"
             onClick={openAutomationLogs}
-            className="mt-2.5 inline-flex items-center gap-1.5 text-[13px] text-[var(--risk)] transition-opacity hover:opacity-80"
-            data-testid="home-cockpit-attention-banner"
+            className="mt-2.5 inline-flex items-center gap-0.5 text-[13px] text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"
+            data-testid="home-cockpit-see-runs"
           >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            View {failureCount === 1 ? 'the snag' : `${failureCount} snags`} in the Automation Center
-            <ChevronRight className="h-3.5 w-3.5" />
+            See runs <ChevronRight className="h-3.5 w-3.5" />
           </button>
-        )}
+        ) : null}
       </div>
 
       <RecentWorkspacesPanel

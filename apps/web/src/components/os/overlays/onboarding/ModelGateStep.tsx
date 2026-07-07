@@ -20,7 +20,7 @@ const ModelGateStep = ({ onContinue, onLater }: ModelGateStepProps) => {
   return (
     <motion.div key="step-model-gate" {...fadeSlide}>
       <div className="text-center mb-5">
-        <Cpu className="w-10 h-10 text-primary mx-auto mb-3" />
+        <Cpu className="w-10 h-10 text-honey mx-auto mb-3" />
         <h2 className="text-2xl font-display font-bold text-foreground mb-2">Connect a model</h2>
         <p className="text-sm text-muted-foreground">
           Waggle needs one model to think with. Bring your own provider key — stored encrypted

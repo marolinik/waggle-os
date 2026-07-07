@@ -220,7 +220,7 @@ const SkillBuilder = ({ onCreated, onCancel, onTierError }: SkillBuilderProps) =
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setSteps((prev) => [...prev, ''])} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline" data-testid="skill-builder-add-step">
+            <button type="button" onClick={() => setSteps((prev) => [...prev, ''])} className="inline-flex items-center gap-1 text-[11px] text-honey hover:underline" data-testid="skill-builder-add-step">
               <Plus className="w-3 h-3" /> Add step
             </button>
           </fieldset>

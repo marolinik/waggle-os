@@ -141,7 +141,7 @@ const ConnectorCard = ({
           {conn.capabilities && conn.capabilities.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {conn.capabilities.map(cap => (
-                <span key={cap} className="px-1.5 py-0.5 text-[11px] rounded bg-primary/10 text-primary">{cap}</span>
+                <span key={cap} className="px-1.5 py-0.5 text-[11px] rounded bg-primary/10 text-honey">{cap}</span>
               ))}
             </div>
           )}
@@ -159,11 +159,11 @@ const ConnectorCard = ({
           {hint && !isConnected && (
             <div className="space-y-1">
               {hint.steps?.map((step, i) => (
-                <p key={i} className="text-[11px] text-muted-foreground"><span className="text-primary font-medium">{i + 1}.</span> {step}</p>
+                <p key={i} className="text-[11px] text-muted-foreground"><span className="text-honey font-medium">{i + 1}.</span> {step}</p>
               ))}
               {hint.url && (
                 <a href={hint.url} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] text-primary hover:text-primary/80">
+                  className="inline-flex items-center gap-1 text-[11px] text-honey hover:text-honey/80">
                   <ExternalLink className="w-3 h-3" /> Open {conn.name}
                 </a>
               )}
@@ -188,7 +188,7 @@ const ConnectorCard = ({
               <div className="ml-auto flex items-center gap-1">
                 <HintTooltip content="Re-checks the connection and stamps the last-sync time. Does not re-pull data (C16).">
                   <button onClick={() => void handleSync()} disabled={syncing}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors">
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 disabled:opacity-50 transition-colors">
                     {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Sync now
                   </button>
                 </HintTooltip>

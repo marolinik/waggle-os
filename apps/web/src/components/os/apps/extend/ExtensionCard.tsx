@@ -9,18 +9,57 @@
  * keeps its consequence dialog; install/connect/enable are one-click (§09).
  */
 import { useState } from 'react';
-import { Download, ExternalLink, Loader2, Package, Plug, Trash2, Zap } from 'lucide-react';
+import { Download, ExternalLink, Loader2, Plug, Trash2, Zap } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
 import type { Extension } from '@/lib/extension-catalog';
 import { isTogglable } from '@/lib/install-store';
 import { useInstallStore } from '@/providers/InstallProvider';
+import BrandTile from '../connectors/BrandTile';
+import { getBrandIdentity } from '../connectors/brand-identity';
 
+/** Registry-slug noise dropped from a humanized display name (Wave X Lane D). */
+const EXT_NAME_NOISE = new Set(['awesome', 'plugin', 'plugins']);
+/** Tokens rendered fully uppercase rather than title-cased. */
+const EXT_NAME_ACRONYMS = new Set(['mcp', 'api', 'ai', 'sdk', 'cli', 'ui', 'db', 'sql']);
+
+/** Humanize raw registry slugs ("agent-skills" → "Agent Skills") for display.
+ *  Curated brand names (mixed/leading caps with no separator — "Gmail",
+ *  "GitHub", "1Password") pass through untouched.
+ *
+ *  Wave X Lane D (R18-V6): the old all-lowercase guard bailed on a mixed-case
+ *  token, so a scraped name like "awesome-claude-plugin-chatDeny-slides-creator"
+ *  rendered as the raw slug (a judge flagged it as undercutting the authored
+ *  feel). Now any separator'd name is humanized: camelCase is split, "awesome"/
+ *  "plugin" noise is dropped, known acronyms uppercased. Render-only — the real
+ *  id/install target is never touched. */
+export function displayExtensionName(name: string): string {
+  const hasSeparator = name.includes('-') || name.includes('_');
+  const isLowerSlug = /^[a-z0-9]+([-_][a-z0-9]+)*$/.test(name);
+  // No separator and not an all-lowercase word → a curated brand name; leave it.
+  if (!hasSeparator && !isLowerSlug) return name;
+  const words = name
+    .split(/[-_]+/)
+    // "chatDeny" → "chat Deny": split camelCase inside a slug token.
+    .flatMap(t => t.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(' '))
+    .filter(Boolean)
+    .filter(t => !EXT_NAME_NOISE.has(t.toLowerCase()));
+  if (words.length === 0) return name; // all-noise → don't blank the card
+  return words
+    .map(t => (EXT_NAME_ACRONYMS.has(t.toLowerCase()) ? t.toUpperCase() : t.charAt(0).toUpperCase() + t.slice(1)))
+    .join(' ');
+}
+
+/** Scan outcomes with a real verdict. "not_scanned" is rendered separately as
+ *  a NEUTRAL outline chip (round-4: unknown ≠ alarm — the amber chip made
+ *  every unscanned entry read as a warning; "Scan failed" stays the alarm). */
 const SCAN_LABELS: Record<string, { tone: 'healthy' | 'attention' | 'risk'; label: string }> = {
   passed: { tone: 'healthy', label: 'Scan passed' },
   failed: { tone: 'risk', label: 'Scan failed' },
-  not_scanned: { tone: 'attention', label: 'Not scanned' },
 };
+
+const NOT_SCANNED_TOOLTIP =
+  "This package hasn't been security-scanned yet — installs are recorded in the audit trail";
 
 /** Which one-click verb a togglable extension shows, by kind/type. */
 type ActionKey = 'package' | 'connector' | 'mcp';
@@ -37,8 +76,95 @@ function actionKey(ext: Extension): ActionKey | null {
   return null;
 }
 
-/** Human labels for the dedup provenance forms (`ext.sources`). */
-const SOURCE_LABELS: Record<string, string> = { connector: 'Connector', mcp: 'MCP', package: 'Package', pack: 'Pack' };
+/** FOUNDER CONSTRAINT (round-4): Add / Connect / Enable KEEP their distinct
+ *  words (renaming declined) — instead the three verbs share ONE visual
+ *  weight, so the action rail reads as a single system. Every primary action
+ *  (verb button + inline token submit) uses this exact treatment. */
+const PRIMARY_ACTION_CLASS =
+  'flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 group-hover:bg-primary/10 group-focus-within:bg-primary/10 transition-colors disabled:opacity-50';
+
+/** ONE chip grammar (R10 / Wave-S Lane C) — TWO species, app-wide:
+ *   FILLED  (category / type / trust / source form): line-soft border,
+ *           surface-2 fill, muted 11px text — the quiet lozenge below.
+ *   OUTLINE (status: Available / Installed / scan verdict): tone border+text
+ *           via StatusBadge + the healthy install pill — never a filled tag.
+ *  Keeping the two visually distinct stops the row carrying two competing
+ *  lozenge styles for two different meanings. */
+const TAG_CHIP =
+  'rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] text-[var(--text-muted)]';
+/** FILLED species with a leading glyph — used for the multi-form source chips. */
+const TAG_CHIP_GLYPH = `inline-flex items-center gap-1 ${TAG_CHIP}`;
+
+/** User-language nouns for the dedup provenance forms (`ext.sources`) —
+ *  registry jargon translated to what each form DOES for the user: a package
+ *  installs a skill, an mcp row runs an MCP server (round-6 judge finding:
+ *  "Connector + MCP + Package" reads as internals, not a benefit). */
+const SOURCE_NOUNS: Record<string, string> = {
+  connector: 'connector',
+  mcp: 'MCP server',
+  package: 'skill',
+  pack: 'skill pack',
+};
+
+/** Glyph + short word per integration form — the multi-form row renders one
+ *  FILLED glyph chip per form (all sharing one tooltip) instead of a single
+ *  sentence chip (Wave-S Lane C: no sentence chips). */
+const SOURCE_FORM_META: Record<string, { Icon: typeof Download; label: string }> = {
+  connector: { Icon: Plug, label: 'connector' },
+  mcp: { Icon: Zap, label: 'MCP' },
+  package: { Icon: Download, label: 'skill' },
+  pack: { Icon: Download, label: 'skill pack' },
+};
+
+/** "Works as connector & MCP server" — one human phrase for a multi-form
+ *  integration, truthfully derived from the merged `ext.sources`. */
+export function describeSourceForms(sources: string[]): string {
+  const nouns = [...new Set(sources.map(s => SOURCE_NOUNS[s] ?? s))];
+  if (nouns.length === 0) return '';
+  const list = nouns.length === 1
+    ? nouns[0]
+    : `${nouns.slice(0, -1).join(', ')} & ${nouns[nouns.length - 1]}`;
+  return `Works as ${list}`;
+}
+
+/** One metadata chip descriptor. Glyph chips (multi-form source markers) carry
+ *  an Icon; the rest are plain FILLED lozenges — still the two Wave-S species. */
+interface MetaChip {
+  key: string;
+  label: string;
+  Icon?: typeof Download;
+  capitalize?: boolean;
+  sourceForm?: boolean;
+}
+
+/** Number of metadata chips shown before the rest fold into a "+N" chip. */
+export const META_VISIBLE_CAP = 3;
+
+/** Metadata budget (Wave T Lane B §2): one priority-ordered, deduped chip set —
+ *  type, then the multi-form source glyphs (the differentiator), then category,
+ *  trust, and the registry source. Deduped by label (case-insensitive) so a
+ *  connector that also runs as an MCP no longer shows "connector" twice; the
+ *  caller caps the result to META_VISIBLE_CAP + a "+N" overflow chip. */
+export function buildMetaChips(ext: Extension): MetaChip[] {
+  const raw: MetaChip[] = [{ key: 'type', label: ext.type }];
+  if (ext.sources && ext.sources.length > 1) {
+    for (const s of [...new Set(ext.sources)]) {
+      const meta = SOURCE_FORM_META[s];
+      raw.push({ key: `form-${s}`, label: meta?.label ?? s, Icon: meta?.Icon, sourceForm: true });
+    }
+  }
+  if (ext.category) raw.push({ key: 'category', label: ext.category });
+  if (ext.trust) raw.push({ key: 'trust', label: ext.trust, capitalize: true });
+  if (ext.source) raw.push({ key: 'source', label: ext.source });
+
+  const seen = new Set<string>();
+  return raw.filter(c => {
+    const n = c.label.trim().toLowerCase();
+    if (seen.has(n)) return false;
+    seen.add(n);
+    return true;
+  });
+}
 
 interface ExtensionCardProps {
   ext: Extension;
@@ -65,6 +191,14 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   const busy = isInstalling(ext.id);
   const verb = key ? VERBS[key] : null;
   const isOAuthConnector = ext.type === 'connector' && ext.authType === 'oauth2';
+  // Connected connectors read alive at a glance: the BrandTile gets its
+  // connected ring AND the row warms up (quiet honey left hairline + wash).
+  const connectedRow = !!installed && ext.type === 'connector';
+  // Metadata budget (Wave T Lane B §2): deduped, capped chip set + overflow.
+  const metaChips = buildMetaChips(ext);
+  const shownChips = metaChips.slice(0, META_VISIBLE_CAP);
+  const overflowChips = metaChips.slice(META_VISIBLE_CAP);
+  const firstSourceFormKey = shownChips.find(c => c.sourceForm)?.key;
 
   const runPrimary = async () => {
     if (ext.type === 'connector') {
@@ -83,31 +217,87 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   return (
     <div
       data-testid="extension-card"
-      className="flex items-start gap-3 p-3 rounded-xl border border-border/30 bg-secondary/20 hover:border-border/60 transition-colors"
+      // Row hover tier (Wave T Lane B §3 · Wave V Lane C motion tier 2): rest
+      // flat → hover/focus-within adds a motion-safe 2px lift + blooms the
+      // elevation to the honey glow (--shadow-honey) and warms the border to
+      // honey, 150ms ease-out. Reduced motion keeps the color tier (border +
+      // bloom) and drops only the lift. `group` lets the primary action gain
+      // full contrast on row hover (see PRIMARY_ACTION_CLASS).
+      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-150 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:focus-within:-translate-y-0.5 ${
+        connectedRow
+          // Rest elevation folded INTO the inset honey hairline (one combined
+          // box-shadow — two shadow-* utilities on one element would collide).
+          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] hover:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-honey)] focus-within:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-honey)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
+          : 'border-border/30 shadow-[var(--shadow-sm)] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]'
+      }`}
     >
-      <Package className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+      {/* Brand identity tile (simple-icons mark or monogram) — no more
+          one-generic-cube-for-everything (2026-07-06 judge finding). */}
+      <BrandTile
+        identity={getBrandIdentity(ext.id, ext.name, ext.category ?? '')}
+        size={40}
+        connected={!!installed && ext.type === 'connector'}
+        className="mt-0.5"
+      />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-display font-medium text-foreground truncate">{ext.name}</span>
-          <StatusBadge
-            tone={installed ? 'healthy' : 'neutral'}
-            label={installed ? (verb?.installed ?? 'Installed') : 'Available'}
-          />
-          {scan && <StatusBadge tone={scan.tone} label={scan.label} />}
+          <span className="text-sm font-display font-medium text-foreground truncate">{displayExtensionName(ext.name)}</span>
+          {installed ? (
+            // Warm sage healthy grammar (--healthy / --healthy-wash) — the same
+            // token agents/home chips use. NOT --sem-healthy (emerald), which
+            // read as off-palette teal here (R10 Lane C, brand judge).
+            <span
+              className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap"
+              style={{
+                color: 'var(--healthy)',
+                borderColor: 'color-mix(in srgb, var(--healthy) 35%, transparent)',
+                backgroundColor: 'var(--healthy-wash)',
+              }}
+            >
+              <span aria-hidden className="inline-block h-1.5 w-1.5 rounded-full" style={{ backgroundColor: 'var(--healthy)' }} />
+              {verb?.installed ?? 'Installed'}
+            </span>
+          ) : (
+            <StatusBadge tone="neutral" label="Available" />
+          )}
+          {ext.scanStatus === 'not_scanned' ? (
+            <span title={NOT_SCANNED_TOOLTIP}>
+              {/* Neutral quiet chip — "pending", not a shield-warning (R10 kw). */}
+              <StatusBadge tone="neutral" label="Safety scan pending" />
+            </span>
+          ) : scan ? (
+            <StatusBadge tone={scan.tone} label={scan.label} />
+          ) : null}
         </div>
         <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{ext.description}</p>
+        {/* Metadata row (Wave T Lane B §2): the deduped chip set, capped at
+            META_VISIBLE_CAP with a "+N" overflow chip (tooltip lists the rest).
+            Two species only (Wave-S grammar): FILLED lozenge + FILLED glyph —
+            the multi-form source glyphs keep ONE shared "Works as …" tooltip. */}
         <div className="flex items-center gap-2 mt-1 flex-wrap">
-          <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{ext.type}</span>
-          {ext.category && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">{ext.category}</span>}
-          {ext.trust && <span className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground capitalize">{ext.trust}</span>}
-          {/* Genuinely multi-form integration (dedup winner absorbed ≥1 twin) —
-              name the forms so the merge is legible, not silently hidden. */}
-          {ext.sources && ext.sources.length > 1 && (
-            <span data-testid="extension-sources" className="text-[11px] px-1.5 py-0.5 rounded bg-secondary text-muted-foreground">
-              {ext.sources.map(s => SOURCE_LABELS[s] ?? s).join(' + ')}
+          {shownChips.map(c => {
+            const Icon = c.Icon;
+            return (
+              <span
+                key={c.key}
+                {...(c.key === firstSourceFormKey ? { 'data-testid': 'extension-sources' } : {})}
+                className={Icon ? TAG_CHIP_GLYPH : (c.capitalize ? `${TAG_CHIP} capitalize` : TAG_CHIP)}
+                title={c.sourceForm ? describeSourceForms(ext.sources ?? []) : undefined}
+              >
+                {Icon && <Icon className="w-3 h-3 shrink-0" aria-hidden />}
+                {c.label}
+              </span>
+            );
+          })}
+          {overflowChips.length > 0 && (
+            <span
+              data-testid="extension-tags-overflow"
+              className={TAG_CHIP}
+              title={overflowChips.map(c => c.label).join(', ')}
+            >
+              +{overflowChips.length}
             </span>
           )}
-          <span className="text-[11px] text-muted-foreground/60">{ext.source}</span>
         </div>
 
         {/* In-place connector token-paste (bearer/api_key/basic). OAuth never
@@ -127,7 +317,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
               onClick={() => void submitToken()}
               disabled={busy || token.trim() === ''}
               data-testid="connector-token-submit"
-              className="px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+              className={PRIMARY_ACTION_CLASS}
             >
               {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Connect'}
             </button>
@@ -146,7 +336,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
         {!verb ? (
           // Browse-only (pack) — no install path exists. Label it so the
           // absent button reads as intentional, not broken.
-          <span className="text-[11px] text-muted-foreground/60">Browse only</span>
+          <span className="text-[11px] text-muted-foreground">Browse only</span>
         ) : installed ? (
           ext.kind === 'package' && onRemove ? (
             <button
@@ -170,7 +360,7 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
             onClick={() => void runPrimary()}
             disabled={busy || showToken}
             data-testid={`extension-install-${ext.id}`}
-            className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+            className={PRIMARY_ACTION_CLASS}
           >
             {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <verb.Icon className="w-3 h-3" />}
             {busy ? verb.busy : verb.idle}

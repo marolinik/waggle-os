@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { Search, Loader2, Brain, Archive, Trash2, GitMerge, RotateCcw, Check, Save, AlertTriangle, ShieldOff } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -6,6 +7,7 @@ import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryKind, MemoryStatus } from '@/lib/types';
 import { MEMORY_KIND_META, memoryKindLabel } from '@/lib/harvest-kind-map';
 import { MemoryCard } from './MemoryCard';
+import { memoryListCacheKey, readMemoryListCache, writeMemoryListCache } from './memory-list-cache';
 import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { ConfidenceBadge } from '@/components/ui/confidence-badge';
@@ -65,17 +67,33 @@ export default function MemoryCenterTab({
 }: MemoryCenterTabProps = {}) {
   // Workspace-mind ops carry the workspace param; personal ops must not.
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const reduceMotion = !!useReducedMotion();
+  // Wave T Lane D (item 2): seed the initial list from the session cache so a
+  // Trust ↔ Memories tab switch re-shows its rows instantly instead of re-
+  // spinning (R13-V1 finding). A fresh remount always lands on the default
+  // filters, so the initial seed keys on those; the live key (below) also folds
+  // in the active filters for the mid-session mind-switch path.
+  const initialCacheKey = memoryListCacheKey(['mc', mind, wsParam, '', '', 0, '']);
+  const [memories, setMemories] = useState<Memory[]>(() => readMemoryListCache(initialCacheKey) ?? []);
+  const [loading, setLoading] = useState(() => readMemoryListCache(initialCacheKey) === undefined);
   const [error, setError] = useState<string | null>(null);
 
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'' | MemoryKind>('');
-  // Default to the curated Active view: deprecated/superseded frames are
-  // version archaeology — surfacing them by default reads as "my memory is
-  // full of junk" to a first-time user. 'All' stays one click away.
-  const [status, setStatus] = useState<'' | MemoryStatus>('active');
+  // Wave W Lane D (item 2): land on the FULL recent list (density). The curated
+  // 'active' view hid the imported backlog (status=unreviewed), which left a
+  // fresh open reading as "one card in a dark field". 'All' is now the honest
+  // default; the curated 'active' view stays one click away as a labeled chip.
+  const [status, setStatus] = useState<'' | MemoryStatus>('');
   const [minConfidence, setMinConfidence] = useState(0);
+
+  // Wave T Lane D (item 2): the live cache key folds in the server-side filters
+  // (this list fetches filtered). Held in a ref (updated every render) so the
+  // mind-switch reset effect can reseed without taking a filter dependency —
+  // reseeding on every keystroke would fight the debounced fetch.
+  const cacheKey = memoryListCacheKey(['mc', mind, wsParam, status, kind, minConfidence, q.trim()]);
+  const cacheKeyRef = useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
 
   const [selected, setSelected] = useState<Memory | null>(null);
   const [checked, setChecked] = useState<Set<string>>(new Set());
@@ -168,13 +186,13 @@ export default function MemoryCenterTab({
         minConfidence: minConfidence || undefined,
         limit: 200,
       });
-      if (seq === loadSeq.current) setMemories(res);
+      if (seq === loadSeq.current) { setMemories(res); writeMemoryListCache(cacheKey, res); }
     } catch (e) {
       if (seq === loadSeq.current) setError(e instanceof Error ? e.message : 'Failed to load memories');
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [q, kind, status, minConfidence, mind, wsParam]);
+  }, [q, kind, status, minConfidence, mind, wsParam, cacheKey]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0); // debounce text search only
@@ -192,10 +210,15 @@ export default function MemoryCenterTab({
   //    a misleading "No memories match these filters." empty state.
   useEffect(() => {
     loadSeq.current++;
+    // Wave T Lane D (item 2): reseed the new mind's rows from cache when the user
+    // has already visited this scope+filter this session — no re-spin — else fall
+    // back to the honest loader. (cacheKeyRef, not a dep, so a filter change here
+    // doesn't wipe selection/checklist.)
+    const cached = readMemoryListCache(cacheKeyRef.current);
     setSelected(null);
     setChecked(new Set());
-    setMemories([]);
-    setLoading(true);
+    setMemories(cached ?? []);
+    setLoading(cached === undefined);
     setEraseNotice(null);   // a receipt for the prior mind must not persist across the switch
     setSuppressionOpen(false); // the erased-source list is per-mind — collapse + drop stale rows
     setSuppressed([]);
@@ -348,8 +371,33 @@ export default function MemoryCenterTab({
     })();
   };
 
+  // Wave V Lane A (item 2): a Trust-hero-parity result-count header frames the
+  // list so a filtered-down set never reads as "one card floating in a black
+  // void". `displayed` is the deduped display list (F22) — computed once, reused
+  // by both the header and the grid. `filterDescriptor` names the active filters;
+  // Wave W Lane D (item 2) makes the full recent list (All) the default, so the
+  // descriptor rides the header only once the user narrows to a specific view.
+  const displayed = useMemo(() => dedupeMemoriesForDisplay(memories), [memories]);
+  const filterDescriptor = useMemo(() => {
+    const parts: string[] = [];
+    const statusLabel = STATUS_FILTERS.find((s) => s.value === status)?.label;
+    if (status && statusLabel) parts.push(statusLabel);
+    if (kind) parts.push(memoryKindLabel(kind));
+    const confLabel = CONFIDENCE_FILTERS.find((c) => c.value === minConfidence)?.label;
+    if (minConfidence && confLabel) parts.push(confLabel);
+    const query = q.trim();
+    if (query) parts.push(`matching "${query}"`);
+    return parts.join(' · ');
+  }, [status, kind, minConfidence, q]);
+
   return (
-    <div className="flex flex-col h-full">
+    // Wave U Lane E (item 4): a ~150ms fade-slide when this panel mounts on the
+    // Trust↔Memories tab swap (reuses the card-enter keyframe at the Wave T hover
+    // timing). motion-safe — reduced-motion keeps the instant swap.
+    <div
+      className="flex flex-col h-full"
+      style={reduceMotion ? undefined : { animation: 'card-enter 0.15s ease-out both' }}
+    >
       {/* Filter bar */}
       <div className="border-b border-border/50 p-2.5 space-y-2 bg-background/60">
         <div className="flex items-center gap-2">
@@ -380,7 +428,7 @@ export default function MemoryCenterTab({
               aria-pressed={status === s.value}
               className={cn(
                 'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
-                status === s.value ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
+                status === s.value ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
               )}
             >
               {s.label}
@@ -392,7 +440,7 @@ export default function MemoryCenterTab({
           <button
             onClick={() => setKind('')}
             aria-pressed={kind === ''}
-            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
           >
             All kinds
           </button>
@@ -401,7 +449,7 @@ export default function MemoryCenterTab({
               key={k}
               onClick={() => setKind(kind === k ? '' : k)}
               aria-pressed={kind === k}
-              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
             >
               {memoryKindLabel(k)}
             </button>
@@ -422,7 +470,7 @@ export default function MemoryCenterTab({
       {/* #7 P1 GDPR erasure receipt — dismissible confirmation of what was purged. */}
       {eraseNotice && (
         <div role="status" aria-live="polite" className="mx-2.5 mt-2 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-foreground">
-          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+          <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-honey" />
           <span className="flex-1">{eraseNotice}</span>
           <button onClick={() => setEraseNotice(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">×</button>
         </div>
@@ -464,14 +512,54 @@ export default function MemoryCenterTab({
         )}
       </div>
 
+      {/* Wave V Lane A (item 2): result-count header — Trust-hero parity. Rendered
+          only when there are rows to frame; the skeleton / empty / error branches
+          own the empty-list surface below. When a background refresh is in flight
+          over seeded rows, an inline "loading the rest…" status replaces the bare
+          floating card (the R15-V3 "one card in a black void" finding). */}
+      {!error && displayed.length > 0 && (
+        <div className="flex items-center gap-2 border-b border-border/50 bg-background/40 px-2.5 py-1.5">
+          <span className="text-[11px] font-medium text-foreground">
+            {memories.length} {memories.length === 1 ? 'memory' : 'memories'}
+          </span>
+          {filterDescriptor && (
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground">· filtered by {filterDescriptor}</span>
+          )}
+          {loading && (
+            <span role="status" aria-live="polite" aria-busy="true" className="ml-auto inline-flex shrink-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden />
+              loading the rest…
+            </span>
+          )}
+        </div>
+      )}
+
       {/* List */}
       <div className="flex-1 overflow-auto p-2.5">
         {loading && memories.length === 0 ? (
-          <div role="status" aria-live="polite" className="text-center py-12"><Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" /><p className="text-xs text-muted-foreground">Loading memories…</p></div>
+          // Wave U Lane E (item 3): a generic centered spinner told the user
+          // nothing about the surface shape. Render skeleton cards on the real
+          // MemoryCard geometry (two-column grid, title + 2 preview lines + a
+          // badge row) so the wait previews the list that's coming. The pulse is
+          // decorative (aria-hidden); the live region carries the announcement.
+          <div role="status" aria-live="polite" aria-busy="true" className="grid grid-cols-1 lg:grid-cols-2 gap-2 animate-pulse motion-reduce:animate-none">
+            <span className="sr-only">Loading memories…</span>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} aria-hidden className="rounded-xl border border-border bg-card/60 p-3">
+                <div className="h-3.5 w-2/3 rounded bg-muted mb-2" />
+                <div className="h-3 w-full rounded bg-muted mb-1" />
+                <div className="h-3 w-4/5 rounded bg-muted" />
+                <div className="mt-2.5 flex gap-1.5">
+                  <div className="h-4 w-14 rounded bg-muted" />
+                  <div className="h-4 w-10 rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : error ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-honey hover:underline">Retry</button>
           </div>
         ) : memories.length === 0 ? (
           <div role="status" aria-live="polite" className="text-center py-12">
@@ -492,7 +580,7 @@ export default function MemoryCenterTab({
                 by an embedded run/uuid/timestamp) collapse to one card with an ×N
                 badge. Row actions still key off the real representative id — nothing
                 is merged or deleted in the store. */}
-            {dedupeMemoriesForDisplay(memories).map(({ memory: m, duplicateCount }) => (
+            {displayed.map(({ memory: m, duplicateCount }) => (
               <MemoryCard
                 key={m.id}
                 memory={m}

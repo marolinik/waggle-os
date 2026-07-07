@@ -467,7 +467,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           onPointerDown={e => dragControls.start(e)}
         >
           <div className="flex items-center gap-2">
-            <Wand2 className="w-4 h-4 text-primary" />
+            <Wand2 className="w-4 h-4 text-honey" />
             <h3 className="text-sm font-display font-semibold text-foreground">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
           </div>
           <button
@@ -482,7 +482,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
         {/* AI Generation */}
         <div className="mx-5 mt-3 space-y-2">
           <div className="flex items-start gap-2 bg-primary/10 border border-primary/20 rounded-xl px-3 py-2">
-            <Sparkles className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+            <Sparkles className="w-3.5 h-3.5 text-honey shrink-0 mt-0.5" />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Describe your use case and AI will auto-fill all fields, or fill them manually below.
             </p>
@@ -514,7 +514,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1">
               <label className="text-[11px] text-muted-foreground font-medium">Template Name</label>
-              <Tooltip text="A short name for this template (e.g. 'Customer Support', 'Data Pipeline')"><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="A short name for this template (e.g. 'Customer Support', 'Data Pipeline')"><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Customer Support Hub"
               className="w-full bg-muted/50 rounded-xl text-[11px] h-auto py-2" />
@@ -524,7 +524,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1">
               <label className="text-[11px] text-muted-foreground font-medium">Description</label>
-              <Tooltip text="Describe the purpose and use case. This helps AI understand the workspace domain."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="Describe the purpose and use case. This helps AI understand the workspace domain."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <textarea value={description} onChange={e => setDescription(e.target.value)}
               placeholder="e.g. Handle customer tickets, track satisfaction…" rows={2}
@@ -535,7 +535,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1.5">
               <label className="text-[11px] text-muted-foreground font-medium">Category</label>
-              <Tooltip text="Categorize this template so it's easy to find via filters."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="Categorize this template so it's easy to find via filters."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {TEMPLATE_CATEGORIES.filter(c => c.id !== 'all').map(cat => (
@@ -554,7 +554,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1.5">
               <label className="text-[11px] text-muted-foreground font-medium">Default Persona</label>
-              <Tooltip text="The AI persona sets the agent's behavior style for workspaces using this template."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="The AI persona sets the agent's behavior style for workspaces using this template."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {TEMPLATE_PERSONAS.map(p => {
@@ -565,7 +565,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
                     className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
                       isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
-                    <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                    <Icon className={`w-4 h-4 ${isSelected ? 'text-honey' : 'text-muted-foreground'}`} />
                     <span className="text-[11px] text-muted-foreground text-center leading-tight">{p.name}</span>
                   </button>
                 );
@@ -577,7 +577,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1">
               <Plug className="w-3 h-3 text-muted-foreground" />
-              <Tooltip text="Select which integrations (GitHub, Slack, Email, etc.) this template pre-configures."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="Select which integrations (GitHub, Slack, Email, etc.) this template pre-configures."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <ChipPicker label="Connectors" options={availableConnectors} selected={selectedConnectors} onChange={setSelectedConnectors} />
           </div>
@@ -586,7 +586,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1">
               <Terminal className="w-3 h-3 text-muted-foreground" />
-              <Tooltip text="Slash commands the agent can run in workspaces using this template."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="Slash commands the agent can run in workspaces using this template."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <ChipPicker label="Suggested Commands"
               options={AVAILABLE_COMMANDS.map(c => ({ id: c.id, label: c.label, desc: c.desc }))}
@@ -597,7 +597,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           <div>
             <div className="flex items-center gap-1 mb-1">
               <label className="text-[11px] text-muted-foreground font-medium">Starter Memory</label>
-              <Tooltip text="One instruction per line. Seeds the agent's memory so it knows the workspace context from the start."><Info className="w-3 h-3 text-primary/60 cursor-help" /></Tooltip>
+              <Tooltip text="One instruction per line. Seeds the agent's memory so it knows the workspace context from the start."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
             <textarea value={starterMemory} onChange={e => setStarterMemory(e.target.value)}
               placeholder={"e.g. This workspace tracks customer support tickets.\nKey workflow: triage → investigate → respond → close."} rows={3}
@@ -774,11 +774,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 <div className="flex items-center gap-1">
                   <label className="text-xs text-muted-foreground">Template</label>
                   <Tooltip text="Start from a pre-configured template with persona, tools, and starter memory already set up">
-                    <Info className="w-3 h-3 text-primary/60 cursor-help" />
+                    <Info className="w-3 h-3 text-honey/60 cursor-help" />
                   </Tooltip>
                 </div>
                 <button onClick={() => setShowTemplateCreator(true)}
-                  className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors">
+                  className="flex items-center gap-1 text-[11px] text-honey hover:text-honey/80 transition-colors">
                   <Plus className="w-3 h-3" /> New Template
                 </button>
               </div>
@@ -844,11 +844,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                             className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-full ${
                               isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                             }`}>
-                            <Icon className={`w-4 h-4 ${isSelected ? 'text-primary' : 'text-muted-foreground'}`} />
+                            <Icon className={`w-4 h-4 ${isSelected ? 'text-honey' : 'text-muted-foreground'}`} />
                             <span className="text-[11px] text-muted-foreground text-center leading-tight truncate w-full">
                               {tmpl.name.length > 12 ? tmpl.name.split(' ')[0] : tmpl.name}
                             </span>
-                            {!tmpl.builtIn && <span className="text-[11px] text-primary/60">custom</span>}
+                            {!tmpl.builtIn && <span className="text-[11px] text-honey/60">custom</span>}
                           </button>
                         </Tooltip>
                         <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -943,7 +943,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                         <span key={c} className="px-1.5 py-0.5 rounded bg-secondary/50 text-[11px] text-muted-foreground">{c}</span>
                       ))}
                       {tmpl.suggestedCommands.slice(0, 4).map(cmd => (
-                        <span key={cmd} className="px-1.5 py-0.5 rounded bg-primary/10 text-[11px] text-primary font-mono">{cmd}</span>
+                        <span key={cmd} className="px-1.5 py-0.5 rounded bg-primary/10 text-[11px] text-honey font-mono">{cmd}</span>
                       ))}
                     </div>
                     <p className="text-[11px] text-muted-foreground/60 mt-1">Persona: {tmpl.persona}</p>
@@ -1088,7 +1088,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                         }`}
                       >
                         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <Users className="w-4 h-4 text-primary" />
+                          <Users className="w-4 h-4 text-honey" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-[11px] font-medium text-foreground truncate">{g.name}</p>
@@ -1096,7 +1096,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                             {g.strategy} · {g.memberCount} agent{g.memberCount !== 1 ? 's' : ''}
                           </p>
                         </div>
-                        {selectedGroupId === g.id && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                        {selectedGroupId === g.id && <Check className="w-3.5 h-3.5 text-honey shrink-0" />}
                       </button>
                     ))
                   )}

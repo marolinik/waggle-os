@@ -1,50 +1,45 @@
-# Persona Bee Sprites
+# Persona Bee Avatars
 
-AI-generated bee mascots for the 22 Waggle personas, mapped 8→22 via
-`apps/web/src/lib/personas.ts` (AVATAR_MAP).
+AI-generated bee mascots — **one unique avatar per Waggle persona (22/22)**,
+wired in `apps/web/src/lib/personas.ts` (AVATAR_MAP, 1:1 by persona id).
 
-## Style
+**Wave Q (2026-07-06): the whole set was redrawn in the canonical
+flat-geometric hex-bee language** — the same style as the landing personas grid
+(`apps/www/public/brand/bee-*-dark.png`). The R9 5-judge panel flagged the
+previous glossy cel-shaded sticker set as a second illustration dialect
+("two mascot languages"); one dialect now covers landing + app.
 
-Cute stylized cartoon bee, centered square composition, front-facing,
-round friendly body with honey-amber gradient (#E5A000) and soft black
-stripes, large expressive black eyes with white highlights, translucent
-iridescent wings, dark outline, modern flat illustration with subtle
-cel-shading, simple soft honey-glow background. Each sprite carries a
-persona-cluster prop (glasses + bar chart, magnifying glass + book, etc.).
+## Style (canonical)
 
-## Regeneration
+Flat geometric vector bee: hexagonal head, simple black dot eyes with white
+glints, small smile, black-striped hexagon body, thick black outlines directly
+on the shapes, flat golden honey palette (#e5a000 family, ~40° hue), NO
+gradients, NO glow, NO background scene, transparent background. Each avatar
+carries one distinct persona prop (quill+hex notebook, hex scales, megaphone,
+interlocking hex gears, …). Reads clearly at 64px.
 
-Uses the `nano-banana` CLI (Gemini 3.1 Flash). API key at `~/.nano-banana/.env`.
+## Regeneration recipe (proven 2026-07-06)
 
-**Base template**, substitute `[ACTION]`:
+1. Generate with `nano-banana` (key: `~/.nano-banana/.env`; pass `--api-key`
+   if a stale `GOOGLE_API_KEY` env shadows it), using THREE style references
+   from the landing set + transparency:
 
-```
-Cute stylized cartoon bee mascot, centered square composition,
-front-facing, round friendly body with honey-amber gradient and soft
-black stripes, large expressive black eyes with white highlights,
-translucent iridescent wings, dark outline, modern flat illustration
-with subtle cel-shading, simple soft honey-glow background, [ACTION].
-Minimal detail, strong silhouette, suitable for a 64px avatar icon.
-No text.
-```
+   ```bash
+   nano-banana "<BASE + persona prop>" \
+     -r bee-builder-dark.png -r bee-hunter-dark.png -r bee-orchestrator-dark.png \
+     -t -m pro -s 1K -a 1:1 -o <persona-id> -d <outdir>
+   ```
 
-## Per-persona actions
+   Batch script with all 22 prompts: session scratchpad `gen-flat-avatars.sh`
+   (2026-07-06); BASE prompt is embedded there.
 
-| File | Cluster | ACTION |
-|---|---|---|
-| analytics.jpeg | data / metrics | wearing round glasses, holding a small colorful floating bar chart showing rising columns |
-| content-writer.jpeg | writing / creative | holding a classic fountain pen, a small open notebook floating beside with faint handwritten lines, focused writing pose |
-| forecaster.jpeg | planning / strategy | holding a rolled parchment scroll in one hand and a small brass compass in the other, thoughtful forward-looking expression as if planning a route |
-| hook-analyzer.jpeg | code / review | wearing large round headphones, holding a magnifying glass inspecting floating code brackets in a speech bubble, analytical alert pose |
-| publisher.jpeg | broadcast / comms | holding a small amber megaphone raised in one hand, a mail envelope floating beside, confident announcing pose |
-| researcher.jpeg | investigation | holding a magnifying glass peering at a small floating book, curious alert expression |
-| synthesizer.jpeg | general / connector | holding a glowing amber lightbulb in one hand, faint connection lines radiating outward, eureka-moment inspired expression |
-| trend-detector.jpeg | sales / intel | holding small binoculars raised to the eyes, a tiny radar-dish antenna on the head, forward-leaning scouting pose, alert and focused |
+2. **Palette-correct** — generations consistently come out ~30° burnt-orange
+   instead of the refs' ~40° gold. Deterministic PIL pass (scratchpad
+   `fix-avatars.py`): halo rim → transparent, interior near-white → warm cream
+   #f7e8c8, orange family +10.5° hue / +0.02 sat. Verify: dominant hue of
+   opaque colored pixels should land 39-41°.
 
-## Regen command
+3. Drop the PNGs here named `<persona-id>.png` — imports in
+   `lib/personas.ts` are 1:1 by id.
 
-```bash
-nano-banana "BASE_TEMPLATE_WITH_ACTION" -o <persona> -d <dir> -s 1K -a 1:1
-```
-
-Cost per image: ~$0.08 (Flash, 1K). Full set of 8: ~$0.65.
+Cost: ~$0.10/image (pro, 1K). Full 22-set ≈ $2.2.

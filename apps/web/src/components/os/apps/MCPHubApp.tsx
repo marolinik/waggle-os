@@ -320,14 +320,14 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
 
       {initialLoading && (
         <div className="flex items-center justify-center py-12" role="status" aria-live="polite">
-          <Loader2 className="w-6 h-6 text-primary animate-spin" />
+          <Loader2 className="w-6 h-6 text-honey animate-spin" />
         </div>
       )}
 
       {!initialLoading && error && (
         <div role="alert" className="text-center py-8">
           <p className="text-xs text-destructive mb-2">{error}</p>
-          <button onClick={() => void load()} className="text-xs text-primary hover:underline">Retry</button>
+          <button onClick={() => void load()} className="text-xs text-honey hover:underline">Retry</button>
         </div>
       )}
 
@@ -374,7 +374,7 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
             ].map(link => (
               <li key={link.url}>
                 <a href={link.url} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:text-primary/80">
+                  className="inline-flex items-center gap-1 text-honey hover:text-honey/80">
                   <ExternalLink className="w-3 h-3" /> {link.name}
                 </a>
               </li>

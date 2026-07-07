@@ -172,7 +172,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       <DialogContent className="sm:max-w-md bg-background border-border" data-testid="spawn-agent-dialog">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-foreground">
-            <Rocket className="w-5 h-5 text-primary" />
+            <Rocket className="w-5 h-5 text-honey" />
             {step === 'config' ? 'New Agent' : 'Confirm Launch'}
           </DialogTitle>
           <DialogDescription>
@@ -214,7 +214,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                         onClick={() => setForm(f => ({ ...f, workspaceId: ws.id }))}
                         className={`px-2.5 py-1.5 text-xs rounded-lg border text-left transition-all truncate ${
                           form.workspaceId === ws.id
-                            ? 'border-primary bg-primary/10 text-primary ring-1 ring-primary/30'
+                            ? 'border-primary bg-primary/10 text-honey ring-1 ring-primary/30'
                             : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground hover:bg-secondary/40'
                         }`}
                       >
@@ -257,7 +257,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                   {showPersona ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                   <span>Persona override</span>
                   {form.persona && (
-                    <span className="text-[11px] text-primary ml-1">({PERSONAS.find(p => p.id === form.persona)?.name})</span>
+                    <span className="text-[11px] text-honey ml-1">({PERSONAS.find(p => p.id === form.persona)?.name})</span>
                   )}
                 </button>
                 {showPersona && (
@@ -339,7 +339,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                         onClick={() => setForm(f => ({ ...f, model: m }))}
                         className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
                           form.model === m
-                            ? 'border-primary bg-primary/10 text-primary'
+                            ? 'border-primary bg-primary/10 text-honey'
                             : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground'
                         }`}
                       >

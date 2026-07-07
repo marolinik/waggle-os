@@ -94,7 +94,7 @@ const Sidebar = ({
             />
           )}
           <Icon
-            className={`h-[19px] w-[19px] shrink-0 ${active ? "text-[var(--honey)]" : ""}`}
+            className={`h-[19px] w-[19px] shrink-0 ${active ? "text-[var(--honey-text)]" : ""}`}
             strokeWidth={1.7}
           />
           <span className="hidden flex-1 text-sm font-medium lg:inline">{item.label}</span>
@@ -108,7 +108,15 @@ const Sidebar = ({
     );
   };
 
-  const zoneLabel = "hidden lg:flex items-center gap-2 px-2.5 pt-3.5 pb-1.5 font-mono text-[9.5px] uppercase tracking-[0.14em] text-[var(--text-dim)]";
+  // Wave V Lane F (a11y): the section labels sit on --bg-2, which is one step
+  // darker than --bg in light — where --text-dim measured 4.47:1 (sub-AA at
+  // 9.5px). --text-muted clears it on --bg-2 in both themes (4.77:1 light /
+  // 6.31:1 dark) while staying quieter than body text. (--text-dim stays tuned
+  // for its --bg surfaces elsewhere; fixing it globally would over-lighten those.)
+  // Wave X Lane C: 9.5px/0.14em uppercase in --text-muted read as garbled noise
+  // (video judge). Bumped to 10.5px and eased tracking to 0.10em so the zone
+  // eyebrows ("PINNED · POWER TOOLS" / "GENERAL") stay legible at 1×.
+  const zoneLabel = "hidden lg:flex items-center gap-2 px-2.5 pt-3.5 pb-1.5 font-mono text-[10.5px] uppercase tracking-[0.1em] text-[var(--text-muted)]";
 
   return (
     <TooltipProvider>
@@ -156,7 +164,7 @@ const Sidebar = ({
           data-testid="sidebar-command"
           aria-label="Search and commands"
           onClick={onOpenCommand}
-          className="flex items-center justify-center gap-3 rounded-[10px] border border-dashed border-[var(--line-strong)] px-2.5 py-2.5 text-left text-[var(--text-muted)] transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--honey-wash)] hover:text-[var(--honey)] lg:justify-start"
+          className="flex items-center justify-center gap-3 rounded-[10px] border border-dashed border-[var(--line-strong)] px-2.5 py-2.5 text-left text-[var(--text-muted)] transition-colors hover:border-[var(--honey-line)] hover:bg-[var(--honey-wash)] hover:text-[var(--honey-text)] lg:justify-start"
         >
           <Search className="h-[18px] w-[18px] shrink-0" strokeWidth={1.7} />
           <span className="hidden flex-1 text-[13px] font-semibold lg:inline">Search &amp; commands</span>
@@ -172,7 +180,7 @@ const Sidebar = ({
           data-testid="nav-spawn-agent"
           aria-label="New Agent"
           onClick={onSpawnAgent}
-          className="mt-1.5 flex items-center justify-center gap-2.5 rounded-[10px] border border-[var(--line)] bg-card px-2.5 py-2 text-left text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--honey)] lg:justify-start"
+          className="mt-1.5 flex items-center justify-center gap-2.5 rounded-[10px] border border-[var(--line)] bg-card px-2.5 py-2 text-left text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--honey-text)] lg:justify-start"
         >
           <Plus className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
           <span className="hidden flex-1 text-[13px] font-semibold lg:inline">New Agent</span>

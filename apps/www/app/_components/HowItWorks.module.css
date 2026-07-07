@@ -1,6 +1,6 @@
 .header {
   max-width: 720px;
-  margin: 0 auto 64px;
+  margin: 0 auto 52px;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -10,17 +10,42 @@
 .steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0;
+  gap: 24px;
   position: relative;
 }
 
 .step {
   position: relative;
-  padding: 0 32px;
+  padding: 30px 28px 32px;
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, var(--hive-900) 0%, var(--hive-950) 100%);
+  border: 1px solid var(--line-soft);
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.step:hover {
+  border-color: var(--honey-line);
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-honey);
 }
 
-.step + .step {
-  border-left: 1px solid var(--line-soft);
+/* Flow connector: a honey chevron seated in the gap before every step after
+   the first, so the three cards read as one sequence (01 → 02 → 03).
+   Each step is wrapped in a <Reveal> div, so the chevron hangs off the reveal
+   wrapper (the actual grid cell), not the inner .step card. */
+.steps > :global(.reveal) {
+  position: relative;
+}
+.steps > :global(.reveal) + :global(.reveal)::before {
+  content: '';
+  position: absolute;
+  top: 51px;
+  left: -22px;
+  width: 20px;
+  height: 20px;
+  background: no-repeat center / contain
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M7 4l6 6-6 6' stroke='%23e9a52c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  opacity: 0.75;
+  z-index: 2;
 }
 
 .stepNumber {
@@ -31,11 +56,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border-radius: 12px;
   border: 1px solid var(--honey-line);
   background: var(--honey-wash);
+  box-shadow: 0 0 20px rgba(233, 165, 44, 0.12);
   margin-bottom: 22px;
 }
 
@@ -55,16 +81,13 @@
 @media (max-width: 860px) {
   .steps {
     grid-template-columns: 1fr;
-    gap: 40px;
+    gap: 20px;
   }
 
-  .step {
-    padding: 0;
-  }
-
-  .step + .step {
-    border-left: none;
-    border-top: 1px solid var(--line-soft);
-    padding-top: 40px;
+  /* Chevrons point downward when the flow stacks vertically. */
+  .steps > :global(.reveal) + :global(.reveal)::before {
+    top: -21px;
+    left: 30px;
+    transform: rotate(90deg);
   }
 }

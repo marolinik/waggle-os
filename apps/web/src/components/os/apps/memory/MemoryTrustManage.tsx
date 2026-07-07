@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Search, Loader2, Brain, Pencil, Trash2, Clock, Check, Save } from 'lucide-react';
+import { useReducedMotion } from 'framer-motion';
+import { Search, Loader2, Brain, Pencil, Trash2, Clock, Check, Save, Tag } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
+import { memoryListCacheKey, readMemoryListCache, writeMemoryListCache } from './memory-list-cache';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import type { Memory, MemoryStatus } from '@/lib/types';
+import { dedupeMemoriesForDisplay } from '@/lib/memory-dedup';
+import { buildMemoryPreview } from '@/lib/memory-text-normalize';
 import { frameSourceLabel } from '@/lib/frame-source';
 import { ConfidenceRing } from '../../warm';
 import { DetailDrawer } from '@/components/ui/detail-drawer';
@@ -34,6 +38,9 @@ interface MemoryTrustManageProps {
   openMemoryId?: string | null;
   /** Called once the openMemoryId request has been handled (one-shot). */
   onOpenConsumed?: () => void;
+  /** Reports the live working-set size after each load — the host sizes the
+   *  hero from it (full manifesto only while the store is effectively empty). */
+  onTotal?: (total: number) => void;
 }
 
 type TrustFilter = 'all' | 'stale' | 'needs_confirm';
@@ -78,24 +85,131 @@ interface DimensionChipProps {
   value: string;
   label: string;
   tone?: 'default' | 'healthy' | 'attention';
+  /** Round-6 fix 2c: when set the chip is a real button (e.g. "to review" →
+   *  seeds the needs-confirm filter) instead of a static stat. */
+  onClick?: () => void;
+  title?: string;
 }
 
-/** A subordinate, non-summing "dimension" of the hive (fresh / stale / awaiting
- *  confirm). These overlap — they are NOT parts of the total, so they render as
+/** A subordinate, non-summing "dimension" of the hive (fresh / stale / to
+ *  review). These overlap — they are NOT parts of the total, so they render as
  *  small inline chips beneath the headline count, never as equal-weight cards. */
-function DimensionChip({ value, label, tone = 'default' }: DimensionChipProps) {
-  const valueColor =
-    tone === 'healthy' ? 'text-[var(--healthy)]' : tone === 'attention' ? 'text-[var(--attention)]' : 'text-[var(--text-2)]';
+function DimensionChip({ value, label, tone = 'default', onClick, title }: DimensionChipProps) {
+  // Round-9 Lane C: the chips are subordinate to the one headline count, so the
+  // value reads smaller/quieter (fix 2). A zero (or not-applicable "—") count
+  // renders in dim text with NO surface wash so it reads as a calm "nothing
+  // here", never as a disabled control (fix 3); non-zero counts keep their tone.
+  const isZeroish = value === '0' || value === '—';
+  const valueColor = isZeroish
+    ? 'text-[var(--text-dim)]'
+    : tone === 'healthy'
+      ? 'text-[var(--healthy)]'
+      : tone === 'attention'
+        ? 'text-[var(--attention)]'
+        : 'text-[var(--text-2)]';
+  const className = cn(
+    'inline-flex items-baseline gap-1.5 rounded-full border px-2.5 py-1',
+    isZeroish
+      ? 'border-[var(--line-soft)] bg-transparent'
+      : cn(
+          'bg-[var(--surface-2)]',
+          tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
+        ),
+    onClick && 'cursor-pointer transition-colors hover:border-[var(--honey-line)]',
+  );
+  const inner = (
+    <>
+      <span className={cn('text-[12px] font-[650] leading-none tracking-[-0.01em]', valueColor)}>{value}</span>
+      <span className="text-[11.5px] text-[var(--text-muted)]">{label}</span>
+    </>
+  );
+  if (onClick) {
+    return (
+      <button type="button" onClick={onClick} title={title} className={className}>
+        {inner}
+      </button>
+    );
+  }
+  return <span title={title} className={className}>{inner}</span>;
+}
+
+// Wave V Lane A (item 1): the count-up entrance is a once-per-APP-SESSION
+// flourish, not a per-mount one. Gating it on a module-level flag (mirrors
+// AllWorkspacesApp's shelfSessionResolved) means a Trust↔Memories tab-return
+// remount — or any background refresh — initializes straight to the real number
+// instead of re-animating from 0, so the hero can never paint a transient 0 on
+// re-entry. Reset via resetMemoryHeroSession() (test-only).
+let heroCountAnimatedThisSession = false;
+
+/** Wave T Lane D (item 3) / Wave V Lane A (item 1) — the hero total LANDS
+ *  instead of popping: a ~600ms ease-out count-up the FIRST time a real count
+ *  arrives THIS app session, then settles instantly on every later mount and
+ *  refresh (so a tab-return never re-animates). Honors prefers-reduced-motion
+ *  (instant set, no animation). Wave W Lane D (item 1): the count-up FLOORS at
+ *  ceil(15% of target) so a 2fps capture can never catch a "0 Memories" frame
+ *  above rendered rows (that reads as a data bug). An empty hive (total 0) floors
+ *  at 0 — a legitimate landed value; the loading/unknown state is gated upstream
+ *  (StatBarSkeleton), so this never renders a false loading-zero. */
+function HeroCount({ total, capped, reduceMotion, floor }: { total: number; capped: boolean; reduceMotion: boolean; floor: number }) {
+  // Wave X Lane A: the count-up must never start (or pass through) a value BELOW
+  // a sub-stat chip, which renders its true value instantly. `floor` is the
+  // largest dimension value on screen; starting there makes the contradiction a
+  // judge caught ("68 total" above "445 to review") structurally impossible,
+  // while keeping the felt climb whenever the breakdown is small.
+  const startFrom = (t: number) => Math.min(t, Math.max(Math.ceil(t * 0.15), floor));
+  const [display, setDisplay] = useState(() =>
+    reduceMotion || heroCountAnimatedThisSession ? total : startFrom(total),
+  );
+  useEffect(() => {
+    if (reduceMotion || heroCountAnimatedThisSession) {
+      heroCountAnimatedThisSession = true;
+      setDisplay(total);
+      return;
+    }
+    heroCountAnimatedThisSession = true;
+    const from = startFrom(total);
+    const durationMs = 600;
+    const start = performance.now();
+    let raf = requestAnimationFrame(function tick(now: number) {
+      const p = Math.min(1, (now - start) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic — decisive, then settles
+      setDisplay(Math.round(from + (total - from) * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else setDisplay(total);
+    });
+    return () => cancelAnimationFrame(raf);
+    // startFrom closes over `floor`; total/reduceMotion/floor are the real inputs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [total, reduceMotion, floor]);
+  const text = capped && display >= FETCH_LIMIT ? `${FETCH_LIMIT}+` : String(display);
   return (
     <span
-      className={cn(
-        'inline-flex items-baseline gap-1.5 rounded-full border bg-[var(--surface-2)] px-2.5 py-1',
-        tone === 'attention' ? 'border-[color-mix(in_srgb,var(--attention)_30%,transparent)]' : 'border-[var(--line-soft)]',
-      )}
+      data-testid="memory-trust-total"
+      className="text-[34px] font-[750] leading-none tracking-[-0.02em] text-[var(--text)]"
     >
-      <span className={cn('text-[13px] font-[700] leading-none tracking-[-0.01em]', valueColor)}>{value}</span>
-      <span className="text-[11.5px] text-[var(--text-muted)]">{label}</span>
+      {text}
     </span>
+  );
+}
+
+/** Wave T Lane D (item 1) — the loading state for the stat bar. A trust surface
+ *  must never show a false "0 Memories in this hive" while the count is still in
+ *  flight, so the whole stat block renders as a shimmer skeleton until the real
+ *  numbers land. Decorative (aria-hidden) — the row list below owns the
+ *  "Loading memories…" live announcement. */
+function StatBarSkeleton() {
+  return (
+    <div data-testid="memory-trust-stat-skeleton" aria-hidden="true" className="animate-pulse motion-reduce:animate-none">
+      <div className="flex items-center gap-3">
+        <div className="h-[34px] w-16 rounded-[10px] bg-[var(--surface-2)]" />
+        <div className="h-3.5 w-52 max-w-[60%] rounded bg-[var(--surface-2)]" />
+      </div>
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        {[64, 88, 96, 72].map((w) => (
+          <div key={w} className="h-7 rounded-full bg-[var(--surface-2)]" style={{ width: w }} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -107,39 +221,102 @@ interface MemoryRowProps {
   onForget: () => void;
   onConfirm: () => void;
   busy: boolean;
+  /** Display-layer dedup (F22, Wave F fix 3b): how many near-identical records
+   *  this row represents. When > 1 an "×N" badge renders — purely informational,
+   *  nothing is merged or deleted in the store. */
+  duplicateCount?: number;
+  /** Wave T Lane D (item 3): staggered entrance delay (ms) so the confidence-ring
+   *  rows draw in one after another as the data lands. Undefined → no animation
+   *  (reduced-motion). CSS runs once per row mount; persisted rows never re-run. */
+  enterDelayMs?: number;
 }
 
-function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps) {
+function MemoryRow({ memory, onOpen, onForget, onConfirm, busy, duplicateCount, enterDelayMs }: MemoryRowProps) {
   const fresh = freshness(memory.createdAt);
   const srcLabel = frameSourceLabel(memory.source);
   const stale = isStale(memory);
   const needsConfirm = memory.status === 'unreviewed';
+  // Round-6 fix 2b: the ring renders only when a confidence actually exists;
+  // the unscored state is a single quiet inline badge on the provenance row
+  // (the old stacked "unscored / CONF" micro-label was illegible).
+  const scored = typeof memory.confidence === 'number' && Number.isFinite(memory.confidence);
+  // Round-5..9: raw harvest strings read as log output — buildMemoryPreview
+  // leads with the first line as a title, clamps the rest as a muted excerpt,
+  // strips markdown tokens, skips machine-provenance leads, and (round-9 Lane C
+  // fix 1) lifts a "session handoff <date> sN" slug out of the title into the
+  // provenance row's titleMeta. Pure display split; the drawer stays raw.
+  const preview = buildMemoryPreview(memory.content);
+  // Wave-S Lane C: compress the mono provenance dump (handoff meta + source)
+  // into ONE FILLED glyph chip; the full string lives in the tooltip
+  // ("transparency without terminal dump"). The M-id stays visible below — it
+  // is the correction handle.
+  const provFull = [preview.titleMeta, srcLabel ? `source: ${srcLabel}` : null].filter(Boolean).join(' · ');
+  const provShort = srcLabel ?? preview.titleMeta?.split('·')[0].trim();
   return (
     <li
+      style={enterDelayMs != null ? { animation: 'card-enter 0.32s ease-out both', animationDelay: `${enterDelayMs}ms` } : undefined}
       className={cn(
         'rounded-[18px] border bg-[var(--surface)] p-4 transition-colors',
         stale ? 'border-[color-mix(in_srgb,var(--attention)_30%,var(--line-soft))]' : 'border-[var(--line-soft)]',
       )}
     >
       <div className="flex items-start gap-3.5">
-        <ConfidenceRing value={memory.confidence} className="mt-0.5" />
+        {scored && <ConfidenceRing value={memory.confidence} className="mt-0.5" />}
         <div className="min-w-0 flex-1">
-          <button type="button" onClick={onOpen} className="block w-full text-left">
-            <p className="line-clamp-3 text-[14.5px] leading-[1.5] text-[var(--text)] hover:text-[var(--honey)]">
-              {memory.content}
+          <button type="button" onClick={onOpen} className="group block w-full text-left">
+            <p className="line-clamp-2 text-[14.5px] font-medium leading-[1.45] text-[var(--text)] group-hover:text-[var(--honey-text)]">
+              {preview.title}
             </p>
+            {preview.excerpt && (
+              <p className="mt-0.5 line-clamp-2 text-[13px] leading-[1.5] text-[var(--text-muted)]">
+                {preview.excerpt}
+              </p>
+            )}
           </button>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[10.5px] text-[var(--text-dim)]">
-            <span className="text-[var(--intel)]">⬡ M-{memory.id}</span>
-            {srcLabel && <span>source: {srcLabel}</span>}
+          {/* Provenance micro-metadata is trust-critical — 12px + --text-muted
+              (AA), not the sub-11px --text-dim decoration tier (a11y review). */}
+          <div className="mt-2 flex flex-wrap items-center gap-x-3.5 gap-y-1 font-mono text-[12px] text-[var(--text-muted)]">
+            {/* Round-9 Lane C fix 4: the M-id used a violet (--intel) that read as
+                an unmanaged third hue on this warm surface — fold it into the
+                neutral tier. Wave X Lane B: --text-dim is 4.09:1 on --surface-2
+                at 12px (sub-AA) and this is the memory's correction HANDLE, not
+                decoration — matched to its row's --text-muted (5.6:1). */}
+            <span className="text-[var(--text-muted)]">⬡ M-{memory.id}</span>
+            {/* Wave-S Lane C: handoff meta + source folded into one glyph chip
+                (short label at rest, full provenance in the tooltip). */}
+            {provShort && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 font-sans text-[11px] text-[var(--text-muted)]"
+                title={provFull}
+              >
+                <Tag className="h-3 w-3 shrink-0" strokeWidth={1.8} aria-hidden />
+                {provShort}
+              </span>
+            )}
+            {!scored && (
+              <span
+                className="rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-2 py-0.5 font-sans text-[11px] text-[var(--text-muted)]"
+                title="No confidence stored for this memory — only harvested memories carry a score."
+              >
+                not scored yet
+              </span>
+            )}
             <span className={fresh.state === 'fresh' ? 'text-[var(--healthy)]' : 'text-[var(--attention)]'}>
               ● {fresh.label}
             </span>
+            {duplicateCount != null && duplicateCount > 1 && (
+              <span
+                className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-1.5 py-0.5 text-[var(--text-muted)]"
+                title={`${duplicateCount} near-identical memories collapsed here — display only, nothing was merged or deleted.`}
+              >
+                ×{duplicateCount}
+              </span>
+            )}
           </div>
 
           {stale && (
             <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-3 py-2">
-              <Clock className="h-4 w-4 shrink-0 text-[var(--honey)]" strokeWidth={1.9} />
+              <Clock className="h-4 w-4 shrink-0 text-[var(--honey-text)]" strokeWidth={1.9} />
               <span className="text-[12.5px] text-[var(--text-2)]">This is {ageLabel(memory.createdAt)} old — still true?</span>
               <div className="ml-auto flex gap-1.5">
                 <button
@@ -181,7 +358,7 @@ function MemoryRow({ memory, onOpen, onForget, onConfirm, busy }: MemoryRowProps
             onClick={onOpen}
             title="Edit / correct"
             aria-label={`Edit or correct memory M-${memory.id}`}
-            className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--honey-line)] hover:text-[var(--honey)]"
+            className="grid h-[30px] w-[30px] place-items-center rounded-[8px] border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:border-[var(--honey-line)] hover:text-[var(--honey-text)]"
           >
             <Pencil className="h-[15px] w-[15px]" strokeWidth={1.8} />
           </button>
@@ -209,10 +386,16 @@ const FILTERS: { id: TrustFilter; label: string }[] = [
   { id: 'needs_confirm', label: 'Needs confirm' },
 ];
 
-export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, openMemoryId, onOpenConsumed }: MemoryTrustManageProps) {
+export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, openMemoryId, onOpenConsumed, onTotal }: MemoryTrustManageProps) {
   const wsParam = mind === 'workspace' ? workspaceId : undefined;
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const reduceMotion = !!useReducedMotion();
+  // Wave T Lane D (item 2): session cache key — the Trust list fetches the whole
+  // working set (no server-side filters), so (mind, workspace) fully identifies
+  // it. Seeding from cache lets a tab-switch remount show its last rows instantly
+  // (no re-spin) while it refreshes silently underneath.
+  const cacheKey = memoryListCacheKey(['trust', mind, wsParam]);
+  const [memories, setMemories] = useState<Memory[]>(() => readMemoryListCache(cacheKey) ?? []);
+  const [loading, setLoading] = useState(() => readMemoryListCache(cacheKey) === undefined);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<TrustFilter>('all');
@@ -234,13 +417,13 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       // Fetch the whole working set (no q) so the stat bar reflects the HIVE,
       // not the current search (review M). Search filters client-side below.
       const res = await adapter.listMemories({ mind, workspaceId: wsParam, limit: FETCH_LIMIT });
-      if (seq === loadSeq.current) setMemories(res);
+      if (seq === loadSeq.current) { setMemories(res); writeMemoryListCache(cacheKey, res); }
     } catch (e) {
       if (seq === loadSeq.current) setError(e instanceof Error ? e.message : 'Failed to load memories');
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [mind, wsParam]);
+  }, [mind, wsParam, cacheKey]);
 
   // Defer to a macrotask so load() captures loadSeq AFTER the mind-reset effect
   // below bumps it on mount — otherwise the reset invalidates the in-flight load
@@ -250,11 +433,18 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     return () => clearTimeout(t);
   }, [load, reloadTick]);
 
-  // Mind switch clears everything in flight + on screen (ids collide across stores).
+  // Mind switch invalidates everything in flight + on screen (ids collide across
+  // stores). Wave T Lane D (item 2): reseed the new mind's rows from cache
+  // instead of blanking to a spinner — a scope the user has already visited this
+  // session re-shows instantly; a first visit still shows the honest loader.
   useEffect(() => {
     loadSeq.current++;
-    setSelected(null); setMemories([]); setLoading(true); setFilter('all');
-  }, [mind, wsParam]);
+    const cached = readMemoryListCache(cacheKey);
+    setSelected(null);
+    setMemories(cached ?? []);
+    setLoading(cached === undefined);
+    setFilter('all');
+  }, [cacheKey]);
 
   // J08 deep-link: Home's "N need review" banner lands here (Trust is the default
   // landing) → seed the "Needs confirm" filter.
@@ -279,6 +469,11 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     [memories],
   );
 
+  // Report the settled working-set size to the host (deterministic hero sizing).
+  useEffect(() => {
+    if (!loading) onTotal?.(live.length);
+  }, [live, loading, onTotal]);
+
   const stats = useMemo(() => {
     const total = live.length >= FETCH_LIMIT ? `${FETCH_LIMIT}+` : String(live.length);
     // W2D: the old "high confidence & fresh" conjunction was structurally ~0 —
@@ -295,6 +490,55 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     return { total, freshCount, highConf, staleCount, needsConfirm };
   }, [live]);
 
+  // Wave T Lane D (item 1): the count is UNKNOWN only while the first load is in
+  // flight with nothing on screen. Once loaded, 0 is a real value (empty hive),
+  // never a loading placeholder — so the stat bar shows a skeleton in that window
+  // instead of a false "0 Memories in this hive".
+  const totalUnknown = loading && memories.length === 0;
+  const totalNum = Math.min(live.length, FETCH_LIMIT);
+  const totalCapped = live.length >= FETCH_LIMIT;
+
+  // Wave R Lane E: order the subordinate dimension chips by value desc so the
+  // row never LEADS with a zero (the round-10 shot opened on "0 fresh"). Zero
+  // and not-applicable ("—") chips sink to the end, where their already-quiet
+  // styling reads as a calm "nothing here" rather than a headline. Ties keep
+  // the source order (Array.sort is stable).
+  const dimensionChips = useMemo(() => {
+    const chips: {
+      key: string;
+      value: string;
+      label: string;
+      tone: 'default' | 'healthy' | 'attention';
+      title?: string;
+      onClick?: () => void;
+    }[] = [
+      { key: 'fresh', value: stats.freshCount, label: 'fresh (last 7 days)', tone: stats.freshCount === '0' ? 'default' : 'healthy' },
+      { key: 'highConf', value: stats.highConf, label: 'high confidence', tone: stats.highConf === '—' || stats.highConf === '0' ? 'default' : 'healthy' },
+      { key: 'stale', value: stats.staleCount, label: 'stale · worth a review', tone: 'attention' },
+      // Round-6 fix 2c: "to review" jumps straight to the needs-confirm filter.
+      // Round-7 fix 4: the tooltip reframes a big count honestly (imported backlog).
+      {
+        key: 'review',
+        value: stats.needsConfirm,
+        label: 'to review',
+        tone: 'attention',
+        title: 'Most of these are imported memories waiting for a first look — reviewing a few at a time is plenty.',
+        onClick: () => setFilter('needs_confirm'),
+      },
+    ];
+    const rank = (v: string) => { const n = parseInt(v, 10); return Number.isNaN(n) ? -1 : n; };
+    return [...chips].sort((a, b) => rank(b.value) - rank(a.value));
+  }, [stats]);
+
+  // Wave X Lane A: the largest numeric dimension on screen — the hero count-up
+  // floors here so it can never animate through a value below a visible sub-stat
+  // (dimensionChips is value-desc, so the head is the max; non-numeric "—" → 0).
+  const maxDimensionValue = useMemo(() => {
+    const top = dimensionChips[0]?.value ?? '0';
+    const n = parseInt(top, 10);
+    return Number.isNaN(n) ? 0 : n;
+  }, [dimensionChips]);
+
   const shown = useMemo(() => {
     let set = live;
     if (filter === 'stale') set = set.filter(isStale);
@@ -303,6 +547,12 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
     if (ql) set = set.filter((m) => m.content.toLowerCase().includes(ql) || (m.title?.toLowerCase().includes(ql) ?? false));
     return set;
   }, [live, filter, q]);
+
+  // Wave F (fix 3b): same display-layer collapse the Memories tab uses (F22) —
+  // near-identical rows fold into one representative with an ×N badge. Render
+  // only; every underlying record stays in the store and row actions key off
+  // the representative's real id.
+  const shownDeduped = useMemo(() => dedupeMemoriesForDisplay(shown), [shown]);
 
   // One-shot: open a specific memory's editor when asked (the Why view's
   // "that memory is wrong → correct it" hands the id back here).
@@ -345,27 +595,41 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
   const openDetail = (m: Memory) => { setSelected(m); setDraft(m.content); };
 
   return (
-    <>
+    // Wave U Lane E (item 4): a ~150ms fade-slide when the Manage body mounts on
+    // the Trust↔Memories tab swap (same card-enter keyframe + Wave T hover
+    // timing as the Memories panel). The wrapper carries the parent's space-y-6
+    // so the stat-bar / search / rows rhythm is unchanged. motion-safe — reduced
+    // motion keeps the instant swap.
+    <div
+      className="space-y-6"
+      style={reduceMotion ? undefined : { animation: 'card-enter 0.15s ease-out both' }}
+    >
       {/* §3 stat bar — one TOTAL headline + subordinate, non-summing dimension
           chips. The three views overlap (a memory can be fresh AND awaiting
           confirm), so they must never read as a partition of the total. */}
       <div className="rounded-[18px] border border-[var(--line-soft)] bg-[var(--surface)] p-4 sm:p-5">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="text-[34px] font-[750] leading-none tracking-[-0.02em] text-[var(--text)]">{stats.total}</span>
-          <span className="text-[13.5px] text-[var(--text-muted)]">
-            Memories in this hive · {mind === 'workspace' ? 'this workspace' : 'personal mind'}
-          </span>
-        </div>
-        <div className="mt-3.5 flex flex-wrap gap-2">
-          {/* W2D: two independent dimensions instead of a near-always-0 conjunction. */}
-          <DimensionChip value={stats.freshCount} label="fresh (last 7 days)" tone={stats.freshCount === '0' ? 'default' : 'healthy'} />
-          <DimensionChip value={stats.highConf} label="high confidence" tone={stats.highConf === '—' || stats.highConf === '0' ? 'default' : 'healthy'} />
-          <DimensionChip value={stats.staleCount} label="stale · worth a review" tone="attention" />
-          <DimensionChip value={stats.needsConfirm} label="awaiting your confirm" tone="attention" />
-        </div>
-        <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
-          Overlapping views — a memory can be counted in more than one.
-        </p>
+        {totalUnknown ? (
+          <StatBarSkeleton />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <HeroCount total={totalNum} capped={totalCapped} reduceMotion={reduceMotion} floor={maxDimensionValue} />
+              <span className="text-[13.5px] text-[var(--text-muted)]">
+                Memories in this hive · {mind === 'workspace' ? 'this workspace' : 'personal mind'}
+              </span>
+            </div>
+            <div className="mt-3.5 flex flex-wrap gap-2">
+              {/* W2D: independent (non-summing) dimensions; Wave R Lane E orders them
+                  by value desc so a zero never leads the row (see dimensionChips). */}
+              {dimensionChips.map((c) => (
+                <DimensionChip key={c.key} value={c.value} label={c.label} tone={c.tone} title={c.title} onClick={c.onClick} />
+              ))}
+            </div>
+            <p className="mt-2.5 text-[11px] leading-snug text-[var(--text-muted)]">
+              Overlapping views — a memory can be counted in more than one.
+            </p>
+          </>
+        )}
       </div>
 
       {/* §4 search + filters */}
@@ -399,13 +663,16 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
             </button>
           );
         })}
-        {/* "Forgotten" is gated off — hard delete leaves no tombstone (no list to show). */}
+        {/* "Forgotten" is gated off — hard delete leaves no tombstone (no list to
+            show). Same contrast as the live chips (a11y: the old dim+opacity-50
+            treatment was near-invisible in both themes); disabled reads from the
+            dashed border + cursor + tooltip instead of low contrast. */}
         <button
           type="button"
           aria-disabled="true"
           aria-label="Forgotten filter unavailable — forgetting is permanent, there's no recoverable list (hard delete, by design)"
           title="Forgetting is permanent — there's no recoverable list (hard delete, by design)"
-          className="cursor-not-allowed rounded-[9px] border border-[var(--line-soft)] bg-[var(--surface)] px-3 py-2 text-[12.5px] font-semibold text-[var(--text-dim)] opacity-50"
+          className="cursor-not-allowed rounded-[9px] border border-dashed border-[var(--line-strong)] bg-[var(--surface)] px-3 py-2 text-[12.5px] font-semibold text-[var(--text-muted)]"
         >
           Forgotten
         </button>
@@ -420,7 +687,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
       ) : error ? (
         <div role="alert" className="py-12 text-center">
           <p className="mb-2 text-[13px] text-[var(--risk)]">{error}</p>
-          <button onClick={() => load()} className="text-[13px] text-[var(--honey)] hover:underline">Retry</button>
+          <button onClick={() => load()} className="text-[13px] text-[var(--honey-text)] hover:underline">Retry</button>
         </div>
       ) : shown.length === 0 ? (
         <div role="status" aria-live="polite" className="py-12 text-center">
@@ -437,11 +704,13 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
         </div>
       ) : (
         <ul className="grid gap-2.5">
-          {shown.map((m) => (
+          {shownDeduped.map(({ memory: m, duplicateCount }, i) => (
             <MemoryRow
               key={m.id}
               memory={m}
+              duplicateCount={duplicateCount}
               busy={busy}
+              enterDelayMs={reduceMotion ? undefined : Math.min(i, 10) * 40}
               onOpen={() => openDetail(m)}
               onForget={() => forget(m)}
               onConfirm={() => confirm(m)}
@@ -514,15 +783,23 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
               />
             </div>
             <EvidencePanel source={selected.source} sourceId={selected.sourceId} sourceUrl={selected.sourceUrl} evidence={selected.evidence} />
-            <p className="text-[11px] text-[var(--text-muted)]">
+            <p className="text-[12px] text-[var(--text-muted)]">
               Created {new Date(selected.createdAt).toLocaleString(DATE_LOCALE)}
               {selected.updatedAt && ` · updated ${new Date(selected.updatedAt).toLocaleString(DATE_LOCALE)}`}
             </p>
           </>
         )}
       </DetailDrawer>
-    </>
+    </div>
   );
+}
+
+/** Test-only: reset the session-scoped hero count-up flag so animation state
+ *  can't leak across tests. Behind a fast-refresh exemption (the lane is scoped
+ *  to this file, so the helper co-locates here — mirrors resetWorkspaceShelfCache). */
+// eslint-disable-next-line react-refresh/only-export-components
+export function resetMemoryHeroSession(): void {
+  heroCountAnimatedThisSession = false;
 }
 
 export { freshness, isStale };

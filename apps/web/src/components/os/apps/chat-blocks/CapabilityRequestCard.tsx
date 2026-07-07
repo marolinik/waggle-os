@@ -134,12 +134,12 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
     >
       <div className="flex items-start gap-3">
         <div className="p-1.5 rounded-lg bg-primary/15 shrink-0 mt-0.5">
-          <Package className="w-4 h-4 text-primary" />
+          <Package className="w-4 h-4 text-honey" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-display font-semibold text-foreground">
-              {verb} <span className="text-primary">{request.name}</span>?
+              {verb} <span className="text-honey">{request.name}</span>?
             </span>
             <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground font-display">
               {kind}

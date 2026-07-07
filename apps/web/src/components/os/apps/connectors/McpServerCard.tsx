@@ -55,7 +55,7 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
                   {server.name}
                 </h4>
                 {server.official && (
-                  <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-primary">
+                  <span className="shrink-0 rounded-full bg-primary/15 px-1.5 py-[1px] text-[9px] font-semibold uppercase tracking-wide text-honey">
                     Official
                   </span>
                 )}
@@ -70,7 +70,7 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="shrink-0 rounded-lg p-1 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-primary"
+                className="shrink-0 rounded-lg p-1 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-honey"
               >
                 <ExternalLink className="h-3 w-3" />
               </a>
@@ -114,7 +114,7 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
               onClick={() => onInstall(server.id)}
               disabled={installing}
               data-testid={`mcp-install-${server.id}`}
-              className="flex items-center gap-1 rounded-lg bg-primary/20 px-2.5 py-1 text-[11px] font-display text-primary transition-colors hover:bg-primary/30 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg bg-primary/20 px-2.5 py-1 text-[11px] font-display text-honey transition-colors hover:bg-primary/30 disabled:opacity-50"
             >
               {installing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
               Install
@@ -130,7 +130,7 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
             <button
               type="button"
               aria-label="How to install"
-              className="shrink-0 rounded-md p-0.5 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-primary"
+              className="shrink-0 rounded-md p-0.5 text-muted-foreground/70 transition-colors hover:bg-primary/10 hover:text-honey"
             >
               <Info className="h-3 w-3" />
             </button>
@@ -144,13 +144,13 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
             </ol>
           </TooltipContent>
         </Tooltip>
-        <span className="shrink-0 font-mono text-[10px] text-primary/70">$</span>
+        <span className="shrink-0 font-mono text-[10px] text-honey/70">$</span>
         <code className="flex-1 truncate font-mono text-[10px] text-foreground/90">
           {server.installCmd}
         </code>
         <button
           onClick={handleCopy}
-          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-primary transition-colors hover:bg-primary/10"
+          className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold text-honey transition-colors hover:bg-primary/10"
           aria-label={copied ? 'Copied — paste in terminal' : 'Copy install command'}
         >
           {copied ? (

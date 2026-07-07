@@ -63,7 +63,7 @@ const SkillRow = ({ skill, testing, verifying, onTest, onEdit, onVerify }: Skill
       disabled={testing}
       aria-label={`Test skill ${skill.name} (preview only)`}
       title="Preview what this skill injects — nothing executes"
-      className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 shrink-0"
+      className="p-1.5 rounded-lg text-honey hover:bg-primary/10 transition-colors disabled:opacity-50 shrink-0"
     >
       {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
     </button>

@@ -8,7 +8,7 @@ interface ToolUseBlockProps {
 
 const StatusIcon = ({ status }: { status: ToolUseContentBlock['status'] }) => {
   switch (status) {
-    case 'running': return <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />;
+    case 'running': return <Loader2 className="w-3.5 h-3.5 text-honey animate-spin" />;
     case 'done': return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />;
     case 'error': return <XCircle className="w-3.5 h-3.5 text-destructive" />;
     case 'denied': return <XCircle className="w-3.5 h-3.5 text-muted-foreground" />;

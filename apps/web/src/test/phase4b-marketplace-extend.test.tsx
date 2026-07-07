@@ -8,7 +8,7 @@
  * pinned in pr4-install-store; this file pins the surface wiring.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const mocks = vi.hoisted(() => ({
@@ -26,10 +26,13 @@ const mocks = vi.hoisted(() => ({
     installMcp: vi.fn(),
     revokeMcp: vi.fn().mockResolvedValue({ ok: true }),
     getExtendAudit: vi.fn(),
+    agentSearch: vi.fn(),
+    installPack: vi.fn().mockResolvedValue(undefined),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
+import type { AgentSearchResponse } from '@/lib/agent-search';
 import MarketplaceApp from '@/components/os/apps/MarketplaceApp';
 import { ServiceProvider } from '@/providers/ServiceProvider';
 import { InstallProvider } from '@/providers/InstallProvider';
@@ -41,6 +44,20 @@ const renderApp = () => render(
 const skillRows = (installed = false) => ([
   { id: 7, name: 'web-scraper', description: 'Scrape pages', waggle_install_type: 'skill', installed, scanStatus: 'passed', source: 'registry' },
 ]);
+
+// Semantic-match fixtures for the NL auto-run (Wave U Lane C). MATCH resolves a
+// skill pick; NO_MATCH resolves empty picks so the catalog fallback shows.
+const MATCH: AgentSearchResponse = {
+  need: 'send a slide deck to my whole team', gapDetected: true, alreadyHandled: false,
+  recommendation: null, candidates: [],
+  picks: {
+    skill: { name: 'deck-builder', type: 'marketplace', availability: 'installable', description: 'Turn work into slides', matchReason: 'matches: slide, deck', matchScore: 0.8, install: { mode: 'store', extensionId: 'pkg:42', type: 'skill', kind: 'package', packageId: 42 } },
+  },
+};
+const NO_MATCH: AgentSearchResponse = {
+  need: 'send a slide deck to my whole team', gapDetected: true, alreadyHandled: false,
+  recommendation: null, candidates: [], picks: {},
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -64,18 +81,21 @@ beforeEach(() => {
   mocks.adapter.uninstallMarketplacePackage.mockResolvedValue(new Response('{}', { status: 200 }));
   mocks.adapter.installMcp.mockResolvedValue({ installed: true });
   mocks.adapter.getExtendAudit.mockResolvedValue([]);
+  mocks.adapter.agentSearch.mockResolvedValue(MATCH);
 });
 afterEach(cleanup);
 
 describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
   it('the All shelf federates skills + connectors + MCP (and only those three)', async () => {
     renderApp();
-    expect(await screen.findByText('web-scraper')).toBeInTheDocument();
+    expect(await screen.findByText('Web Scraper')).toBeInTheDocument();
     // Browse-only pack: display_name renders, no install affordance (A4).
     expect(screen.getByText('Research Pack')).toBeInTheDocument();
     expect(screen.queryByTestId('extension-install-pack:research-pack')).not.toBeInTheDocument();
     expect(screen.getByText('PostgreSQL')).toBeInTheDocument();
-    expect(screen.getByText('pg-mcp-pkg')).toBeInTheDocument();
+    // Wave X Lane D: displayExtensionName now uppercases known acronyms, so the
+    // slug "pg-mcp-pkg" humanizes to "Pg MCP Pkg" (was "Pg Mcp Pkg").
+    expect(screen.getByText('Pg MCP Pkg')).toBeInTheDocument();
     expect(screen.getByText('GitHub')).toBeInTheDocument();
     // Agents/models/templates are NOT in the marketplace shelf (D2).
     expect(screen.queryByText('Researcher')).not.toBeInTheDocument();
@@ -85,7 +105,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
 
   it('exposes exactly the four shelves (D2)', async () => {
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     const rail = screen.getByTestId('extension-facets');
     expect(rail).toHaveTextContent('All');
     expect(rail).toHaveTextContent('Skills');
@@ -104,7 +124,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
 
   it('Add installs a package one-click through the store — no ApprovalModal', async () => {
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
     await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
     // One-click: the pre-emptive consequence dialog is gone for installs.
@@ -117,7 +137,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     mocks.adapter.installMarketplacePackage.mockResolvedValue(
       new Response(JSON.stringify({ blocked: true, severity: 'CRITICAL', message: 'Blocked' }), { status: 403 }));
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByTestId('extension-install-pkg:7'));
     await waitFor(() => expect(mocks.adapter.installMarketplacePackage).toHaveBeenCalledWith(7));
     // Still offers Add — a gate-rejected item never enters the installed count.
@@ -130,7 +150,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       { id: 'slack', name: 'Slack', description: 'Chat', service: 'slack', authType: 'bearer', status: 'disconnected', capabilities: [], substrate: 'waggle', tools: [], category: 'comms' },
     ]);
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
 
     fireEvent.click(await screen.findByTestId('extension-install-connector:slack'));
@@ -149,7 +169,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     window.addEventListener('waggle:open-app', listener);
     try {
       renderApp();
-      await screen.findByText('web-scraper');
+      await screen.findByText('Web Scraper');
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
       fireEvent.click(await screen.findByTestId('extension-install-connector:gcal'));
       await waitFor(() => expect(events.some(e => e.detail.appId === 'connectors')).toBe(true));
@@ -162,7 +182,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
 
   it('the connector shelf shows the honest in-place note', async () => {
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
     expect(await screen.findByTestId('federated-note')).toHaveTextContent(/vault/i);
   });
@@ -184,7 +204,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       params?.type === 'mcp' ? { packages: [], total: 0 } : { packages: skillRows(true), total: 1 }
     ));
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(await screen.findByRole('button', { name: /Remove/ }));
 
     const modal = await screen.findByTestId('approval-modal');
@@ -204,12 +224,80 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       Object.assign(new Error('boom'), { name: 'AdapterHttpError', status: 500 }),
     );
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(await screen.findByRole('button', { name: /Remove/ }));
     fireEvent.click(await screen.findByTestId('approval-modal-approve'));
     await waitFor(() => expect(mocks.adapter.uninstallMarketplacePackage).toHaveBeenCalledWith(7));
     // Still installed: the Remove affordance survives the failed uninstall.
     expect(await screen.findByRole('button', { name: /Remove/ })).toBeInTheDocument();
+  });
+
+  it('the Start-here band surfaces curated matches on the All shelf only — no duplicate rows', async () => {
+    renderApp();
+    await screen.findByText('Web Scraper');
+    // GitHub (connector) + PostgreSQL (mcp) match the curated list → band shows.
+    const band = screen.getByTestId('start-here-band');
+    expect(within(band).getByText('GitHub')).toBeInTheDocument();
+    expect(within(band).getByText('PostgreSQL')).toBeInTheDocument();
+    // Banded entries are lifted OUT of the grid — exactly one row each.
+    expect(screen.getAllByText('GitHub')).toHaveLength(1);
+    expect(screen.getAllByText('PostgreSQL')).toHaveLength(1);
+    // Uncurated entries stay in the grid, not the band.
+    expect(within(band).queryByText('Web Scraper')).not.toBeInTheDocument();
+    // Off the All facet the band disappears.
+    fireEvent.click(screen.getByRole('button', { name: 'Skills' }));
+    await waitFor(() => expect(screen.queryByTestId('start-here-band')).not.toBeInTheDocument());
+  });
+
+  it('the Start-here band stays hidden under 2 curated matches (never fabricated)', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([]); // drop GitHub → only PostgreSQL matches
+    renderApp();
+    await screen.findByText('Web Scraper');
+    expect(screen.queryByTestId('start-here-band')).not.toBeInTheDocument();
+    expect(screen.getByText('PostgreSQL')).toBeInTheDocument(); // still in the grid
+  });
+
+  it('an NL query with no keyword match AUTO-RUNS the semantic match — no dead-end (Wave U Lane C §1)', async () => {
+    renderApp();
+    await screen.findByText('Web Scraper');
+    // ≥3-word described need that no loaded row matches by name/description.
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), {
+      target: { value: 'send a slide deck to my whole team' },
+    });
+    // The bridge runs itself — no "press Enter" hint — and renders the ranked
+    // result under the "Matched to your request" label.
+    await waitFor(
+      () => expect(mocks.adapter.agentSearch).toHaveBeenCalledWith('send a slide deck to my whole team'),
+      { timeout: 3000 },
+    );
+    expect(await screen.findByTestId('nl-matched-label')).toBeInTheDocument();
+    expect(screen.getByTestId('agent-search-pick-skill')).toHaveTextContent('deck-builder');
+    // The old "press Enter" dead-end hint is gone.
+    expect(screen.queryByTestId('nl-search-bridge')).not.toBeInTheDocument();
+  });
+
+  it('when the semantic match ALSO finds nothing, shows closest catalog entries + a real escape (Lane C §2)', async () => {
+    mocks.adapter.agentSearch.mockResolvedValue(NO_MATCH);
+    renderApp();
+    await screen.findByText('Web Scraper');
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), {
+      target: { value: 'reconcile invoices against the ledger nightly' },
+    });
+    const fallback = await screen.findByTestId('nl-no-match-fallback', {}, { timeout: 3000 });
+    // A real escape button (not a text link), and no gray "no match by name" lead.
+    expect(within(fallback).getByTestId('nl-ask-agent').tagName).toBe('BUTTON');
+    expect(screen.queryByTestId('nl-search-bridge')).not.toBeInTheDocument();
+    expect(screen.queryByText(/by name/i)).not.toBeInTheDocument();
+  });
+
+  it('a 1-2 word miss keeps the plain "No results" copy and never auto-runs (Lane C §3)', async () => {
+    renderApp();
+    await screen.findByText('Web Scraper');
+    fireEvent.change(screen.getByLabelText('Ask Waggle'), { target: { value: 'zzzznope' } });
+    expect(await screen.findByText('No results for "zzzznope"')).toBeInTheDocument();
+    expect(screen.queryByTestId('nl-no-match-fallback')).not.toBeInTheDocument();
+    // Below the NL threshold — the semantic engine is never invoked.
+    await waitFor(() => expect(mocks.adapter.agentSearch).not.toHaveBeenCalled(), { timeout: 1200 });
   });
 
   it('the Audit tab reads the C18 shared feed and the type filter re-queries', async () => {
@@ -220,7 +308,7 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
       initiator: 'user', detail: 'Installed from registry',
     }]);
     renderApp();
-    await screen.findByText('web-scraper');
+    await screen.findByText('Web Scraper');
     fireEvent.click(screen.getByRole('tab', { name: 'Audit' }));
 
     await waitFor(() => expect(mocks.adapter.getExtendAudit).toHaveBeenCalledWith({ limit: 30 }));

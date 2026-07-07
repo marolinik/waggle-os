@@ -51,7 +51,7 @@ const standaloneTheme: ThemeContextValue = {
     return resolve(readStored());
   },
   setTheme(mode) {
-    applyTheme(resolve(mode));
+    applyTheme(resolve(mode), true);
     try {
       localStorage.setItem(STORAGE_KEY, mode);
     } catch {
@@ -60,7 +60,7 @@ const standaloneTheme: ThemeContextValue = {
   },
   toggleTheme() {
     const next: ResolvedTheme = resolve(readStored()) === "light" ? "dark" : "light";
-    applyTheme(next);
+    applyTheme(next, true);
     try {
       localStorage.setItem(STORAGE_KEY, next);
     } catch {
@@ -90,11 +90,52 @@ function resolve(mode: ThemeMode): ResolvedTheme {
   return mode;
 }
 
-function applyTheme(resolved: ResolvedTheme): void {
+/**
+ * Lane D (Wave V) — signature theme crossfade ("sunset over the hive"). On a
+ * REAL theme change we stamp `.theme-transition` on <html> for one swap window;
+ * the CSS rule (index.css, motion-safe) interpolates the color tokens, then the
+ * class is removed so it never lingers on ordinary hover/interaction. The
+ * animation is pure CSS transition — JS only toggles a class. Reduced-motion
+ * users never get the class (belt) AND the CSS is `no-preference`-gated
+ * (suspenders), so their swap stays instant.
+ */
+const THEME_TRANSITION_MS = 360;
+let themeTransitionTimer: ReturnType<typeof setTimeout> | undefined;
+// Last theme actually stamped onto <html>. Lets applyTheme distinguish a real
+// swap (crossfade) from the initial apply / a no-op re-apply (instant), so the
+// crossfade never fires on load or on a StrictMode double-invoke.
+let lastAppliedTheme: ResolvedTheme | undefined;
+
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
+function beginThemeTransition(root: HTMLElement): void {
+  if (prefersReducedMotion()) return;
+  root.classList.add("theme-transition");
+  if (themeTransitionTimer) clearTimeout(themeTransitionTimer);
+  themeTransitionTimer = setTimeout(() => {
+    root.classList.remove("theme-transition");
+    themeTransitionTimer = undefined;
+  }, THEME_TRANSITION_MS + 60);
+}
+
+function applyTheme(resolved: ResolvedTheme, animate = false): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
+  // Crossfade only when a caller opted in AND the value truly changes from what
+  // is on <html> — the class must be present before the tokens swap for the CSS
+  // transition to capture the change (both happen in this one synchronous tick).
+  if (animate && lastAppliedTheme !== undefined && lastAppliedTheme !== resolved) {
+    beginThemeTransition(root);
+  }
   if (resolved === "light") root.setAttribute("data-theme", "light");
   else root.removeAttribute("data-theme");
+  lastAppliedTheme = resolved;
 }
 
 /**
@@ -117,7 +158,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     const r = resolve(theme);
     setResolvedTheme(r);
-    applyTheme(r);
+    // animate: the initial apply / re-apply is a no-op vs. the pre-paint stamp
+    // (applyStoredThemeEarly), so applyTheme's change-guard suppresses the
+    // crossfade on mount; only a genuine mode change fades.
+    applyTheme(r, true);
     try {
       localStorage.setItem(STORAGE_KEY, theme);
     } catch {
@@ -133,7 +177,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const onChange = () => {
       const r: ResolvedTheme = mql.matches ? "dark" : "light";
       setResolvedTheme(r);
-      applyTheme(r);
+      applyTheme(r, true);
     };
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);

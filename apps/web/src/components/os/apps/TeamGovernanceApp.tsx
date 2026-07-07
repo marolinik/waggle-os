@@ -5,7 +5,7 @@ const TeamGovernanceApp = () => {
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <div className="relative mb-4">
         <Shield className="w-12 h-12 text-muted-foreground/20" />
-        <Lock className="w-5 h-5 text-primary absolute -bottom-1 -right-1" />
+        <Lock className="w-5 h-5 text-honey absolute -bottom-1 -right-1" />
       </div>
       <h2 className="text-lg font-display font-semibold text-foreground mb-2">Team Governance</h2>
       <p className="text-sm text-muted-foreground max-w-xs mb-4">
@@ -35,7 +35,7 @@ const TeamGovernanceApp = () => {
         </div>
       </div>
       <div className="mt-6 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30">
-        <p className="text-xs font-display text-primary">Available on Teams ($49/mo per seat) and Enterprise tiers</p>
+        <p className="text-xs font-display text-honey">Available on Teams ($49/mo per seat) and Enterprise tiers</p>
       </div>
     </div>
   );

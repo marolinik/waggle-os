@@ -30,7 +30,7 @@ const FileTree = ({ treeDirs, currentPath, workspaceName, storageType, onNavigat
         <button
           onClick={() => onNavigate('/')}
           className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ${
-            currentPath === '/' ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
+            currentPath === '/' ? 'bg-primary/15 text-honey' : 'text-foreground hover:bg-muted/50'
           }`}
         >
           <Home className="w-3.5 h-3.5" />
@@ -41,7 +41,7 @@ const FileTree = ({ treeDirs, currentPath, workspaceName, storageType, onNavigat
             key={dir.path}
             onClick={() => onNavigate(dir.path)}
             className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ml-2 ${
-              currentPath === dir.path ? 'bg-primary/15 text-primary' : 'text-foreground hover:bg-muted/50'
+              currentPath === dir.path ? 'bg-primary/15 text-honey' : 'text-foreground hover:bg-muted/50'
             }`}
           >
             {currentPath === dir.path ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}

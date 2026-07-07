@@ -77,7 +77,7 @@ const healthShape: Record<string, { glyph: string; label: string }> = {
 };
 
 const groupColors: Record<string, string> = {
-  Personal: 'bg-primary/20 text-primary',
+  Personal: 'bg-primary/20 text-honey',
   Work: 'bg-sky-500/20 text-sky-400',
   Research: 'bg-violet-500/20 text-violet-400',
 };
@@ -138,14 +138,14 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
       >
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
-            <Brain className="w-3.5 h-3.5 text-primary" />
+            <Brain className="w-3.5 h-3.5 text-honey" />
             <span className="text-[11px] font-display font-semibold text-foreground">Brain Health</span>
             <span className="text-[10px] text-muted-foreground" data-testid="brain-health-tier">
               {TIER_LABELS[brainTier]}
             </span>
           </div>
           <span
-            className="text-xs font-display font-semibold text-primary tabular-nums"
+            className="text-xs font-display font-semibold text-honey tabular-nums"
             data-testid="brain-health-score"
           >
             {brainScore}%
@@ -243,7 +243,7 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                       {(ws.templateId || ws.persona) && (
                         <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                           {ws.templateId && ws.templateId !== 'blank' && (
-                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-primary/10 text-primary text-[11px] font-display">
+                            <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-primary/10 text-honey text-[11px] font-display">
                               <Sparkles className="w-2.5 h-2.5" />
                               {TEMPLATE_LABELS[ws.templateId] || ws.templateId}
                             </span>
@@ -296,7 +296,7 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Activity className="w-10 h-10 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground mb-2">No workspaces yet</p>
-          <button onClick={onCreateWorkspace} className="text-xs text-primary hover:text-primary/80">Create your first workspace</button>
+          <button onClick={onCreateWorkspace} className="text-xs text-honey hover:text-honey/80">Create your first workspace</button>
         </div>
       )}
     </div>

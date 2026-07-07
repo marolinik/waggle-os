@@ -80,7 +80,7 @@ const WorkspaceRail = ({ workspaces, activeWorkspaceId, onSelect, onDropFiles }:
                     : 'border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                 }`}
               >
-                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-primary' : ''}`} />
+                <Icon className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-honey' : ''}`} />
                 <span className="text-xs truncate flex-1">{ws.name}</span>
                 {ws.storageType === 'team' && (
                   <span className="text-[10px] text-emerald-400 uppercase tracking-wide font-display">team</span>

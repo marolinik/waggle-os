@@ -26,6 +26,11 @@ describe('formatModelLabel (W2C)', () => {
     expect(formatModelLabel('qwen3-35b')).toBe('Qwen3 35b');
   });
 
+  it('re-joins dash-encoded version digits with a dot (heuristic path, no catalog)', () => {
+    expect(formatModelLabel('claude-opus-4-6')).toBe('Claude Opus 4.6');
+    expect(formatModelLabel('claude-3-5-sonnet')).toBe('Claude 3.5 Sonnet');
+  });
+
   it('is empty-safe', () => {
     expect(formatModelLabel(undefined)).toBe('');
     expect(formatModelLabel('')).toBe('');

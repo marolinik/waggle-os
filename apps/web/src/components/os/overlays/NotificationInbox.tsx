@@ -1,4 +1,4 @@
-import { Bell, Check, CheckCheck, X, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Bell, Check, CheckCheck, X, CheckCircle2, ArrowRight, Clock, ShieldCheck, ClipboardList, MessageSquare, Bot, Pin, type LucideIcon } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Notification } from '@/lib/types';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,8 +14,9 @@ interface NotificationInboxProps {
   onMarkAllRead: () => void;
 }
 
-const typeIcons: Record<string, string> = {
-  cron: '⏰', approval: '🔐', task: '📋', message: '💬', agent: '🤖',
+// Lucide, not emoji — one icon language across the chrome (2026-07-06 P2).
+const typeIcons: Record<string, LucideIcon> = {
+  cron: Clock, approval: ShieldCheck, task: ClipboardList, message: MessageSquare, agent: Bot,
 };
 
 const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAllRead }: NotificationInboxProps) => {
@@ -47,7 +48,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
             <div className="flex items-center gap-2">
-              <Bell className="w-4 h-4 text-primary" />
+              <Bell className="w-4 h-4 text-honey" />
               <span className="text-sm font-display font-semibold text-foreground">Notifications</span>
             </div>
             <div className="flex items-center gap-1">
@@ -71,6 +72,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
             )}
             {notifications.map(n => {
               const { title, body, href } = humanizeNotification(n);
+              const TypeIcon = typeIcons[n.type] ?? Pin;
               return (
               <div
                 key={n.id}
@@ -79,7 +81,7 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                 }`}
               >
                 <div className="flex items-start gap-2">
-                  <span className="text-sm mt-0.5">{typeIcons[n.type] || '📌'}</span>
+                  <TypeIcon className="w-4 h-4 mt-0.5 text-honey/70 shrink-0" aria-hidden />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-display font-medium text-foreground">{title}</p>
                     {body && <p className="text-[11px] text-muted-foreground mt-0.5">{body}</p>}
@@ -87,14 +89,14 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
                     {href && (
                       <button
                         onClick={() => openAction(n, href)}
-                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                        className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-honey hover:underline"
                       >
                         Open <ArrowRight className="w-3 h-3" />
                       </button>
                     )}
                   </div>
                   {!n.read && (
-                    <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-primary transition-colors" aria-label="Mark as read">
+                    <button onClick={() => onMarkRead(n.id)} className="p-1 text-muted-foreground hover:text-honey transition-colors" aria-label="Mark as read">
                       <Check className="w-3 h-3" />
                     </button>
                   )}

@@ -12,14 +12,14 @@
  * its ApprovalModal consequence dialog. The Audit tab is the C18 shared feed.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Store, Search, Loader2, Package } from 'lucide-react';
+import { Store, Loader2, Package, Sparkles } from 'lucide-react';
 import type { ExtensionType } from '@waggle/shared';
-import { Input } from '@/components/ui/input';
 import { classifyInstallRisk, actionRisk, installTrustSource } from '@/lib/risk-display';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useInstallStore } from '@/providers/InstallProvider';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
+import { Skeleton } from '@/components/ui/skeleton';
 import { dedupePacks } from '@/lib/dedupe-packs';
 import {
   filterExtensions, sortExtensions, dedupeExtensions,
@@ -28,7 +28,7 @@ import {
 } from '@/lib/extension-catalog';
 import ExtensionCard from './extend/ExtensionCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
-import AgentSearchBox from './extend/AgentSearchBox';
+import AgentSearchBox, { type AutoMatchState } from './extend/AgentSearchBox';
 
 /** The four shelves (D2) — the design's "one simple shelf" set. */
 const SHELVES = ['all', 'skill', 'connector', 'mcp'] as const;
@@ -71,6 +71,42 @@ export function buildRemoveRequest(ext: Extension): ApprovalRequest {
   };
 }
 
+/** Curated "Start here" shelf — a handful of well-known marks lifted above the
+ *  All grid so a first visit has an obvious entry point. R10: lead with the
+ *  memory-feeding connectors (Gmail / Drive / Notion / Slack) — the ones that
+ *  make Waggle's memory richer — and demote 1Password. Honest by construction:
+ *  matched against the LOADED list only (first 3 hits, band hidden under 2
+ *  matches) — never fabricated entries. */
+const START_HERE_IDS = ['gmail', 'gdrive', 'notion', 'slack', 'github', '1password', 'postgres', 'airtable'] as const;
+
+export function startHerePicks(list: Extension[]): Extension[] {
+  const norm = (s: string) => s.toLowerCase().replace(/^(connector|mcp|pkg|pack):/, '').replace(/-mcp$/, '');
+  const picks: Extension[] = [];
+  for (const key of START_HERE_IDS) {
+    const hit = list.find(e => norm(e.id) === key || (e.name ?? '').trim().toLowerCase() === key);
+    if (hit && !picks.includes(hit)) picks.push(hit);
+    if (picks.length === 3) break;
+  }
+  return picks.length >= 2 ? picks : [];
+}
+
+/** Closest catalog entries for a described need when BOTH keyword filtering and
+ *  the semantic match come up empty (Wave U Lane C §2) — a real, installable
+ *  starting point instead of a dead-end. Ranked by loaded-token overlap on
+ *  name/description (best first), then catalog order; never fabricated (drawn
+ *  only from the loaded list). */
+export function nearestCatalog(list: Extension[], query: string, n = 3): Extension[] {
+  const tokens = query.toLowerCase().split(/\s+/).filter(t => t.length >= 3);
+  return [...list]
+    .map(e => {
+      const hay = `${e.name ?? ''} ${e.description ?? ''}`.toLowerCase();
+      return { e, score: tokens.reduce((s, t) => s + (hay.includes(t) ? 1 : 0), 0) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(x => x.e);
+}
+
 /** Structured install risk/provenance (regression-locked by p7-issue17). */
 export function buildInstallRequest(ext: Extension): ApprovalRequest {
   return {
@@ -95,12 +131,25 @@ const MarketplaceApp = () => {
   const [tab, setTab] = useState<Tab>('browse');
   const [facet, setFacet] = useState<Facet>('all');
   const [query, setQuery] = useState('');
+  // ~150ms-debounced mirror of `query` for the CLIENT grid filter + view mode,
+  // so the first keystroke doesn't flash the full list before it narrows (Wave
+  // T Lane B §1). `query` itself still drives the (separately 300ms-debounced)
+  // server load below and the input's own value.
+  const [filterQuery, setFilterQuery] = useState('');
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(false);
+  // Wave V Lane E §2: true from the keystroke until its debounced fetch settles
+  // (covers the pre-fetch 300ms gap that `loading` alone misses). Drives the
+  // dimmed-but-mounted results so the list doesn't collapse between keystrokes.
+  const [searchPending, setSearchPending] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Extension | null>(null);
   const [removing, setRemoving] = useState(false);
   const [shelfNote, setShelfNote] = useState<string | null>(null);
+  // Lifecycle of the NL auto-match (reported by AgentSearchBox) — lets the
+  // no-match area suppress its dead-end while matching / on a hit and show the
+  // catalog fallback only when the semantic match ALSO finds nothing (Lane C).
+  const [autoMatch, setAutoMatch] = useState<AutoMatchState>('idle');
   // Monotonic request token — only the LATEST loadFacet call may commit state.
   const requestSeq = useRef(0);
 
@@ -159,7 +208,7 @@ const MarketplaceApp = () => {
         setLoadError(err instanceof Error ? err.message : 'Failed to load extensions');
       }
     } finally {
-      if (seq === requestSeq.current) setLoading(false);
+      if (seq === requestSeq.current) { setLoading(false); setSearchPending(false); }
     }
   }, []);
 
@@ -178,9 +227,18 @@ const MarketplaceApp = () => {
     if (connecting) return;
     if (lastQueryRef.current === query) return;
     lastQueryRef.current = query;
+    setSearchPending(true);
     const t = setTimeout(() => void loadFacet(facet, query), 300);
     return () => clearTimeout(t);
   }, [connecting, facet, query, loadFacet]);
+
+  // Debounce the CLIENT grid filter (Wave T Lane B §1) — the grouped view + the
+  // narrowed list hold steady until typing settles, so the first keystroke no
+  // longer flashes a near-full flat list before it filters down.
+  useEffect(() => {
+    const t = setTimeout(() => setFilterQuery(query), 150);
+    return () => clearTimeout(t);
+  }, [query]);
 
   /** Remove confirmed → uninstall through the store so the count bar + every
    *  other view reflect it. The store toasts + reconciles on failure. */
@@ -197,12 +255,52 @@ const MarketplaceApp = () => {
     window.dispatchEvent(new CustomEvent('waggle:open-app', { detail: { appId } }));
   };
 
-  const visible = filterExtensions(extensions, query);
+  const visible = filterExtensions(extensions, filterQuery);
+  // A search/reload is settling — a server fetch is in flight OR we're still in
+  // the keystroke→fetch debounce gap. The results container stays mounted and
+  // dims (aria-busy) rather than collapsing between keystrokes (Wave V Lane E §2).
+  const busy = loading || searchPending;
+  // NL bridge (Wave U Lane C §1): a query that reads like a described need
+  // (≥3 words) with no keyword match auto-runs the semantic engine instead of
+  // dead-ending. The engine + results live in AgentSearchBox above; here we only
+  // hand it the need and compose the fallback if it too comes up empty. Wave V
+  // Lane E §2: keyed on the settled query, NOT on `loading`, so a transient
+  // reload no longer tears down and remounts the "Matched to your request"
+  // section across adjacent debounce ticks — it holds until the query changes.
+  const isNlQuery = filterQuery.trim().split(/\s+/).filter(Boolean).length >= 3;
+  const nlNoMatch = isNlQuery && !loadError && visible.length === 0;
+  const autoMatchNeed = nlNoMatch ? filterQuery.trim() : null;
+  const nearest = nlNoMatch && autoMatch === 'empty' ? nearestCatalog(extensions, filterQuery) : [];
+  // Wave W Lane C §2: the semantic three-up returns AT MOST 3 hits — a 1-2-pick
+  // answer leaves the matched surface sparse. On a hit, append a quiet "More
+  // from the catalog" rail (nearestCatalog, ≤3) below the picks so the result
+  // never strands the user in dark space.
+  const catalogRail = nlNoMatch && autoMatch === 'matched' ? nearestCatalog(extensions, filterQuery) : [];
+  // Round-4 merchandising: the band renders on the default All browse only
+  // (no active query); banded entries are lifted OUT of the grid below so
+  // each integration keeps exactly one row + one action.
+  const startHere = facet === 'all' && !filterQuery ? startHerePicks(extensions) : [];
+  const gridVisible = startHere.length > 0
+    ? visible.filter(e => !startHere.some(f => f.id === e.id))
+    : visible;
+  // Round-5 merchandising: the default All browse groups by type with section
+  // headers instead of one alphabetical mixed-type dump. A live query (or a
+  // typed facet) keeps the flat relevance list.
+  const groupedSections: Array<{ label: string; items: Extension[] }> =
+    facet === 'all' && !filterQuery
+      ? (['skill', 'connector', 'mcp'] as const)
+          .map(t => ({ label: FACET_LABELS[t], items: gridVisible.filter(e => e.type === t) }))
+          .concat([{ label: 'More', items: gridVisible.filter(e => !['skill', 'connector', 'mcp'].includes(e.type)) }])
+          .filter(s => s.items.length > 0)
+      : [];
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
+      {/* Header — inner content shares the centered browse column below so the
+          facet rail and count line up with the rows (round-6: full-bleed rows
+          put actions a long eye-travel from titles). */}
       <div className="px-4 py-3 border-b border-border/30">
+        <div className="mx-auto w-full max-w-[860px]">
         <div className="flex items-center gap-3 mb-3">
           <Store className="w-5 h-5" style={{ color: 'var(--honey-500)' }} />
           <h2 className="text-sm font-display font-semibold text-foreground">Marketplace</h2>
@@ -220,7 +318,7 @@ const MarketplaceApp = () => {
               role="tab"
               aria-selected={tab === t}
               className={`px-3 py-1 text-xs font-display rounded-lg transition-colors ${
-                tab === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground'
+                tab === t ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {t === 'browse' ? 'Browse' : 'Audit'}
@@ -248,30 +346,41 @@ const MarketplaceApp = () => {
               ))}
             </div>
 
-            <div className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-1.5">
-              <Search className="w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                placeholder="Search skills, connectors, MCP servers..."
-                className="flex-1 bg-transparent text-sm border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              {loading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
-            </div>
           </>
         )}
+        </div>
       </div>
 
-      {/* Body */}
-      <div className="flex-1 overflow-auto p-3 space-y-2" role="tabpanel">
+      {/* Body — constrained to a centered readable column instead of a
+          full-bleed list. */}
+      <div className="flex-1 overflow-auto p-3" role="tabpanel">
+        <div className="mx-auto w-full max-w-[860px] space-y-2">
         {tab === 'audit' ? (
           <InstallAuditPanel showFilter limit={30} />
         ) : (
           <>
-            {/* Screen-09 agent-search bar — ask for a capability; the three-up
-                suggestion installs through the same store as the grid below. */}
-            <AgentSearchBox />
+            {/* ONE smart input (H-round merge): keystrokes filter the grid
+                below live; Enter asks the agent-search engine for a capability
+                three-up. Replaces the former separate header search field. */}
+            <AgentSearchBox onQueryChange={setQuery} autoRunNeed={autoMatchNeed} onAutoStateChange={setAutoMatch} />
             <div className="border-t border-border/20 my-1" />
+
+            {startHere.length > 0 && (
+              <div data-testid="start-here-band" className="space-y-2">
+                <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider">
+                  Start here
+                </p>
+                {startHere.map(ext => (
+                  <ExtensionCard
+                    key={ext.id}
+                    ext={ext}
+                    onRemove={setRemoveTarget}
+                    onOpenIn={handleOpenIn}
+                  />
+                ))}
+                <div className="border-t border-border/20" aria-hidden />
+              </div>
+            )}
 
             {shelfNote && (
               <p data-testid="federated-note" className="text-[11px] text-muted-foreground bg-muted/40 border border-border/30 rounded-lg px-2.5 py-1.5">
@@ -279,7 +388,9 @@ const MarketplaceApp = () => {
               </p>
             )}
 
-            {loading && visible.length === 0 && (
+            {/* Cold load only — once ANY extensions are loaded, a reload dims the
+                existing list (below) instead of collapsing to this spinner. */}
+            {loading && extensions.length === 0 && (
               <div className="text-center py-8">
                 <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
                 <p className="text-xs text-muted-foreground">Loading extensions...</p>
@@ -291,32 +402,123 @@ const MarketplaceApp = () => {
                 <p className="text-xs text-destructive mb-2">{loadError}</p>
                 <button
                   onClick={() => void loadFacet(facet, query)}
-                  className="text-xs text-primary hover:underline"
+                  className="text-xs text-honey hover:underline"
                 >
                   Retry
                 </button>
               </div>
             )}
 
-            {!loading && !loadError && visible.length === 0 && (
-              <div className="text-center py-8">
-                <Package className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">
-                  {query ? `No results for "${query}"` : 'No extensions available for this facet'}
-                </p>
+            {!busy && !loadError && visible.length === 0 && (
+              isNlQuery ? (
+                // Described need, no keyword hit: the semantic match runs itself
+                // (AgentSearchBox above shows the BeeLoader + ranked results under
+                // "Matched to your request"). We compose a fallback ONLY when that
+                // match also finds nothing — closest catalog entries + a real
+                // escape, never a gray "no match by name" dead-end (Lane C §2).
+                autoMatch === 'empty' ? (
+                  <div data-testid="nl-no-match-fallback" className="space-y-2 py-1">
+                    {nearest.length > 0 && (
+                      <>
+                        <p className="px-1 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
+                          Closest in the catalog
+                        </p>
+                        {nearest.map(ext => (
+                          <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                        ))}
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenIn('home')}
+                      data-testid="nl-ask-agent"
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--honey-line)] bg-[var(--honey-wash)] px-3 py-2 text-xs font-medium text-[var(--honey-text)] transition-colors hover:bg-primary/15"
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Ask your agent to do this instead
+                    </button>
+                  </div>
+                ) : null
+              ) : (
+                <div className="text-center py-8">
+                  <Package className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground">
+                    {filterQuery ? `No results for "${filterQuery}"` : 'No extensions available for this facet'}
+                  </p>
+                </div>
+              )
+            )}
+
+            {/* Wave W Lane C §1: an NL query keyword-filters EVERYTHING out, so
+                the busy-dim on live results has nothing to hold. While the
+                semantic match settles (the "Matching skills to this job…" status
+                shows above), stand up 3 purpose-built result-row skeletons — icon
+                square + two text lines + chip stubs — instead of dimming the
+                now-wrong pre-query browse rows. Motion-safe (animate-none under
+                reduced motion). */}
+            {nlNoMatch && (autoMatch === 'idle' || autoMatch === 'searching') && (
+              <div data-testid="nl-matching-skeletons" aria-hidden className="space-y-2">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="flex items-start gap-3 rounded-xl border border-border/30 bg-card px-3 py-2.5">
+                    <Skeleton className="h-10 w-10 shrink-0 rounded-lg motion-reduce:animate-none" />
+                    <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+                      <Skeleton className="h-3 w-2/5 motion-reduce:animate-none" />
+                      <Skeleton className="h-3 w-4/5 motion-reduce:animate-none" />
+                      <div className="flex gap-2 pt-0.5">
+                        <Skeleton className="h-4 w-14 rounded-full motion-reduce:animate-none" />
+                        <Skeleton className="h-4 w-12 rounded-full motion-reduce:animate-none" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 
-            {visible.map(ext => (
-              <ExtensionCard
-                key={ext.id}
-                ext={ext}
-                onRemove={setRemoveTarget}
-                onOpenIn={handleOpenIn}
-              />
-            ))}
+            {/* Wave W Lane C §2: a matched three-up can be as few as 1-2 picks.
+                Append a quiet "More from the catalog" rail below it so the answer
+                never strands the user in dark space (reuses nearestCatalog, ≤3). */}
+            {catalogRail.length > 0 && (
+              <div data-testid="nl-more-catalog" className="space-y-2 pt-1">
+                <p className="px-1 text-[11px] font-display font-semibold uppercase tracking-wider text-muted-foreground">
+                  More from the catalog
+                </p>
+                {catalogRail.map(ext => (
+                  <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                ))}
+              </div>
+            )}
+
+            {/* Wave V Lane E §2: the matched-results container stays mounted and
+                only dims (aria-busy) while a search settles — it doesn't collapse
+                and rebuild between keystrokes. */}
+            <div
+              data-testid="marketplace-results"
+              aria-busy={busy || undefined}
+              className={`space-y-2 transition-opacity duration-150 motion-reduce:transition-none ${busy ? 'opacity-60' : ''}`}
+            >
+              {groupedSections.length > 0
+                ? groupedSections.map(section => (
+                    <div key={section.label} data-testid={`marketplace-section-${section.label.toLowerCase()}`} className="space-y-2">
+                      <p className="pt-2 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider">
+                        {section.label} <span className="text-[var(--text-dim)] normal-case tracking-normal">· {section.items.length}</span>
+                      </p>
+                      {section.items.map(ext => (
+                        <ExtensionCard key={ext.id} ext={ext} onRemove={setRemoveTarget} onOpenIn={handleOpenIn} />
+                      ))}
+                    </div>
+                  ))
+                : gridVisible.map(ext => (
+                    <ExtensionCard
+                      key={ext.id}
+                      ext={ext}
+                      onRemove={setRemoveTarget}
+                      onOpenIn={handleOpenIn}
+                    />
+                  ))}
+            </div>
           </>
         )}
+        </div>
       </div>
 
       {/* Remove confirm — destructive direction keeps its consequence dialog

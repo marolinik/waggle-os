@@ -37,7 +37,7 @@ const WorkspaceCreateStep = ({
 }: WorkspaceCreateStepProps) => (
   <motion.div key="step-workspace-create" {...fadeSlide}>
     <div className="text-center mb-6">
-      <FolderPlus className="w-10 h-10 text-primary mx-auto mb-3" />
+      <FolderPlus className="w-10 h-10 text-honey mx-auto mb-3" />
       <h2 className="text-2xl font-display font-bold text-foreground mb-2">
         Create your first workspace
       </h2>
@@ -63,7 +63,7 @@ const WorkspaceCreateStep = ({
               selected ? 'ring-2 ring-primary border-primary/40' : 'hover:border-primary/40'
             }`}
           >
-            <Icon className={`w-5 h-5 mb-0.5 ${selected ? 'text-primary' : 'text-muted-foreground'}`} />
+            <Icon className={`w-5 h-5 mb-0.5 ${selected ? 'text-honey' : 'text-muted-foreground'}`} />
             <h3 className="text-sm font-display font-semibold text-foreground">{t.name}</h3>
             <p className="text-[11px] text-muted-foreground">{t.desc}</p>
           </button>

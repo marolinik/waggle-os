@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot, Plus, Search, Loader2, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Network, ArrowRight } from 'lucide-react';
+import { Bot, Plus, Search, AlertCircle, RefreshCw, LibraryBig, ChevronRight, Network, ArrowRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import BeeLoader from '@/components/ui/BeeLoader';
 import { adapter } from '@/lib/adapter';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -16,7 +17,7 @@ import {
   shouldSuggestAgents,
   SUGGESTED_PERSONA_IDS,
 } from '@/lib/agent-center-display';
-import { getPersonaById, type PersonaConfig } from '@/lib/personas';
+import { getPersonaById, PERSONAS, type PersonaConfig } from '@/lib/personas';
 import AgentCenterRow from './agents/AgentCenterRow';
 import AgentCenterDetail from './agents/AgentCenterDetail';
 import WorkspacePickerDialog from './agents/WorkspacePickerDialog';
@@ -185,15 +186,28 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
       {/* Header: title + Templates side affordance + create */}
       <div className="px-4 py-3 border-b border-border/30 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          <Bot className="w-4 h-4 text-primary shrink-0" />
+          <Bot className="w-4 h-4 text-honey shrink-0" />
           <h2 className="text-sm font-display font-bold text-foreground">Agents</h2>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* KPI strip (C27: success-rate yes, hours-saved no). Round-7 fix 3b:
+              lives in the page header as page-level stats — the search row
+              below breathes. Center view only (Templates isn't the fleet). */}
+          {view === 'center' && (
+            <div className="hidden sm:flex items-center gap-3 mr-2 text-[11px] text-muted-foreground shrink-0" data-testid="agent-center-kpis">
+              <span><span className="text-foreground font-medium tabular-nums">{kpis.total}</span> {kpis.total === 1 ? 'agent' : 'agents'}</span>
+              <span><span className="text-foreground font-medium tabular-nums">{kpis.running}</span> running</span>
+              {/* H2: no runs yet → hide the segment rather than showing a dash. */}
+              {kpis.avgSuccessRate !== null && (
+                <span>avg success <span className="text-foreground font-medium tabular-nums">{formatSuccessRate(kpis.avgSuccessRate)}</span></span>
+              )}
+            </div>
+          )}
           <button
             onClick={() => setView(view === 'templates' ? 'center' : 'templates')}
             aria-pressed={view === 'templates'}
             className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg transition-colors ${
-              view === 'templates' ? 'bg-primary/20 text-primary' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
+              view === 'templates' ? 'bg-primary/20 text-honey' : 'bg-secondary/30 text-muted-foreground hover:text-foreground'
             }`}
           >
             <LibraryBig className="w-3 h-3" /> Templates
@@ -227,29 +241,26 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                   aria-selected={tab === t.id}
                   aria-controls="agent-center-tab-panel"
                   className={`px-2 py-0.5 rounded-full text-[11px] transition-colors border ${
-                    tab === t.id ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
+                    tab === t.id ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {t.label}
                 </button>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1">
-                <Search className="w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search agents..."
-                  className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
-              </div>
-              {/* KPI strip (C27: success-rate yes, hours-saved no). */}
-              <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground shrink-0" data-testid="agent-center-kpis">
-                <span><span className="text-foreground font-medium tabular-nums">{kpis.total}</span> {kpis.total === 1 ? 'agent' : 'agents'}</span>
-                <span><span className="text-foreground font-medium tabular-nums">{kpis.running}</span> running</span>
-                <span>avg success <span className="text-foreground font-medium tabular-nums">{kpis.avgSuccessRate === null ? '—' : formatSuccessRate(kpis.avgSuccessRate)}</span></span>
-              </div>
+            {/* Search row — KPIs moved to the page header (round-7 fix 3b),
+                so the field gets the full row to itself. Wave T Lane F item 4:
+                a visible `--line` border + honey focus ring (focus-within, since
+                the inner Input suppresses its own ring) so the field holds its
+                edge on dark — consistent with the marketplace search bar. */}
+            <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg border border-[var(--line)] px-2 py-1 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
+              <Search className="w-3.5 h-3.5 text-muted-foreground" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search agents..."
+                className="flex-1 bg-transparent text-xs h-auto border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+              />
             </div>
           </div>
 
@@ -290,21 +301,24 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
             {error && agents.length > 0 && (
               <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
                 <span className="text-[11px] text-destructive">Refresh failed — this list may be stale. {error}</span>
-                <button onClick={() => void load()} className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline shrink-0">
+                <button onClick={() => void load()} className="inline-flex items-center gap-1 text-[11px] text-honey hover:underline shrink-0">
                   <RefreshCw className="w-3 h-3" /> Retry
                 </button>
               </div>
             )}
             {loading && agents.length === 0 ? (
-              <div role="status" aria-live="polite" className="text-center py-12">
-                <Loader2 className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2 animate-spin" />
-                <p className="text-xs text-muted-foreground">Loading agents…</p>
+              // Wave T Lane F item 3: the signature waggle-dance loader replaces
+              // the generic arc spinner. BeeLoader owns the status role + SR
+              // label; the visible caption is aria-hidden to avoid a double read.
+              <div className="flex flex-col items-center py-12">
+                <BeeLoader label="Loading agents…" />
+                <p className="mt-2.5 text-xs text-muted-foreground" aria-hidden>Loading agents…</p>
               </div>
             ) : error && agents.length === 0 ? (
               <div role="alert" className="text-center py-12">
                 <AlertCircle className="w-6 h-6 text-destructive/60 mx-auto mb-2" />
                 <p className="text-xs text-destructive mb-2">{error}</p>
-                <button onClick={() => load()} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+                <button onClick={() => load()} className="inline-flex items-center gap-1 text-xs text-honey hover:underline">
                   <RefreshCw className="w-3 h-3" /> Retry
                 </button>
               </div>
@@ -319,7 +333,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
                         not read as "nothing is working for you". */}
                     {workspaces && workspaces.length > 0 && (
                       <div>
-                        <p className="text-[11px] font-display font-semibold text-primary/80 uppercase tracking-wider mb-1.5">
+                        <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider mb-1.5">
                           Already working for you
                         </p>
                         <ul className="space-y-1">
@@ -364,7 +378,12 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
               </ul>
             )}
             {sparse && (
-              <SuggestedAgentCards personas={suggestedPersonas} onPick={startFromPersona} />
+              <SuggestedAgentCards
+                personas={suggestedPersonas}
+                onPick={startFromPersona}
+                allPersonas={PERSONAS}
+                onBrowseAll={() => setView('templates')}
+              />
             )}
           </div>
         </>

@@ -33,7 +33,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   LayoutGrid, MessageSquare, FileBox, Brain,
-  Loader2, Users, WifiOff, ShieldAlert, ChevronRight,
+  Users, WifiOff, ShieldAlert, ChevronRight,
   FileText, SearchX, RefreshCw,
 } from 'lucide-react';
 import { tierSatisfies, TIER_LABELS } from '@waggle/shared';
@@ -152,10 +152,19 @@ interface ArtifactRow {
  *  (PR3.5 keystone). Rows whose source is absent fall back to the REAL date
  *  only — never a fabricated source. */
 function FactsSection({ ctx }: { ctx: WorkspaceContext | null }) {
+  // The server-composed summary card above often quotes the newest memory
+  // verbatim — don't render the identical string twice on one screen (2026-07
+  // judge finding). Substring test on normalized text, display-only.
+  const summaryNorm = (ctx?.summary ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const inSummary = (text: string) => {
+    if (!summaryNorm) return false;
+    const t = text.replace(/\s+/g, ' ').trim().toLowerCase();
+    return t.length > 20 && summaryNorm.includes(t);
+  };
   const facts = [
     ...(ctx?.recentDecisions ?? []).map((d) => ({ text: d.content, source: d.source, when: relativeTime(d.date) })),
     ...(ctx?.recentMemories ?? []).map((m) => ({ text: m.content, source: m.source, when: relativeTime(m.date) })),
-  ].slice(0, 6);
+  ].filter((f) => !inSummary(f.text)).slice(0, 6);
   if (facts.length === 0) return null;
   return (
     <section>
@@ -478,10 +487,60 @@ const WorkspaceDesktopApp = ({
   // ── Whole-screen states ────────────────────────────────────────────────
 
   if (loading) {
+    // Wave V Lane E fix 1: cold entry is a layout-preserving skeleton, not a
+    // centered "Loading workspace…" spinner in an empty void. The header +
+    // tab-bar scaffold hold the page shape; the content area carries the
+    // WorkspaceBriefing thread-shaped placeholder idiom, so entering a
+    // workspace reads as "your workspace is loading" rather than a blank frame.
+    // role=status + sr-only keeps the announcement; reduced-motion stills it.
     return (
-      <div className="h-full flex items-center justify-center bg-background text-muted-foreground" data-testid="ws-desktop-loading">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        <span className="text-sm">Loading workspace…</span>
+      <div
+        className="h-full flex flex-col overflow-hidden bg-background animate-pulse motion-reduce:animate-none"
+        role="status"
+        aria-label="Loading workspace"
+        aria-busy="true"
+        data-testid="ws-desktop-loading"
+      >
+        <span className="sr-only">Loading workspace…</span>
+        {/* Header scaffold — mirrors the real header row (avatar + title). */}
+        <div className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5" aria-hidden="true">
+          <div className="flex items-center gap-3">
+            <div className="h-[46px] w-[46px] shrink-0 rounded-[14px] bg-[var(--surface-2)]" />
+            <div className="space-y-2">
+              <div className="h-2.5 w-24 rounded bg-[var(--surface-2)]" />
+              <div className="h-5 w-52 rounded bg-[var(--surface-2)]" />
+            </div>
+          </div>
+        </div>
+        {/* Tab-bar scaffold — a row of pill placeholders. */}
+        <div className="shrink-0 flex items-center gap-4 border-b border-[var(--line-soft)] px-4 py-3.5" aria-hidden="true">
+          {[14, 10, 12, 12, 10].map((w, i) => (
+            <div key={i} className="h-3 rounded bg-[var(--surface-2)]" style={{ width: `${w * 4}px` }} />
+          ))}
+        </div>
+        {/* Content — thread-shaped placeholders (WorkspaceBriefing idiom). */}
+        <div className="flex-1 min-h-0 overflow-hidden p-6" aria-hidden="true">
+          <div className="mx-auto w-full max-w-[680px] space-y-4 py-2">
+            <div className="flex gap-2">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+              <div className="flex-1 space-y-2 pt-0.5">
+                <div className="h-3 w-28 rounded bg-[var(--surface-2)]" />
+                <div className="h-3 w-full rounded bg-[var(--surface-2)]" />
+                <div className="h-3 w-4/5 rounded bg-[var(--surface-2)]" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <div className="h-10 w-2/5 rounded-[4px_14px_14px_14px] bg-[var(--surface-2)]" />
+            </div>
+            <div className="flex gap-2">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+              <div className="flex-1 space-y-2 pt-0.5">
+                <div className="h-3 w-32 rounded bg-[var(--surface-2)]" />
+                <div className="h-3 w-11/12 rounded bg-[var(--surface-2)]" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -564,21 +623,26 @@ const WorkspaceDesktopApp = ({
               <h2 className="truncate font-display text-[clamp(20px,2.4vw,28px)] font-semibold leading-tight tracking-[-0.02em] text-[var(--text)]">
                 {displayName}
               </h2>
-              <div className="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] text-[var(--text-muted)]">
-                {agentsRunning > 0 && (
-                  <span className="inline-flex items-center gap-1.5" data-testid="ws-agents-running">
-                    <DotLive tone="healthy" size={7} />
-                    {agentsRunning} agent{agentsRunning === 1 ? '' : 's'} live
-                  </span>
-                )}
-                {typeof ctx?.stats?.memoryCount === 'number' && (
-                  <span>{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
-                )}
-                {relativeTime(lastEvent?.ts) && <span>updated {relativeTime(lastEvent?.ts)}</span>}
-                {wsStatus !== 'active' && (
-                  <span className="capitalize text-[var(--attention)]" data-testid="ws-status-pill" data-status={wsStatus}>{wsStatus}</span>
-                )}
-              </div>
+              {/* UX gold-standard H1: on the Chat tab (highest-dwell surface) the
+                  header compacts — the memories/updated subtitle hides so the
+                  thread starts higher. Title + actions stay. */}
+              {activeTab !== 'chat' && (
+                <div className="mt-1 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] text-[var(--text-muted)]">
+                  {agentsRunning > 0 && (
+                    <span className="inline-flex items-center gap-1.5" data-testid="ws-agents-running">
+                      <DotLive tone="healthy" size={7} />
+                      {agentsRunning} agent{agentsRunning === 1 ? '' : 's'} live
+                    </span>
+                  )}
+                  {typeof ctx?.stats?.memoryCount === 'number' && (
+                    <span>{ctx.stats.memoryCount} {ctx.stats.memoryCount === 1 ? 'memory' : 'memories'}</span>
+                  )}
+                  {relativeTime(lastEvent?.ts) && <span>updated {relativeTime(lastEvent?.ts)}</span>}
+                  {wsStatus !== 'active' && (
+                    <span className="capitalize text-[var(--attention)]" data-testid="ws-status-pill" data-status={wsStatus}>{wsStatus}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -663,7 +727,7 @@ const WorkspaceDesktopApp = ({
               && (state?.pending?.length ?? 0) === 0 && (state?.blocked?.length ?? 0) === 0 ? (
               <FullScreenState
                 icon={Brain}
-                iconClass="text-primary/50"
+                iconClass="text-honey/50"
                 title="This workspace is empty"
                 body="Nothing has happened here yet. Open chat to start working — memory, tasks, and artifacts will fill in as you go."
                 testId="ws-overview-no-memory"
@@ -671,7 +735,7 @@ const WorkspaceDesktopApp = ({
                   <button
                     type="button"
                     onClick={openChat}
-                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20"
                   >
                     Open chat
                   </button>
@@ -701,7 +765,7 @@ const WorkspaceDesktopApp = ({
                   <button
                     type="button"
                     onClick={openChat}
-                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                    className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20"
                     data-testid="ws-chat-tab-open"
                   >
                     Open chat
@@ -766,7 +830,7 @@ const WorkspaceDesktopApp = ({
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
-                        className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
+                        className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
                         data-testid="ws-files-upload"
                       >
                         {uploading ? 'Uploading…' : 'Upload file'}
@@ -775,7 +839,7 @@ const WorkspaceDesktopApp = ({
                         <button
                           type="button"
                           onClick={openChat}
-                          className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20"
+                          className="px-4 py-2 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20"
                           data-testid="ws-files-tab-open-chat"
                         >
                           Open chat
@@ -791,7 +855,7 @@ const WorkspaceDesktopApp = ({
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={uploading}
-                      className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
+                      className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20 disabled:opacity-60"
                       data-testid="ws-files-upload"
                     >
                       {uploading ? 'Uploading…' : 'Upload file'}

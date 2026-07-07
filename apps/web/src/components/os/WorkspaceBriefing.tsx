@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   Brain, Clock, CheckCircle2, AlertTriangle, MessageSquare,
-  Lightbulb, Loader2, ChevronRight, Sparkles, ChevronDown, ChevronUp, Wrench,
+  Lightbulb, ChevronRight, Sparkles, ChevronDown, ChevronUp, Wrench,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
@@ -68,10 +68,37 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
   };
 
   if (loading) {
+    // Wave T Lane E fix 3: the chat's entry loading is a thread-shaped skeleton
+    // (message rhythm: bee-avatar + assistant lines, a right-aligned user bubble)
+    // instead of a bare centered spinner + "Loading workspace…" — so entering a
+    // chat reads as "your conversation is loading", not a lie about an empty box.
+    // sr-only text keeps the screen-reader announcement; reduced-motion stills it.
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground">
-        <Loader2 className="w-5 h-5 animate-spin mr-2" />
-        <span className="text-sm">Loading workspace...</span>
+      <div
+        className="mx-auto w-full max-w-[680px] space-y-4 py-2 animate-pulse motion-reduce:animate-none"
+        role="status"
+        aria-label="Loading conversation"
+        data-testid="chat-thread-skeleton"
+      >
+        <span className="sr-only">Loading conversation…</span>
+        <div className="flex gap-2" aria-hidden="true">
+          <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+          <div className="flex-1 space-y-2 pt-0.5">
+            <div className="h-3 w-28 rounded bg-[var(--surface-2)]" />
+            <div className="h-3 w-full rounded bg-[var(--surface-2)]" />
+            <div className="h-3 w-4/5 rounded bg-[var(--surface-2)]" />
+          </div>
+        </div>
+        <div className="flex justify-end" aria-hidden="true">
+          <div className="h-10 w-2/5 rounded-[4px_14px_14px_14px] bg-[var(--surface-2)]" />
+        </div>
+        <div className="flex gap-2" aria-hidden="true">
+          <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
+          <div className="flex-1 space-y-2 pt-0.5">
+            <div className="h-3 w-32 rounded bg-[var(--surface-2)]" />
+            <div className="h-3 w-11/12 rounded bg-[var(--surface-2)]" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -79,7 +106,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
   if (!ctx) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2">
-        <Brain className="w-8 h-8 text-primary/50" />
+        <Brain className="w-8 h-8 text-honey/50" />
         <p className="text-sm">Ready to chat</p>
       </div>
     );
@@ -179,7 +206,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       {ctx.recentDecisions && ctx.recentDecisions.length > 0 && (
         <div className="mb-4 p-3 rounded-xl bg-secondary/30 border border-border/30">
           <h3 className="text-xs font-display font-semibold text-foreground mb-2">
-            <Lightbulb className="w-3 h-3 inline mr-1 text-primary" />Recent Decisions
+            <Lightbulb className="w-3 h-3 inline mr-1 text-honey" />Recent Decisions
           </h3>
           <ul className="space-y-1.5">
             {ctx.recentDecisions.slice(0, 3).map((d, i) => (
@@ -203,7 +230,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
               <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
                 <span className={`mt-0.5 text-[11px] px-1 rounded ${
                   m.importance === 'critical' ? 'bg-rose-500/20 text-rose-400' :
-                  m.importance === 'important' ? 'bg-primary/20 text-primary' :
+                  m.importance === 'important' ? 'bg-primary/20 text-honey' :
                   'bg-muted text-muted-foreground'
                 }`}>{m.importance === 'critical' ? '!' : m.importance === 'important' ? '★' : '·'}</span>
                 <span className="text-foreground">{m.content.slice(0, 120)}{m.content.length > 120 ? '...' : ''}</span>
@@ -223,7 +250,9 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
             {ctx.recentThreads.slice(0, 4).map(t => (
               <button key={t.id} onClick={() => onSelectSession?.(t.id)}
                 className="w-full flex items-center justify-between text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded hover:bg-muted/50 transition-colors">
-                <span className="truncate">{t.title}</span>
+                {/* Untitled sessions arrive as their raw id ("session-<uuid>") —
+                    never surface a machine slug as a conversation title. */}
+                <span className="truncate">{/^(session[-_ ]?)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(t.title.trim()) ? 'Untitled conversation' : t.title}</span>
                 <ChevronRight className="w-3 h-3 shrink-0" />
               </button>
             ))}
@@ -250,7 +279,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
       {personaId && onPrefill && skillChips.length > 0 && (
         <div className="mt-6" data-testid="briefing-skill-chips">
           <h3 className="text-xs font-display font-semibold text-muted-foreground mb-2">
-            <Wrench className="w-3 h-3 inline mr-1 text-primary" />
+            <Wrench className="w-3 h-3 inline mr-1 text-honey" />
             {personaLabel ? `Skills for ${personaLabel}` : 'Try a skill'}
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -258,7 +287,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
               <button
                 key={chip.id}
                 onClick={() => onPrefill(chip.starter)}
-                className="px-3 py-1.5 text-xs rounded-xl bg-secondary/40 text-foreground hover:bg-secondary/60 hover:text-primary transition-colors border border-border/30"
+                className="px-3 py-1.5 text-xs rounded-xl bg-secondary/40 text-foreground hover:bg-secondary/60 hover:text-honey transition-colors border border-border/30"
                 title={chip.starter}
                 data-testid={`briefing-skill-chip-${chip.id}`}
               >
@@ -276,7 +305,7 @@ const WorkspaceBriefing = ({ workspaceId, personaId, onSendMessage, onPrefill, o
           <div className="flex flex-wrap gap-2">
             {ctx.suggestedPrompts.slice(0, 5).map((p, i) => (
               <button key={i} onClick={() => onSendMessage?.(p)}
-                className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-primary hover:bg-primary/20 transition-colors border border-primary/20">
+                className="px-3 py-1.5 text-xs rounded-xl bg-primary/10 text-honey hover:bg-primary/20 transition-colors border border-primary/20">
                 {p}
               </button>
             ))}

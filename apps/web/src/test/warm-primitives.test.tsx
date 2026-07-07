@@ -56,13 +56,15 @@ describe('warm primitives — render smoke', () => {
     expect(screen.getByText('14 memories consolidated')).toBeInTheDocument();
   });
 
-  it('ConfidenceRing renders the value + CONF caption, and a neutral dash when unknown', () => {
+  it('ConfidenceRing renders NN% + CONF caption, and a labeled "unscored" badge when unknown', () => {
     const { rerender } = render(<ConfidenceRing value={94} />);
-    expect(screen.getByText('94')).toBeInTheDocument();
+    expect(screen.getByText('94%')).toBeInTheDocument();
     expect(screen.getByText('conf')).toBeInTheDocument();
-    // Unknown confidence (harvest-only signal absent) → "—", never a fabricated number.
+    // Unknown confidence (harvest-only signal absent) → a quiet labeled badge,
+    // never an empty dial with a dash and never a fabricated number (Wave F 3a).
     rerender(<ConfidenceRing value={undefined} />);
-    expect(screen.getByText('—')).toBeInTheDocument();
+    expect(screen.getByText('unscored')).toBeInTheDocument();
+    expect(screen.queryByText('—')).not.toBeInTheDocument();
   });
 
   it('confidenceColor maps bands ≥85 healthy / ≥60 attention / <60 risk', () => {
@@ -79,13 +81,18 @@ describe('warm primitives — render smoke', () => {
     expect(screen.getByText(/auto/)).toBeInTheDocument();
   });
 
-  it('OvernightHero shows the statement when runs exist, empty text otherwise', () => {
+  it('OvernightHero always renders the statement; the chip row only when runs exist', () => {
     const { rerender } = render(
-      <OvernightHero statement={<>Folded 14 memories</>} runs={[{ label: 'x' }]} />,
+      <OvernightHero statement={<>Folded 14 memories</>} runs={[{ label: '14 consolidated' }]} />,
     );
     expect(screen.getByText('Folded 14 memories')).toBeInTheDocument();
-    rerender(<OvernightHero statement={<>Folded 14 memories</>} runs={[]} emptyText="A calm night" />);
+    expect(screen.getByText('14 consolidated')).toBeInTheDocument();
+    // H2: single-clause stories pass no chips (a lone chip would repeat the
+    // sentence) — the statement must still render; the caller owns the
+    // empty-night fallback line.
+    rerender(<OvernightHero statement={<>A calm night</>} runs={[]} />);
     expect(screen.getByText('A calm night')).toBeInTheDocument();
+    expect(screen.queryByText('14 consolidated')).not.toBeInTheDocument();
   });
 
   it('AskBar submits trimmed text and clears the input', () => {

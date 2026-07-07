@@ -486,7 +486,7 @@ export default function EvolutionTab() {
             <div role="alert" className="text-center py-8">
               <AlertTriangle className="w-5 h-5 text-destructive/70 mx-auto mb-2" />
               <p className="text-xs text-destructive mb-2 px-2">{error}</p>
-              <button type="button" onClick={handleRefresh} className="text-xs text-primary hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
+              <button type="button" onClick={handleRefresh} className="text-xs text-honey hover:underline px-2 py-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-500)]">Retry</button>
             </div>
           ) : runs.length === 0 ? (
             <div className="text-center py-8">
@@ -532,7 +532,7 @@ export default function EvolutionTab() {
       <div className="flex-1 overflow-auto">
         {detailLoading ? (
           <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <Loader2 className="w-5 h-5 animate-spin text-honey" />
           </div>
         ) : detail ? (
           <RunDetailView
@@ -553,7 +553,7 @@ export default function EvolutionTab() {
             </p>
             <button
               onClick={() => setRunModalOpen(true)}
-              className="mt-4 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors font-display"
+              className="mt-4 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors font-display"
             >
               <Plus className="w-3 h-3" />
               New Run
@@ -589,7 +589,7 @@ function FilterChip({ label, active, count, onClick }: FilterChipProps) {
     <button
       onClick={onClick}
       className={`px-1.5 py-0.5 rounded text-[10px] font-display transition-colors ${
-        active ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground hover:text-foreground'
+        active ? 'bg-primary/20 text-honey' : 'bg-muted text-muted-foreground hover:text-foreground'
       }`}
     >
       {label}
@@ -693,7 +693,7 @@ function RunDetailView({
       {/* Diff */}
       <div>
         <div className="flex items-center gap-1.5 mb-1.5">
-          <FileDiff className="w-3 h-3 text-primary" />
+          <FileDiff className="w-3 h-3 text-honey" />
           <p className="text-[11px] font-display font-medium text-foreground">Baseline vs Winner</p>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -1145,7 +1145,7 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/40">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" />
+            <Sparkles className="w-4 h-4 text-honey" />
             <h3 className="text-sm font-display font-semibold text-foreground">New Evolution Run</h3>
           </div>
           <button
@@ -1160,7 +1160,7 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
         <div className="p-4 space-y-3">
           {loadingTargets ? (
             <div className="flex items-center justify-center py-6">
-              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+              <Loader2 className="w-5 h-5 animate-spin text-honey" />
             </div>
           ) : !targets ? (
             <p className="text-[11px] text-destructive">Could not load targets.</p>
@@ -1241,7 +1241,7 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
 
               {/* Progress / error / result */}
               {submitting && progress && !runResult && !err && (
-                <div className="text-[11px] text-primary bg-primary/5 border border-primary/20 rounded px-2 py-1.5 flex items-center gap-2">
+                <div className="text-[11px] text-honey bg-primary/5 border border-primary/20 rounded px-2 py-1.5 flex items-center gap-2">
                   <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                   <span className="font-mono">Phase: {progress.phase}</span>
                   {progress.message && (
@@ -1284,7 +1284,7 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
             <button
               onClick={onSubmit}
               disabled={submitting || loadingTargets || loadingBaseline || !baseline || !name}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors disabled:opacity-50 font-display"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors disabled:opacity-50 font-display"
             >
               {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
               {submitting ? 'Running…' : 'Run'}

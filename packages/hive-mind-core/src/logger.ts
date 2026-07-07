@@ -21,10 +21,18 @@ export function createCoreLogger(tag: string): CoreLogger {
   // console.error already target stderr; route info/debug there too rather
   // than console.info/console.debug (which write to stdout).
   // Reverse-ported from OSS hive-mind (oss-drift triage R1, 2026-06-11).
+  //
+  // Guard the optional payload with `data !== undefined` (NOT a truthiness
+  // check) so falsy-but-defined payloads (0, '', false, null) are still
+  // logged instead of silently dropped. Ported from hive-mind a99ea0e.
   return {
-    info: (msg: string, data?: unknown) => console.error(data ? `${prefix} ${msg}` : `${prefix} ${msg}`, ...(data ? [data] : [])),
-    warn: (msg: string, data?: unknown) => console.warn(data ? `${prefix} ${msg}` : `${prefix} ${msg}`, ...(data ? [data] : [])),
-    error: (msg: string, data?: unknown) => console.error(data ? `${prefix} ${msg}` : `${prefix} ${msg}`, ...(data ? [data] : [])),
-    debug: (msg: string, data?: unknown) => console.error(data ? `${prefix} ${msg}` : `${prefix} ${msg}`, ...(data ? [data] : [])),
+    info: (msg: string, data?: unknown) =>
+      data !== undefined ? console.error(`${prefix} ${msg}`, data) : console.error(`${prefix} ${msg}`),
+    warn: (msg: string, data?: unknown) =>
+      data !== undefined ? console.warn(`${prefix} ${msg}`, data) : console.warn(`${prefix} ${msg}`),
+    error: (msg: string, data?: unknown) =>
+      data !== undefined ? console.error(`${prefix} ${msg}`, data) : console.error(`${prefix} ${msg}`),
+    debug: (msg: string, data?: unknown) =>
+      data !== undefined ? console.error(`${prefix} ${msg}`, data) : console.error(`${prefix} ${msg}`),
   };
 }

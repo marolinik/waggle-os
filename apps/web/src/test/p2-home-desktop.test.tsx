@@ -56,7 +56,7 @@ function httpError(status: number, message = `HTTP ${status}`) {
 
 const RAW_ISO = '2026-06-11T07:42:13.512Z';
 const briefing = (over: Record<string, unknown> = {}) => ({
-  greeting: "Good morning, Marko. Here's your day:",
+  greeting: "Good morning, Marko. Here's your day",
   userName: 'Marko',
   date: RAW_ISO,
   recentWorkspaces: [],
@@ -100,7 +100,9 @@ describe('HomeCockpit (P2)', () => {
   it('renders the J08 review banner and deep-links to the Memory Center filter', async () => {
     await renderHome(briefing({ needsReviewCount: 3 }));
     const banner = screen.getByTestId('home-cockpit-review-banner');
-    expect(banner.textContent).toContain('3 imported memories need your review');
+    // Scope-qualified copy ("from your imports") so the Home count can't read
+    // as contradicting the Memory Center's broader "awaiting your confirm" total.
+    expect(banner.textContent).toContain('3 memories from your imports need your review');
 
     const events: Array<Record<string, unknown>> = [];
     const spy = (e: Event) => events.push((e as CustomEvent).detail as Record<string, unknown>);

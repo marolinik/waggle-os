@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
+import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import {
   HEX_TEXTURE_PATH,
@@ -30,6 +31,33 @@ const personaByOrder = new Map<number, Persona>(
   personas.map((p) => [p.order, p]),
 );
 
+/**
+ * Per-persona accent — a curated warm ramp (honey / amber / copper / bronze /
+ * terracotta family; no purple, no gradients). Round-6 palette discipline:
+ * exactly ONE muted cool note survives (sleeping → night blue, where the hue
+ * IS the meaning); everything else stays in the warm-Hive family. Each tile
+ * gets its hue on the title, top hairline, and hover border/glow so the grid
+ * reads as a cast of characters, not a spreadsheet. Hues are chosen so
+ * horizontally/vertically adjacent tiles (4-col landing grid) never repeat,
+ * and a few map to meaning (confused → terracotta flag, researcher/team →
+ * deep bronze, analyst/architect → copper).
+ */
+const PERSONA_ACCENTS: Readonly<Record<PersonaSlug, string>> = {
+  hunter: '#f6c45a',
+  researcher: '#c07e16',
+  analyst: '#d98a3d',
+  connector: '#f2b950',
+  architect: '#d98a3d',
+  builder: '#e9a52c',
+  writer: '#e0916f',
+  orchestrator: '#e9a52c',
+  marketer: '#f6c45a',
+  team: '#c07e16',
+  celebrating: '#f9d27e',
+  confused: '#db8068',
+  sleeping: '#86a9d1',
+};
+
 export interface BrandPersonasCardProps {
   /** Optional uppercase kicker rendered above the heading (e.g. "Built for"). */
   eyebrow?: string;
@@ -47,7 +75,8 @@ export interface BrandPersonasCardProps {
  *
  * @remarks
  * Copy is imported verbatim from `_data/personas.ts` — do not override in-place.
- * Assets are loaded via plain `<img>` tags with an `onError` fallback that flips
+ * Assets are loaded eagerly via `next/image` (optimizer serves ~256px
+ * AVIF/WebP of the 2048px source PNGs) with an `onError` fallback that flips
  * the tile to a hex-texture placeholder. The placeholder auto-disables when an
  * asset loads successfully, so shipping new PNGs requires no code change.
  *
@@ -210,11 +239,13 @@ function PersonaTile({
             <span className="waggle-persona-placeholder-dot" />
           </div>
         ) : (
-          <img
+          /* next/image (optimizer → ~256px AVIF/WebP) makes eager loading
+             affordable; the raw 2048px PNGs are ~2.5 MB each. Eager so a
+             tile never paints as an empty frame while lazy IO waits. */
+          <Image
             src={persona.imagePath}
             alt={persona.alt}
-            decoding="async"
-            loading="lazy"
+            loading="eager"
             width={256}
             height={256}
             className="waggle-persona-asset"
@@ -229,12 +260,17 @@ function PersonaTile({
     </figure>
   );
 
+  const tileStyle = {
+    '--accent': PERSONA_ACCENTS[persona.slug],
+  } as CSSProperties;
+
   return (
     <li
       data-testid={`persona-tile-${persona.slug}`}
       data-slug={persona.slug}
       data-placeholder={hasError ? 'true' : undefined}
       className="waggle-persona-tile"
+      style={tileStyle}
       onMouseEnter={handleHover}
       onFocus={handleFocus}
     >
@@ -331,17 +367,36 @@ const scopedCss = `
   .waggle-persona-tile {
     position: relative;
     list-style: none;
+    overflow: hidden;
     background: linear-gradient(180deg, #14110b 0%, #0e0c07 100%);
     border: 1px solid #1f1a12;
     border-radius: 16px;
     padding: 20px;
     min-height: 260px;
-    transition: border-color 200ms ease-out, transform 200ms ease-out;
+    transition: border-color 200ms ease-out, transform 200ms ease-out,
+      box-shadow 200ms ease-out;
+  }
+  /* Per-role accent hairline across the top edge of each tile. */
+  .waggle-persona-tile::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--accent, #e9a52c);
+    opacity: 0.5;
+    transition: opacity 200ms ease-out;
   }
   .waggle-persona-tile:hover,
   .waggle-persona-tile:focus-within {
-    border-color: #e9a52c;
-    transform: scale(1.02);
+    border-color: var(--accent, #e9a52c);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 34px -16px color-mix(in srgb, var(--accent, #e9a52c) 55%, transparent);
+  }
+  .waggle-persona-tile:hover::before,
+  .waggle-persona-tile:focus-within::before {
+    opacity: 1;
   }
   @media (prefers-reduced-motion: reduce) {
     .waggle-persona-tile,
@@ -359,7 +414,7 @@ const scopedCss = `
     border-radius: 12px;
   }
   .waggle-persona-button:focus-visible {
-    outline: 2px solid #e9a52c;
+    outline: 2px solid var(--accent, #e9a52c);
     outline-offset: 2px;
   }
   .waggle-persona-figure {
@@ -370,6 +425,7 @@ const scopedCss = `
     gap: 16px;
   }
   .waggle-persona-asset-frame {
+    position: relative;
     width: 100%;
     aspect-ratio: 1 / 1;
     max-width: 256px;
@@ -378,10 +434,16 @@ const scopedCss = `
     justify-content: center;
   }
   .waggle-persona-asset {
+    position: relative;
     width: 100%;
     height: 100%;
     object-fit: contain;
     display: block;
+    /* The mascot PNGs are background-transparent (2026-07-06 flood-fill) —
+       they sit directly on the card gradient. The old dark vignette +
+       edge-fade masks compensated for baked-black squares and are gone:
+       with real alpha they READ as a dark box behind the art. */
+    filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.35));
   }
   .waggle-persona-placeholder {
     width: 100%;
@@ -414,7 +476,7 @@ const scopedCss = `
     font-family: var(--sans);
     font-size: 16px;
     font-weight: 600;
-    color: #f6c45a;
+    color: var(--accent, #f6c45a);
     letter-spacing: 0.01em;
   }
   .waggle-persona-role {
@@ -424,14 +486,52 @@ const scopedCss = `
     color: #c8bfa9;
     line-height: 1.45;
   }
+  /* Filler slots keep the staggered grid rhythm without reading as broken
+     cards: no border, no card surface — an outlined-but-hollow frame looks
+     like missing content. Instead: ambient comb texture that fades out
+     radially, so the corners read as intentional negative space.
+     Decorative only (aria-hidden on the element). */
   .waggle-persona-filler {
+    position: relative;
     list-style: none;
     min-height: 260px;
     border-radius: 16px;
-    background-image: url("${HEX_TEXTURE_PATH}");
-    background-size: cover;
-    background-position: center;
-    opacity: 0.4;
-    border: 1px solid #1f1a12;
+    overflow: hidden;
+    /* Round-7: complete the falloff — the texture dissolves toward the grid's
+       outer edge so the ghost reads as intentional ambience, never as an
+       unloaded card. */
+    -webkit-mask-image: linear-gradient(to right, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+    mask-image: linear-gradient(to right, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+  }
+  .waggle-persona-filler:nth-of-type(1),
+  li.waggle-persona-filler:first-child {
+    -webkit-mask-image: linear-gradient(to left, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+    mask-image: linear-gradient(to left, rgba(0,0,0,0.8), rgba(0,0,0,0.15));
+  }
+  /* Round-6: fainter + slightly shrunken so the ghosts can't be mistaken for
+     unloaded cards — clearly ambient texture, not content-in-waiting. */
+  .waggle-persona-filler::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 50% 46%, rgba(233, 165, 44, 0.10), rgba(233, 165, 44, 0) 62%),
+      url("${HEX_TEXTURE_PATH}") center / cover no-repeat;
+    opacity: 0.2;
+    transform: scale(0.88);
+    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 22%, transparent 74%);
+    mask-image: radial-gradient(circle at 50% 50%, #000 22%, transparent 74%);
+  }
+  .waggle-persona-filler::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 34px;
+    height: 38px;
+    transform: translate(-50%, -50%);
+    background: no-repeat center / contain
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='42' height='46' viewBox='0 0 42 46' fill='none'%3E%3Cpath d='M21 2 L39 12.5 V33.5 L21 44 L3 33.5 V12.5 Z' stroke='%23e9a52c' stroke-width='1.4' stroke-linejoin='round'/%3E%3C/svg%3E");
+    opacity: 0.18;
   }
 `;

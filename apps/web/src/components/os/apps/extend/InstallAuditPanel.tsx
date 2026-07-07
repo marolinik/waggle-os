@@ -94,7 +94,7 @@ const InstallAuditPanel = ({ type, capability, limit = 20, showFilter = false }:
   if (loading) {
     return (
       <div className="flex justify-center py-6" role="status" aria-live="polite">
-        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+        <Loader2 className="w-4 h-4 animate-spin text-honey" />
       </div>
     );
   }
@@ -103,7 +103,7 @@ const InstallAuditPanel = ({ type, capability, limit = 20, showFilter = false }:
     return (
       <div role="alert" className="text-center py-6">
         <p className="text-xs text-destructive mb-2">{error}</p>
-        <button onClick={() => void load()} className="text-xs text-primary hover:underline">Retry</button>
+        <button onClick={() => void load()} className="text-xs text-honey hover:underline">Retry</button>
       </div>
     );
   }

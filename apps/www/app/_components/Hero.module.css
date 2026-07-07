@@ -113,3 +113,48 @@
     max-width: 640px;
   }
 }
+
+/* Round-7: one benchmark strip in the hero's dead bottom quarter.
+   Wave R Lane E: the 86.49% number is lifted to a flagship stat chip
+   (larger mono, honey-wash lozenge) so the leaderboard claim carries weight
+   near the CTAs; the rest stays quiet supporting mono copy. */
+.proofStrip {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 28px;
+  max-width: 40em;
+  color: var(--honey-500);
+  text-decoration: none;
+}
+.proofStat {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: baseline;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: var(--honey-wash);
+  border: 1px solid var(--honey-line);
+  font-family: var(--mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--honey-400);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.proofLabel {
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.proofStrip:hover .proofStat {
+  border-color: var(--honey-500);
+  background: rgba(233, 165, 44, 0.16);
+}
+.proofStrip:hover .proofLabel {
+  color: var(--hive-300);
+}

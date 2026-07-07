@@ -28,7 +28,6 @@ import { matchPath, useLocation } from 'react-router-dom';
 import ChatWindowInstance from './apps/ChatWindowInstance';
 import { useShell } from '@/providers/ShellContext';
 import {
-  composeChatTitle,
   rekeyLocalDefaultChatState,
   takeChatSeed,
   useChatWidgetState,
@@ -119,13 +118,9 @@ const ChatHostInstance = ({ workspaceId }: { workspaceId: string }) => {
 
   return createPortal(
     <div className="h-full flex flex-col" data-testid={`chat-widget-${workspaceId}`}>
-      {/* §3.2: getWindowTitle's chat-title composition → widget header label. */}
-      <div
-        className="shrink-0 px-3 py-1.5 border-b border-border/30 text-xs font-display text-muted-foreground truncate"
-        data-testid="chat-widget-title"
-      >
-        {composeChatTitle(ws?.name, ws?.templateId, personaId)}
-      </div>
+      {/* UX gold-standard H1: the composeChatTitle breadcrumb row is gone —
+          it duplicated workspace + persona info already shown in the
+          WorkspaceDesktopApp header and ChatApp's agent chip row. */}
       <div className="flex-1 min-h-0">
         <ChatWindowInstance
           workspaceId={workspaceId}

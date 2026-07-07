@@ -1,7 +1,8 @@
 import { motion } from 'framer-motion';
-import { UserRound, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { fadeSlide } from './constants';
 import { WORK_TYPES, TEAM_SIZES, GOALS, buildProfilePreview } from '@/lib/onboarding-profile';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
 import type { WhoAreYouStepProps } from './types';
 
 /** Industry options — copied from UserProfileApp's Identity tab (reuse pattern). */
@@ -36,8 +37,11 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
 
   return (
     <motion.div key="step-who-are-you" {...fadeSlide}>
+      {/* Wave V Lane F item 3 (mascot carry): the generic UserRound glyph that
+          used to head this step is gone — the wizard shell now carries the
+          persistent breathing hex-bee across every step, so the brand mascot is
+          the header instead of a per-step icon swap. */}
       <div className="text-center mb-6">
-        <UserRound className="w-10 h-10 text-primary mx-auto mb-3" />
         <h2 className="text-2xl font-display font-bold text-foreground mb-2">
           Tell us who you are
         </h2>
@@ -71,15 +75,28 @@ const WhoAreYouStep = ({ profile, onChange, onContinue, saving }: WhoAreYouStepP
           </div>
           <div>
             <label className="text-xs text-muted-foreground block mb-1" htmlFor="who-industry">Industry</label>
-            <select
-              id="who-industry"
-              value={profile.industry ?? ''}
-              onChange={e => onChange({ industry: e.target.value })}
-              className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            {/* Wave V Lane F item 3: the native OS <select> rendered its options
+                list in un-themed browser chrome (a white popup in dark mode).
+                The app's themed Select primitive (Radix) renders a token-driven
+                dropdown that matches both themes; the trigger inherits the same
+                bg-muted/50 + border-border/50 grammar as the Name/Role inputs. */}
+            <Select
+              value={profile.industry || undefined}
+              onValueChange={(v) => onChange({ industry: v })}
             >
-              <option value="">Select…</option>
-              {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
-            </select>
+              <SelectTrigger
+                id="who-industry"
+                aria-label="Industry"
+                className="w-full h-auto bg-muted/50 border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground"
+              >
+                <SelectValue placeholder="Select…" />
+              </SelectTrigger>
+              <SelectContent>
+                {INDUSTRIES.map(i => (
+                  <SelectItem key={i} value={i}>{i}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

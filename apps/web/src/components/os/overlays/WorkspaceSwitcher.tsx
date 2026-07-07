@@ -81,7 +81,7 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
           {subtitle && <span className="text-[11px] text-muted-foreground truncate block">{subtitle}</span>}
         </div>
         {isActive
-          ? <Check className="w-3.5 h-3.5 text-primary shrink-0" aria-label="Current workspace" />
+          ? <Check className="w-3.5 h-3.5 text-honey shrink-0" aria-label="Current workspace" />
           : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
       </button>
       <WorkspaceActionsMenu

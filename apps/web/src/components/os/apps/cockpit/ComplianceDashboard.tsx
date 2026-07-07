@@ -266,7 +266,7 @@ const ComplianceDashboard = () => {
         <button
           onClick={() => fetchStatus()}
           disabled={refreshing}
-          className="mt-2 text-[11px] text-primary hover:text-primary/80 transition-colors disabled:opacity-50"
+          className="mt-2 text-[11px] text-honey hover:text-honey/80 transition-colors disabled:opacity-50"
         >
           {refreshing ? 'Retrying…' : 'Retry'}
         </button>
@@ -326,7 +326,7 @@ const ComplianceDashboard = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
-          <Shield className="w-4 h-4 text-primary shrink-0" />
+          <Shield className="w-4 h-4 text-honey shrink-0" />
           <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
           {lastRefreshed && (
             <span className="text-[11px] text-muted-foreground truncate">
@@ -364,7 +364,7 @@ const ComplianceDashboard = () => {
             <button
               onClick={() => setShowOptions(s => !s)}
               className={`p-1 rounded-lg transition-colors ${
-                showOptions ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                showOptions ? 'text-honey bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
             >
               <SettingsIcon className="w-3.5 h-3.5" />
@@ -467,7 +467,7 @@ const ComplianceDashboard = () => {
                 onClick={() => setOn(!on)}
                 className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
                   on
-                    ? 'bg-primary/20 text-primary border-primary/30'
+                    ? 'bg-primary/20 text-honey border-primary/30'
                     : 'bg-background/30 text-muted-foreground border-border/30 hover:text-foreground'
                 }`}
               >

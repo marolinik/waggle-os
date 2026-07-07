@@ -105,7 +105,7 @@ const FileActions = ({
               onDrop={e => onBreadcrumbDrop(e, crumb.path)}
               className={`text-[11px] transition-colors truncate max-w-[100px] px-1.5 py-0.5 rounded-md ${
                 breadcrumbDropTarget === crumb.path
-                  ? 'bg-primary/20 text-primary ring-1 ring-primary/40'
+                  ? 'bg-primary/20 text-honey ring-1 ring-primary/40'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >

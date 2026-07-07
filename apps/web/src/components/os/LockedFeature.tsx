@@ -19,7 +19,7 @@ const LockedFeature = ({ featureName, upgradePrompt, children }: LockedFeaturePr
       </div>
       <p className="text-sm font-display font-medium text-foreground">{featureName}</p>
       <p className="text-xs text-muted-foreground max-w-xs">{upgradePrompt}</p>
-      <button className="flex items-center gap-1.5 mt-1 px-4 py-2 text-xs font-medium rounded-lg bg-primary/20 text-primary hover:bg-primary/30 transition-colors">
+      <button className="flex items-center gap-1.5 mt-1 px-4 py-2 text-xs font-medium rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors">
         <ArrowUpRight className="w-3.5 h-3.5" />
         View Plans
       </button>

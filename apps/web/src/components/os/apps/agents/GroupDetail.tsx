@@ -14,7 +14,7 @@ import { STRATEGY_CONFIG } from './types';
 
 const STATUS_ICON: Record<MemberExecStatus, React.ReactNode> = {
   pending: <Clock className="w-3.5 h-3.5 text-muted-foreground" />,
-  running: <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />,
+  running: <Loader2 className="w-3.5 h-3.5 text-honey animate-spin" />,
   done: <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />,
   failed: <XCircle className="w-3.5 h-3.5 text-destructive" />,
 };
@@ -103,7 +103,7 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
     >
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Users className="w-5 h-5 text-primary" />
+          <Users className="w-5 h-5 text-honey" />
           <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
           <button onClick={onDuplicate} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
             <Copy className="w-3 h-3" /> Duplicate

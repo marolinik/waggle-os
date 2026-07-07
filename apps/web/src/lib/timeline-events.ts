@@ -87,8 +87,8 @@ export const EVENT_ICONS: Record<KnownEventType, TimelineIcon> = {
 /** Tailwind colour classes per event type. */
 export const EVENT_COLORS: Record<KnownEventType, string> = {
   // ── Canonical ─────────────────────────────────────────────────────
-  tool_call: 'text-primary border-primary/30',
-  tool_result: 'text-primary border-primary/30',
+  tool_call: 'text-honey border-primary/30',
+  tool_result: 'text-honey border-primary/30',
   memory_write: 'text-amber-400 border-amber-400/30',
   memory_delete: 'text-amber-400 border-amber-400/30',
   workspace_create: 'text-sky-400 border-sky-400/30',
@@ -96,7 +96,7 @@ export const EVENT_COLORS: Record<KnownEventType, string> = {
   workspace_delete: 'text-destructive border-destructive/30',
   session_start: 'text-muted-foreground border-border/30',
   session_end: 'text-muted-foreground border-border/30',
-  approval_requested: 'text-primary border-primary/30',
+  approval_requested: 'text-honey border-primary/30',
   approval_granted: 'text-emerald-400 border-emerald-400/30',
   approval_denied: 'text-destructive border-destructive/30',
   approval_auto: 'text-emerald-400 border-emerald-400/30',
@@ -106,10 +106,10 @@ export const EVENT_COLORS: Record<KnownEventType, string> = {
   memory_save: 'text-amber-400 border-amber-400/30',
   agent_spawned: 'text-violet-400 border-violet-400/30',
   skill_installed: 'text-sky-400 border-sky-400/30',
-  workflow_execution: 'text-primary border-primary/30',
+  workflow_execution: 'text-honey border-primary/30',
   user_action: 'text-muted-foreground border-border/30',
   knowledge_created: 'text-amber-400 border-amber-400/30',
-  connector_activated: 'text-primary border-primary/30',
+  connector_activated: 'text-honey border-primary/30',
   error: 'text-destructive border-destructive/30',
 };
 

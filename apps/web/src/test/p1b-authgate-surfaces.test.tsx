@@ -40,6 +40,12 @@ const mocks = vi.hoisted(() => ({
     // PR5: Settings opens on the Models tab → ModelGate fetches these on mount.
     getProviders: vi.fn(),
     getLocalInferenceStatus: vi.fn(),
+    // MODEL-GATE: the mount probe calls these too — absent, the probe's async
+    // closure throws (TypeError: not a function) as an UNHANDLED rejection that
+    // poisons unrelated tests in the full-suite run. configured:false = the
+    // probe's honest "nothing to check" idle path.
+    probeModel: vi.fn().mockResolvedValue({ configured: false }),
+    probeProvider: vi.fn().mockResolvedValue({ configured: false, valid: false, verified: false }),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -231,9 +237,12 @@ describe('LoginBriefing (P1b)', () => {
     mocks.adapter.getMemoryStats.mockRejectedValue(httpError(401, {}, 'Unauthorized'));
     mocks.adapter.getWorkspaces.mockRejectedValue(httpError(401, { code: 'MISSING_TOKEN' }, 'Unauthorized'));
     const screen = await renderBriefing();
+    // Wave Q Lane A: a failed briefing degrades to the slim inline row (NOT a
+    // blocking modal). The behavioral contract — error state, never the Day-0
+    // demo bubbles — is unchanged; only the surface it renders on moved.
     await waitFor(() => expect(screen.getByTestId('login-briefing-error')).toBeInTheDocument());
     expect(screen.queryByTestId('login-briefing-empty-hook')).toBeNull();
-    expect(screen.getByTestId('login-briefing-brag-line').textContent).toContain('Briefing unavailable');
+    expect(screen.getByTestId('login-briefing-error').textContent).toContain('Briefing unavailable');
     // Generous budget: full framer-motion render under parallel suite load.
   }, 15000);
 

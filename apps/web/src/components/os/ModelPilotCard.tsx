@@ -34,9 +34,9 @@ interface LaneConfig {
   key: 'primary' | 'fallback' | 'budget';
   label: string;
   icon: React.ElementType;
-  color: string;       // border + accent color
-  bgColor: string;     // lane background
-  dotColor: string;     // status dot color
+  /** Role accent (warm palette token) — drives the left rail + label text only;
+   *  the row surface itself stays neutral (H2 fix: no full-row tints). */
+  rail: string;
   description: string;
 }
 
@@ -45,27 +45,31 @@ const LANES: LaneConfig[] = [
     key: 'primary',
     label: 'Primary',
     icon: Zap,
-    color: 'text-emerald-400',
-    bgColor: 'bg-emerald-500/5 border-emerald-500/20',
-    dotColor: 'bg-emerald-400',
+    // Wave U Lane E (item 2): --honey-text (not raw --honey) so the 11px label
+    // clears AA in light — raw --honey #c07f00 probes ~3.3:1 on the ivory card,
+    // --honey-text #9a6408 is ~4.9:1. No-op in dark (both resolve to #e9a52c).
+    rail: 'var(--honey-text)',
     description: 'Your default model for all tasks',
   },
   {
     key: 'fallback',
     label: 'Fallback',
     icon: Shield,
-    color: 'text-amber-400',
-    bgColor: 'bg-amber-500/5 border-amber-500/20',
-    dotColor: 'bg-amber-400',
+    // Warm copper — role identity deliberately OFF the semantic palette
+    // (round-4: the --risk rail read as "this lane is failing"). Mixed from
+    // the theme tokens so it tracks both themes; the Shield icon carries the
+    // role, and red/green stay reserved for real states. Wave U Lane E (item 2):
+    // the honey half uses --honey-text so the copper label clears AA in light
+    // (~3.8:1 → ~4.7:1); no-op in dark where --honey-text == --honey.
+    rail: 'color-mix(in srgb, var(--honey-text) 55%, var(--risk) 45%)',
     description: 'Used when primary is down or rate-limited',
   },
   {
     key: 'budget',
     label: 'Budget Saver',
     icon: Coins,
-    color: 'text-sky-400',
-    bgColor: 'bg-sky-500/5 border-sky-500/20',
-    dotColor: 'bg-sky-400',
+    // Warm sand/stone — NOT --healthy (green read as "success", not a role).
+    rail: 'var(--text-muted)',
     description: 'Activates when daily spend exceeds threshold',
   },
 ];
@@ -74,12 +78,6 @@ const COST_TOOLTIPS: Record<string, string> = {
   '$': '~$0.001/msg',
   '$$': '~$0.01/msg',
   '$$$': '~$0.05/msg',
-};
-
-const COST_COLORS: Record<string, string> = {
-  '$': 'text-emerald-400',
-  '$$': 'text-amber-400',
-  '$$$': 'text-rose-400',
 };
 
 /** Dropdown for picking a model, grouped by provider */
@@ -121,12 +119,14 @@ const LaneDropdown = ({
               {provider.name}
             </span>
             {!provider.hasKey && provider.requiresKey && (
-              <span className="flex items-center gap-0.5 text-[11px] text-amber-400">
+              <span className="flex items-center gap-0.5 text-[11px] text-[var(--status-warning)]">
                 <Key className="w-2.5 h-2.5" /> No key
               </span>
             )}
+            {/* ✓ = key configured (presence only — no probe status is in reach
+                here), so it stays muted-neutral rather than a success green. */}
             {provider.hasKey && (
-              <span className="text-[11px] text-emerald-400">&#10003;</span>
+              <span className="text-[11px] text-muted-foreground">&#10003;</span>
             )}
           </div>
           {provider.models.map(m => {
@@ -140,7 +140,7 @@ const LaneDropdown = ({
                 disabled={disabled}
                 className={`w-full text-left px-3 py-1.5 text-xs transition-colors flex items-center justify-between ${
                   value === m.id
-                    ? 'bg-primary/10 text-primary'
+                    ? 'bg-primary/10 text-honey'
                     : disabled
                       ? 'text-muted-foreground/40 cursor-not-allowed'
                       : 'text-foreground hover:bg-muted/50'
@@ -149,7 +149,7 @@ const LaneDropdown = ({
                 <span className="flex items-center gap-1.5">
                   {m.name}
                   {isFree && (
-                    <span className="px-1 py-0.5 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
+                    <span className="px-1 py-0.5 rounded text-[11px] font-display font-bold bg-[var(--healthy-wash)] text-[var(--healthy)] leading-none">
                       FREE
                     </span>
                   )}
@@ -158,13 +158,14 @@ const LaneDropdown = ({
                   {isSameAsPrimary ? (
                     <span className="text-muted-foreground/60">Same as Primary</span>
                   ) : disabled ? (
-                    <span className="text-muted-foreground/40">Add key in Vault</span>
+                    // Wave X Lane B: /40 read as broken; /60 matches the "Same as
+                    // Primary" sibling above (disabled-state label — WCAG-inactive
+                    // exempt, but should still be legible).
+                    <span className="text-muted-foreground/60">Add key in Vault</span>
                   ) : (
                     <HintTooltip content={COST_TOOLTIPS[m.cost] ?? ''}>
-                      <span
-                        className={COST_COLORS[m.cost] ?? ''}
-                        tabIndex={0}
-                      >
+                      {/* The $ count already encodes cost — neutral text, no traffic-light colors. */}
+                      <span className="text-muted-foreground" tabIndex={0}>
                         {m.cost}
                       </span>
                     </HintTooltip>
@@ -191,6 +192,45 @@ const resolveModelCost = (modelId: string | null, providers: Provider[]): string
     if (found) return found.cost;
   }
   return null;
+};
+
+/** Cost rank for a model — lower is cheaper. FREE=0, $=1, $$=2, $$$=3; an
+ *  unknown/unpriced cost returns null (excluded from cheaper-than comparisons). */
+const costRank = (model: { id: string; cost: string }): number | null => {
+  if (model.id.includes(':free')) return 0;
+  switch (model.cost) {
+    case '$': return 1;
+    case '$$': return 2;
+    case '$$$': return 3;
+    default: return null;
+  }
+};
+
+/** Find a strictly-cheaper, USABLE model than the primary from the live catalog
+ *  (real data only — the owning provider must have a key so the fallback can
+ *  actually fire, and it must not equal the primary). Returns the cheapest such
+ *  model, or null when none exists (no invention — the button then hides). */
+const findCheaperFallback = (
+  defaultModel: string,
+  providers: Provider[],
+): { id: string; name: string } | null => {
+  let primaryRank: number | null = null;
+  for (const p of providers) {
+    const m = p.models.find(mm => mm.id === defaultModel);
+    if (m) { primaryRank = costRank(m); break; }
+  }
+  if (primaryRank == null) return null;
+  let best: { id: string; name: string; rank: number } | null = null;
+  for (const p of providers) {
+    if (p.requiresKey && !p.hasKey) continue; // must be usable
+    for (const m of p.models) {
+      if (m.id === defaultModel) continue;
+      const rank = costRank(m);
+      if (rank == null || rank >= primaryRank) continue;
+      if (!best || rank < best.rank) best = { id: m.id, name: m.name, rank };
+    }
+  }
+  return best ? { id: best.id, name: best.name } : null;
 };
 
 const ModelPilotCard = ({
@@ -241,12 +281,20 @@ const ModelPilotCard = ({
 
   const visibleLanes = singleMode ? LANES.slice(0, 1) : LANES;
 
+  // kw (Wave S): when the fallback can never fire (== primary), offer a
+  // one-click switch to a strictly-cheaper usable model — only if one really
+  // exists in the catalog. Null hides the suggestion (no invented models).
+  const cheaperFallback =
+    !singleMode && fallbackModel && fallbackModel === defaultModel
+      ? findCheaperFallback(defaultModel, providers)
+      : null;
+
   return (
     <div className="rounded-xl bg-secondary/30 border border-border/30 p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Zap className="w-4 h-4 text-primary" />
+          <Zap className="w-4 h-4 text-honey" />
           <h3 className="text-sm font-display font-semibold text-foreground">Model Pilot</h3>
           <HintTooltip content="What is Model Pilot?">
             <button
@@ -265,7 +313,7 @@ const ModelPilotCard = ({
             {singleMode ? (
               <ToggleLeft className="w-4 h-4" />
             ) : (
-              <ToggleRight className="w-4 h-4 text-primary" />
+              <ToggleRight className="w-4 h-4 text-honey" />
             )}
             {singleMode ? 'Single model' : 'Fallback chain'}
           </button>
@@ -292,13 +340,19 @@ const ModelPilotCard = ({
           const isOpen = openLane === lane.key;
 
           return (
-            <div key={lane.key} className={`relative rounded-lg border p-2.5 ${lane.bgColor}`}>
+            <div key={lane.key} className="relative rounded-lg border border-[var(--line-soft)] bg-card p-2.5 pl-3.5 shadow-[var(--shadow-sm)]">
+              {/* Single role accent: inset 3px rail + colored label (no overflow-hidden —
+                  the LaneDropdown below overhangs the row). */}
+              <span
+                aria-hidden
+                className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full"
+                style={{ background: lane.rail }}
+              />
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${lane.dotColor}`} />
-                  <lane.icon className={`w-3.5 h-3.5 shrink-0 ${lane.color}`} />
+                  <lane.icon className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0">
-                    <p className={`text-[11px] font-display font-semibold ${lane.color}`}>
+                    <p className="text-[11px] font-display font-semibold" style={{ color: lane.rail }}>
                       {lane.label}
                     </p>
                     <p className="text-[11px] text-muted-foreground truncate">{lane.description}</p>
@@ -313,17 +367,18 @@ const ModelPilotCard = ({
                     </p>
                     <div className="flex items-center justify-end gap-1">
                       {cost && (
-                        <HintTooltip content={COST_TOOLTIPS[cost] ?? ''}>
-                          <span
-                            className={`text-[11px] ${COST_COLORS[cost] ?? ''}`}
-                            tabIndex={0}
-                          >
-                            {cost}
-                          </span>
-                        </HintTooltip>
+                        // R10: the bare `$$$` glyph read as cryptic — surface the
+                        // explicit per-message cost inline (+ aria-label) so the
+                        // tier is legible without a hover or a foot-of-card legend.
+                        <span
+                          className="text-[11px] text-muted-foreground"
+                          aria-label={`Cost tier ${cost}${COST_TOOLTIPS[cost] ? ` — ${COST_TOOLTIPS[cost]}` : ''}`}
+                        >
+                          {cost}{COST_TOOLTIPS[cost] ? ` · ${COST_TOOLTIPS[cost]}` : ''}
+                        </span>
                       )}
                       {isFree && (
-                        <span className="px-1 rounded text-[11px] font-display font-bold bg-emerald-500/20 text-emerald-400 leading-none">
+                        <span className="px-1 rounded text-[11px] font-display font-bold bg-[var(--healthy-wash)] text-[var(--healthy)] leading-none">
                           FREE
                         </span>
                       )}
@@ -357,17 +412,29 @@ const ModelPilotCard = ({
       </div>
 
       {/* W2C: a persisted fallback equal to the primary can never fire
-          (chat.ts guards resolvedModel !== fallbackModel). Warn + one-click clear. */}
+          (chat.ts guards resolvedModel !== fallbackModel). Warn + one-click clear.
+          H2: quiet neutral styling — the ModelGate key-health banner above owns
+          the amber on this screen; two amber banners at once read as an incident. */}
       {!singleMode && fallbackModel && fallbackModel === defaultModel && (
         <div
-          className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-2 text-[11px] text-amber-300"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-[var(--line-soft)] bg-muted/40 px-2.5 py-2 text-[11px] text-muted-foreground"
           data-testid="model-pilot-fallback-equals-primary"
         >
           <Shield className="w-3.5 h-3.5 shrink-0" />
-          <span className="flex-1">Fallback equals Primary — failover will never trigger.</span>
+          <span className="flex-1 min-w-[10rem]">Fallback equals Primary — failover will never trigger.</span>
+          {cheaperFallback && (
+            <button
+              onClick={() => onUpdate({ fallbackModel: cheaperFallback.id })}
+              title={`Switch fallback to ${cheaperFallback.name}`}
+              data-testid="model-pilot-use-cheaper-fallback"
+              className="shrink-0 font-display font-semibold text-honey transition-opacity hover:opacity-80"
+            >
+              Use a cheaper fallback
+            </button>
+          )}
           <button
             onClick={() => onUpdate({ fallbackModel: null })}
-            className="shrink-0 font-display font-semibold text-amber-200 hover:text-amber-100 transition-colors"
+            className="shrink-0 font-display font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Clear
           </button>
@@ -392,7 +459,7 @@ const ModelPilotCard = ({
             step={0.05}
             value={budgetThreshold}
             onChange={(e) => onUpdate({ budgetThreshold: parseFloat(e.target.value) })}
-            className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-sky-400 cursor-pointer"
+            className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-[var(--honey)] cursor-pointer"
           />
           <div className="flex justify-between text-[11px] text-muted-foreground mt-0.5">
             <span>10%</span>
@@ -401,15 +468,8 @@ const ModelPilotCard = ({
           </div>
         </div>
       )}
-
-      {/* Cost legend */}
-      <div className="flex items-center gap-3 pt-1 text-[11px] text-muted-foreground">
-        {Object.entries(COST_TOOLTIPS).map(([tier, tooltip]) => (
-          <span key={tier} className="flex items-center gap-0.5">
-            <span className={COST_COLORS[tier]}>{tier}</span> {tooltip}
-          </span>
-        ))}
-      </div>
+      {/* Cost legend removed (R10): each lane row now carries the explicit
+          per-message cost inline, so a foot-of-card key is redundant. */}
     </div>
   );
 };

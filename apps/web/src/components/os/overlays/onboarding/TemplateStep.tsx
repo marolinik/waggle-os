@@ -45,12 +45,12 @@ const TemplateStep = ({ templates, onSelect, creating, creatingId, createError, 
           >
             <div className="flex items-center justify-between gap-2">
               {isCreating ? (
-                <Loader2 className="w-5 h-5 mb-0.5 text-primary animate-spin" aria-hidden />
+                <Loader2 className="w-5 h-5 mb-0.5 text-honey animate-spin" aria-hidden />
               ) : (
                 <Icon className="w-5 h-5 mb-0.5 text-muted-foreground" aria-hidden />
               )}
               {isRecommended && (
-                <span className="text-[10px] font-display font-semibold uppercase tracking-wide text-primary bg-primary/10 rounded-full px-2 py-0.5">
+                <span className="text-[10px] font-display font-semibold uppercase tracking-wide text-honey bg-primary/10 rounded-full px-2 py-0.5">
                   Recommended
                 </span>
               )}

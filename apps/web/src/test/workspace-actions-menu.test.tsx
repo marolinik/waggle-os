@@ -114,6 +114,32 @@ describe('WorkspaceActionsMenu', () => {
     });
   });
 
+  // ── Wave W Lane B (item 2) — actions-menu craft ──────────────────────────
+  it('opens with the roomier "comfortable" item density (py-2, marketplace-matched)', () => {
+    render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
+    openMenu();
+    // The workspace actions menu opts into the roomier density rather than the
+    // compact default other ContextMenu callers keep.
+    expect(screen.getByText('Rename').className).toContain('py-2');
+  });
+
+  it('scales the menu in FROM the trigger corner (transform-origin top-left)', () => {
+    render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
+    openMenu();
+    const container = screen.getByText('Rename').parentElement as HTMLElement;
+    expect(container.style.transformOrigin).toBe('top left');
+  });
+
+  it('does not steal focus into the menu (preserves Escape-returns-focus) and Escape closes it', () => {
+    render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
+    openMenu();
+    // The menu never auto-focuses an item — focus stays on the kebab, which is
+    // what makes Escape return focus to the trigger. Escape then closes it.
+    expect(screen.getByText('Rename')).not.toBe(document.activeElement);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('Rename')).toBeNull();
+  });
+
   it('does NOT fire onChanged when the mutation fails', async () => {
     mocks.shell.patchWorkspace.mockResolvedValue(false);
     const onChanged = vi.fn();

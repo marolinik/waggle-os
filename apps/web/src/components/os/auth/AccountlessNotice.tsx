@@ -17,7 +17,7 @@ export default function AccountlessNotice() {
   return (
     <div className="text-center">
       <div className="w-[60px] h-[60px] rounded-2xl mx-auto mb-6 grid place-items-center bg-[var(--honey-wash)] border border-[var(--honey-line)]">
-        <Check className="w-7 h-7 text-primary" strokeWidth={2.2} />
+        <Check className="w-7 h-7 text-honey" strokeWidth={2.2} />
       </div>
 
       <h1 className="text-[26px] font-display font-semibold tracking-[-0.02em] text-foreground">

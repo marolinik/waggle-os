@@ -198,7 +198,7 @@ const CockpitApp = () => {
                 </div>
               ))}
               {data.crons.length > 3 && (
-                <button onClick={() => setShowAdvanced(true)} className="text-[11px] text-primary hover:text-primary/80 transition-colors">
+                <button onClick={() => setShowAdvanced(true)} className="text-[11px] text-honey hover:text-honey/80 transition-colors">
                   +{data.crons.length - 3} more — view all
                 </button>
               )}

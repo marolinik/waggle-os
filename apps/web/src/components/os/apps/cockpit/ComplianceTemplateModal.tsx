@@ -306,7 +306,7 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
                     type="button"
                     className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${
                       formSections[key]
-                        ? 'bg-primary/20 text-primary border-primary/30'
+                        ? 'bg-primary/20 text-honey border-primary/30'
                         : 'bg-background/30 text-muted-foreground border-border/30 hover:text-foreground'
                     }`}
                   >

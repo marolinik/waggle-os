@@ -106,7 +106,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <Sparkles className="h-3.5 w-3.5 text-honey" />
               <h3 className="font-display text-sm font-semibold text-foreground">
                 MCP Connector Catalog
               </h3>
@@ -114,7 +114,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
             <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
               <span className="font-semibold text-foreground">{stats.total}</span> curated servers
               across <span className="font-semibold text-foreground">{stats.categories.length}</span>{' '}
-              categories — <span className="text-primary">{stats.officialCount} official</span>,{' '}
+              categories — <span className="text-honey">{stats.officialCount} official</span>,{' '}
               <span className="text-foreground/80">{stats.realLogoCount} with brand logos</span> ·
               +{COMPOSIO_GATEWAY_COUNT}+ more via the Composio gateway.
             </p>
@@ -160,7 +160,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
         >
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <Star className="h-3.5 w-3.5 text-primary shrink-0" />
+              <Star className="h-3.5 w-3.5 text-honey shrink-0" />
               <h3 className="font-display text-sm font-semibold text-foreground truncate">
                 Recommended for {recommended.name}
               </h3>
@@ -238,7 +238,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
             {selectedCategory && (
               <>
                 {' '}
-                in <span className="font-semibold text-primary">{selectedCategory}</span>
+                in <span className="font-semibold text-honey">{selectedCategory}</span>
               </>
             )}
             {search && (
@@ -254,7 +254,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
                 setSearch('');
                 setSelectedCategory(null);
               }}
-              className="text-primary transition-colors hover:text-primary/80"
+              className="text-honey transition-colors hover:text-honey/80"
             >
               Reset
             </button>
@@ -280,7 +280,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
                 setSearch('');
                 setSelectedCategory(null);
               }}
-              className="mt-2 text-[11px] text-primary hover:text-primary/80"
+              className="mt-2 text-[11px] text-honey hover:text-honey/80"
             >
               Clear filters
             </button>
@@ -296,7 +296,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
             href="https://github.com/punkpeye/awesome-mcp-servers"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+            className="text-honey underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
           >
             awesome-mcp-servers
           </a>
@@ -305,7 +305,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
             href="https://github.com/modelcontextprotocol/servers"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+            className="text-honey underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
           >
             official reference
           </a>
@@ -314,7 +314,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
             href="https://mcp.composio.dev"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+            className="text-honey underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
           >
             Composio
           </a>

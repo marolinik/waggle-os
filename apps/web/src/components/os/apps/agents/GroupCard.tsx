@@ -24,7 +24,7 @@ const GroupCard = ({ group, selected, onSelect, onDelete }: GroupCardProps) => {
       }`}
     >
       <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-        <Users className="w-5 h-5 text-primary" />
+        <Users className="w-5 h-5 text-honey" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-xs font-display font-semibold text-foreground truncate">{group.name}</p>

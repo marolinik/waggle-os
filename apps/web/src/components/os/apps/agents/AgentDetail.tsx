@@ -33,7 +33,7 @@ const AgentDetail = ({ agent, localPersona, allTools, onEdit }: AgentDetailProps
           <h3 className="text-sm font-display font-bold text-foreground">{agent.name}</h3>
           <p className="text-xs text-muted-foreground">{agent.description}</p>
           {agent.custom && (
-            <span className="inline-block mt-1 text-[11px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary font-medium">Custom</span>
+            <span className="inline-block mt-1 text-[11px] px-1.5 py-0.5 rounded-full bg-primary/20 text-honey font-medium">Custom</span>
           )}
         </div>
         {agent.custom && onEdit && (

@@ -237,7 +237,7 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   // sync notice, lazy health detail) survives instead of being unmounted
   // before it ever paints.
   if (loading && connectors.length === 0) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+    return <div className="flex items-center justify-center h-full"><Loader2 className="w-5 h-5 animate-spin text-honey" /></div>;
   }
 
   if (error && connectors.length === 0) {
@@ -284,7 +284,7 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
             role="tab"
             aria-selected={tab === t}
             className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
-              tab === t ? 'bg-primary/20 text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              tab === t ? 'bg-primary/20 text-honey' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
             }`}>
             {TAB_LABELS[t]}
             {t === 'connected' && <span className="ml-auto text-[11px] text-emerald-400">{connectedCount}</span>}

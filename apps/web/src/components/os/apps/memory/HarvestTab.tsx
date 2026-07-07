@@ -9,6 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Upload, RefreshCw, Clock, CheckCircle2, AlertCircle,
   Loader2, Plus, Zap, Brain, Trash2, Pause, Play, Sparkles, RotateCcw, XCircle,
+  MessageSquare, FileText,
 } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
@@ -313,7 +314,7 @@ const HarvestTab = () => {
     <div className="h-full overflow-auto p-4 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Brain className="w-4 h-4 text-primary" />
+          <Brain className="w-4 h-4 text-honey" />
           <h3 className="text-sm font-display font-semibold text-foreground">Memory Harvest</h3>
         </div>
         <button
@@ -373,7 +374,7 @@ const HarvestTab = () => {
         <div className="p-3 rounded-xl bg-primary/10 border border-primary/30">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2 min-w-0">
-              <Zap className="w-4 h-4 text-primary shrink-0" />
+              <Zap className="w-4 h-4 text-honey shrink-0" />
               <div className="min-w-0">
                 <p className="text-xs font-display font-medium text-foreground">
                   Claude Code Detected
@@ -530,7 +531,7 @@ const HarvestTab = () => {
                           setError(err instanceof Error ? err.message : 'Failed to update auto-sync');
                         }
                       }}
-                      className={`p-1 rounded transition-colors ${s.autoSync ? 'text-primary hover:text-primary/70' : 'text-muted-foreground hover:text-foreground'}`}
+                      className={`p-1 rounded transition-colors ${s.autoSync ? 'text-honey hover:text-honey/70' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       {s.autoSync ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                     </button>
@@ -570,7 +571,7 @@ const HarvestTab = () => {
               onClick={() => setSelectedSource(key)}
               className={`px-2 py-1 rounded-lg text-[11px] transition-colors ${
                 selectedSource === key
-                  ? 'bg-primary/20 text-primary border border-primary/30'
+                  ? 'bg-primary/20 text-honey border border-primary/30'
                   : 'bg-secondary/30 text-muted-foreground hover:text-foreground border border-border/30'
               }`}
             >
@@ -584,7 +585,7 @@ const HarvestTab = () => {
           <button
             onClick={() => setPasteMode(false)}
             className={`flex-1 p-3 rounded-xl border text-center transition-colors ${
-              !pasteMode ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-secondary/30 border-border/30 text-muted-foreground'
+              !pasteMode ? 'bg-primary/10 border-primary/30 text-honey' : 'bg-secondary/30 border-border/30 text-muted-foreground'
             }`}
           >
             <Upload className="w-4 h-4 mx-auto mb-1" />
@@ -593,7 +594,7 @@ const HarvestTab = () => {
           <button
             onClick={() => setPasteMode(true)}
             className={`flex-1 p-3 rounded-xl border text-center transition-colors ${
-              pasteMode ? 'bg-primary/10 border-primary/30 text-primary' : 'bg-secondary/30 border-border/30 text-muted-foreground'
+              pasteMode ? 'bg-primary/10 border-primary/30 text-honey' : 'bg-secondary/30 border-border/30 text-muted-foreground'
             }`}
           >
             <Plus className="w-4 h-4 mx-auto mb-1" />
@@ -646,7 +647,7 @@ const HarvestTab = () => {
             </p>
             <div className="flex flex-wrap gap-2 mb-2">
               {Object.entries(preview.types).map(([type, count]) => (
-                <span key={type} className="px-2 py-0.5 rounded text-[11px] bg-primary/10 text-primary">
+                <span key={type} className="px-2 py-0.5 rounded text-[11px] bg-primary/10 text-honey">
                   {type}: {count}
                 </span>
               ))}
@@ -654,7 +655,11 @@ const HarvestTab = () => {
             <div className="space-y-1 max-h-32 overflow-auto mb-3">
               {preview.preview.map(item => (
                 <p key={item.id} className="text-[11px] text-muted-foreground truncate">
-                  {item.type === 'conversation' ? '💬' : item.type === 'memory' ? '🧠' : '📄'} {item.title}
+                  {item.type === 'conversation'
+                    ? <MessageSquare className="w-3 h-3 inline mr-1 text-honey/70" aria-hidden />
+                    : item.type === 'memory'
+                      ? <Brain className="w-3 h-3 inline mr-1 text-honey/70" aria-hidden />
+                      : <FileText className="w-3 h-3 inline mr-1 text-honey/70" aria-hidden />} {item.title}
                 </p>
               ))}
             </div>

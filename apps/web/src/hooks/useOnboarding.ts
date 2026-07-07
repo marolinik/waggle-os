@@ -101,6 +101,61 @@ function saveState(state: OnboardingState) {
   window.dispatchEvent(new CustomEvent('waggle:onboarding-sync'));
 }
 
+/**
+ * Wave T Lane A (item 1): can we decide wizard-vs-shell WITHOUT the server?
+ * True when localStorage already settles it (completed, or mid-wizard step>0), or
+ * a DEV forceWizard / E2E skipOnboarding param forces the decision. False only
+ * for a fresh localStorage that must ask /api/onboarding/status — the exact case
+ * where the wizard flashes for ~1s before the async auto-complete lands. Reads
+ * raw localStorage with no side effects (does NOT consume the forceWizard latch),
+ * so AppShell can gate the boot screen on it.
+ */
+export function isOnboardingStatusKnownSync(): boolean {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('skipOnboarding') === 'true') return true;
+    if (import.meta.env.DEV && params.get('forceWizard') === 'true') return true;
+    if (localStorage.getItem('waggle_onboarding_complete') === 'true') return true;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<OnboardingState>;
+      if (parsed?.completed) return true;
+      if (typeof parsed?.step === 'number' && parsed.step > 0) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Wave T Lane A (item 1): resolve a fresh-localStorage user's onboarding against
+ * the server BEFORE the shell mounts, and persist the completed flag so
+ * useOnboarding reads it synchronously (the wizard never paints for a
+ * server-onboarded returning user). No-op when the decision is already known
+ * locally. The boot-time counterpart of the in-hook auto-complete effect below;
+ * never throws — a dead sidecar leaves the wizard in place for a truly new user.
+ */
+export async function resolveReturningUserOnboarding(): Promise<void> {
+  if (isOnboardingStatusKnownSync()) return;
+  try {
+    const status = await adapter.getOnboardingStatus();
+    if (status?.completed) {
+      const next: OnboardingState = {
+        ...defaultState,
+        completed: true,
+        step: 7,
+        tier: 'power',
+        tooltipsDismissed: true,
+        apiKeySet: true,
+      };
+      saveState(next);
+    }
+  } catch {
+    /* sidecar unreachable — stay on the wizard so a truly new user can set up */
+  }
+}
+
 export const useOnboarding = () => {
   const [state, setState] = useState<OnboardingState>(loadState);
 

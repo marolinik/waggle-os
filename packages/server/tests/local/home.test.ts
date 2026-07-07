@@ -80,8 +80,8 @@ const card = (id: string, pendingCount: number, rankTs: number): { card: RecentW
 
 describe('personalizeGreeting (P2 — B8 name in greeting)', () => {
   it('splices the name before the first sentence break', () => {
-    expect(personalizeGreeting("Good morning. Here's your day:", 'Marko'))
-      .toBe("Good morning, Marko. Here's your day:");
+    expect(personalizeGreeting("Good morning. Here's your day", 'Marko'))
+      .toBe("Good morning, Marko. Here's your day");
   });
 
   it('handles the em-dash fresh-state greeting', () => {
@@ -90,8 +90,8 @@ describe('personalizeGreeting (P2 — B8 name in greeting)', () => {
   });
 
   it('passes through without a name', () => {
-    expect(personalizeGreeting("Good morning. Here's your day:"))
-      .toBe("Good morning. Here's your day:");
+    expect(personalizeGreeting("Good morning. Here's your day"))
+      .toBe("Good morning. Here's your day");
   });
 
   it('passes through greetings with no sentence break', () => {

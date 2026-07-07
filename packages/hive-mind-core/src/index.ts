@@ -24,9 +24,11 @@ export { SuppressionStore, type SuppressedSubject } from './mind/suppression.js'
 export { hashFrameContent } from './mind/content-hash.js';
 export { SessionStore, type Session } from './mind/sessions.js';
 export {
-  HybridSearch, type SearchResult,
+  HybridSearch, type SearchResult, type SearchOptions,
   // D1 (oss-drift triage, 2026-06-11) — chunk-level retrieval (flag-gated, default OFF)
   chunkRetrievalEnabled, rechunkAllFrames, type RechunkResult,
+  // Abstain-path retrieval-confidence scaffold. Ported from hive-mind a99ea0e.
+  assessRetrievalConfidence, type RetrievalConfidence,
 } from './mind/search.js';
 export { chunkText, type ChunkOptions, type FrameChunk } from './mind/chunker.js';
 export { KnowledgeGraph, type Entity, type Relation, type ValidationSchema } from './mind/knowledge.js';

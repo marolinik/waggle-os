@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Search, Loader2, FileText, Presentation, Table2, LayoutDashboard, Microscope,
   Code2, Image as ImageIcon, Palette, File, Archive, Trash2, RotateCcw, Save, Plus, Link2,
@@ -71,6 +72,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'' | ArtifactKind>('');
   const [status, setStatus] = useState<'' | ArtifactStatus>('');
@@ -192,7 +194,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               aria-pressed={status === s.value}
               className={cn(
                 'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
-                status === s.value ? 'border-primary/40 bg-primary/15 text-primary' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
+                status === s.value ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
               )}
             >
               {s.label}
@@ -204,7 +206,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
           <button
             onClick={() => setKind('')}
             aria-pressed={kind === ''}
-            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
           >
             All kinds
           </button>
@@ -213,7 +215,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               key={k}
               onClick={() => setKind(kind === k ? '' : k)}
               aria-pressed={kind === k}
-              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-primary' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
             >
               {KIND_META[k].label}
             </button>
@@ -255,7 +257,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
         ) : error && artifacts.length === 0 ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => load()} className="text-xs text-primary hover:underline">Retry</button>
+            <button onClick={() => load()} className="text-xs text-honey hover:underline">Retry</button>
           </div>
         ) : artifacts.length === 0 ? (
           <div role="status" aria-live="polite" className="text-center py-12">
@@ -263,6 +265,28 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
             <p className="text-xs text-muted-foreground">
               {q || kind || status ? 'No artifacts match these filters.' : 'No artifacts yet — outcomes your agents produce will appear here.'}
             </p>
+            {/* Teach-and-invite (5-judge finding: "all mood, no sell — no CTA").
+                Ghost tiles show WHAT will appear; the CTA routes to a chat. */}
+            {!q && !kind && !status && (
+              <>
+                <div className="mt-5 flex items-center justify-center gap-2.5" aria-hidden>
+                  {(['document', 'presentation', 'spreadsheet'] as ArtifactKind[]).map(k => {
+                    const { label, Icon } = KIND_META[k];
+                    return (
+                      <span key={k} className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border/50 bg-muted/20 px-3 py-2 text-[11px] text-muted-foreground/70">
+                        <Icon className="w-3.5 h-3.5" /> {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => navigate('/workspaces')}
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-display font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  Ask Waggle to make something →
+                </button>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -271,7 +295,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
             {error && (
               <div role="alert" className="mb-2 flex items-center justify-between gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-2.5 py-1.5">
                 <span className="text-[11px] text-destructive">{error}</span>
-                <button onClick={() => load()} className="text-[11px] text-primary hover:underline shrink-0">Retry</button>
+                <button onClick={() => load()} className="text-[11px] text-honey hover:underline shrink-0">Retry</button>
               </div>
             )}
             {/* 3-column card grid (PR6b §16) — provenance-forward outcome

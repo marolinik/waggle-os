@@ -13,6 +13,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
 import { stashDeepLink, consumeDeepLink } from '@/lib/app-deeplink';
+import { clearMemoryListCache } from '@/components/os/apps/memory/memory-list-cache';
 import type { Memory } from '@/lib/types';
 
 const mocks = vi.hoisted(() => ({
@@ -51,6 +52,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   consumeDeepLink('memory'); // drop any stash a test left behind
+  clearMemoryListCache(); // Wave T Lane D: reset the module-level list cache between tests
 });
 
 describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
@@ -63,13 +65,16 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     expect(arg.workspaceId).toBeUndefined();
   });
 
-  it('defaults to the curated Active view, not All (deprecated stays hidden)', async () => {
+  it('lands on the full recent list (All), with the curated Active view as a filter chip (Wave W Lane D item 2)', async () => {
     mocks.adapter.listMemories.mockResolvedValue([]);
     await renderTab();
     await waitFor(() => expect(mocks.adapter.listMemories).toHaveBeenCalled());
     const arg = mocks.adapter.listMemories.mock.calls[0][0];
-    expect(arg.status).toBe('active');
-    expect(screen.getByRole('button', { name: 'Active' }).getAttribute('aria-pressed')).toBe('true');
+    // No status filter → the server returns the full recent list (density); the
+    // curated 'active' view is one click away as a labeled chip.
+    expect(arg.status).toBeUndefined();
+    expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Active' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it("mind='workspace' reads with {mind:'workspace', workspaceId}", async () => {
@@ -183,6 +188,41 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
       expect(last?.mind).toBe('personal');
       expect(last?.workspaceId).toBeUndefined();
     });
+  });
+
+  it('frames the list with a result-count header — count always, filter descriptor once narrowed (Wave V Lane A item 2 / Wave W Lane D item 2)', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([
+      mem({ id: '1', title: 'First fact', content: 'Alpha content' }),
+      mem({ id: '2', title: 'Second fact', content: 'Beta content' }),
+    ]);
+    await renderTab();
+    await waitFor(() => expect(screen.getByLabelText('First fact')).toBeTruthy());
+    // Trust-hero parity: the header always names the result count, so a
+    // filtered-down set never reads as one card floating in a void.
+    expect(screen.getByText('2 memories')).toBeTruthy();
+    // Wave W Lane D (item 2): the default is now the full recent list (All), so no
+    // filter descriptor rides the header at rest…
+    expect(screen.queryByText(/filtered by/)).toBeNull();
+    // …but selecting the curated Active view names it in the descriptor.
+    fireEvent.click(screen.getByRole('button', { name: 'Active' }));
+    await waitFor(() => expect(screen.getByText(/filtered by Active/)).toBeTruthy());
+  });
+
+  it('keeps a "loading the rest…" status over seeded rows while a refresh is in flight (Wave V Lane A item 2)', async () => {
+    // First load seeds the session list cache.
+    mocks.adapter.listMemories.mockResolvedValueOnce([mem({ id: '1', title: 'Seeded fact', content: 'Cached content' })]);
+    const { default: MemoryCenterTab } = await import('@/components/os/apps/memory/MemoryCenterTab');
+    const first = render(<MemoryCenterTab mind="personal" consumeDeepLinks={false} />);
+    await waitFor(() => expect(screen.getByLabelText('Seeded fact')).toBeTruthy());
+    first.unmount();
+
+    // Tab return: rows re-seed from cache instantly; the background refresh never
+    // resolves here, so the header must carry the loading affordance OVER the
+    // seeded card (not a bare floating card, and not a full-surface skeleton).
+    mocks.adapter.listMemories.mockImplementationOnce(() => new Promise(() => {}));
+    render(<MemoryCenterTab mind="personal" consumeDeepLinks={false} />);
+    expect(screen.getByLabelText('Seeded fact')).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/loading the rest/)).toBeTruthy());
   });
 
   it("switching minds never renders the previous mind's rows while the new fetch is in flight", async () => {

@@ -165,7 +165,11 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
           (same fix class as the dock-tray portal, 0de190f). */}
       {createPortal(<>
       {menuPos && (
-        <ContextMenu items={items} position={menuPos} onClose={() => setMenuPos(null)} />
+        // Wave W Lane B (item 2): the menu opens at the kebab's bottom-left, so it
+        // scales in from its top-left corner (roomier "comfortable" density too).
+        // Escape-returns-focus is preserved — ContextMenu never steals focus from
+        // the trigger, so closing lands it back on the kebab.
+        <ContextMenu items={items} position={menuPos} onClose={() => setMenuPos(null)} origin="top left" />
       )}
 
       {renameOpen && (

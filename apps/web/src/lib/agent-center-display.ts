@@ -18,7 +18,7 @@ import { DATE_LOCALE } from '@/lib/date-locale';
 export const AGENT_STATE_META: Record<AgentRunState, { label: string; tone: StatusTone }> = {
   draft: { label: 'Draft', tone: 'neutral' },
   idle: { label: 'Idle', tone: 'neutral' },
-  running: { label: 'Running', tone: 'info' },
+  running: { label: 'Running', tone: 'healthy' },
   paused: { label: 'Paused', tone: 'attention' },
   failed: { label: 'Failed', tone: 'risk' },
   waiting_for_approval: { label: 'Waiting for approval', tone: 'attention' },
@@ -92,7 +92,9 @@ export function agentKpis(agents: Agent[]): {
  * click-to-create cards when the fleet is near-empty. Ids are the canonical
  * persona ids (packages/agent/src/persona-data.ts, mirrored in lib/personas).
  */
-export const SUGGESTED_PERSONA_IDS: readonly string[] = ['researcher', 'writer', 'analyst'];
+export const SUGGESTED_PERSONA_IDS: readonly string[] = [
+  'researcher', 'writer', 'analyst', 'planner', 'coder', 'consultant',
+];
 
 /**
  * Whether to surface the "Suggested agents" block: only on the unfiltered

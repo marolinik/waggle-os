@@ -206,7 +206,7 @@ const ResultRow = ({ result, onSelect }: { result: CommandResult; onSelect: () =
 
 /* ── Group heading (mono, uppercase; honey for the Pinned group) ── */
 const groupHeading = (label: string, pinned = false) => (
-  <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${pinned ? 'text-[var(--honey)]' : 'text-[var(--text-dim)]'}`}>
+  <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${pinned ? 'text-[var(--honey-text)]' : 'text-[var(--text-dim)]'}`}>
     {label}
   </span>
 );
@@ -220,7 +220,7 @@ const CatalogRow = ({ cmd, onSelect }: { cmd: CatalogCommand; onSelect: () => vo
       onSelect={onSelect}
       className="group flex items-center gap-3 rounded-[9px] px-3 py-2 aria-selected:bg-[var(--honey-wash)]"
     >
-      <Icon className="h-[18px] w-[18px] shrink-0 text-[var(--text-2)] group-aria-selected:text-[var(--honey)]" strokeWidth={1.7} />
+      <Icon className="h-[18px] w-[18px] shrink-0 text-[var(--text-2)] group-aria-selected:text-[var(--honey-text)]" strokeWidth={1.7} />
       <span className="min-w-0 flex-1 truncate">
         <span className="text-sm text-[var(--text)]">{cmd.name}</span>
         {cmd.subtitle && (

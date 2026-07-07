@@ -121,7 +121,7 @@ const TimelineApp = ({ workspaceId, workspaceName }: TimelineAppProps) => {
       <div className="shrink-0 px-4 py-3 border-b border-border/50">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-primary" />
+            <Clock className="w-4 h-4 text-honey" />
             <h2 className="text-sm font-display font-semibold text-foreground">
               {workspaceName ?? 'Workspace'} Timeline
             </h2>
@@ -138,7 +138,7 @@ const TimelineApp = ({ workspaceId, workspaceName }: TimelineAppProps) => {
             <button key={r} onClick={() => setRange(r)}
               className={`px-2 py-1 rounded-lg text-[11px] font-display transition-colors ${
                 range === r
-                  ? 'bg-primary/20 text-primary border border-primary/40'
+                  ? 'bg-primary/20 text-honey border border-primary/40'
                   : 'text-muted-foreground hover:bg-muted/50'
               }`}>
               {RANGE_LABELS[r]}
@@ -164,7 +164,7 @@ const TimelineApp = ({ workspaceId, workspaceName }: TimelineAppProps) => {
       <div className="flex-1 overflow-auto p-4">
         {loading ? (
           <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <Loader2 className="w-5 h-5 animate-spin text-honey" />
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-center">

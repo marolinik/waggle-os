@@ -56,7 +56,17 @@ export default function Reveal({
       { rootMargin: '0px 0px -10% 0px', threshold: 0.1 },
     );
     observer.observe(node);
-    return () => observer.disconnect();
+    // Safety net: if a section is never scrolled into view — a crawler, a
+    // social-preview renderer, or a full-page screenshot that paints without
+    // scrolling — the observer never fires and the content would stay stuck at
+    // opacity:0. Reveal it anyway shortly after mount so no section is ever a
+    // headline floating in an empty void. Real users scrolling normally still
+    // trip the observer first and get the entrance animation per section.
+    const fallback = window.setTimeout(() => setVisible(true), 900);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(fallback);
+    };
   }, []);
 
   const classes = [

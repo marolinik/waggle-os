@@ -45,9 +45,9 @@
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
-  max-width: 720px;
+  max-width: 1080px;
   margin: 0 auto 40px;
   align-items: stretch;
 }
@@ -66,6 +66,19 @@
   background: var(--hive-850);
   border-color: var(--honey-line);
   box-shadow: var(--shadow-honey);
+}
+
+/* Enterprise/KVARK slot: present but visually subordinate to Solo/Team. */
+.tierCardQuiet {
+  background: transparent;
+}
+
+.enterpriseBody {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--hive-300);
+  margin: 0 0 26px;
+  flex-grow: 1;
 }
 
 .badge {
@@ -141,36 +154,9 @@
   width: 100%;
 }
 
-.enterprise {
-  max-width: 720px;
-  margin: 0 auto;
-  border-radius: var(--r-lg);
-  border: 1px solid var(--line-soft);
-  background: var(--hive-900);
-  padding: 24px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.enterpriseText {
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--hive-300);
-  max-width: 640px;
-  margin: 0;
-}
-
 @media (max-width: 1023px) {
   .grid {
     grid-template-columns: 1fr;
     max-width: 460px;
-  }
-
-  .enterprise {
-    flex-direction: column;
-    align-items: flex-start;
   }
 }

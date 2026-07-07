@@ -118,7 +118,7 @@ const InstalledMcpList = ({ items, onRevoke, onScope, onChanged }: InstalledMcpL
                   </button>
                 ) : (
                   <button onClick={() => void handleStart(item.id)} disabled={busy}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-primary hover:bg-primary/10 disabled:opacity-50 transition-colors">
+                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 disabled:opacity-50 transition-colors">
                     {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />} Start
                   </button>
                 )}

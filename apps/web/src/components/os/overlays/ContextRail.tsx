@@ -64,7 +64,7 @@ const ContextRail = ({ target, onClose }: ContextRailProps) => {
           {/* Header */}
           <div className="shrink-0 px-4 py-3 border-b border-border/50 flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
-              <FileText className="w-4 h-4 text-primary shrink-0" />
+              <FileText className="w-4 h-4 text-honey shrink-0" />
               <div className="min-w-0">
                 <h3 className="text-xs font-display font-semibold text-foreground truncate">
                   {target.label}
@@ -81,7 +81,7 @@ const ContextRail = ({ target, onClose }: ContextRailProps) => {
           <div className="flex-1 overflow-auto p-3 space-y-2">
             {loading ? (
               <div className="flex items-center justify-center h-32">
-                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                <Loader2 className="w-5 h-5 animate-spin text-honey" />
               </div>
             ) : items.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-center">

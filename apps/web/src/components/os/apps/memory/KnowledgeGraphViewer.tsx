@@ -412,7 +412,7 @@ const KnowledgeGraphViewer = ({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="mt-3 px-3 py-1 rounded-md bg-primary/20 text-primary text-[11px] hover:bg-primary/30 transition-colors"
+            className="mt-3 px-3 py-1 rounded-md bg-primary/20 text-honey text-[11px] hover:bg-primary/30 transition-colors"
           >
             Retry
           </button>
@@ -433,7 +433,7 @@ const KnowledgeGraphViewer = ({
         aria-live="polite"
         aria-label="Loading knowledge graph"
       >
-        <Loader2 className="w-8 h-8 text-primary/70 mb-3 animate-spin" />
+        <Loader2 className="w-8 h-8 text-honey/70 mb-3 animate-spin" />
         <p className="text-xs text-muted-foreground">Loading knowledge graph…</p>
       </div>
     );
@@ -484,7 +484,7 @@ const KnowledgeGraphViewer = ({
       {/* Toolbar */}
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-border/30 shrink-0">
         <div className="flex items-center gap-2">
-          <Network className="w-3.5 h-3.5 text-primary" />
+          <Network className="w-3.5 h-3.5 text-honey" />
           <span className="text-xs font-display font-medium text-foreground">
             Knowledge Graph
           </span>
@@ -512,7 +512,7 @@ const KnowledgeGraphViewer = ({
                   onClick={() => setNodeLimit(opt)}
                   className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
                     nodeLimit === opt
-                      ? 'bg-primary/20 text-primary'
+                      ? 'bg-primary/20 text-honey'
                       : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -732,7 +732,7 @@ const KnowledgeGraphViewer = ({
               <HintTooltip content="Reset all type filters">
                 <button
                   onClick={resetHiddenTypes}
-                  className="text-[11px] text-primary hover:text-primary/80 transition-colors"
+                  className="text-[11px] text-honey hover:text-honey/80 transition-colors"
                 >
                   Reset
                 </button>
@@ -803,7 +803,7 @@ const KnowledgeGraphViewer = ({
                     const other = s.id === selectedNodeData.id ? t : s;
                     return (
                       <p key={i} className="truncate">
-                        <span className="text-primary/80">{l.relationship}</span>
+                        <span className="text-honey/80">{l.relationship}</span>
                         {' → '}
                         <span className="text-foreground">{other.label}</span>
                       </p>

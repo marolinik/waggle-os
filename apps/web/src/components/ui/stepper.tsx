@@ -106,7 +106,7 @@ export const BuilderStepper = ({
                 data-testid={`${testId}-step-${s.id}`}
                 className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
                   i === current
-                    ? 'border-primary/40 bg-primary/15 text-primary'
+                    ? 'border-primary/40 bg-primary/15 text-honey'
                     : reachable(i)
                       ? 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
                       : 'border-transparent bg-muted/30 text-muted-foreground/50'

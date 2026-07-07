@@ -19,7 +19,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 vi.mock('@/lib/app-deeplink', () => ({ consumeDeepLink: () => null }));
 
-import MemoryTrustManage from '@/components/os/apps/memory/MemoryTrustManage';
+import MemoryTrustManage, { resetMemoryHeroSession } from '@/components/os/apps/memory/MemoryTrustManage';
+import { clearMemoryListCache } from '@/components/os/apps/memory/memory-list-cache';
 
 const DAY = 86_400_000;
 const iso = (ageDays: number) => new Date(Date.now() - ageDays * DAY).toISOString();
@@ -34,7 +35,7 @@ function mem(over: Partial<Memory> & Pick<Memory, 'id'>): Memory {
   } as Memory;
 }
 
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); vi.clearAllMocks(); clearMemoryListCache(); resetMemoryHeroSession(); });
 beforeEach(() => {
   mocks.adapter.deleteMemoryById.mockResolvedValue(undefined);
   mocks.adapter.confirmMemory.mockResolvedValue({});
@@ -56,11 +57,11 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     expect(card?.textContent).toBe('—');
   });
 
-  it('renders the confidence ring number when confidence is present', async () => {
+  it('renders the confidence ring as NN% when confidence is present', async () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '7', confidence: 94, createdAt: iso(1) })]);
     render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
     await waitFor(() => expect(screen.getByText('⬡ M-7')).toBeTruthy());
-    expect(screen.getByText('94')).toBeTruthy();
+    expect(screen.getByText('94%')).toBeTruthy();
   });
 
   it('the "Needs confirm" filter shows only unreviewed memories', async () => {
@@ -101,6 +102,43 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     fireEvent.click(screen.getByTitle('Confirm this memory'));
     await waitFor(() => expect(mocks.adapter.confirmMemory).toHaveBeenCalledWith('8', undefined, 'personal'));
     expect(onToast).toHaveBeenCalledWith(expect.stringContaining('Confirmed M-8'));
+  });
+
+  it('hero count settles instantly on a tab-return remount — never a transient 0 (Wave V Lane A item 1)', async () => {
+    resetMemoryHeroSession();
+    mocks.adapter.listMemories.mockResolvedValue([
+      mem({ id: '1', createdAt: iso(1) }),
+      mem({ id: '2', createdAt: iso(1) }),
+      mem({ id: '3', createdAt: iso(1) }),
+    ]);
+    const { unmount } = render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    // First visit resolves the real count (the once-per-session count-up runs here).
+    await waitFor(() => expect(screen.getByTestId('memory-trust-total').textContent).toBe('3'));
+    unmount();
+
+    // Tab return: the list re-seeds from the session cache, so the hero must show
+    // the cached 3 on its very FIRST paint — no skeleton, no count-up from 0.
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    expect(screen.getByTestId('memory-trust-total').textContent).toBe('3');
+
+    // Drain the background refresh so its setState lands inside act().
+    await waitFor(() => expect(mocks.adapter.listMemories).toHaveBeenCalledTimes(2));
+  });
+
+  it('the hero count-up floors at ceil(15%) — never paints 0/near-0 above rendered rows (Wave W Lane D item 1)', async () => {
+    resetMemoryHeroSession();
+    // 20 rows → floor = ceil(20 * 0.15) = 3, so no animation frame can show 0/1/2.
+    mocks.adapter.listMemories.mockResolvedValue(
+      Array.from({ length: 20 }, (_, i) => mem({ id: String(i + 1), createdAt: iso(1) })),
+    );
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    // Once data lands the hero replaces the stat-bar skeleton.
+    await waitFor(() => expect(screen.getByTestId('memory-trust-total')).toBeTruthy());
+    // The count-up is monotonic from the floor, so every sampled frame is ≥ floor
+    // (and thus never the "0 Memories with data present" data-bug frame).
+    expect(Number(screen.getByTestId('memory-trust-total').textContent)).toBeGreaterThanOrEqual(3);
+    // …and it still settles on the true total.
+    await waitFor(() => expect(screen.getByTestId('memory-trust-total').textContent).toBe('20'));
   });
 
   it('workspace mind passes the workspace param to mutations', async () => {

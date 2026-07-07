@@ -43,7 +43,9 @@ describe('AGENT_STATE_META — §14.5 full vocabulary', () => {
   it('uses human labels for the multi-word states', () => {
     expect(AGENT_STATE_META.waiting_for_approval.label).toBe('Waiting for approval');
     expect(AGENT_STATE_META.failed.tone).toBe('risk');
-    expect(AGENT_STATE_META.running.tone).toBe('info');
+    // Wave-S Lane C: running reads as an active-good state (healthy sage), not
+    // the intelligence/info violet.
+    expect(AGENT_STATE_META.running.tone).toBe('healthy');
   });
 });
 
@@ -136,9 +138,9 @@ describe('shouldSuggestAgents — F-W5C sparse state', () => {
     expect(shouldSuggestAgents({ ...base, tab: 'archive' })).toBe(false);
   });
 
-  it('curates 2-3 persona ids', () => {
-    expect(SUGGESTED_PERSONA_IDS.length).toBeGreaterThanOrEqual(2);
-    expect(SUGGESTED_PERSONA_IDS.length).toBeLessThanOrEqual(3);
+  it('curates 6 unique persona ids (round-7 fix 3a)', () => {
+    expect(SUGGESTED_PERSONA_IDS.length).toBe(6);
+    expect(new Set(SUGGESTED_PERSONA_IDS).size).toBe(SUGGESTED_PERSONA_IDS.length);
   });
 });
 

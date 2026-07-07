@@ -106,7 +106,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
     <div className="h-full overflow-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-display font-semibold text-foreground flex items-center gap-2">
-          <Radio className="w-5 h-5 text-primary" /> Mission Control
+          <Radio className="w-5 h-5 text-honey" /> Mission Control
         </h2>
         <div className="flex items-center gap-1">
           <Button
