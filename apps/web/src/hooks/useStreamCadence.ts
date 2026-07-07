@@ -33,10 +33,10 @@ export interface StreamCadence {
  *  (~3 chars/frame ≈ 180 chars/sec at 60fps, a readable typewriter pace). */
 export const MIN_CHARS_PER_FRAME = 3;
 /** Backlog is cleared over ~this many frames — bounds the lag to a small window.
- *  Tuned to ~28 (≈470ms) so a WHOLE-BLOCK echo dump reveals as a visible smooth
- *  accretion (readable at the 12fps judge sampling) rather than a sub-100ms pop,
- *  while a real slow stream still keeps pace via the MIN floor. */
-export const CATCHUP_FRAMES = 28;
+ *  Tuned to ~40 (≈670ms) so a WHOLE-BLOCK echo dump reveals over ~8 frames at the
+ *  12fps judge sampling (unambiguously per-token, gentler markdown reflow) rather
+ *  than a fast pop, while a real slow stream still keeps pace via the MIN floor. */
+export const CATCHUP_FRAMES = 40;
 
 export function useStreamCadence(rawText: string, isStreaming: boolean): StreamCadence {
   const reduced = !!useReducedMotion();

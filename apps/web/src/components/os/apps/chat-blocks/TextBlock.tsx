@@ -45,7 +45,11 @@ const TextBlock = memo(({ block, isStreaming }: TextBlockProps) => {
             {caretVisible && isLastTextSegment && seg.content && (
               <span
                 aria-hidden
-                className="stream-caret inline-block w-0.5 h-4 bg-[var(--honey-text)] ml-0.5 align-text-bottom"
+                // R21 (design/competitor HIGH): the 2px caret was invisible at
+                // video scale ("no blinking caret"). A 3px rounded honey bar at
+                // ~1.15em reads as a live typing cursor; .stream-caret carries the
+                // token'd blink (reduced-motion → solid, no blink).
+                className="stream-caret inline-block w-[3px] h-[1.15em] rounded-[1.5px] bg-[var(--honey-text)] ml-0.5 align-text-bottom"
               />
             )}
           </Fragment>

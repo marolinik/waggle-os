@@ -774,3 +774,39 @@ caps the score so residuals alone can't reach 8.0):
 
 → Proceed to Phase C (Pillar 3 aliveness — streaming headline) with the cleanup lane
 folded in. The path is agreed (5/5); the gate-miss reason is the next phase's work.
+
+## Round 21 (post-Phase-C, product @ 4a059907, kit v7, Fable ruler) — COACHMARK-CONTAMINATED
+
+**design 7.6 · kw 7.8 · competitor 7.8 · a11y 7.7 · brand 7.7 — min 7.6, avg 7.72.**
+Flat vs R20 (7.6/7.78) DESPITE streaming shipping — because a NEW capture artifact
+dominated: the "Type / for 22 powerful commands" onboarding coach-mark occluded live
+content in SIX scenarios (s01/s03/s04/s06/s07/s08). ALL 5 judges rated killing it HIGH;
+design: "the single most un-premium, most-repeated tell... disqualifying for best-in-class."
+
+### Root cause (a seed bug I introduced in kit v7, now fixed)
+Kit v7 added `waggle_onboarding_complete: 'true'` to the capture seed. That is the LEGACY
+migration key: useOnboarding.loadState() (L78) sees it, rewrites the onboarding blob to
+`{completed:true, step:7}` WITHOUT tooltipsDismissed, so shouldShowCoachMarks fired.
+NOT a product bug (real returning users carry the current blob, not the legacy key).
+Fixed by removing the key from the seed; verified coach-mark GONE on home + chat.
+
+### Real residuals addressed (C.1 polish, committed):
+- Streaming STILL read chunk-buffered + "no caret" to design+competitor (2 HIGH). The
+  2px caret was invisible at video scale → widened to 3px rounded honey; CATCHUP_FRAMES
+  28→40 (~670ms reveal, ~8 frames at 12fps = unambiguously per-token). Verified: smooth
+  per-char growth 253→362 with the 3px caret visible.
+- Light-theme recall-card 10px timestamp borderline on cream (a11y+design medium) →
+  --text-tertiary.
+
+### Real Phase-C wins CONFIRMED (through the coachmark noise):
+s05 count-up 445→449, s01 staggered I-REMEMBER + hero crossfade, s11 honest reduced-
+motion (count snaps, routes crossfade, no lingering transform — "exactly what a design
+jury rewards"), s10 keyboard focus rings "real and premium", s12 first-launch boot,
+s02 coordinated theme crossfade. Verdict: "beats Codex/Hermes/Odyssey; ties/edges
+ChatGPT; trails Claude ONLY on streaming finesse + never letting chrome cover content."
+
+### Still-open for Phase D (the motion system — every judge's remaining ask):
+hover tiers "tasteful-restrained → memorable" (multi-property lift+bloom, 3 judges);
+ONE signature motion identity moment (count-up + glow-breathe are the seeds); route/
+entrance choreography. These ARE Pillar 1 (Phase D). Gate min≥8.5 not met (7.6) but
+the coachmark masked the true post-C number — Phase D + the clean re-capture is R22.

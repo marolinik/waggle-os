@@ -22,8 +22,11 @@ export function RecallCard({ highlight, timeLabel }: RecallCardProps) {
       <Sparkles className="mt-0.5 h-3 w-3 shrink-0 text-honey/60" aria-hidden />
       <div className="min-w-0">
         <p className="text-[12px] leading-relaxed text-foreground">{highlight.content}</p>
+        {/* R21 (a11y/design): the 10px timestamp on the honey-wash card read
+            borderline on cream — --text-tertiary is the quiet-but-AA tier
+            (~4.7:1 light / 5.0:1 dark on the tinted surface). */}
         {(highlight.workspace || timeLabel) && (
-          <p className="mt-0.5 text-[10px] text-muted-foreground">
+          <p className="mt-0.5 text-[10px] text-[var(--text-tertiary)]">
             {highlight.workspace && <span>{highlight.workspace} · </span>}
             {timeLabel}
           </p>
