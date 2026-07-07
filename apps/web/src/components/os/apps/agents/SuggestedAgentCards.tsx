@@ -62,7 +62,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
             <button
               type="button"
               onClick={() => onPick(p)}
-              className="group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card p-4 text-left shadow-[var(--shadow-sm)] transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+              className="hive-interactive group relative flex h-full w-full flex-col overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card p-4 text-left shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
             >
               {/* Wave T Lane F item 1: honey top hairline that blooms on
                   hover/focus — the perceivable delta the video judges missed
@@ -111,7 +111,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
           <button
             type="button"
             onClick={onBrowseAll}
-            className="group relative flex w-full items-center gap-3 overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left shadow-[var(--shadow-sm)] transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+            className="hive-interactive group relative flex w-full items-center gap-3 overflow-hidden rounded-[14px] border border-[var(--line-soft)] bg-card px-4 py-3 text-left shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
           >
             {/* Wave T Lane F item 1: same honey top hairline as the bee cards. */}
             <span

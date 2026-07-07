@@ -132,6 +132,55 @@
   transition: transform 0.08s ease;
 }
 
+/* ── hive-interactive — the shared hover tier: "honey responds to touch" ──────
+ * Pillar 1.2 (path-to-9). ONE felt lift+bloom, adopted by workspace/agent cards,
+ * marketplace rows and MCP/provider tiles (and demoed on /motion-spec). Rest →
+ * hover / focus-visible (self-focusable cards) or focus-within (rows whose
+ * focusable trigger is a child): a 4px lift, honey-warm border, and a soft honey
+ * glow bloom (--shadow-honey-bloom). Press settles toward the surface. Motion
+ * tokens only (--mo-fast / --mo-ease). Reduced-motion keeps colour + shadow and
+ * drops the translate (REDUCED.hover = 'color-shadow-only-no-transform').
+ *   .hive-interactive      — self-focusable cards (button / role=button)
+ *   .hive-interactive-row  — containers whose focusable trigger is a CHILD
+ * `--hive-inset` is a composable slot so a row can layer an inset hairline (e.g.
+ * a connected connector's left honey rule) UNDER the bloom in a single shadow. */
+.hive-interactive,
+.hive-interactive-row {
+  --hive-inset: 0 0 #0000;
+  transition:
+    transform var(--mo-fast) var(--mo-ease),
+    box-shadow var(--mo-fast) var(--mo-ease),
+    border-color var(--mo-fast) var(--mo-ease);
+}
+.hive-interactive:hover,
+.hive-interactive:focus-visible,
+.hive-interactive-row:hover,
+.hive-interactive-row:focus-within {
+  transform: translateY(-4px);
+  border-color: var(--honey-line);
+  box-shadow: var(--hive-inset), var(--shadow-honey-bloom);
+}
+.hive-interactive:active,
+.hive-interactive-row:active {
+  transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hive-interactive,
+  .hive-interactive-row {
+    transition:
+      box-shadow var(--mo-fast) var(--mo-ease),
+      border-color var(--mo-fast) var(--mo-ease);
+  }
+  .hive-interactive:hover,
+  .hive-interactive:focus-visible,
+  .hive-interactive:active,
+  .hive-interactive-row:hover,
+  .hive-interactive-row:focus-within,
+  .hive-interactive-row:active {
+    transform: none;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Warm-Hive shared atoms (ported from design-files/styles/waggle.css)
  * ═══════════════════════════════════════════════════════════════════════════ */

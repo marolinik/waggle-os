@@ -20,12 +20,13 @@
  * `/workspaces/:id`); with no prop it degrades to selection-only.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Search, Plus, Hexagon, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useShell } from '@/providers/ShellContext';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { isDevNoiseWorkspace } from '@/lib/workspace-counts';
-import { STAGGER } from '@/lib/motion/tokens';
+import { SPRING, STAGGER } from '@/lib/motion/tokens';
+import { workspaceHeroAvatarId, workspaceHeroNameId, heroMorphEnabled } from '@/lib/motion/hero-morph';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
 import CreateWorkspaceDialog from '../overlays/CreateWorkspaceDialog';
 import { HexAvatar, SectionLabel } from '../warm';
@@ -174,7 +175,7 @@ function FilterPills({
 
 // ── One workspace card (real fields only) ─────────────────────────────────
 function WorkspaceCard({
-  ws, onOpen, onChanged, isDuplicateName, enterDelayMs,
+  ws, onOpen, onChanged, isDuplicateName, enterDelayMs, enableMorph = false,
 }: {
   ws: Workspace;
   onOpen: () => void;
@@ -185,7 +186,16 @@ function WorkspaceCard({
   /** Wave W (Lane A) item 1: staggered-entrance delay (ms) for the once-per-visit
    *  cascade. Absent → the card renders at rest with no entrance animation. */
   enterDelayMs?: number;
+  /** Lane HM (Pillar 1.1): opt this card's hex avatar + name into the hero
+   *  shared-element morph. When true, both carry the workspace's layoutId so
+   *  opening the card GROWS it into the destination workspace header. Gated off
+   *  under reduced motion (no shared-element travel) and by the kill switch. */
+  enableMorph?: boolean;
 }) {
+  // Hero-morph ids — only assigned when the morph is live, so the plain card is
+  // byte-identical when reduced motion / the kill switch is on.
+  const avatarLayoutId = enableMorph ? workspaceHeroAvatarId(ws.id) : undefined;
+  const nameLayoutId = enableMorph ? workspaceHeroNameId(ws.id) : undefined;
   const badge = ws.storageType ? STORAGE_BADGE[ws.storageType] : null;
   const activeAgo = formatRelative(ws.lastActive ?? ws.updatedAt);
   // The server list rows carry WorkspaceConfig.created; the web type doesn't
@@ -244,7 +254,7 @@ function WorkspaceCard({
       // break that tier — `backwards` only holds the hidden start-state during the
       // stagger delay, then hands transform back to the hover tier once it settles.
       style={enterDelayMs != null ? { animation: 'card-enter var(--mo-slow) var(--mo-ease) backwards', animationDelay: `${enterDelayMs}ms` } : undefined}
-      className="group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="hive-interactive group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       {/* Wave S (Lane B) fix 2: the one live signal — a 2px top band in the
@@ -255,15 +265,19 @@ function WorkspaceCard({
         style={{ background: `color-mix(in srgb, ${accent} 40%, transparent)` }}
       />
 
-      {/* Slot 1 — identity row: avatar + name + storage badge. */}
+      {/* Slot 1 — identity row: avatar + name + storage badge. Lane HM: the
+          avatar + name are the hero morph's source pair (layoutId), so opening
+          the card grows them into the workspace header. */}
       <div className="mb-2.5 flex items-center gap-3">
-        <HexAvatar label={ws.name} size={36} />
-        <h3
+        <HexAvatar label={ws.name} size={36} layoutId={avatarLayoutId} />
+        <motion.h3
+          layoutId={nameLayoutId}
+          transition={SPRING.expressive}
           className="min-w-0 flex-1 truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]"
           data-testid={`all-workspaces-open-${ws.id}`}
         >
           {ws.name}
-        </h3>
+        </motion.h3>
         {badge && (
           <span
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
@@ -462,6 +476,12 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
   const reduceMotion = !!useReducedMotion();
   const entrancePlayedRef = useRef(false);
 
+  // Lane HM (Pillar 1.1): the shelf cards are the SOURCE of the card→workspace
+  // hero morph. Enable it only when motion is allowed and the kill switch is
+  // off; reduced motion falls back to the default route crossfade (no
+  // shared-element travel).
+  const enableMorph = heroMorphEnabled() && !reduceMotion;
+
   // The shelf hides dev/test artefacts (ai-os-audit-*, StressTest-*, E2E-Audit-*…)
   // so it reads as the user's real work — matching the switcher/home visible
   // count. (Previously the grid was the deliberately-unfiltered "full shelf"; the
@@ -635,6 +655,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
               // STAGGER.list/card, capped so the last card settles ≤500ms
               // (--mo-slow dur + 160ms max delay); frozen after first paint (once-per-visit).
               enterDelayMs={reduceMotion || entrancePlayedRef.current ? undefined : Math.min(i, 4) * STAGGER_LIST_MS}
+              enableMorph={enableMorph}
               onOpen={() => handleOpen(ws.id)}
               onChanged={() => { void refreshWorkspaces(); }}
               isDuplicateName={duplicateNames.has(ws.name.trim().toLowerCase())}
@@ -662,6 +683,7 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
                 <WorkspaceCard
                   key={ws.id}
                   ws={ws}
+                  enableMorph={enableMorph}
                   onOpen={() => handleOpen(ws.id)}
                   onChanged={() => { void refreshWorkspaces(); }}
                   isDuplicateName={false}

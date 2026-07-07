@@ -31,6 +31,7 @@
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   LayoutGrid, MessageSquare, FileBox, Brain,
   Users, WifiOff, ShieldAlert, ChevronRight,
@@ -38,6 +39,8 @@ import {
 } from 'lucide-react';
 import { tierSatisfies, TIER_LABELS } from '@waggle/shared';
 import { adapter } from '@/lib/adapter';
+import { SPRING } from '@/lib/motion/tokens';
+import { workspaceHeroAvatarId, workspaceHeroNameId, heroMorphEnabled } from '@/lib/motion/hero-morph';
 import { useShell } from '@/providers/ShellContext';
 import { useRoomState } from '@/hooks/useRoomState';
 import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
@@ -388,6 +391,18 @@ const WorkspaceDesktopApp = ({
     onOpenChat?.(workspaceId);
   }, [onOpenChat, workspaceId]);
 
+  // Lane HM (Pillar 1.1): this surface is the DESTINATION of the card→workspace
+  // hero morph. The header avatar + name carry the SAME layoutIds the shelf
+  // card used, so opening a card grows it into this header. The ids also ride
+  // the loading skeleton's hero row, so the morph target is mounted at route
+  // commit (the header data lands async — without the skeleton hero the morph
+  // would have nothing to land on and would fall back to the plain crossfade).
+  // Gated off under reduced motion / the kill switch → plain, instant header.
+  const reduceMotion = !!useReducedMotion();
+  const enableMorph = heroMorphEnabled() && !reduceMotion;
+  const heroAvatarId = enableMorph ? workspaceHeroAvatarId(workspaceId) : undefined;
+  const heroNameId = enableMorph ? workspaceHeroNameId(workspaceId) : undefined;
+
   // Files tab upload: writes to the storage provider, then re-reads the union
   // (registry + provider fs) so the new file surfaces immediately.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -552,13 +567,23 @@ const WorkspaceDesktopApp = ({
         data-testid="ws-desktop-loading"
       >
         <span className="sr-only">Loading workspace…</span>
-        {/* Header scaffold — mirrors the real header row (avatar + title). */}
-        <div className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5 animate-pulse motion-reduce:animate-none" aria-hidden="true">
+        {/* Header scaffold — the hero (avatar + name) is REAL, not a gray box:
+            the name is known at route time, so showing it immediately reads as
+            "your workspace is loading" AND gives the card→workspace morph a
+            target that is mounted at route commit (Lane HM). Only the eyebrow
+            crumb stays a skeleton line while context resolves. */}
+        <div className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="h-[46px] w-[46px] shrink-0 rounded-[14px] bg-[var(--surface-2)]" />
-            <div className="space-y-2">
-              <div className="h-2.5 w-24 rounded bg-[var(--surface-2)]" />
-              <div className="h-5 w-52 rounded bg-[var(--surface-2)]" />
+            <HexAvatar label={workspaceName} size={46} layoutId={heroAvatarId} />
+            <div className="min-w-0">
+              <div className="mb-1.5 h-2.5 w-24 rounded bg-[var(--surface-2)] animate-pulse motion-reduce:animate-none" aria-hidden="true" />
+              <motion.h2
+                layoutId={heroNameId}
+                transition={SPRING.expressive}
+                className="truncate font-display text-[clamp(20px,2.4vw,28px)] font-semibold leading-tight tracking-[-0.02em] text-[var(--text)]"
+              >
+                {workspaceName}
+              </motion.h2>
             </div>
           </div>
         </div>
@@ -655,7 +680,7 @@ const WorkspaceDesktopApp = ({
       <header className="shrink-0 border-b border-[var(--line-soft)] px-5 py-3.5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <HexAvatar label={displayName} size={46} />
+            <HexAvatar label={displayName} size={46} layoutId={heroAvatarId} />
             <div className="min-w-0">
               <div className="mb-0.5 flex items-center gap-1.5 font-mono text-[11px] text-[var(--text-dim)]">
                 <button
@@ -668,9 +693,13 @@ const WorkspaceDesktopApp = ({
                 <span aria-hidden>›</span>
                 <span className="truncate text-[var(--text-2)]">{displayName}</span>
               </div>
-              <h2 className="truncate font-display text-[clamp(20px,2.4vw,28px)] font-semibold leading-tight tracking-[-0.02em] text-[var(--text)]">
+              <motion.h2
+                layoutId={heroNameId}
+                transition={SPRING.expressive}
+                className="truncate font-display text-[clamp(20px,2.4vw,28px)] font-semibold leading-tight tracking-[-0.02em] text-[var(--text)]"
+              >
                 {displayName}
-              </h2>
+              </motion.h2>
               {/* UX gold-standard H1: on the Chat tab (highest-dwell surface) the
                   header compacts — the memories/updated subtitle hides so the
                   thread starts higher. Title + actions stay. */}

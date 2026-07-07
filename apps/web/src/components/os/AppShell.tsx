@@ -14,13 +14,14 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Home, MessageSquare, Brain, ListTodo, Library, Network, Plug, Shield } from 'lucide-react';
 import wallpaperDark from '@/assets/wallpaper.jpg';
 import wallpaperLight from '@/assets/wallpaper-light.jpg';
 import BootScreen from './BootScreen';
 import StatusBar from './StatusBar';
 import ChatHost from './ChatHost';
+import RouteTransition from './RouteTransition';
 import CommandCenter from './overlays/CommandCenter';
 import Sidebar, { type SidebarNavItem } from './Sidebar';
 import AppErrorBoundary from './ErrorBoundary';
@@ -444,9 +445,15 @@ const ShellLayout = () => {
         <main className="relative z-10 flex-1 min-w-0 overflow-hidden">
           {/* §4.2 keep-alive: ChatHost portals one live ChatWindowInstance per
               visited workspace, so navigation can't kill in-flight SSE
-              streams. It renders no layout DOM of its own. */}
+              streams. It renders no layout DOM of its own. NOTE: it stays a
+              SIBLING of RouteTransition (never wrapped) so the crossfade can
+              never remount it and kill an in-flight stream. */}
           <ChatHost />
-          <Outlet />
+          {/* Pillar 1.1 · Lane RT: the default fade-through crossfade + persistent
+              chrome for top-level route changes. Wraps ONLY the Outlet; the
+              sidebar + StatusBar above are outside this subtree, so they persist.
+              Feature-flagged + reduced-motion-aware; focus/AT ships inside it. */}
+          <RouteTransition />
         </main>
       </div>
 

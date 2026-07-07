@@ -10,6 +10,7 @@ import { useProviders } from "@/hooks/useProviders";
 import { formatModelLabel } from "@/lib/model-label";
 import { adapter } from "@/lib/adapter";
 import { DATE_LOCALE } from "@/lib/date-locale";
+import { WaggleSettle, claimFullSignature } from "@/components/os/warm";
 
 interface StatusBarProps {
   workspaceName?: string;
@@ -52,6 +53,10 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
   // “+N ⬡” particle folds into the hive (the brain chip) and fades. Honest by
   // construction — it only ever fires on an actual frame-count increase.
   const [foldDelta, setFoldDelta] = useState<number | null>(null);
+  // Lane WS: the commissioned waggle-settle plays over the memory chip on the
+  // FIRST real memory-saved of the session (SIGNATURE.full gate + cooldown) —
+  // the prototype's single wired moment. Reduced-motion degrades inside it.
+  const [settlePlay, setSettlePlay] = useState(false);
   useEffect(() => {
     let cancelled = false;
     let foldTimer: ReturnType<typeof setTimeout> | undefined;
@@ -68,6 +73,10 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
               setFoldDelta(n - prev);
               if (foldTimer) clearTimeout(foldTimer);
               foldTimer = setTimeout(() => { if (!cancelled) setFoldDelta(null); }, 2000);
+              // Signature flourish — gated to first-of-session + cooldown, so it
+              // fires at most once per session (claim is idempotent under a
+              // double-invoked updater in StrictMode).
+              if (claimFullSignature('memory-saved-first-of-session')) setSettlePlay(true);
             }
             return n > 0 ? n : null;
           });
@@ -168,6 +177,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
                     +{foldDelta} ⬡
                   </span>
                 )}
+                <WaggleSettle play={settlePlay} onDone={() => setSettlePlay(false)} size={20} />
               </span>
             </HintTooltip>
           </>

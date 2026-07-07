@@ -19,4 +19,6 @@ export { ActivityStream, type ActivityStep } from './ActivityStream';
 export { AmbientHiveGlow } from './AmbientHiveGlow';
 export { InlineApprovalCard } from './InlineApprovalCard';
 export { ConfidenceRing, confidenceColor } from './ConfidenceRing';
+export { WaggleSettle, type WaggleSettleProps } from './WaggleSettle';
+export { claimFullSignature } from './waggle-settle-gate';
 export { TONE_COLOR, TONE_WASH, type WarmTone } from './tones';

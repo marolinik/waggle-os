@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Brain, Clock, Network, Download, Activity, BookOpen, Sparkles, User, Briefcase, ShieldCheck, SlidersHorizontal, ChevronDown } from 'lucide-react';
 import type { KGNode, KGEdge } from '@/lib/types';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { SPRING } from '@/lib/motion/tokens';
 import { cn } from '@/lib/utils';
 import MemoryTrust from './MemoryTrust';
 import KnowledgeGraphViewer from './memory/KnowledgeGraphViewer';
@@ -96,6 +98,11 @@ const MemoryCenterApp = ({
   // Advanced flyout (display-level IA regroup): open state + active child.
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const activeAdvanced = ADVANCED_TABS.find((t) => t.id === view);
+
+  // Lane HM (Pillar 1.1): the memory tab panel morphs between views (the
+  // Trust↔Memories pair especially) rather than hard-cutting — a keyed
+  // opacity+settle on the panel container. Reduced motion → instant swap.
+  const reduceMotion = !!useReducedMotion();
 
   return (
     <div className="flex flex-col h-full" data-testid="memory-center-app">
@@ -243,6 +250,17 @@ const MemoryCenterApp = ({
       </div>
 
       <div className="flex-1 overflow-auto">
+        {/* Lane HM: the panel body morphs on view change (Trust↔Memories the
+            hero pair) — keyed opacity + a small settle, not a hard cut. The
+            container's scroll stays on the parent; reduced motion swaps
+            instantly (initial disabled, zero-duration transition). */}
+        <motion.div
+          key={view}
+          initial={reduceMotion ? false : { opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={reduceMotion ? { duration: 0 } : SPRING.standard}
+          data-testid="memory-view-panel"
+        >
         {view === 'trust' ? (
           <MemoryTrust mind={mind} workspaceId={workspaceId} />
         ) : view === 'memories' ? (
@@ -266,6 +284,7 @@ const MemoryCenterApp = ({
         ) : (
           <EvolutionTab />
         )}
+        </motion.div>
       </div>
     </div>
   );

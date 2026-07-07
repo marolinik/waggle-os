@@ -31,6 +31,7 @@ import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
 import WorkspaceActionsMenu from '../WorkspaceActionsMenu';
+import { RevealSection } from './HomeReveal';
 import {
   HexAvatar, SectionLabel, DotLive, RunChip, IconTile, OvernightHero, AskBar,
   StreakChip, AmbientHiveGlow, type RunChipProps,
@@ -855,18 +856,23 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           RecallCard the modal renders. */}
       <RecallStrip highlights={highlights} />
 
-      <StartHereCard
-        move={startHereMove}
-        onContinue={onContinue}
-        onOpenWorkspaceDesktop={onOpenWorkspaceDesktop}
-      />
+      {startHereMove && (
+        <RevealSection>
+          <StartHereCard
+            move={startHereMove}
+            onContinue={onContinue}
+            onOpenWorkspaceDesktop={onOpenWorkspaceDesktop}
+          />
+        </RevealSection>
+      )}
 
       {needsReviewCount > 0 && (
-        <div
-          className="mb-6 flex items-center gap-2.5 rounded-[14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-4 py-3"
-          role="alert"
-          data-testid="home-cockpit-review-banner"
-        >
+        <RevealSection>
+          <div
+            className="mb-6 flex items-center gap-2.5 rounded-[14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-4 py-3"
+            role="alert"
+            data-testid="home-cockpit-review-banner"
+          >
           <Brain className="h-4 w-4 shrink-0 text-[var(--attention)]" />
           {/* Scope stated explicitly ("from your imports") — this counts ONLY
               import-sourced unreviewed memories, a subset of the Memory Center's
@@ -884,9 +890,11 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           >
             Review <ChevronRight className="h-3.5 w-3.5" />
           </button>
-        </div>
+          </div>
+        </RevealSection>
       )}
 
+      <RevealSection>
       <div className="mb-9">
         <OvernightHero statement={overnightStatement ?? overnightEmpty} runs={runChips} />
         {failureCount > 0 ? (
@@ -934,19 +942,32 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           </button>
         ) : null}
       </div>
+      </RevealSection>
 
-      <RecentWorkspacesPanel
-        onWorkspaceChanged={() => { void load(); }}
-        cards={recentWorkspaces}
-        onContinue={onContinue}
-        onOpenDesktop={onOpenWorkspaceDesktop}
-      />
+      {recentWorkspaces.length > 0 && (
+        <RevealSection>
+          <RecentWorkspacesPanel
+            onWorkspaceChanged={() => { void load(); }}
+            cards={recentWorkspaces}
+            onContinue={onContinue}
+            onOpenDesktop={onOpenWorkspaceDesktop}
+          />
+        </RevealSection>
+      )}
 
-      <SuggestedActionsPanel actions={briefing.suggestedActions} subFor={subForAction} onRun={onOpenFromAction} />
+      {briefing.suggestedActions.length > 0 && (
+        <RevealSection>
+          <SuggestedActionsPanel actions={briefing.suggestedActions} subFor={subForAction} onRun={onOpenFromAction} />
+        </RevealSection>
+      )}
 
       {/* Rendered only when there is at least one item — zero schedule items
           (or a sidecar omitting the field) must not leave an empty section. */}
-      <UpNextPanel items={briefing.upNext ?? []} onOpen={(id) => { if (id) onOpenWorkspaceDesktop(id); }} />
+      {(briefing.upNext ?? []).length > 0 && (
+        <RevealSection>
+          <UpNextPanel items={briefing.upNext ?? []} onOpen={(id) => { if (id) onOpenWorkspaceDesktop(id); }} />
+        </RevealSection>
+      )}
 
       <AskBar
         onSubmit={(text) => void captureAsk(text, 'task')}

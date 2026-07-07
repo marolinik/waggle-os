@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check } from "lucide-react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   SPRING,
@@ -11,6 +12,7 @@ import {
   type SpringVariant,
   type MotionTier,
 } from "@/lib/motion/tokens";
+import { WaggleSettle } from "@/components/os/warm";
 
 /**
  * /motion-spec — the arc's single source of motion truth (Phase-0 item 2,
@@ -142,7 +144,7 @@ function HoverTierCard() {
     <div
       tabIndex={0}
       role="button"
-      className="group relative flex min-h-[110px] w-full max-w-[280px] cursor-pointer flex-col justify-between overflow-hidden rounded-[16px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:active:scale-[0.98] motion-safe:focus-visible:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-visible:border-[var(--honey-line)] focus-visible:shadow-[var(--shadow-honey)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="hive-interactive group relative flex min-h-[110px] w-full max-w-[280px] cursor-pointer flex-col justify-between overflow-hidden rounded-[16px] border border-[var(--line-soft)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
     >
       <span
         aria-hidden
@@ -229,6 +231,38 @@ function ExitSample({ reduce }: { reduce: boolean }) {
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function WaggleSettleSample({ reduce }: { reduce: boolean }) {
+  const [play, setPlay] = useState(false);
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={play}
+          onClick={() => setPlay(true)}
+          className="rounded-[9px] border border-[var(--line-strong)] bg-[var(--surface-2)] px-3 py-1.5 text-[12px] font-semibold text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] disabled:opacity-50"
+        >
+          {play ? "…dancing" : "Play the waggle ⬡"}
+        </button>
+        <span className="font-mono text-[11px] text-[var(--text-muted)]">
+          {reduce ? "reduce — instant state + one colour pulse" : "SPRING.expressive · DUR.settle (~400ms)"}
+        </span>
+      </div>
+      {/* The exact product moment it is wired to: a "memory saved" confirmation. */}
+      <div className="relative flex max-w-[320px] items-center gap-2.5 overflow-visible rounded-[14px] border border-[var(--honey-line)] bg-[var(--honey-wash)] px-4 py-3">
+        <span aria-hidden className="hex grid h-6 w-6 shrink-0 place-items-center bg-[var(--honey)] text-[#1a1407]">
+          <Check className="h-3.5 w-3.5" strokeWidth={2.6} />
+        </span>
+        <div className="min-w-0">
+          <div className="font-display text-[13px] font-semibold text-[var(--text)]">Memory saved</div>
+          <div className="truncate text-[12px] text-[var(--text-muted)]">Waggle will remember this across sessions.</div>
+        </div>
+        <WaggleSettle play={play} onDone={() => setPlay(false)} size={44} />
       </div>
     </div>
   );
@@ -368,7 +402,14 @@ export default function MotionSpec() {
         </Section>
 
         <Section
-          title="7 · The inventory — every motion on the judged surfaces"
+          title="7 · The signature gesture — the waggle-settle (prototype)"
+          subtitle="The commissioned brand gesture (Pillar 1.3), judged STANDALONE here first. The honey brand hex runs the bee's figure-eight waggle dance (a Gerono lemniscate — two lobes crossing at the origin — with a fast body-wobble) and settles at centre with a single-overshoot spring (SPRING.expressive · DUR.settle). The translation PATH carries the identity — it reads as 'the waggle,' not a scale-pop. Wired to exactly ONE product moment (memory saved, first per session, behind the SIGNATURE.full cooldown gate); it does not propagate elsewhere in this phase. Reduced-motion → the dancer snaps to its settled state and a single honey colour pulse replaces the gesture (REDUCED.settle = instant-state-color-pulse)."
+        >
+          <WaggleSettleSample reduce={reduce} />
+        </Section>
+
+        <Section
+          title="8 · The inventory — every motion on the judged surfaces"
           subtitle="The Phase-A end-state, rebuilt from the shipped tree (every row grep-verified). Discrete transitions (hover tiers, entrances, chrome, count-ups, boot, theme crossfade) resolve to the tokens above — acceptance = ZERO non-token durations/easings on judged surfaces. Signature moments and ambient loops keep their keyframe cadence on purpose (loop rhythm is not a discrete-transition duration); every one degrades per the reduced-motion column. The final row lists CSS animation classes that are defined but no longer applied — kept honest, not hidden."
         >
           <div className="overflow-x-auto rounded-[14px] border border-[var(--line)]">

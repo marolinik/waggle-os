@@ -8,7 +8,7 @@
  * alone). The destructive Remove direction is delegated to the parent so it
  * keeps its consequence dialog; install/connect/enable are one-click (§09).
  */
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { Download, ExternalLink, Loader2, Plug, Trash2, Zap } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
@@ -217,18 +217,19 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
   return (
     <div
       data-testid="extension-card"
-      // Row hover tier (Wave T Lane B §3 · Wave V Lane C motion tier 2): rest
-      // flat → hover/focus-within adds a motion-safe 2px lift + blooms the
-      // elevation to the honey glow (--shadow-honey) and warms the border to
-      // honey, --mo-fast · --mo-ease. Reduced motion keeps the color tier (border +
-      // bloom) and drops only the lift. `group` lets the primary action gain
-      // full contrast on row hover (see PRIMARY_ACTION_CLASS).
-      className={`group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card transition-all duration-[var(--mo-fast)] ease-[var(--mo-ease)] motion-safe:hover:-translate-y-0.5 motion-safe:focus-within:-translate-y-0.5 ${
+      // Row hover tier — the shared `.hive-interactive-row` class (Lane HV,
+      // Pillar 1.2): rest flat → hover/focus-within lifts 4px, warms the border
+      // to honey and blooms the elevation (--shadow-honey-bloom), --mo-fast ·
+      // --mo-ease. A connected connector keeps its inset honey rule by feeding it
+      // into the shared shadow via `--hive-inset` (one combined box-shadow — two
+      // shadow-* utilities on one element would collide). Reduced motion keeps
+      // the colour tier (border + bloom) and drops only the lift. `group` lets
+      // the primary action gain full contrast on row hover (see PRIMARY_ACTION_CLASS).
+      style={connectedRow ? ({ '--hive-inset': 'inset 2px 0 0 0 var(--honey)' } as CSSProperties) : undefined}
+      className={`hive-interactive-row group flex items-start gap-3 px-3 py-2.5 rounded-xl border bg-card ${
         connectedRow
-          // Rest elevation folded INTO the inset honey hairline (one combined
-          // box-shadow — two shadow-* utilities on one element would collide).
-          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] hover:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-honey)] focus-within:shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-honey)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
-          : 'border-border/30 shadow-[var(--shadow-sm)] hover:border-[var(--honey-line)] hover:shadow-[var(--shadow-honey)] focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]'
+          ? 'border-[var(--honey-line)] shadow-[inset_2px_0_0_0_var(--honey),var(--shadow-sm)] bg-gradient-to-r from-[var(--honey-wash)] to-transparent'
+          : 'border-border/30 shadow-[var(--shadow-sm)]'
       }`}
     >
       {/* Brand identity tile (simple-icons mark or monogram) — no more
