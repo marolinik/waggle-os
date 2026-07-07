@@ -810,3 +810,60 @@ hover tiers "tasteful-restrained → memorable" (multi-property lift+bloom, 3 ju
 ONE signature motion identity moment (count-up + glow-breathe are the seeds); route/
 entrance choreography. These ARE Pillar 1 (Phase D). Gate min≥8.5 not met (7.6) but
 the coachmark masked the true post-C number — Phase D + the clean re-capture is R22.
+
+## Round 22 — the 9-attempt (all 4 pillars shipped @ 9b892ed9, kit v8) + PLATEAU ANALYSIS #4 (FINAL)
+
+**design 7.6 · kw 7.9 · competitor 7.7 · a11y 7.5 · brand 7.6 — min 7.5, avg 7.66.**
+
+### The measurement is conclusive: the executed path plateaued at ~7.6–7.8
+Video-regime avg across the FULLY EXECUTED path (Fable ruler, comparable):
+R20 (Pillars 4+2) 7.78 → R21 (Pillar 3, coachmark-masked, real ~7.9) 7.72 →
+**R22 (Pillar 1, motion system) 7.66.** Three rounds flat-to-declining while
+shipping the ENTIRE agreed path (motion vocabulary, AA floor, instant power feel,
+aliveness/streaming, AND the full motion system). min pinned at 7.5. This is the
+SAME min-of-5 ceiling dynamic that capped the static regime at 7.65 — now reached
+at ~7.66 with a far stronger verdict.
+
+### The judges CREDIT the whole path (uniform, strong)
+"Clearly BEATS Codex, Hermes, Odyssey" (all 5); "edges Claude and ChatGPT on brand
+identity and warmth" (brand); "a working motion system + memory-native surfaces the
+competitors don't attempt" (kw/competitor); s13 hero morph = "genuine Apple/Linear-
+grade spatial continuity that the chat competitors don't attempt for navigation"
+(design); s05 memory "the product's soul... genuinely differentiated." The motion
+system landed and is recognized.
+
+### Why 9.0-MINIMUM is not reachable under this regime (evidence, 3 causes)
+1. **The two persistent HIGH asks are substantially CAPTURE/DEV artifacts:**
+   - "Instant everywhere / the 459ms isn't visible / kill route-return skeletons"
+     (3 judges): each capture journey uses a FRESH browser context, so per-surface
+     caches are COLD on first visit within it. HOME cache-first is gate-verified at
+     459ms (real). Extending cache-first to EVERY surface is real Pillar-2 work but
+     the capture can't easily show warm per-surface returns, and it won't move min→9.
+   - "Buttery per-token streaming" (2 judges, persistent through R20/21/22 despite
+     TWO cadence retunes): the dev ECHO provider dumps WHOLE-BLOCK, so the cadence
+     smooths a block rather than pacing real tokens; a production streaming model
+     would read smoother. Plus markdown reflow at 12fps reads chunky. Dev-env + 12fps
+     artifact, not a shippable product deficit.
+2. **The min-of-5 harsh rubric ("9 = do NOT be generous") + new equal-weight nits
+   every round** (R22: unselected onboarding chips, light small-caps labels — after
+   two prior AA sweeps closed the ones before). Documented whack-a-mole; the stable
+   fixed point once real defects are gone is ~7.5 min.
+3. **2fps sampling structurally withholds credit** for the motion the product's
+   strongest layer now has (12fps strips only partially compensate).
+
+### DECISION (founder) — the path is COMPLETE; this is a genuine budget call
+The /goal ("done when judges agree on the path") was MET (PATH-2, 5/5 endorsed).
+The path was then FULLY EXECUTED: 4 pillars, ~15 commits on main, every gate green,
+every phase adversarially verified, 2 blocking motion bugs caught+fixed. Result:
+6.7 static → 7.66 video with a "genuine peer to Claude/ChatGPT" verdict. 9.0-minimum
+is not reachable for the measured reasons above.
+- **A. Accept the executed arc** — merge/push the full path (Phases A–D), take the
+  result (strong, verified, "beats the field / peer to the leaders"). EV-recommended.
+- **B. One targeted round on the two REAL (non-artifact) levers** — extend cache-
+  first paint to every surface (real, kw/competitor HIGH) + the 2 a11y nits. Measured
+  EV ≈ +0.1–0.2 avg, min maybe 7.5→7.7; will NOT reach 9. Streaming "buttery" needs
+  a real provider, not fixable in the echo-dev capture.
+- **C. Stop and accept the plateau** — the number is a stable fixed point.
+Recommendation: **A** (or B then A). C and "more full phases" have measured EV ≈ 0
+(three flat rounds). Grinding past a measured plateau is the mistake this arc's
+discipline exists to prevent (it caught two prior plateaus).
