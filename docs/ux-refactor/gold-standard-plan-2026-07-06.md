@@ -734,3 +734,43 @@ Pillar 1 motion system, with kit v6 verification (≥12fps signature clips, keyb
 + reduced-motion journeys, hard Playwright gates, Claude/ChatGPT side-by-sides) and
 per-round success gates (min ≥8.0 after P4+P2 · ≥8.5 after P3 · 9-attempt after P1;
 two flat rounds → stop and re-analyze).
+
+## Round 20 (post-Phase-A+B, product @ b4f1abfe, kit v6, Fable ruler)
+
+**design 7.9 · kw 7.9 · competitor 7.8 · a11y 7.7 · brand 7.6 — min 7.6, avg 7.78.**
+Fable-ruler trajectory: R18 7.70 → **R20 7.78** (+0.08 avg, min 7.5→7.6). Five surfaces
+at 8.0 (home/memory/settings/onboarding + s04 chat 7.8). **Verdict flipped: "a genuine
+PEER to Claude/ChatGPT — wins decisively on identity + memory-native moments + the
+surfaces around chat; beats Codex/Hermes/Odyssey on craft AND motion now."**
+
+### v3 gate check: min ≥ 8.0 after Phases 4+2 → **NOT met (7.6), but the miss is the
+UNBUILT pillars, not a Phase-A/B defect.** The convergence is unambiguous:
+- **Streaming cadence = THE gap (4/5 HIGH)**: chunk/line reveal vs Claude/ChatGPT's
+  per-token blur-up + live caret. This is literally Pillar 3.1 (next phase). The
+  memory-search trace during generation is already judged "differentiated, no
+  competitor ships it" — only the raw-text micro-cadence trails.
+- **Home ambient life + scroll-reveal (brand+design HIGH)**: Pillar 3 ambient / Pillar 1
+  entrance — also unbuilt.
+- **Stronger honey-responds-to-touch hover (brand)**: Pillar 1.2 amplitude.
+
+### Phase-A/B wins CONFIRMED on camera
+Warm cache-first paint (recall cards INSIDE the hero, no interposing modal — the
+double-catch-up collapse working, 3-day<7 threshold), non-blocking send queue
+("user bubble commits instantly, composer clears"), Fix-it-now focus-jump, honest
+reduced-motion degradation (s11: instant route change, static count), keyboard focus
+rings visible (s10), light theme "proper re-tokening not an inverted hack."
+
+### Verified residuals (fold into Phase C cleanup lane, not a separate round — streaming
+caps the score so residuals alone can't reach 8.0):
+1. Boot "~2s wall" for warm users = CAPTURE ARTIFACT (seed missing `waggle-booted`;
+   real returning users skip boot, gate-verified 459ms). Fix the capture seed +
+   verify product truth.
+2. Card/row overflow ('…') actions keyboard-reachability (roving tabindex + focus
+   ring on the action) — s10 acceptance partially unverified (a11y+design HIGH).
+3. Reduced-motion boot glow freeze (s11, 2 judges low).
+4. A few tertiary-text eyebrow stragglers (RESEARCH HUB/START HERE, onboarding
+   subhead) + light-theme focus-ring visibility check (a11y).
+5. Dense secondary surfaces (marketplace/models/memories rows) vertical rhythm (medium).
+
+→ Proceed to Phase C (Pillar 3 aliveness — streaming headline) with the cleanup lane
+folded in. The path is agreed (5/5); the gate-miss reason is the next phase's work.
