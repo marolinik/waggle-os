@@ -16,6 +16,8 @@
 import { PairingStore } from './pairing.js';
 import { runChannelChatTurn } from './chat-client.js';
 import { TelegramAdapter } from './telegram-adapter.js';
+import { DiscordAdapter } from './discord-adapter.js';
+import { SlackAdapter } from './slack-adapter.js';
 import type { ChannelAdapter, ChannelAdapterStatus, ChannelMessage, ChannelPlatform } from './types.js';
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -136,16 +138,24 @@ export class ChannelManager {
 
   private createAdapter(platform: ChannelPlatform): ChannelAdapter | null {
     if (this.opts.adapterFactory) return this.opts.adapterFactory(platform, this);
+    const onMessage = (msg: ChannelMessage) => this.handleInbound(msg);
     if (platform === 'telegram') {
       const token = this.readVault('telegram_bot_token');
       if (!token) return null;
-      return new TelegramAdapter({
-        botToken: token,
-        onMessage: msg => this.handleInbound(msg),
-        log: this.opts.log,
-      });
+      return new TelegramAdapter({ botToken: token, onMessage, log: this.opts.log });
     }
-    // discord / slack → P2, whatsapp → P3 (see docs/plans/CHANNELS-ARC-2026-07-09.md)
+    if (platform === 'discord') {
+      const token = this.readVault('discord_bot_token');
+      if (!token) return null;
+      return new DiscordAdapter({ botToken: token, onMessage, log: this.opts.log });
+    }
+    if (platform === 'slack') {
+      const appToken = this.readVault('slack_app_token');
+      const botToken = this.readVault('slack_bot_token');
+      if (!appToken || !botToken) return null;
+      return new SlackAdapter({ appToken, botToken, onMessage, log: this.opts.log });
+    }
+    // whatsapp → P3 (see docs/plans/CHANNELS-ARC-2026-07-09.md)
     return null;
   }
 

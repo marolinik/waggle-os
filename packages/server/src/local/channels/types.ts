@@ -59,6 +59,19 @@ export interface ChannelConfig {
   defaultWorkspace: string;
 }
 
+/**
+ * Minimal structural WebSocket contract shared by the Discord gateway and
+ * Slack Socket Mode adapters. `ws`'s WebSocket satisfies it; tests inject
+ * scripted fakes through the adapters' wsFactory seam.
+ */
+export interface WsLike {
+  on(event: 'open' | 'message' | 'close' | 'error', cb: (...args: unknown[]) => void): void;
+  send(data: string): void;
+  close(): void;
+}
+
+export type WsFactory = (url: string) => WsLike;
+
 /** Split a reply into ≤limit chunks, preferring paragraph then line breaks. */
 export function chunkText(text: string, limit: number): string[] {
   if (text.length <= limit) return [text];
