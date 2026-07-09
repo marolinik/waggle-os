@@ -18,6 +18,7 @@ import { runChannelChatTurn } from './chat-client.js';
 import { TelegramAdapter } from './telegram-adapter.js';
 import { DiscordAdapter } from './discord-adapter.js';
 import { SlackAdapter } from './slack-adapter.js';
+import { WhatsAppAdapter } from './whatsapp-adapter.js';
 import type { ChannelAdapter, ChannelAdapterStatus, ChannelMessage, ChannelPlatform } from './types.js';
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
@@ -155,7 +156,15 @@ export class ChannelManager {
       if (!appToken || !botToken) return null;
       return new SlackAdapter({ appToken, botToken, onMessage, log: this.opts.log });
     }
-    // whatsapp → P3 (see docs/plans/CHANNELS-ARC-2026-07-09.md)
+    if (platform === 'whatsapp') {
+      // No vault credential — Baileys pairs via QR and persists its own
+      // auth state under dataDir/channels/whatsapp-auth.
+      return new WhatsAppAdapter({
+        dataDir: this.opts.dataDir,
+        onMessage,
+        log: this.opts.log,
+      });
+    }
     return null;
   }
 

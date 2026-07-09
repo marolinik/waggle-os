@@ -26,6 +26,7 @@
     "@waggle/shared": "*",
     "@waggle/waggle-dance": "*",
     "@waggle/wiki-compiler": "*",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "archiver": "^7.0.1",
     "bullmq": "^5.0.0",
     "cron-parser": "^4.9.0",
