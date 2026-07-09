@@ -37,6 +37,7 @@ import {
   StreakChip, AmbientHiveGlow, type RunChipProps,
 } from '../warm';
 import { RecallCard } from '../overlays/RecallCard';
+import DreamDiaryCard from '../home/DreamDiaryCard';
 import { readHomeCache, writeHomeCache } from '@/lib/home-cache';
 import { takeBriefingData, type MemoryHighlight } from '@/lib/briefing-source';
 import { timeAgo } from '@/lib/login-briefing-brag';
@@ -942,6 +943,12 @@ const HomeCockpit = ({ onContinue, onOpenWorkspaceDesktop, onCreateWorkspace, us
           </button>
         ) : null}
       </div>
+      </RevealSection>
+
+      {/* Dream Diary — nightly memory-curation narrative; self-hides until
+          the first dream exists (docs/plans/DREAM-DIARY-2026-07-09.md). */}
+      <RevealSection>
+        <DreamDiaryCard />
       </RevealSection>
 
       {recentWorkspaces.length > 0 && (
