@@ -1,0 +1,7 @@
+{
+  "abstention":               { "cell": "retrieval",     "prompt": "v1", "topK": 30 },
+  "contradiction_resolution": { "cell": "hybrid",        "prompt": "v2", "kRaw": 15, "kFact": 60 },
+  "instruction_following":    { "cell": "hybrid",        "prompt": "v2", "kRaw": 15, "kFact": 60 },
+  "event_ordering":           { "cell": "hybrid",        "prompt": "v2", "kRaw": 15, "kFact": 60 },
+  "_default":                 { "cell": "hive_mind_ipb", "prompt": "v2", "topK": 30 }
+}

@@ -143,6 +143,18 @@ interface CanonicalInstance {
   memory_ability: string;
   chat_size: string;
   conversation_index: number;
+  /**
+   * schema v2 (2026-07-06): the ordered list of rubric "nuggets" for this
+   * probing question. This is the criterion set the OFFICIAL BEAM metric
+   * scores — each nugget is judged 0 / 0.5 / 1 by the graded LLM judge and
+   * the per-question score is their mean (see beam-nugget-judge.ts). Carried
+   * additively; v1 archives (e.g. the committed beam-128K.jsonl, dataset
+   * hash 9311bba4…) do not have it. Appended LAST in FIELD_ORDER so the
+   * leading columns are byte-identical to v1 for a human diff — note that
+   * ANY added field changes the SHA-256 dataset_version, so a v1 archive
+   * rebuilt with this code becomes a v2 hash. We do not rebuild 128K here.
+   */
+  rubric: string[];
 }
 
 const FIELD_ORDER: readonly (keyof CanonicalInstance)[] = [
@@ -154,7 +166,11 @@ const FIELD_ORDER: readonly (keyof CanonicalInstance)[] = [
   'memory_ability',
   'chat_size',
   'conversation_index',
+  'rubric',
 ];
+
+/** Canonical schema version. Bumped to 2 when `rubric` nuggets were added. */
+const SCHEMA_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Turn flattening
@@ -214,6 +230,37 @@ function normaliseAnswer(pq: BeamProbingQuestion): string | null {
     pq.ideal_summary ??
     null
   );
+}
+
+/**
+ * Extract the ordered list of rubric "nuggets" from a probing question.
+ * Ported verbatim from mem0's `extract_rubric_nuggets` (benchmarks/beam/run.py):
+ * the `rubric` field may be a list[str] (the BEAM 1M/10M shape), a dict with a
+ * `nuggets` list, or a bare scalar. Empty/whitespace nuggets are dropped.
+ */
+function extractRubricNuggets(pq: BeamProbingQuestion): string[] {
+  const raw = (pq as Record<string, unknown>).rubric;
+  const clean = (arr: unknown[]): string[] =>
+    arr
+      .map(n =>
+        n !== null && typeof n === 'object'
+          ? String((n as Record<string, unknown>).description ??
+                   (n as Record<string, unknown>).text ??
+                   JSON.stringify(n))
+          : String(n),
+      )
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+  if (Array.isArray(raw)) return clean(raw);
+  if (raw !== null && typeof raw === 'object') {
+    const nuggets = (raw as Record<string, unknown>).nuggets;
+    if (Array.isArray(nuggets)) return clean(nuggets);
+  }
+  if (raw !== undefined && raw !== null && String(raw).trim().length > 0) {
+    return [String(raw).trim()];
+  }
+  return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -430,10 +477,19 @@ function main(): void {
           skipStats.missingQuestion++;
           continue;
         }
-        const answerText = normaliseAnswer(pq);
+        const rubric = extractRubricNuggets(pq);
+        // `expected` keeps the single normalised reference answer for the
+        // legacy substring scorer. If a question has no single-answer field
+        // but does carry rubric nuggets, fall back to the joined rubric
+        // (mem0's ground_truth_answer convention) rather than dropping it.
+        let answerText = normaliseAnswer(pq);
         if (answerText === null) {
-          skipStats.missingAnswer++;
-          continue;
+          if (rubric.length > 0) {
+            answerText = rubric.join(' | ');
+          } else {
+            skipStats.missingAnswer++;
+            continue;
+          }
         }
 
         const instanceId = `beam_${safeChatSize}_${convId}_${category}_q${qi}`;
@@ -447,6 +503,7 @@ function main(): void {
           memory_ability: category,
           chat_size: chatSize,
           conversation_index: convIdx,
+          rubric,
         });
       }
     }
@@ -483,14 +540,37 @@ function main(): void {
 
   const safeChatSize = chatSize.replace(/[^a-zA-Z0-9]/g, '');
   const jsonlPath = path.join(outDir, `beam-${safeChatSize}.jsonl`);
-  const body = all.map(serializeCanonical).join('\n') + '\n';
-  fs.writeFileSync(jsonlPath, body, 'utf-8');
 
-  const hash = crypto.createHash('sha256').update(body, 'utf-8').digest('hex');
+  // Stream the write + hash incrementally, one line at a time. The full body
+  // for the 1M/10M tracks (~3 GB for 1M, since the ~4 MB context is repeated
+  // per question) exceeds V8's max string length (~512 MB), so it can never
+  // be materialised as a single `join()`ed string. Writing `line + '\n'` for
+  // each row in sorted order produces byte-identical output to the old
+  // `all.map(serializeCanonical).join('\n') + '\n'` (a trailing newline after
+  // the final row), so the SHA-256 dataset_version stays deterministic and
+  // matches what the join-based path would have produced.
+  const hasher = crypto.createHash('sha256');
+  const fd = fs.openSync(jsonlPath, 'w');
+  try {
+    for (const inst of all) {
+      const line = serializeCanonical(inst) + '\n';
+      fs.writeSync(fd, line, null, 'utf-8');
+      hasher.update(line, 'utf-8');
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  const hash = hasher.digest('hex');
 
   const metaPath = path.join(outDir, `beam-${safeChatSize}.meta.json`);
+  const withRubric = all.filter(i => i.rubric.length > 0).length;
+  const totalNuggets = all.reduce((s, i) => s + i.rubric.length, 0);
+
   const meta = {
     dataset_version: hash,
+    schema_version: SCHEMA_VERSION,
+    instances_with_rubric: withRubric,
+    total_nuggets: totalNuggets,
     instance_count: all.length,
     chat_size: chatSize,
     built_at: new Date().toISOString(),

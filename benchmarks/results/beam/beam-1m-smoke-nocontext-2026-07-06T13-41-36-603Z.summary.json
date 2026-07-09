@@ -1,0 +1,90 @@
+{
+  "run": {
+    "cell": "no-context",
+    "dataset": "beam-1m",
+    "model": "gpt-4o",
+    "judge_model": "gpt-4o",
+    "protocol": "mem0-nugget-graded (0/0.5/1 avg-score, pass>=0.5)",
+    "per_ability": 1,
+    "compute_tau": true,
+    "startedAt": "2026-07-06T13:41:36.603Z",
+    "finishedAt": "2026-07-06T13:42:37.106Z",
+    "budgetStopped": false
+  },
+  "metrics": {
+    "overall_avg_score": 0.1,
+    "overall_pass_rate_pct": 10,
+    "total": 10,
+    "correct": 1,
+    "errors": 0,
+    "by_ability": {
+      "abstention": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 100,
+        "avgScore": 1
+      },
+      "contradiction_resolution": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "event_ordering": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "information_extraction": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "instruction_following": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "knowledge_update": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "multi_session_reasoning": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "preference_following": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "summarization": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "temporal_reasoning": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      }
+    }
+  },
+  "cost": {
+    "total_usd": 0.109195,
+    "answer_calls": 10,
+    "judge_calls": 40,
+    "input_tokens": 37754,
+    "output_tokens": 1481
+  }
+}
