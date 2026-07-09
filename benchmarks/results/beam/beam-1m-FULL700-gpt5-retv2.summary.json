@@ -1,0 +1,33 @@
+{
+  "run": {
+    "cell": "retrieval",
+    "dataset": "beam-1m",
+    "model": "gpt-5",
+    "judge_model": "gpt-5",
+    "prompt": "v2",
+    "outline": null,
+    "directives": null,
+    "top_k": 30,
+    "retrieval_unit": "raw_turns",
+    "mean_answer_prompt_tokens": 27587,
+    "minds_dir": "minds-1M",
+    "per_ability": 70,
+    "budgetStopped": false,
+    "answered_now": 1
+  },
+  "metrics": {
+    "overall_avg_score": 0.625,
+    "overall_pass_rate_pct": 100,
+    "by_ability": {
+      "summarization": {
+        "total": 1,
+        "correct": 1,
+        "accuracy": 100,
+        "avgScore": 0.625
+      }
+    }
+  },
+  "cost": {
+    "total_usd": 0.17921375000000003
+  }
+}

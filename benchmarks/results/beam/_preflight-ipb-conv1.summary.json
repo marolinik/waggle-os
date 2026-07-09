@@ -1,0 +1,42 @@
+{
+  "run": {
+    "cell": "hive_mind_ipb",
+    "dataset": "beam-1m",
+    "model": "gpt-4o",
+    "judge_model": "gpt-4o",
+    "top_k": 30,
+    "retrieval_unit": "raw_turns",
+    "mean_answer_prompt_tokens": 21573,
+    "minds_dir": "minds-1M",
+    "per_ability": null,
+    "budgetStopped": true,
+    "answered_now": 5
+  },
+  "metrics": {
+    "overall_avg_score": 0.45999999999999996,
+    "overall_pass_rate_pct": 40,
+    "by_ability": {
+      "abstention": {
+        "total": 2,
+        "correct": 2,
+        "accuracy": 100,
+        "avgScore": 1
+      },
+      "contradiction_resolution": {
+        "total": 2,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0
+      },
+      "event_ordering": {
+        "total": 1,
+        "correct": 0,
+        "accuracy": 0,
+        "avgScore": 0.3
+      }
+    }
+  },
+  "cost": {
+    "total_usd": 0.41246750000000004
+  }
+}
