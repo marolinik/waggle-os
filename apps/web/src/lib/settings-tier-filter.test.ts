@@ -51,7 +51,7 @@ describe('STANDARD_SETTINGS_TAB_IDS', () => {
   it('extends Essential with operational tabs (no enterprise, no advanced)', () => {
     expect(STANDARD_SETTINGS_TAB_IDS).toEqual([
       'general', 'models', 'billing',
-      'permissions', 'team', 'backup',
+      'permissions', 'channels', 'team', 'backup',
     ]);
   });
 
@@ -62,8 +62,8 @@ describe('STANDARD_SETTINGS_TAB_IDS', () => {
 });
 
 describe('POWER_SETTINGS_TAB_IDS', () => {
-  it('includes all 8 tabs', () => {
-    expect(POWER_SETTINGS_TAB_IDS).toHaveLength(8);
+  it('includes all 9 tabs', () => {
+    expect(POWER_SETTINGS_TAB_IDS).toHaveLength(9);
     for (const t of ALL_TABS) {
       expect(POWER_SETTINGS_TAB_IDS).toContain(t.id);
     }
