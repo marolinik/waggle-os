@@ -1,6 +1,12 @@
 # IM Channels Arc — Slack · Telegram · WhatsApp · Discord
 
-**Date:** 2026-07-09 · **Status:** approved by founder (design Q&A 2026-07-09) · **Branch:** `worktree-channels-arc`
+**Date:** 2026-07-09 · **Status:** ✅ P1–P4 EXECUTED (4 commits on `worktree-channels-arc`) · **Branch:** `worktree-channels-arc`
+
+> Executed 2026-07-09: P1 core+Telegram (48 tests) → P2 Discord+Slack raw ws (18 tests) →
+> P3 WhatsApp/Baileys (11 tests) → P4 Settings UI (tier-filter Standard).
+> Gates at completion: server tsc 0, server suite 2183 ✓, apps/web 1575 ✓, web build ✓.
+> Bonus fix: `.gitignore` `s*.png` was swallowing sales-rep/support-agent avatars → main's web build was broken on clean checkout; fixed with scoped negation + committed binaries.
+> Residual (not blocking): live end-to-end verification with real bot tokens; WhatsApp real-device pairing; approval-over-IM (explicitly out of v1).
 **Origin:** CowAgent teardown (`docs/analysis/cowagent-vs-waggle-2026-07-09.md`) steal #4 — IM reach as distribution surface.
 
 ## Founder decisions (locked — do not re-raise)
