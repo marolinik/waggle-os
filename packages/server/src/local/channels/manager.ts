@@ -1,0 +1,267 @@
+/**
+ * ChannelManager — owns adapter lifecycle and the inbound message pipeline.
+ *
+ * Pipeline (every inbound message, all platforms):
+ *   1. per-sender rate limit (token bucket, RATE_LIMIT_MAX/min)
+ *   2. `/pair <code>` — the ONLY verb an unpaired sender can use
+ *   3. deny-by-default: unpaired senders get silence (no bot-presence oracle)
+ *   4. commands: /workspace [id], /status
+ *   5. plain text → loopback /api/chat turn (injection scan, persona,
+ *      governance, memory all inherited) → chunked reply
+ *
+ * Secrets stay in the vault (read-only here — routes write them);
+ * allowlist/overrides/config live in PairingStore (channels.json).
+ */
+
+import { PairingStore } from './pairing.js';
+import { runChannelChatTurn } from './chat-client.js';
+import { TelegramAdapter } from './telegram-adapter.js';
+import type { ChannelAdapter, ChannelAdapterStatus, ChannelMessage, ChannelPlatform } from './types.js';
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX = 10;
+
+export const APPROVAL_NEEDED_REPLY =
+  'This request needs a tool approval — open the Waggle app to review and approve it.';
+export const PAIR_OK_REPLY = 'Paired ✓ — this device can now talk to Waggle. Try /status or just say hi.';
+export const PAIR_FAIL_REPLY = 'Invalid or expired pairing code. Generate a fresh one in Waggle → Settings → Channels.';
+
+/** Vault keys per platform (telegram reuses the FR-2 digest key on purpose). */
+export const CHANNEL_VAULT_KEYS: Record<ChannelPlatform, string[]> = {
+  telegram: ['telegram_bot_token'],
+  discord: ['discord_bot_token'],
+  slack: ['slack_app_token', 'slack_bot_token'],
+  whatsapp: [], // Baileys manages its own auth-state directory
+};
+
+interface VaultReader {
+  get(key: string): { value: string } | null | undefined;
+}
+
+interface ManagerLog {
+  info: (msg: string) => void;
+  warn: (msg: string) => void;
+}
+
+export interface ChannelManagerOptions {
+  dataDir: string;
+  /** Sidecar HTTP port for loopback /api/chat calls. */
+  port: number;
+  vault: VaultReader;
+  log: ManagerLog;
+  /** For /workspace validation; absent → any id accepted. */
+  listWorkspaceIds?: () => string[];
+  /** Audit sink (pair/unpair events — names match AuditEventType). */
+  onAudit?: (event: {
+    type: 'channel_pair' | 'channel_pair_failed' | 'channel_unpair';
+    platform: ChannelPlatform;
+    detail?: string;
+  }) => void;
+  /** Test seam — replaces the loopback chat call. */
+  chatTurnImpl?: typeof runChannelChatTurn;
+  /** Test seam — replaces adapter construction. */
+  adapterFactory?: (platform: ChannelPlatform, manager: ChannelManager) => ChannelAdapter | null;
+}
+
+export class ChannelManager {
+  readonly pairing: PairingStore;
+
+  private readonly opts: ChannelManagerOptions;
+  private readonly adapters = new Map<ChannelPlatform, ChannelAdapter>();
+  private readonly rateBuckets = new Map<string, number[]>();
+  private readonly chatTurn: typeof runChannelChatTurn;
+
+  constructor(opts: ChannelManagerOptions) {
+    this.opts = opts;
+    this.pairing = new PairingStore(opts.dataDir);
+    this.chatTurn = opts.chatTurnImpl ?? runChannelChatTurn;
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────────────
+
+  /** Start every platform whose persisted config says enabled. */
+  async startEnabled(): Promise<void> {
+    for (const platform of ['telegram', 'discord', 'slack', 'whatsapp'] as ChannelPlatform[]) {
+      if (this.pairing.getConfig(platform).enabled) {
+        await this.start(platform).catch(e => {
+          this.opts.log.warn(`[channels] ${platform} failed to start: ${e instanceof Error ? e.message : e}`);
+        });
+      }
+    }
+  }
+
+  async start(platform: ChannelPlatform): Promise<ChannelAdapterStatus> {
+    let adapter = this.adapters.get(platform);
+    if (!adapter) {
+      const created = this.createAdapter(platform);
+      if (!created) {
+        throw new Error(`${platform} is not configured (missing credentials or unsupported in this build)`);
+      }
+      adapter = created;
+      this.adapters.set(platform, adapter);
+    }
+    await adapter.start();
+    this.opts.log.info(`[channels] ${platform} started`);
+    return adapter.getStatus();
+  }
+
+  async stop(platform: ChannelPlatform): Promise<void> {
+    const adapter = this.adapters.get(platform);
+    if (!adapter) return;
+    await adapter.stop();
+    this.adapters.delete(platform);
+    this.opts.log.info(`[channels] ${platform} stopped`);
+  }
+
+  async stopAll(): Promise<void> {
+    for (const platform of [...this.adapters.keys()]) {
+      await this.stop(platform).catch(() => undefined);
+    }
+  }
+
+  /** Restart a running platform so config changes take effect. */
+  async restartIfRunning(platform: ChannelPlatform): Promise<void> {
+    if (this.adapters.has(platform)) {
+      await this.stop(platform);
+      await this.start(platform);
+    }
+  }
+
+  getStatuses(): ChannelAdapterStatus[] {
+    return (['telegram', 'discord', 'slack', 'whatsapp'] as ChannelPlatform[]).map(platform =>
+      this.adapters.get(platform)?.getStatus()
+      ?? { platform, running: false, connected: false },
+    );
+  }
+
+  private createAdapter(platform: ChannelPlatform): ChannelAdapter | null {
+    if (this.opts.adapterFactory) return this.opts.adapterFactory(platform, this);
+    if (platform === 'telegram') {
+      const token = this.readVault('telegram_bot_token');
+      if (!token) return null;
+      return new TelegramAdapter({
+        botToken: token,
+        onMessage: msg => this.handleInbound(msg),
+        log: this.opts.log,
+      });
+    }
+    // discord / slack → P2, whatsapp → P3 (see docs/plans/CHANNELS-ARC-2026-07-09.md)
+    return null;
+  }
+
+  private readVault(key: string): string | null {
+    try {
+      return this.opts.vault.get(key)?.value ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Inbound pipeline ─────────────────────────────────────────────────
+
+  async handleInbound(msg: ChannelMessage): Promise<void> {
+    if (!this.allowRate(`${msg.platform}:${msg.senderId}`)) return;
+
+    const text = msg.text.trim();
+    const adapter = this.adapters.get(msg.platform);
+    const reply = async (t: string) => {
+      await adapter?.send(msg.chatId, t).catch(e => {
+        this.opts.log.warn(`[channels] ${msg.platform} reply failed: ${e instanceof Error ? e.message : e}`);
+      });
+    };
+
+    // 1. Pairing — the only path open to unknown senders.
+    if (/^\/pair\b/i.test(text)) {
+      const code = text.replace(/^\/pair\b/i, '').trim();
+      const ok = this.pairing.consumeCode(msg.platform, code, msg.senderId, msg.senderName);
+      this.opts.onAudit?.({
+        type: ok ? 'channel_pair' : 'channel_pair_failed',
+        platform: msg.platform,
+        detail: ok ? `sender ${msg.senderId} paired` : `bad code from ${msg.senderId}`,
+      });
+      await reply(ok ? PAIR_OK_REPLY : PAIR_FAIL_REPLY);
+      return;
+    }
+
+    // 2. Deny-by-default: silence toward unpaired senders.
+    if (!this.pairing.isPaired(msg.platform, msg.senderId)) {
+      this.opts.log.info(`[channels] ignored message from unpaired ${msg.platform} sender ${msg.senderId}`);
+      return;
+    }
+
+    // 3. Commands.
+    if (/^\/workspace\b/i.test(text)) {
+      await reply(this.handleWorkspaceCommand(msg, text));
+      return;
+    }
+    if (/^\/status\b/i.test(text)) {
+      const status = adapter?.getStatus();
+      const ws = this.resolveWorkspace(msg);
+      await reply(`Waggle connected ✓\nWorkspace: ${ws}\nTransport: ${status?.connected ? 'healthy' : 'degraded'}`);
+      return;
+    }
+
+    // 4. Agent turn via loopback chat.
+    const result = await this.chatTurn({
+      port: this.opts.port,
+      message: msg.text,
+      workspace: this.resolveWorkspace(msg),
+      session: sessionIdFor(msg),
+    });
+
+    if (result.approvalRequired && !result.content) {
+      await reply(APPROVAL_NEEDED_REPLY);
+      return;
+    }
+    if (result.error && !result.content) {
+      await reply(`Something went wrong: ${result.error}`);
+      return;
+    }
+    if (result.content) {
+      await reply(result.content + (result.approvalRequired ? `\n\n${APPROVAL_NEEDED_REPLY}` : ''));
+    }
+  }
+
+  private handleWorkspaceCommand(msg: ChannelMessage, text: string): string {
+    const arg = text.replace(/^\/workspace\b/i, '').trim();
+    if (!arg) {
+      return `Current workspace: ${this.resolveWorkspace(msg)}\nUse "/workspace <id>" to switch this chat, "/workspace default" to clear.`;
+    }
+    if (arg === 'default') {
+      this.pairing.setWorkspaceOverride(msg.platform, msg.chatId, null);
+      return `This chat now uses the channel default workspace (${this.pairing.getConfig(msg.platform).defaultWorkspace}).`;
+    }
+    const known = this.opts.listWorkspaceIds?.();
+    if (known && !known.includes(arg)) {
+      return `Unknown workspace "${arg}". Available: ${known.slice(0, 20).join(', ') || '(none)'}`;
+    }
+    this.pairing.setWorkspaceOverride(msg.platform, msg.chatId, arg);
+    return `This chat is now routed to workspace "${arg}".`;
+  }
+
+  private resolveWorkspace(msg: ChannelMessage): string {
+    return this.pairing.getWorkspaceOverride(msg.platform, msg.chatId)
+      ?? this.pairing.getConfig(msg.platform).defaultWorkspace;
+  }
+
+  private allowRate(key: string): boolean {
+    const now = Date.now();
+    const recent = (this.rateBuckets.get(key) ?? []).filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+    if (recent.length >= RATE_LIMIT_MAX) {
+      this.rateBuckets.set(key, recent);
+      return false;
+    }
+    this.rateBuckets.set(key, [...recent, now]);
+    return true;
+  }
+}
+
+/**
+ * Stable persisted-session id per IM conversation. chatIds can be negative
+ * (Telegram groups) or contain platform punctuation — normalize to the
+ * charset assertSafeSegment allows so chat-persistence path joins stay safe.
+ */
+export function sessionIdFor(msg: Pick<ChannelMessage, 'platform' | 'chatId'>): string {
+  const safeChat = msg.chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
+  return `channel-${msg.platform}-${safeChat}`;
+}

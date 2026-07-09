@@ -121,7 +121,7 @@ import { costRoutes } from './routes/cost.js';
 import { backupRoutes } from './routes/backup.js';
 import { offlineRoutes } from './routes/offline.js';
 import { weaverRoutes } from './routes/weaver.js';
-import { eventRoutes, closeAuditDb, cleanupAuditEvents } from './routes/events.js';
+import { eventRoutes, closeAuditDb, cleanupAuditEvents, emitAuditEvent } from './routes/events.js';
 import { closeTeamsDb } from './routes/team.js';
 import { pinRoutes } from './routes/pins.js';
 import { documentRoutes } from './routes/documents.js';
@@ -129,6 +129,8 @@ import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
 import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
+import { ChannelManager } from './channels/manager.js';
+import { channelRoutes } from './channels/routes.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
@@ -2327,6 +2329,38 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(browseRoutes);
   await server.register(browserExtRoutes);
   await server.register(telegramRoutes);
+  // IM channel adapters (Slack/Telegram/WhatsApp/Discord) — see
+  // docs/plans/CHANNELS-ARC-2026-07-09.md. Manager owns adapter lifecycle;
+  // adapters run agent turns through loopback POST /api/chat.
+  {
+    const channelManager = new ChannelManager({
+      dataDir: server.localConfig.dataDir,
+      port: server.localConfig.port,
+      vault: { get: (key: string) => server.vault?.get(key) ?? null },
+      log: {
+        info: (msg: string) => server.log.info(msg),
+        warn: (msg: string) => server.log.warn(msg),
+      },
+      listWorkspaceIds: () => wsManager.list().map(w => w.id),
+      onAudit: (event) => emitAuditEvent(server, {
+        workspaceId: 'default',
+        eventType: event.type,
+        input: JSON.stringify({ platform: event.platform, detail: event.detail ?? '' }),
+      }),
+    });
+    server.decorate('channelManager', channelManager);
+    // Auto-start enabled channels once the server is up; skip under test to
+    // keep unit runs hermetic (mirrors the teams-server VITEST guard below).
+    if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
+      server.addHook('onReady', async () => {
+        await channelManager.startEnabled();
+      });
+    }
+    server.addHook('onClose', async () => {
+      await channelManager.stopAll();
+    });
+  }
+  await server.register(channelRoutes);
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
   await server.register(stripeRoutes);
