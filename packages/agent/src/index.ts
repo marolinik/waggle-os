@@ -524,3 +524,4 @@ export {
 export { renderGoalAncestry } from './goal-ancestry.js';
 export { getToolRegistry } from './tool-registry.js';
 export { loadThirdPartyManifests, type ManifestLoaderDeps } from './tool-manifest-loader.js';
+export { safeFetch, assertUrlAllowed, allowLocalFromEnv, EgressBlockedError } from './url-egress-guard.js';

@@ -23,6 +23,7 @@ import { homedir } from 'os';
 import { execSync } from 'child_process';
 import { MarketplaceDB } from './db';
 import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security';
+import { type FetchFn, defaultFetch } from './fetcher';
 import type {
   MarketplacePackage,
   InstallManifest,
@@ -66,10 +67,14 @@ interface McpConfigFile {
 export class MarketplaceInstaller {
   private db: MarketplaceDB;
   private security: SecurityGate;
+  /** Outbound fetch for external skill content — SSRF-guarded when the server
+   *  injects it; plain global fetch for standalone/CLI callers. */
+  private fetchImpl: FetchFn;
 
-  constructor(db: MarketplaceDB, securityConfig?: Partial<SecurityGateConfig>) {
+  constructor(db: MarketplaceDB, securityConfig?: Partial<SecurityGateConfig>, fetchImpl?: FetchFn) {
     this.db = db;
     this.security = new SecurityGate(securityConfig);
+    this.fetchImpl = fetchImpl ?? defaultFetch;
     this.ensureDirectories();
   }
 
@@ -672,7 +677,9 @@ export class MarketplaceInstaller {
   }
 
   private async fetchContent(url: string): Promise<string> {
-    const response = await fetch(url);
+    // External skill content — routed through the injected (SSRF-guarded)
+    // fetcher so a malicious skill_url cannot pull an internal/link-local host.
+    const response = await this.fetchImpl(url);
     if (!response.ok) {
       throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
     }

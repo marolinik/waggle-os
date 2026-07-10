@@ -20,6 +20,7 @@
  */
 
 import { MarketplaceDB } from './db';
+import { type FetchFn, defaultFetch } from './fetcher';
 import type {
   MarketplacePackage,
   MarketplaceSource,
@@ -88,7 +89,16 @@ export type VaultLookupFn = (key: string) => string | null;
 interface SyncAdapter {
   name: string;
   canSync(source: MarketplaceSource): boolean;
-  sync(source: MarketplaceSource, db: MarketplaceDB, vaultLookup?: VaultLookupFn): Promise<SyncResult>;
+  // `doFetch` is the SSRF-guarded fetcher injected by the server (or plain
+  // global fetch for standalone/CLI). Every outbound registry fetch below must
+  // use it rather than the global `fetch` so an attacker-controlled source URL
+  // cannot reach an internal/link-local host.
+  sync(
+    source: MarketplaceSource,
+    db: MarketplaceDB,
+    vaultLookup: VaultLookupFn | undefined,
+    doFetch: FetchFn,
+  ): Promise<SyncResult>;
 }
 
 // ─── External JSON Boundary Shapes ─────────────────────────────────
@@ -276,7 +286,7 @@ const awesomeListAdapter: SyncAdapter = {
     return isAwesomeListUrl(source.url);
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
     // No cap — we store metadata only, actual content fetched on install
 
@@ -288,7 +298,7 @@ const awesomeListAdapter: SyncAdapter = {
 
       // Fetch README.md via raw.githubusercontent.com
       const readmeUrl = `https://raw.githubusercontent.com/${owner}/${repo}/main/README.md`;
-      const response = await fetch(readmeUrl, {
+      const response = await doFetch(readmeUrl, {
         headers: { 'User-Agent': 'waggle-marketplace-sync' },
       });
 
@@ -296,7 +306,7 @@ const awesomeListAdapter: SyncAdapter = {
       if (!response.ok) {
         // Try master branch as fallback
         const fallbackUrl = `https://raw.githubusercontent.com/${owner}/${repo}/master/README.md`;
-        const fallbackResp = await fetch(fallbackUrl, {
+        const fallbackResp = await doFetch(fallbackUrl, {
           headers: { 'User-Agent': 'waggle-marketplace-sync' },
         });
         if (!fallbackResp.ok) throw new Error(`README fetch failed: ${response.status} / ${fallbackResp.status}`);
@@ -371,7 +381,7 @@ const githubRepoContentAdapter: SyncAdapter = {
     return !!match;
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
     // No cap — metadata only, content fetched on install
 
@@ -382,13 +392,13 @@ const githubRepoContentAdapter: SyncAdapter = {
 
       // Use GitHub API to get repo tree
       const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/main?recursive=1`;
-      const response = await fetch(treeUrl, { headers: githubHeaders() });
+      const response = await doFetch(treeUrl, { headers: githubHeaders() });
 
       let treeData: GitHubTreeResponse;
       if (!response.ok) {
         // Try master branch
         const fallbackUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/master?recursive=1`;
-        const fallbackResp = await fetch(fallbackUrl, { headers: githubHeaders() });
+        const fallbackResp = await doFetch(fallbackUrl, { headers: githubHeaders() });
         if (!fallbackResp.ok) throw new Error(`GitHub tree API: ${response.status} / ${fallbackResp.status}`);
         treeData = await fallbackResp.json() as GitHubTreeResponse;
       } else {
@@ -460,7 +470,7 @@ const webRegistryAdapter: SyncAdapter = {
     return false;
   },
 
-  async sync(source, db, vaultLookup?) {
+  async sync(source, db, vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
@@ -491,7 +501,7 @@ const webRegistryAdapter: SyncAdapter = {
         const sep = baseUrl.includes('?') ? '&' : '?';
         const pageUrl = `${baseUrl}${sep}limit=${pageSize}&offset=${offset}`;
 
-        const response = await fetch(pageUrl, { headers });
+        const response = await doFetch(pageUrl, { headers });
 
         if (response.status === 401 || response.status === 403) {
           result.errors.push(
@@ -664,12 +674,12 @@ const npmSearchAdapter: SyncAdapter = {
     return source.source_type === 'npm_registry';
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
       const apiUrl = source.api_endpoint || 'https://registry.npmjs.org/-/v1/search?text=keywords:mcp-server&size=250';
-      const response = await fetch(apiUrl, {
+      const response = await doFetch(apiUrl, {
         headers: { 'User-Agent': 'waggle-marketplace-sync' },
       });
 
@@ -745,7 +755,7 @@ const githubAdapter: SyncAdapter = {
     return false;
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
@@ -757,7 +767,7 @@ const githubAdapter: SyncAdapter = {
       // Fetch repos with topic filters
       const apiUrl = source.api_endpoint || `https://api.github.com/orgs/${owner}/repos?per_page=100&sort=updated`;
 
-      const response = await fetch(apiUrl, { headers: githubHeaders() });
+      const response = await doFetch(apiUrl, { headers: githubHeaders() });
       if (!response.ok) throw new Error(`GitHub API ${response.status}: ${response.statusText}`);
 
       const repos = await response.json() as GitHubRepo[];
@@ -825,7 +835,7 @@ const clawhubAdapter: SyncAdapter = {
     return source.name === 'clawhub' || source.url.includes('clawhub.ai');
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
@@ -841,7 +851,7 @@ const clawhubAdapter: SyncAdapter = {
 
       while (hasMore && page <= maxPage) {
         const url = `${apiBase}/skills?page=${page}&per_page=${perPage}&sort=downloads`;
-        const response = await fetch(url, {
+        const response = await doFetch(url, {
           headers: { 'User-Agent': 'waggle-marketplace-sync' },
         });
 
@@ -950,7 +960,7 @@ const skillsmpAdapter: SyncAdapter = {
     return source.name === 'skillsmp' || source.url.includes('skillsmp.dev') || source.url.includes('skillsmp.com');
   },
 
-  async sync(source, db, vaultLookup?) {
+  async sync(source, db, vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
@@ -995,7 +1005,7 @@ const skillsmpAdapter: SyncAdapter = {
 
         while (hasMore) {
           const url = `${apiBase}/skills/search?q=${encodeURIComponent(query)}&limit=${perPage}&page=${page}`;
-          const response = await fetch(url, { headers });
+          const response = await doFetch(url, { headers });
 
           if (!response.ok) {
             if (response.status === 429) {
@@ -1099,12 +1109,12 @@ const lobehubAdapter: SyncAdapter = {
     return source.name === 'lobehub_plugins' || source.url.includes('lobehub');
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
       const indexUrl = source.api_endpoint || 'https://chat-plugins.lobehub.com/index.json';
-      const response = await fetch(indexUrl);
+      const response = await doFetch(indexUrl);
       if (!response.ok) throw new Error(`LobeHub index: ${response.status}`);
 
       const data = await response.json() as LobeHubResponse | LobeHubPlugin[];
@@ -1171,11 +1181,11 @@ const genericAdapter: SyncAdapter = {
     return !!source.api_endpoint;
   },
 
-  async sync(source, db) {
+  async sync(source, db, _vaultLookup, doFetch) {
     const result: SyncResult = { source: source.name, added: 0, updated: 0, removed: 0, errors: [] };
 
     try {
-      const response = await fetch(source.api_endpoint!);
+      const response = await doFetch(source.api_endpoint!);
       if (!response.ok) throw new Error(`API ${response.status}`);
 
       const data = await response.json() as RemoteCatalogItem[] | RemoteCatalogResponse;
@@ -1313,10 +1323,13 @@ const ADAPTERS: SyncAdapter[] = [
 export class MarketplaceSync {
   private db: MarketplaceDB;
   private vaultLookup?: VaultLookupFn;
+  /** SSRF-guarded fetch injected by the server; plain global fetch otherwise. */
+  private doFetch: FetchFn;
 
-  constructor(db: MarketplaceDB, vaultLookup?: VaultLookupFn) {
+  constructor(db: MarketplaceDB, vaultLookup?: VaultLookupFn, fetchImpl?: FetchFn) {
     this.db = db;
     this.vaultLookup = vaultLookup;
+    this.doFetch = fetchImpl ?? defaultFetch;
   }
 
   /**
@@ -1346,7 +1359,7 @@ export class MarketplaceSync {
       }
 
       try {
-        const result = await adapter.sync(source, this.db, this.vaultLookup);
+        const result = await adapter.sync(source, this.db, this.vaultLookup, this.doFetch);
         results.push(result);
         console.log(`[sync] ${source.display_name}: +${result.added} added, ${result.errors.length} errors`);
       } catch (err) {

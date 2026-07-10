@@ -57,6 +57,7 @@ import {
   loadBehavioralSpecOverrides,
   TraceRecorder,
   HarnessTraceBridge,
+  safeFetch,
   type ToolDefinition,
   type LoadedSkill,
   type DeliveryPreferences,
@@ -1535,7 +1536,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
         } else if (mcJobConfig.action === 'marketplace_sync' && marketplaceDb) {
           try {
             const vaultLookup = server.vault ? (key: string) => server.vault!.get(key)?.value ?? null : undefined;
-            const sync = new MarketplaceSync(marketplaceDb, vaultLookup);
+            const sync = new MarketplaceSync(marketplaceDb, vaultLookup, (url, init) => safeFetch(url, init));
             const results = await sync.syncAll();
             const totalAdded = results.reduce((sum, r) => sum + r.added, 0);
             if (totalAdded > 0) {

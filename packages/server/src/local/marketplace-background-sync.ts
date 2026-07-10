@@ -1,4 +1,5 @@
 import { MarketplaceSync, type MarketplaceDB } from '@waggle/marketplace';
+import { safeFetch } from '@waggle/agent';
 
 type SyncResultLike = { added: number };
 type MarketplaceSyncLike = { syncAll(): Promise<SyncResultLike[]> };
@@ -15,7 +16,9 @@ export function scheduleMarketplaceBackgroundSync({
   env = process.env,
   delayMs = 15_000,
   intervalMs = 24 * 60 * 60 * 1000,
-  createSync = (db) => new MarketplaceSync(db),
+  // Default sync uses the SSRF-guarded fetcher — background sync pulls
+  // attacker-influenceable registry URLs (user-added sources).
+  createSync = (db) => new MarketplaceSync(db, undefined, (url, init) => safeFetch(url, init)),
 }: {
   marketplaceDb: MarketplaceDB | null;
   log: LogLike;
