@@ -223,13 +223,22 @@ export async function executeToolCall(
     result = tiered.reason;
   } else if (tiered.action === 'block') {
     result = tiered.reason;
+    // A blocked attempt still counts as a failed attempt — without this the
+    // same-tool failure tail freezes at T4's threshold (6) and T3's hard abort
+    // (8) is unreachable: the model can hammer a broken tool forever, eating
+    // one nudge per turn until maxTurns.
+    guard.record(fnName, fnArgs, false);
   } else if (!guard.check(fnName, fnArgs)) {
     result = `Error: Loop detected — called ${fnName} with identical arguments too many times. Try a different approach.`;
+    guard.record(fnName, fnArgs, false);
   } else if (tool) {
     logTurnEvent(turnId, { stage: 'agent-loop.tool.enter', toolName: fnName, argsKeys: Object.keys(fnArgs) });
     try {
       result = await tool.execute(fnArgs);
-      guard.record(fnName, fnArgs, true);
+      // Tools in this codebase report many failures by RETURNING an
+      // "Error: ..." string rather than throwing — count those as failures
+      // too, or the failure tiers never see them.
+      guard.record(fnName, fnArgs, !/^Error\b/.test(result));
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
     } catch (err) {
       result = `Error executing ${fnName}: ${(err as Error).message}`;

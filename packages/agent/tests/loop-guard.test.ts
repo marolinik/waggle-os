@@ -126,6 +126,32 @@ describe('LoopGuard graduated tiers (steal #9)', () => {
     expect(guard.checkTiered('read_file', { path: 'a.ts' }).action).toBe('allow');
   });
 
+  it('escalates T4 blocks into a T3 abort when blocked attempts are recorded (executor contract)', () => {
+    // Mirrors tool-executor's loop: checkTiered first; a block is recorded as
+    // a failed attempt; an executed failure is also recorded. Without
+    // record-on-block the same-tool tail freezes at 6 and T3 never fires.
+    const guard = new LoopGuard();
+    let aborted = false;
+    for (let attempt = 0; attempt < 12 && !aborted; attempt++) {
+      const verdict = guard.checkTiered('bash', { command: `try ${attempt}` });
+      if (verdict.action === 'abort') {
+        expect(verdict.tier).toBe('T3');
+        aborted = true;
+        break;
+      }
+      // block or allow -> the model tried again and it failed again.
+      guard.record('bash', { command: `try ${attempt}` }, false);
+    }
+    expect(aborted).toBe(true);
+  });
+
+  it('counts a returned "Error:" string as a failure via the executor convention', () => {
+    // The executor records success as !/^Error\b/.test(result); this pins the
+    // convention so string-failure tools feed the failure tiers.
+    expect(/^Error\b/.test('Error: Skill name must be kebab-case')).toBe(true);
+    expect(/^Error\b/.test('Created skill successfully')).toBe(false);
+  });
+
   it('caps the outcome history at 50 records', () => {
     const guard = new LoopGuard();
     for (let i = 0; i < 60; i++) guard.record('bash', { command: `c${i}` }, false);

@@ -535,7 +535,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       enable_cisco_scanner: false,
       enable_mcp_guardian: false,
       enable_heuristics: true,
-    });
+    }, guardedFetch);
 
     const scanResult = await installer.scanOnly(body.packageId);
 
