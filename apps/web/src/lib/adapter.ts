@@ -1488,6 +1488,16 @@ class LocalAdapter {
     });
   }
 
+  /** Multi-source skill install (steal #11): SKILL.md URL / GitHub URL /
+   *  owner-repo shorthand / .zip URL. Never installs directly — the server
+   *  resolves + scans and holds a create_skill approval (202). */
+  async installSkillFromUrl(source: string, sha256?: string): Promise<Response> {
+    return this.fetchRaw('/api/marketplace/install-url', {
+      method: 'POST',
+      body: JSON.stringify(sha256 ? { source, sha256 } : { source }),
+    });
+  }
+
   /** PR4 agent-pick (screen 09): natural-language need → ranked suggestions
    *  across connector/skill/tool, each with a "why" + install descriptor. */
   async agentSearch(need: string): Promise<AgentSearchResponse> {

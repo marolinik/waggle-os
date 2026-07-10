@@ -12,13 +12,38 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { MarketplaceDB, MarketplaceInstaller, MarketplaceSync, SecurityGate, ENTERPRISE_PACKS, PACKAGE_CATEGORIES, recategorizeAll, isCiscoScannerAvailable } from '@waggle/marketplace';
-import type { InstallationType, SearchSort, ScanResult, MarketplacePackage } from '@waggle/marketplace';
+import { MarketplaceDB, MarketplaceInstaller, MarketplaceSync, SecurityGate, ENTERPRISE_PACKS, PACKAGE_CATEGORIES, recategorizeAll, isCiscoScannerAvailable, resolveSkillSource, SkillSourceError } from '@waggle/marketplace';
+import type { InstallationType, SearchSort, ScanResult, MarketplacePackage, FetchFn } from '@waggle/marketplace';
 import { validateSkillMd } from '@waggle/sdk';
+import { safeFetch, assertUrlAllowed, scanForInjection } from '@waggle/agent';
 import { getKvarkConfig } from '../../kvark/kvark-config.js';
 import { emitNotification } from './notifications.js';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { removeMcpServerEntry } from '../mcp-config.js';
+import { enqueueHeldAction } from '../held-action-executor.js';
+
+/**
+ * SSRF-guarded outbound fetch injected into every marketplace component that
+ * pulls external content (installer skill_url, sync registry adapters, the
+ * multi-source resolver). An attacker-influenced URL that resolves to a
+ * private / link-local / loopback address is refused before any request.
+ */
+const guardedFetch: FetchFn = (url, init) => safeFetch(url, init);
+
+/** Fetch used by /install-url — injectable for hermetic route tests (mirrors
+ *  cisco-scanner's setExecFile test-injection precedent). */
+let installUrlFetch: FetchFn = guardedFetch;
+export function setInstallUrlFetchForTests(fn: FetchFn | null): void {
+  installUrlFetch = fn ?? guardedFetch;
+}
+
+/** Installed skill names must be safe path segments (mirrors writeSkill's rule). */
+const SAFE_SKILL_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
+
+function sanitizeSkillName(name: string): string {
+  const cleaned = name.trim().replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 64);
+  return SAFE_SKILL_NAME.test(cleaned) ? cleaned : '';
+}
 
 type ScanStatus = 'passed' | 'failed' | 'not_scanned' | 'unavailable';
 
@@ -344,7 +369,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       enable_cisco_scanner: false,
       enable_mcp_guardian: false,
       enable_heuristics: true,
-    });
+    }, guardedFetch);
     const result = await installer.install({
       packageId: body.packageId,
       installPath: body.installPath,
@@ -456,7 +481,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'packageId is required' });
     }
 
-    const installer = new MarketplaceInstaller(db);
+    const installer = new MarketplaceInstaller(db, undefined, guardedFetch);
     const result = await installer.uninstall(body.packageId);
 
     // Phase 4 (S08): an MCP uninstall must ALSO leave the live runtime and the
@@ -542,6 +567,108 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
     return { sources, total: sources.length };
   });
 
+  // ── POST /api/marketplace/install-url ───────────────────────────────
+  // Multi-source skill install (steal #11 — SKILLS ONLY, never plugins/MCP).
+  // Resolves a source string (SKILL.md URL / GitHub URL / owner-repo shorthand
+  // / .zip URL) to SKILL.md bytes through the SSRF-guarded fetcher, runs the
+  // security pipeline (SecurityGate heuristics → injection scan → frontmatter
+  // contract), and lands the result as a HELD create_skill approval — nothing
+  // touches disk until a human approves it in Approvals (exact bytes shown).
+
+  fastify.post('/api/marketplace/install-url', async (request, reply) => {
+    const body = request.body as { source?: string; sha256?: string; workspaceId?: string };
+    if (!body.source || typeof body.source !== 'string') {
+      return reply.code(400).send({ error: 'source is required' });
+    }
+    if (body.sha256 !== undefined && !/^[a-fA-F0-9]{64}$/.test(body.sha256)) {
+      return reply.code(400).send({ error: 'sha256 must be a 64-character hex digest' });
+    }
+
+    let resolved;
+    try {
+      resolved = await resolveSkillSource(body.source, {
+        sha256: body.sha256,
+        fetchImpl: installUrlFetch,
+      });
+    } catch (err) {
+      const msg = err instanceof SkillSourceError
+        ? err.message
+        : `Could not resolve skill source: ${err instanceof Error ? err.message : String(err)}`;
+      return reply.code(400).send({ error: msg });
+    }
+
+    // Frontmatter contract — Claude-Code compatible (name + description required).
+    const validation = validateSkillMd(resolved.content);
+    if (!validation.valid || !validation.metadata) {
+      return reply.code(422).send({ error: 'Invalid SKILL.md', details: validation.errors });
+    }
+    const name = sanitizeSkillName(validation.metadata.name);
+    if (!name) {
+      return reply.code(422).send({
+        error: `Skill name "${validation.metadata.name}" cannot be sanitized to a safe name`,
+      });
+    }
+
+    // Injection scan on the full external content (CLAUDE.md §7.2).
+    if (!scanForInjection(resolved.content, 'tool_output').safe) {
+      return reply.code(422).send({ error: 'SKILL.md content failed the injection scan' });
+    }
+
+    // SecurityGate heuristics, content-aware. CRITICAL/HIGH blocks outright
+    // (matching /install's gate); lower severities proceed — the held approval
+    // (human reviews exact bytes) is the final gate either way.
+    const gate = new SecurityGate({
+      enable_gen_trust_hub: false,
+      enable_cisco_scanner: false,
+      enable_mcp_guardian: false,
+      enable_heuristics: true,
+    });
+    const syntheticPkg = {
+      id: -1, source_id: -1, name, display_name: name,
+      description: validation.metadata.description, author: validation.metadata.author ?? 'unknown',
+      package_type: 'skill', waggle_install_type: 'skill', waggle_install_path: '',
+      version: validation.metadata.version ?? '0.0.0', license: null,
+      repository_url: null, homepage_url: null, downloads: 0, stars: 0, rating: 0,
+      rating_count: 0, category: 'community', subcategory: null, install_manifest: null,
+      platforms: [], min_waggle_version: null, dependencies: [], packs: [],
+      created_at: '', updated_at: '',
+    } as MarketplacePackage;
+    let scan: ScanResult | undefined;
+    try {
+      scan = await gate.scan(syntheticPkg, resolved.content);
+    } catch {
+      // Heuristics failure never blocks — the held approval still gates.
+    }
+    if (scan && (scan.overall_severity === 'CRITICAL' || scan.overall_severity === 'HIGH')) {
+      return reply.code(403).send({
+        error: `Security scan blocked install (${scan.overall_severity})`,
+        findings: scan.findings.slice(0, 5),
+      });
+    }
+
+    // Held approval — never a direct write. On approve, executeHeldAction runs
+    // the real create_skill tool → sanctioned writeSkill seam (backup + audit).
+    const enq = enqueueHeldAction(fastify, {
+      workspaceId: body.workspaceId ?? null,
+      source: 'marketplace:install-url',
+      tool: 'create_skill',
+      args: { name, content: resolved.content },
+      summary: `Install skill "${name}" from ${resolved.resolvedUrl}`,
+    });
+    if ('refused' in enq) {
+      return reply.code(422).send({ error: `Skill proposal refused (${enq.refused})` });
+    }
+    return reply.code(202).send({
+      held: true,
+      id: enq.id,
+      name,
+      sourceType: resolved.sourceType,
+      resolvedUrl: resolved.resolvedUrl,
+      scanSeverity: scan?.overall_severity ?? 'UNSCANNED',
+      warnings: validation.warnings,
+    });
+  });
+
   // ── POST /api/marketplace/sources ───────────────────────────────────
   // Add a user-defined source and trigger an immediate sync for it.
 
@@ -564,6 +691,16 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
       new URL(body.url);
     } catch {
       return reply.code(400).send({ error: 'Invalid URL format' });
+    }
+
+    // SSRF guard: a user-supplied source URL is fetched by the sync engine —
+    // refuse anything that resolves to a private/loopback/link-local address
+    // BEFORE it is persisted (a stored bad source would re-fire on every sync).
+    try {
+      await assertUrlAllowed(body.url);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return reply.code(400).send({ error: `Source URL refused: ${msg}` });
     }
 
     // Check for duplicate name
@@ -592,7 +729,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
 
     // Trigger immediate sync for the new source
     const vaultLookup = fastify.vault ? (key: string) => fastify.vault!.get(key)?.value ?? null : undefined;
-    const sync = new MarketplaceSync(db, vaultLookup);
+    const sync = new MarketplaceSync(db, vaultLookup, guardedFetch);
     let syncResult = null;
     try {
       const results = await sync.syncAll({ sources: [body.name] });
@@ -671,7 +808,7 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
     const body = (request.body ?? {}) as { sources?: string[] };
 
     const vaultLookup = fastify.vault ? (key: string) => fastify.vault!.get(key)?.value ?? null : undefined;
-    const sync = new MarketplaceSync(db, vaultLookup);
+    const sync = new MarketplaceSync(db, vaultLookup, guardedFetch);
 
     try {
       const results = await sync.syncAll(body.sources ? { sources: body.sources } : {});

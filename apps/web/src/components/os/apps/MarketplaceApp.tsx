@@ -30,6 +30,7 @@ import {
 import ExtensionCard from './extend/ExtensionCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
 import AgentSearchBox, { type AutoMatchState } from './extend/AgentSearchBox';
+import InstallFromUrlRow from './extend/InstallFromUrlRow';
 
 /** The four shelves (D2) — the design's "one simple shelf" set. */
 const SHELVES = ['all', 'skill', 'connector', 'mcp'] as const;
@@ -399,6 +400,8 @@ const MarketplaceApp = () => {
                 three-up. Replaces the former separate header search field. */}
             <AgentSearchBox onQueryChange={setQuery} autoRunNeed={autoMatchNeed} onAutoStateChange={setAutoMatch} />
             <div className="border-t border-border/20 my-1" />
+
+            <InstallFromUrlRow onHeld={setShelfNote} />
 
             {startHere.length > 0 && (
               <div data-testid="start-here-band" className="space-y-2">
