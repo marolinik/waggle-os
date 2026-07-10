@@ -30,6 +30,7 @@ import {
 import { requiresYoloConfirm } from '@/lib/autonomy-confirm';
 import ModelSelector from '@/components/os/ModelSelector';
 import ModelPilotCard from '@/components/os/ModelPilotCard';
+import EmbeddingRoutingCard from '@/components/os/EmbeddingRoutingCard';
 import { ModelGate } from '@/components/os/model-gate/ModelGate';
 import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
@@ -465,6 +466,8 @@ const SettingsApp = () => {
                 if (fields.budgetThreshold !== undefined) setBudgetThreshold(fields.budgetThreshold);
               }}
             />
+
+            <EmbeddingRoutingCard providers={providers} tier={tier} />
 
             <SectionLabel>Model Configuration</SectionLabel>
 

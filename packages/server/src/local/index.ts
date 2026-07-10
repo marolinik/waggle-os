@@ -74,6 +74,7 @@ import { memoryRoutes } from './routes/memory.js';
 import { memoryCenterRoutes } from './routes/memory-center.js';
 import { artifactRoutes } from './routes/artifacts.js';
 import { settingsRoutes } from './routes/settings.js';
+import { embeddingRoutes, buildEmbeddingStatusPayload } from './routes/embedding.js';
 import { sessionRoutes, findUndistilledSessions, markSessionDistilled } from './routes/sessions.js';
 import { knowledgeRoutes } from './routes/knowledge.js';
 import { litellmRoutes } from './routes/litellm.js';
@@ -2352,6 +2353,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(memoryRoutes);
   await server.register(memoryCenterRoutes);
   await server.register(settingsRoutes);
+  await server.register(embeddingRoutes);
   await server.register(sessionRoutes);
   await server.register(knowledgeRoutes);
   await server.register(litellmRoutes);
@@ -2731,9 +2733,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     };
   });
 
-  // Embedding provider status + reprobe endpoints
+  // Embedding provider status + reprobe endpoints. (The set/write side —
+  // POST /api/embedding/provider — lives in routes/embedding.ts.)
   server.get('/api/embedding/status', async () => {
-    return embeddingProvider.getStatus();
+    // Enriched shape: live status + persisted `configuredProvider` + `envOverride`.
+    return buildEmbeddingStatusPayload(server);
   });
 
   server.post('/api/embedding/reprobe', async () => {

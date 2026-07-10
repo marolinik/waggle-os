@@ -174,6 +174,22 @@ function normalizeFrame(raw: any): MemoryFrame {
   };
 }
 
+/** Embedding router status (steal #10) — GET /api/embedding/status and the
+ *  response of POST /api/embedding/provider. `activeProvider` is what is running;
+ *  `configuredProvider` is what the user persisted; `envOverride` = an env var is
+ *  forcing the runtime; `restartRequired` is set on a provider-change response. */
+export interface EmbeddingRoutingStatus {
+  activeProvider: string;
+  availableProviders: string[];
+  dimensions: number;
+  modelName: string;
+  lastError?: string;
+  probeTimestamp?: string;
+  configuredProvider: string;
+  envOverride: boolean;
+  restartRequired?: boolean;
+}
+
 class LocalAdapter {
   private baseUrl: string;
   private authToken: string | null = null;
@@ -2084,6 +2100,28 @@ class LocalAdapter {
 
   async getLiteLLMStatus(): Promise<unknown> {
     const res = await this.fetch('/api/litellm/status');
+    return res.json();
+  }
+
+  // ── Embedding router (steal #10) ──────────────────────────────────────
+
+  async getEmbeddingStatus(): Promise<EmbeddingRoutingStatus> {
+    const res = await this.fetch('/api/embedding/status');
+    return res.json();
+  }
+
+  /** Persist the embedding provider. Throws AdapterHttpError on 403 (tier) /
+   *  409 (env override) / 400 (invalid) — the message carries the reason. */
+  async setEmbeddingProvider(provider: string): Promise<EmbeddingRoutingStatus> {
+    const res = await this.fetch('/api/embedding/provider', {
+      method: 'POST',
+      body: JSON.stringify({ provider }),
+    });
+    return res.json();
+  }
+
+  async reprobeEmbedding(): Promise<EmbeddingRoutingStatus> {
+    const res = await this.fetch('/api/embedding/reprobe', { method: 'POST' });
     return res.json();
   }
 
