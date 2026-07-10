@@ -104,3 +104,29 @@ export function applyPersonaToolFilter(
 
   return out;
 }
+
+/**
+ * Persona policy for MCP tools (steal #6 — the first time MCP tools enter the
+ * pool). Unlike built-ins, MCP tool names (`mcp_<server>_<tool>`) are dynamic
+ * and never appear in a persona's static `tools` allowlist — so running them
+ * through the allowlist above would strip every MCP tool for any persona that
+ * declares an allowlist. Instead MCP tools bypass the allowlist but still honor
+ * the two safety rails:
+ *   - `disallowedTools` (explicit denylist) is enforced.
+ *   - read-only personas (planner / verifier) get NO MCP tools — external MCP
+ *     actions are unknown-capability, so they're dropped wholesale, matching the
+ *     "no write tools ever" allowlist philosophy for READ_ONLY_ALLOWED_TOOLS.
+ *
+ * Pure: returns a filtered copy, never mutates the input array.
+ */
+export function filterMcpToolsForPersona(
+  tools: ToolDefinition[],
+  persona: AgentPersona,
+): ToolDefinition[] {
+  if (persona.isReadOnly) return [];
+  if (persona.disallowedTools?.length) {
+    const denied = new Set(persona.disallowedTools);
+    return tools.filter(t => !denied.has(t.name));
+  }
+  return tools;
+}

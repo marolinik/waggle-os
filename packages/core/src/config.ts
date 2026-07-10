@@ -42,6 +42,19 @@ interface ConfigData {
     ollamaModel?: string;
     inprocessModel?: string;
   };
+  /** Steal #6: on-demand relevance gating for MCP tools. */
+  mcpToolRetrieval?: {
+    enabled?: boolean;
+    threshold?: number;
+    topK?: number;
+  };
+}
+
+/** Resolved MCP tool-retrieval config (all fields present). */
+export interface McpToolRetrievalSettings {
+  enabled: boolean;
+  threshold: number;
+  topK: number;
 }
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6';
@@ -226,5 +239,17 @@ export class WaggleConfig {
   setEmbeddingProvider(provider: EmbeddingProviderType | 'auto'): void {
     if (!this.data.embedding) this.data.embedding = {};
     this.data.embedding.provider = provider;
+  }
+
+  // --- MCP tool retrieval (Steal #6) ---
+
+  /** Resolve MCP tool-retrieval settings, filling defaults (ON, threshold 20, top-k 10). */
+  getMcpToolRetrieval(): McpToolRetrievalSettings {
+    const cfg = this.data.mcpToolRetrieval;
+    return {
+      enabled: cfg?.enabled ?? true,
+      threshold: cfg?.threshold ?? 20,
+      topK: cfg?.topK ?? 10,
+    };
   }
 }

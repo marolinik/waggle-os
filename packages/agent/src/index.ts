@@ -330,6 +330,7 @@ export {
   type MarketplaceCandidate,
 } from './capability-acquisition.js';
 export { McpServerInstance, McpRuntime, type McpServerConfig, type McpServerState, type McpToolInfo, type McpProcess, type SpawnFn } from './mcp/mcp-runtime.js';
+export { McpToolRetriever, buildRetrievalQuery, DEFAULT_MCP_TOOL_RETRIEVAL_CONFIG, type McpToolRetrievalConfig, type RetrievalMessage } from './mcp/mcp-tool-retrieval.js';
 export { SubagentOrchestrator, type WorkerState, type WorkerStatus, type WorkflowStep, type WorkflowTemplate, type OrchestratorConfig as SubagentOrchestratorConfig } from './subagent-orchestrator.js';
 export {
   BEHAVIORAL_SPEC, COMPACTION_PROMPT, buildActiveBehavioralSpec,

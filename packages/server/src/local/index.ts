@@ -47,6 +47,7 @@ import {
   createConnectorSearchTools,
   createCrossWorkspaceTools,
   McpRuntime,
+  McpToolRetriever,
   isWithinBudget,
   getRecentLogs,
   setPersonaDataDir,
@@ -275,6 +276,8 @@ export interface AgentState {
   pluginRuntimeManager: import('@waggle/sdk').PluginRuntimeManager;
   /** MCP server runtime — stdio servers, health, tools */
   mcpRuntime: import('@waggle/agent').McpRuntime;
+  /** Steal #6: relevance-gates MCP tools into the model pool per conversation */
+  mcpToolRetriever: import('@waggle/agent').McpToolRetriever;
   /** Command registry — slash commands */
   commandRegistry: import('@waggle/agent').CommandRegistry;
   /** LLM provider status — which provider is active and whether it's truly healthy */
@@ -985,6 +988,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const mcpRuntime = new McpRuntime();
   populateMcpRuntimeFromConfig(mcpRuntime, fullConfig.dataDir, log);
 
+  // Steal #6: relevance-gates MCP tools into the model pool. Holds the lazy
+  // embedding index + per-conversation union-only accumulator; the mock-embedder
+  // fallback keeps it honest when semantic embeddings are unavailable.
+  const mcpToolRetriever = new McpToolRetriever({ embedder });
+
   // Session histories (server-side, like CLI)
   const sessionHistories = new Map<string, Array<{ role: string; content: string }>>();
 
@@ -1468,6 +1476,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     spawnSecurityContext: null,
     pluginRuntimeManager,
     mcpRuntime,
+    mcpToolRetriever,
     commandRegistry,
     llmProvider: {
       provider: 'anthropic-proxy' as const,

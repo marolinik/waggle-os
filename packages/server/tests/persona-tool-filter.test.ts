@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { ToolDefinition, AgentPersona } from '@waggle/agent';
 import {
   applyPersonaToolFilter,
+  filterMcpToolsForPersona,
   ALWAYS_AVAILABLE_TOOLS,
   READ_ONLY_WRITE_TOOLS,
   READ_ONLY_ALLOWED_TOOLS,
@@ -120,5 +121,28 @@ describe('applyPersonaToolFilter — read-only allowlist (no write tool leaks)',
     expect(out).not.toContain('execute_step');
     expect(out).not.toContain('write_file');
     expect(out).not.toContain('bash'); // read-only strips arbitrary command execution
+  });
+});
+
+// Steal #6: MCP tools bypass the persona ALLOWLIST (their dynamic
+// `mcp_<server>_<tool>` names are never in a persona's static tools[]) but must
+// still honor the two safety rails — explicit denylist + read-only.
+describe('filterMcpToolsForPersona — MCP persona safety rails', () => {
+  const MCP_POOL = ['mcp_github_create_issue', 'mcp_slack_send', 'mcp_postgres_query'].map(tool);
+
+  it('bypasses the allowlist: a narrow persona still gets MCP tools', () => {
+    const out = filterMcpToolsForPersona(MCP_POOL, persona({ tools: ['chat_x'] })).map(t => t.name);
+    expect(out).toEqual(['mcp_github_create_issue', 'mcp_slack_send', 'mcp_postgres_query']);
+  });
+
+  it('honors disallowedTools against MCP tool names', () => {
+    const out = filterMcpToolsForPersona(MCP_POOL, persona({ disallowedTools: ['mcp_postgres_query'] })).map(t => t.name);
+    expect(out).not.toContain('mcp_postgres_query');
+    expect(out).toContain('mcp_github_create_issue');
+  });
+
+  it('grants a read-only persona NO MCP tools (unknown-capability external actions)', () => {
+    const out = filterMcpToolsForPersona(MCP_POOL, persona({ isReadOnly: true }));
+    expect(out).toEqual([]);
   });
 });

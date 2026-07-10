@@ -39,7 +39,7 @@ import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggest
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
-import { applyPersonaToolFilter } from '../persona-tool-filter.js';
+import { applyPersonaToolFilter, filterMcpToolsForPersona } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
@@ -1325,6 +1325,28 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
         if (!hasCustomRunner) {
           effectiveTools = filterAvailableTools(effectiveTools);
+
+          // Steal #6: relevance-gate connected MCP tools into the pool. This is
+          // the FIRST point MCP tools enter effectiveTools. Runs after
+          // availability filtering (so counts are real) and before the
+          // conversational narrowing + spawn-allowlist snapshot, so a spawned
+          // sub-agent inherits the selected MCP tools. Below the threshold the
+          // retriever injects them all; above it, the conversation's union-only
+          // accumulated top-k. Persona denylist / read-only rails still apply.
+          const runningMcpTools = server.agentState.mcpRuntime.getAllTools();
+          if (runningMcpTools.length > 0) {
+            const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
+            let selectedMcp = await server.agentState.mcpToolRetriever.selectTools(
+              runningMcpTools, history, sessionId, retrievalCfg,
+            );
+            const mcpPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+            if (mcpPersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, mcpPersona);
+            if (selectedMcp.length > 0) {
+              const present = new Set(effectiveTools.map(t => t.name));
+              effectiveTools = [...effectiveTools, ...selectedMcp.filter(t => !present.has(t.name))];
+            }
+          }
+
           spawnAllowedToolNames = new Set(effectiveTools.map(t => t.name));
           const beforeNarrowing = effectiveTools.length;
           effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
