@@ -381,10 +381,13 @@ export { redactSkillContent, type SkillRedactionResult } from './skill-redaction
 export {
   writeSkill,
   deleteSkill,
+  undoSkillWrite,
   type SkillWriteDeps,
   type WriteSkillInput,
   type DeleteSkillInput,
   type SkillWriteResult,
+  type UndoSkillInput,
+  type UndoSkillResult,
 } from './skill-write-service.js';
 export {
   shouldDistillSkill, planSkillDistillation, SKILL_DISTILL_MIN_TOOL_CALLS,
@@ -486,6 +489,10 @@ export {
   buildAwarenessSummary, formatAwarenessPrompt, markSummarySurfaced,
   type AwarenessSummary, type CapabilityGapSignal, type CorrectionSignal, type WorkflowPatternSignal,
 } from './improvement-detector.js';
+export {
+  lintMemoryWrite,
+  type MemoryLintResult, type MemoryLintVerdict,
+} from './memory-write-lint.js';
 export {
   detectInstalledTools,
   type ToolDetectionDeps,

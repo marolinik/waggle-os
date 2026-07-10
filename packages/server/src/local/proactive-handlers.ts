@@ -13,6 +13,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { WorkspaceManager, WorkspaceConfig } from '@waggle/core';
+import { materialFingerprint } from './notification-gate.js';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -23,6 +24,9 @@ export interface ProactiveMessage {
   workspaceId?: string;
   actionUrl?: string;
   priority: 'low' | 'medium' | 'high';
+  /** Anti-nag: stable key + fingerprint so an unchanged nag is suppressed on re-emit. */
+  dedupeKey?: string;
+  materialHash?: string;
 }
 
 export interface ProactiveContext {
@@ -179,6 +183,14 @@ export function generateMorningBriefing(ctx: ProactiveContext): ProactiveMessage
     body: bodyParts.join(' '),
     priority: totalPending > 5 ? 'high' : 'medium',
     actionUrl: '/',
+    dedupeKey: 'proactive:morning_briefing',
+    materialHash: materialFingerprint({
+      wsCount: workspaces.length,
+      totalPending,
+      staleCount,
+      summary: summaryParts,
+      decisions: decisionParts,
+    }),
   };
 }
 
@@ -210,6 +222,11 @@ export function checkStaleWorkspaces(ctx: ProactiveContext): ProactiveMessage[] 
         workspaceId: ws.id,
         actionUrl: `/workspaces/${ws.id}`,
         priority: idleDays > 30 ? 'medium' : 'low',
+        dedupeKey: `proactive:stale_workspace:${ws.id}`,
+        // Fingerprint on identity, not idleDays — so a still-stale workspace
+        // doesn't re-nag every day. Re-fires only if it's touched (new
+        // reference time) or its frame count changes.
+        materialHash: materialFingerprint({ wsId: ws.id, frameCount, referenceMs: referenceDate.getTime() }),
       });
     }
   }
@@ -235,6 +252,8 @@ export function checkPendingTasks(ctx: ProactiveContext): ProactiveMessage[] {
       workspaceId: ws.id,
       actionUrl: `/workspaces/${ws.id}`,
       priority: pending > 3 ? 'high' : 'medium',
+      dedupeKey: `proactive:task_reminder:${ws.id}`,
+      materialHash: materialFingerprint({ wsId: ws.id, pending }),
     });
   }
 
@@ -251,6 +270,8 @@ export function suggestCapabilities(ctx: ProactiveContext): ProactiveMessage | n
       body: 'You haven\'t installed any capability packs yet. Explore Research, Writing, and Planning packs to supercharge your agent.',
       priority: 'low',
       actionUrl: '/skills',
+      dedupeKey: 'proactive:capability_suggestion',
+      materialHash: materialFingerprint({ kind: 'no_caps' }),
     };
   }
 
@@ -282,6 +303,10 @@ export function suggestCapabilities(ctx: ProactiveContext): ProactiveMessage | n
         body: `You have ${totalFrames} memories across ${workspaces.length} workspace${workspaces.length === 1 ? '' : 's'}. Consider connecting GitHub, Slack, or other tools for richer context.`,
         priority: 'low',
         actionUrl: '/connectors',
+        dedupeKey: 'proactive:capability_suggestion',
+        // Fingerprint on the trigger kind only — showing this once is the point;
+        // it re-fires when the suggestion itself changes (or the condition clears).
+        materialHash: materialFingerprint({ kind: 'connectors' }),
       };
     }
   }

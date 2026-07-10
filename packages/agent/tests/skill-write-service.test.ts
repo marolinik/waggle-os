@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { writeSkill, deleteSkill, type SkillWriteDeps } from '../src/skill-write-service.js';
+import { writeSkill, deleteSkill, undoSkillWrite, type SkillWriteDeps } from '../src/skill-write-service.js';
 import { parseSkillFrontmatter } from '../src/skill-frontmatter.js';
+import { loadSkills } from '../src/prompt-loader.js';
+import { loadActiveSkills } from '../src/skill-hygiene.js';
 
 describe('skill-write-service (P5/D4 iii)', () => {
   let dir: string;
@@ -126,5 +128,91 @@ describe('skill-write-service (P5/D4 iii)', () => {
   it('degrades gracefully with no auditStore/onChange', () => {
     const res = writeSkill({ skillsDir }, { name: 'bare', content: 'x', initiator: 'user', source: 'api' });
     expect(res.ok).toBe(true);
+  });
+
+  describe('backup + undo (P-C)', () => {
+    const backupsDir = () => path.join(skillsDir, '.backups');
+    const backupsFor = (name: string) =>
+      (fs.existsSync(backupsDir()) ? fs.readdirSync(backupsDir()) : []).filter((f) => {
+        const base = f.slice(0, -3);
+        return f.endsWith('.md') && base.slice(0, base.lastIndexOf('-')) === name;
+      });
+
+    it('no backup on the first-ever write', () => {
+      writeSkill(deps, { name: 'fresh', content: 'v1', initiator: 'agent', source: 'chat' });
+      expect(backupsFor('fresh')).toHaveLength(0);
+    });
+
+    it('overwrite snapshots the exact outgoing bytes', () => {
+      writeSkill(deps, { name: 'ov', content: 'v1', initiator: 'agent', source: 'chat' });
+      const before = fs.readFileSync(path.join(skillsDir, 'ov.md'));
+      writeSkill(deps, { name: 'ov', content: 'v2 different', initiator: 'agent', source: 'chat' });
+      const backups = backupsFor('ov');
+      expect(backups).toHaveLength(1);
+      const snapshot = fs.readFileSync(path.join(backupsDir(), backups[0]));
+      expect(snapshot.equals(before)).toBe(true);
+    });
+
+    it('caps retained backups at the 5 newest, pruning older', () => {
+      writeSkill(deps, { name: 'cap', content: 'v1', initiator: 'agent', source: 'chat' });
+      for (let i = 2; i <= 8; i++) {
+        writeSkill(deps, { name: 'cap', content: `v${i}`, initiator: 'agent', source: 'chat' });
+      }
+      // 7 overwrites → 7 snapshots, pruned to the newest 5.
+      expect(backupsFor('cap')).toHaveLength(5);
+    });
+
+    it('parses backup ownership for skill names containing hyphens', () => {
+      writeSkill(deps, { name: 'my-hyphen-skill', content: 'v1', initiator: 'agent', source: 'chat' });
+      writeSkill(deps, { name: 'my-hyphen-skill', content: 'v2', initiator: 'agent', source: 'chat' });
+      expect(backupsFor('my-hyphen-skill')).toHaveLength(1);
+    });
+
+    it('delete snapshots the skill before unlinking', () => {
+      writeSkill(deps, { name: 'del', content: 'v1', initiator: 'agent', source: 'chat' });
+      const before = fs.readFileSync(path.join(skillsDir, 'del.md'));
+      deleteSkill(deps, { name: 'del', initiator: 'agent', source: 'chat' });
+      const backups = backupsFor('del');
+      expect(backups).toHaveLength(1);
+      expect(fs.readFileSync(path.join(backupsDir(), backups[0])).equals(before)).toBe(true);
+    });
+
+    it('undo restores the exact prior bytes, audits, and reloads', () => {
+      writeSkill(deps, { name: 'u', content: 'v1 original', initiator: 'agent', source: 'chat' });
+      const original = fs.readFileSync(path.join(skillsDir, 'u.md'));
+      writeSkill(deps, { name: 'u', content: 'v2 replacement', initiator: 'agent', source: 'chat' });
+      audit.length = 0;
+      onChange.mockClear();
+
+      const res = undoSkillWrite(deps, { name: 'u' });
+      expect(res.ok).toBe(true);
+      expect(res.restoredFrom).toBeTruthy();
+      expect(fs.readFileSync(path.join(skillsDir, 'u.md')).equals(original)).toBe(true);
+      expect(audit.at(-1)).toMatchObject({ action: 'installed', source: 'restored-from-backup' });
+      expect(onChange).toHaveBeenCalled();
+    });
+
+    it('undo with no backups returns a clear error, writes nothing', () => {
+      writeSkill(deps, { name: 'nobackup', content: 'v1', initiator: 'agent', source: 'chat' });
+      audit.length = 0;
+      onChange.mockClear();
+      const res = undoSkillWrite(deps, { name: 'nobackup' });
+      expect(res.ok).toBe(false);
+      expect(res.error).toMatch(/no backup/i);
+      expect(audit).toHaveLength(0);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('skill loaders ignore the .backups subdir', () => {
+      writeSkill(deps, { name: 'live', content: 'v1', initiator: 'agent', source: 'chat' });
+      writeSkill(deps, { name: 'live', content: 'v2', initiator: 'agent', source: 'chat' });
+      expect(backupsFor('live')).toHaveLength(1); // a backup exists on disk
+
+      const loaded = loadSkills(dir).map((s) => s.name);
+      const active = loadActiveSkills(dir).map((s) => s.name);
+      expect(loaded).toEqual(['live']);
+      expect(active).toEqual(['live']);
+      expect(loaded).not.toContain('.backups');
+    });
   });
 });

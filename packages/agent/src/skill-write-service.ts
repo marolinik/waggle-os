@@ -62,6 +62,69 @@ function invalidName(name: string): boolean {
   return !name || !/^[a-zA-Z0-9_-]+$/.test(name);
 }
 
+/** Subdir under skillsDir holding pre-overwrite/pre-delete snapshots. */
+const BACKUP_DIR = '.backups';
+/** Newest N snapshots retained per skill; older are pruned. */
+const BACKUP_KEEP = 5;
+
+function backupsDirFor(skillsDir: string): string {
+  return path.join(skillsDir, BACKUP_DIR);
+}
+
+/**
+ * Monotonic, filesystem-safe, sortable stamp (e.g. 20260710T123456789Z). It
+ * never repeats within a process — colliding same-millisecond writes are bumped
+ * forward — so backup filenames stay unique and lexical sort == chronological.
+ */
+let lastStampMs = 0;
+function nextBackupStamp(): string {
+  let now = Date.now();
+  if (now <= lastStampMs) now = lastStampMs + 1;
+  lastStampMs = now;
+  return new Date(now).toISOString().replace(/[-:.]/g, '');
+}
+
+/**
+ * Skill name a backup filename belongs to. The stamp is the suffix after the
+ * LAST '-' (and contains no '-' itself), so names with hyphens parse correctly.
+ */
+function backupSkillName(file: string): string | null {
+  if (!file.endsWith('.md')) return null;
+  const base = file.slice(0, -'.md'.length);
+  const lastDash = base.lastIndexOf('-');
+  if (lastDash <= 0) return null;
+  return base.slice(0, lastDash);
+}
+
+/** Backup filenames for one skill, newest first (exact-name match, not prefix). */
+function backupsForSkill(skillsDir: string, name: string): string[] {
+  const dir = backupsDirFor(skillsDir);
+  if (!fs.existsSync(dir)) return [];
+  return fs
+    .readdirSync(dir)
+    .filter((f) => backupSkillName(f) === name)
+    .sort()
+    .reverse();
+}
+
+/**
+ * Snapshot the current on-disk skill bytes into .backups before it is
+ * overwritten or deleted, then prune to the newest BACKUP_KEEP. Best-effort: a
+ * backup failure must never block the primary write/delete.
+ */
+function stashBackup(skillsDir: string, name: string): void {
+  const filePath = path.join(skillsDir, `${name}.md`);
+  if (!fs.existsSync(filePath)) return;
+  try {
+    const dir = backupsDirFor(skillsDir);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${name}-${nextBackupStamp()}.md`), fs.readFileSync(filePath));
+    for (const stale of backupsForSkill(skillsDir, name).slice(BACKUP_KEEP)) {
+      try { fs.unlinkSync(path.join(dir, stale)); } catch { /* best-effort prune */ }
+    }
+  } catch { /* backup is best-effort; never block the primary op */ }
+}
+
 /**
  * Inject/overwrite `initiator` + `source` inside the content's frontmatter
  * WITHOUT round-tripping through serializeFrontmatter (which is lossy — it drops
@@ -132,6 +195,8 @@ export function writeSkill(deps: SkillWriteDeps, input: WriteSkillInput): SkillW
   const stamped = stampProvenance(safe, fileInitiator, fileSource);
 
   if (!fs.existsSync(skillsDir)) fs.mkdirSync(skillsDir, { recursive: true });
+  // Snapshot the outgoing bytes before overwrite so the write is undoable.
+  if (existed) stashBackup(skillsDir, name);
   fs.writeFileSync(filePath, stamped, 'utf-8');
 
   try {
@@ -169,6 +234,8 @@ export function deleteSkill(deps: SkillWriteDeps, input: DeleteSkillInput): Skil
     return { ok: false, error: `Skill "${name}" not found.` };
   }
 
+  // Snapshot before unlink so a delete can be undone.
+  stashBackup(skillsDir, name);
   fs.unlinkSync(filePath);
 
   try {
@@ -187,4 +254,56 @@ export function deleteSkill(deps: SkillWriteDeps, input: DeleteSkillInput): Skil
 
   onChange?.();
   return { ok: true, path: filePath };
+}
+
+export interface UndoSkillInput {
+  name: string;
+  /** Who triggered the restore — recorded in the audit row. Defaults to 'agent'. */
+  initiator?: SkillInitiator;
+}
+
+export interface UndoSkillResult {
+  ok: boolean;
+  /** Absolute path of the restored skill file (present on success). */
+  path?: string;
+  /** Backup filename that was restored (present on success). */
+  restoredFrom?: string;
+  /** Set when ok=false. */
+  error?: string;
+}
+
+/**
+ * Restore a skill's newest backup through the sanctioned writeSkill seam: the
+ * snapshot bytes are re-written (source 'restored-from-backup'), which also
+ * snapshots the current bytes as a fresh backup, records an audit row, and
+ * fires onChange. Returns a clear error when no backup exists.
+ */
+export function undoSkillWrite(deps: SkillWriteDeps, input: UndoSkillInput): UndoSkillResult {
+  const { skillsDir } = deps;
+  const { name } = input;
+
+  if (invalidName(name)) {
+    return { ok: false, error: 'Invalid skill name.' };
+  }
+
+  const newest = backupsForSkill(skillsDir, name)[0];
+  if (!newest) {
+    return { ok: false, error: `No backup found for skill "${name}".` };
+  }
+
+  let bytes: string;
+  try {
+    bytes = fs.readFileSync(path.join(backupsDirFor(skillsDir), newest), 'utf-8');
+  } catch (err) {
+    return { ok: false, error: `Backup unreadable: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  const res = writeSkill(deps, {
+    name,
+    content: bytes,
+    initiator: input.initiator ?? 'agent',
+    source: 'restored-from-backup',
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, path: res.path, restoredFrom: newest };
 }

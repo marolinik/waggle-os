@@ -99,6 +99,7 @@ import { homeRoutes } from './routes/home.js';
 import { onboardingRoutes } from './routes/onboarding.js';
 import { cronRoutes } from './routes/cron.js';
 import { notificationRoutes, emitNotification, emitSubagentStatus } from './routes/notifications.js';
+import { materialFingerprint } from './notification-gate.js';
 import { marketplaceDevRoutes } from './routes/marketplace-dev.js';
 import { marketplaceRoutes } from './routes/marketplace.js';
 import { agentSearchRoutes } from './routes/agent-search.js';
@@ -1761,7 +1762,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
           }
 
           const inAppEmitter = (notification: { title: string; body: string; category: string; actionUrl?: string }) => {
-            emitNotification(server, { ...notification, category: notification.category as 'cron' | 'agent' | 'task' });
+            emitNotification(
+              server,
+              { ...notification, category: notification.category as 'cron' | 'agent' | 'task' },
+              msg.dedupeKey && msg.materialHash ? { dedupeKey: msg.dedupeKey, materialHash: msg.materialHash } : undefined,
+            );
           };
 
           deliverCronResult(
@@ -1917,12 +1922,19 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 log.warn(`[cron] GEPA variant generation error: ${(variantErr as Error).message}`);
               }
 
-              eventBus.emit('notification', {
-                type: 'notification',
-                timestamp: new Date().toISOString(),
+              // Anti-nag: one signal per (workspace, month, correction-rate bucket).
+              // Re-runs on the same month with an unchanged rate bucket are suppressed.
+              emitNotification(server, {
                 title: 'Prompt optimization signal',
                 body: `Workspace "${ws.name}" has ${(correctionRate * 100).toFixed(0)}% correction rate — optimization candidate`,
                 category: 'agent',
+              }, {
+                dedupeKey: `prompt_optimization:${ws.id}`,
+                materialHash: materialFingerprint({
+                  wsId: ws.id,
+                  period: new Date().toISOString().slice(0, 7),
+                  rateBucket: Math.round(correctionRate * 10),
+                }),
               });
             }
 
@@ -2062,6 +2074,15 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             body: `${assessment.period} report: ${assessment.totalInteractions} interactions, ${(assessment.correctionRate * 100).toFixed(1)}% correction rate — check your workspace home`,
             category: 'agent',
             actionUrl: '/',
+          }, {
+            // Anti-nag: one per period + counters. Same month with unchanged
+            // counters is suppressed; a new month or changed numbers re-fires.
+            dedupeKey: 'monthly_assessment',
+            materialHash: materialFingerprint({
+              period: assessment.period,
+              totalInteractions: assessment.totalInteractions,
+              correctionRateBucket: Math.round(assessment.correctionRate * 100),
+            }),
           });
         } catch (err) {
           log.warn(`[cron] Monthly assessment failed: ${(err as Error).message}`);

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { validateOrigin } from '../cors-config.js';
+import { getNotificationGate } from '../notification-gate.js';
 
 export interface NotificationEvent {
   type: 'notification';
@@ -47,7 +48,35 @@ export interface WorkflowSuggestionEvent {
   timestamp: string;
 }
 
-export function emitNotification(fastify: FastifyInstance, event: Omit<NotificationEvent, 'type' | 'timestamp' | 'id' | 'read'>) {
+/**
+ * Anti-nag options. When both are supplied, the notification is suppressed
+ * (no persisted row, no SSE broadcast) if the material fingerprint is unchanged
+ * since the last emit for that `dedupeKey`. Callers without options behave
+ * exactly as before.
+ */
+export interface EmitNotificationOptions {
+  dedupeKey?: string;
+  materialHash?: string;
+}
+
+export interface EmitNotificationResult {
+  suppressed: boolean;
+}
+
+export function emitNotification(
+  fastify: FastifyInstance,
+  event: Omit<NotificationEvent, 'type' | 'timestamp' | 'id' | 'read'>,
+  options?: EmitNotificationOptions,
+): EmitNotificationResult {
+  // Material-change gate: only when both key and hash are provided.
+  if (options?.dedupeKey && options.materialHash) {
+    const dataDir = fastify.localConfig?.dataDir;
+    if (dataDir && !getNotificationGate(dataDir).shouldNotify(options.dedupeKey, options.materialHash)) {
+      fastify.log?.debug?.({ dedupeKey: options.dedupeKey }, 'notification suppressed (unchanged material)');
+      return { suppressed: true };
+    }
+  }
+
   // W4C/F25: persist FIRST so the broadcast payload carries the real row id.
   // Without it the live-pushed notification reaches the client id-less, and a
   // subsequent markRead() PATCHes `/api/notifications/undefined/read` (400) —
@@ -66,6 +95,7 @@ export function emitNotification(fastify: FastifyInstance, event: Omit<Notificat
     ...event,
   };
   fastify.eventBus?.emit('notification', full);
+  return { suppressed: false };
 }
 
 /** Emit a sub-agent status event on the eventBus for SSE relay */

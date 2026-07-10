@@ -5,7 +5,7 @@ import path from 'node:path';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -226,6 +226,33 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   ];
   hookRegistry.on('pre:memory-write', (ctx) => {
     const content = ctx.memoryContent ?? '';
+
+    // Fix the source, not the symptom: block memories that merely record a
+    // capability failure ("the Slack connector failed to authenticate"). The
+    // agent should fix or flag the capability instead of durably remembering
+    // that it is broken — a symptom memory rots the moment the tool is repaired.
+    const lint = lintMemoryWrite(content, ctx.memoryType);
+    if (lint.verdict === 'capability_symptom') {
+      // Route the observation to the improvement-signal path so a recurring gap
+      // still surfaces (via acquire_capability), rather than into durable memory.
+      // The pre:memory-write ctx carries no workspaceId, so we record on the base
+      // orchestrator's (personal) signal store — the least-invasive reachable
+      // ImprovementSignalStore. Recording is non-blocking.
+      try {
+        recordCapabilityGap(orchestrator.getImprovementSignals(), lint.capability ?? 'capability', lint.reason);
+      } catch {
+        // Non-blocking — a signal-store failure must not swallow the cancel.
+      }
+      log.info('[memory-validation] Capability-failure symptom blocked from memory:', content.slice(0, 100));
+      return {
+        cancel: true,
+        reason:
+          `This looks like a capability failure symptom ("${lint.capability ?? 'a capability'}"), not a durable fact. ` +
+          `Don't memorize that a tool/connector is broken — it will rot when the capability is fixed. ` +
+          `Instead, fix or flag the capability (e.g. use acquire_capability). The gap has been recorded as an improvement signal.`,
+      };
+    }
+
     for (const pattern of DRAMATIC_PATTERNS) {
       if (pattern.test(content)) {
         log.warn('[memory-validation] Dramatic claim detected in save_memory:', content.slice(0, 100));
