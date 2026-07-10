@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { PERSONAS, getPersona, listPersonas, composePersonaPrompt } from '../src/personas.js';
 
 describe('Agent Personas', () => {
-  it('PERSONAS catalog has 22 entries', () => {
-    expect(PERSONAS).toHaveLength(22);
+  it('PERSONAS catalog has 23 entries', () => {
+    // 22 user-facing (8 universal + 14 specialists) + 1 internal review persona
+    // (session-reviewer) used only by the IdleSessionWatcher self-evolution loop.
+    expect(PERSONAS).toHaveLength(23);
   });
 
   it('each persona has required fields', () => {
@@ -38,9 +40,9 @@ describe('Agent Personas', () => {
     expect(getPersona('')).toBeNull();
   });
 
-  it('listPersonas() returns all 22 personas', () => {
+  it('listPersonas() returns all 23 personas', () => {
     const list = listPersonas();
-    expect(list).toHaveLength(22);
+    expect(list).toHaveLength(23);
     expect(list).not.toBe(PERSONAS); // Returns a copy
   });
 
@@ -198,6 +200,19 @@ describe('Soft tool model', () => {
     expect(v!.disallowedTools).toContain('write_file');
     expect(v!.isReadOnly).toBe(true);
   });
+
+  it('session-reviewer is a trust-boundary persona: reads + create_skill only, no writes/exec/memory', () => {
+    const r = getPersona('session-reviewer');
+    expect(r, 'session-reviewer not found').toBeTruthy();
+    // create_skill is the proposal vehicle and must stay in the allowlist.
+    expect(r!.tools).toContain('create_skill');
+    // isReadOnly would strip create_skill, so it must be false.
+    expect(r!.isReadOnly).toBe(false);
+    // The critical tools ALWAYS_AVAILABLE_TOOLS re-adds must be explicitly denied.
+    for (const t of ['save_memory', 'delete_skill', 'install_capability', 'acquire_capability', 'spawn_agent', 'bash']) {
+      expect(r!.disallowedTools, `${t} must be disallowed`).toContain(t);
+    }
+  });
 });
 
 describe('New domain personas', () => {
@@ -216,7 +231,8 @@ describe('New domain personas', () => {
     });
   }
 
-  it('total persona count is 22', () => {
-    expect(PERSONAS.length).toBe(22);
+  it('total persona count is 23', () => {
+    // 22 tiered + session-reviewer (internal self-evolution reviewer).
+    expect(PERSONAS.length).toBe(23);
   });
 });

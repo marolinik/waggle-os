@@ -40,6 +40,7 @@ import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
+import { enqueueHeldAction, isProposableTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
 import type { GoalAncestry } from '@waggle/shared';
@@ -535,6 +536,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        * a reload doesn't show a duplicate.
        */
       retry?: boolean;
+      /**
+       * Self-evolution: set by the IdleSessionWatcher's loopback review turn.
+       * A review turn runs headless — no interactive client watches the SSE
+       * stream, so a live approval prompt would auto-deny after the timeout and
+       * the proposal would be lost. When true, a gated proposable tool (e.g.
+       * create_skill) is HELD for durable human approval in Approvals instead of
+       * a live SSE prompt, and any other gated tool is denied. The reviewer can
+       * therefore never write to disk without approval.
+       */
+      proposeHeld?: boolean;
     };
   }>('/api/chat', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
@@ -543,7 +554,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     const {
       message, workspace: _ws, workspaceId: _wsId, model, session,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
-      autonomy: autonomyRaw, retry: retryTurn,
+      autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
 
@@ -1147,6 +1158,34 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               });
             }
             return;
+          }
+
+          // Self-evolution review turn: no interactive client is watching this
+          // headless loopback stream, so a live approval prompt would auto-deny
+          // after the timeout and the reviewer's proposal would vanish. Convert a
+          // gated proposable tool (create_skill) into a DURABLE held action that
+          // ApprovalsApp shows; deny any other gated tool. This runs before the
+          // grant-store shortcut on purpose \u2014 a saved "Always allow" grant must
+          // NOT let a headless reviewer write a skill to disk. The trust boundary:
+          // the reviewer can never persist a skill without explicit human approval.
+          if (proposeHeldTurn) {
+            if (isProposableTool(ctx.toolName)) {
+              const enq = enqueueHeldAction(server, {
+                workspaceId: effectiveWorkspace || null,
+                source: `session-reviewer:${sessionId}`,
+                tool: ctx.toolName,
+                args,
+                summary: describeToolUse(ctx.toolName, args),
+              });
+              sendEvent('step', {
+                content: 'refused' in enq
+                  ? `\u26a0 ${ctx.toolName} proposal refused (${enq.refused})`
+                  : `\ud83d\udccb ${ctx.toolName} held for your approval`,
+              });
+            } else {
+              sendEvent('step', { content: `\u2716 ${ctx.toolName} not permitted for review turns` });
+            }
+            return { cancel: true, reason: `Review turn: ${ctx.toolName} held for approval` };
           }
 
           // H3: Auto-approve all tool requests when WAGGLE_AUTO_APPROVE=1 (testing only)

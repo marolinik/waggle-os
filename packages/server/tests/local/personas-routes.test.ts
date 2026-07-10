@@ -76,12 +76,14 @@ describe('Personas Routes', () => {
       await server.close();
     });
 
-    it('contains all 17 personas', async () => {
+    it('contains all 23 personas', async () => {
       const server = createTestServer();
       const res = await server.inject({ method: 'GET', url: '/api/personas' });
       const { personas } = res.json();
 
-      expect(personas.length).toBe(22);
+      // 22 tiered personas + session-reviewer (internal self-evolution reviewer;
+      // returned by the raw list but excluded from onboarding + PersonaSwitcher).
+      expect(personas.length).toBe(23);
       const ids = personas.map((p: { id: string }) => p.id);
       expect(ids).toContain('researcher');
       expect(ids).toContain('writer');

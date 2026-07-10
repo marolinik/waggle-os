@@ -26,6 +26,14 @@ export interface ChatTurnRequest {
   /** Persisted session id — one per IM conversation. */
   session: string;
   timeoutMs?: number;
+  /** Per-turn persona override (e.g. 'session-reviewer' for the idle watcher). */
+  persona?: string;
+  /**
+   * Self-evolution review turn: hold gated proposable tools for human approval
+   * instead of prompting live over an SSE stream nobody is watching. See the
+   * `proposeHeld` field on POST /api/chat.
+   */
+  proposeHeld?: boolean;
 }
 
 /** Hard ceiling so a wedged turn can't pin a poll loop forever. */
@@ -69,6 +77,8 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
         message: req.message,
         workspace: req.workspace,
         session: req.session,
+        ...(req.persona ? { persona: req.persona } : {}),
+        ...(req.proposeHeld ? { proposeHeld: true } : {}),
       }),
       signal: controller.signal,
     });

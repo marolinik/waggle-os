@@ -27,6 +27,14 @@ describe('getPersonaTier', () => {
   it('treats unknown ids (e.g. custom personas) as specialists', () => {
     expect(getPersonaTier('my-custom-persona')).toBe('specialist');
   });
+
+  it('does not surface the internal session-reviewer persona in either tier', () => {
+    // session-reviewer is an internal self-evolution reviewer; it must never
+    // appear in the PersonaSwitcher (universal modes OR the specialist roster).
+    expect(UNIVERSAL_MODE_IDS).not.toContain('session-reviewer');
+    expect(ALL_SPECIALIST_IDS).not.toContain('session-reviewer');
+    expect(getSpecialistsForTemplate('blank').primary).not.toContain('session-reviewer');
+  });
 });
 
 describe('UNIVERSAL_MODE_IDS', () => {

@@ -131,7 +131,9 @@ import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
 import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
 import { ChannelManager } from './channels/manager.js';
+import { runChannelChatTurn } from './channels/chat-client.js';
 import { channelRoutes } from './channels/routes.js';
+import { IdleSessionWatcher, readRecentTranscript, buildReviewInstruction, NOTHING_TO_DO } from './idle-watcher.js';
 import { DreamJournal } from './dream-journal.js';
 import { dreamRoutes } from './routes/dreams.js';
 import { oauthRoutes } from './routes/oauth.js';
@@ -306,6 +308,8 @@ declare module 'fastify' {
     embeddingProvider: import('@waggle/core').EmbeddingProviderInstance;
     skillHashStore: import('@waggle/core').SkillHashStore;
     scheduler: import('./cron.js').LocalScheduler;
+    /** Idle-session self-evolution watcher. Inert unless self-evolution.json enabled. */
+    idleWatcher: import('./idle-watcher.js').IdleSessionWatcher;
     /** H-10 G1: autonomous evolution daemon. Inert unless WAGGLE_EVOLUTION_AUTO_ENABLED=1. */
     evolutionService: import('./services/evolution-service.js').EvolutionService;
     marketplace: import('@waggle/marketplace').MarketplaceDB | null;
@@ -2203,6 +2207,37 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   });
   scheduler.start();
   server.decorate('scheduler', scheduler);
+
+  // Self-evolution: idle-session watcher (CowAgent steal #3, v1). Default OFF via
+  // <dataDir>/self-evolution.json; when enabled, it reviews idle sessions through
+  // a restricted `session-reviewer` loopback turn whose only write (create_skill)
+  // is HELD for human approval. Skipped under test to keep unit runs hermetic
+  // (mirrors the ChannelManager VITEST guard below).
+  const idleWatcher = new IdleSessionWatcher({
+    dataDir: fullConfig.dataDir,
+    emitNotification: (event, options) => emitNotification(server, event, options),
+    log: { info: (msg: string) => log.info(msg), warn: (msg: string) => log.warn(msg) },
+    runReviewTurn: async ({ sessionId, workspaceId }) => {
+      const transcript = readRecentTranscript(fullConfig.dataDir, workspaceId, sessionId);
+      if (!transcript) return { content: NOTHING_TO_DO };
+      const res = await runChannelChatTurn({
+        port: server.localConfig.port,
+        message: buildReviewInstruction(sessionId, transcript),
+        workspace: workspaceId,
+        session: `evolve-${sessionId}`,
+        persona: 'session-reviewer',
+        proposeHeld: true,
+      });
+      return { content: res.content, ...(res.error ? { error: res.error } : {}) };
+    },
+  });
+  server.decorate('idleWatcher', idleWatcher);
+  if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
+    idleWatcher.start();
+  }
+  server.addHook('onClose', async () => {
+    idleWatcher.stop();
+  });
 
   // H-10 G1: Evolution service — autonomous self-evolution daemon.
   // Disabled by default; opt-in via WAGGLE_EVOLUTION_AUTO_ENABLED=1 so

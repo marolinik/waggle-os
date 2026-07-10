@@ -36,6 +36,12 @@ export function isProposableTool(tool: string): boolean {
   if (tool === 'send_email' || tool === 'write_file' || tool === 'edit_file' || tool === 'generate_docx') {
     return true;
   }
+  // create_skill is the self-evolution proposal vehicle (session-reviewer). Held
+  // here so a headless review turn can never write a skill to disk without human
+  // approval; on approve, executeHeldAction runs the real create_skill tool from
+  // the workspace pool, which persists through the sanctioned, backup-protected
+  // writeSkill path (skill-tools.ts → skill-write-service.ts).
+  if (tool === 'create_skill') return true;
   // Connector WRITE actions (connector_<id>_<action> where action mutates).
   if (tool.startsWith('connector_') && /_(create|update|delete|send|post|transition|remove|add|set|put)(_|$)/.test(tool)) {
     return true;

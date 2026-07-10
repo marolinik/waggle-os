@@ -45,6 +45,12 @@ describe('held-action-executor', () => {
       expect(isProposableTool('read_file')).toBe(false);
       expect(isProposableTool('connector_gmail_list_messages')).toBe(false); // read, not write
     });
+
+    it('accepts create_skill (the self-evolution proposal vehicle)', () => {
+      expect(isProposableTool('create_skill')).toBe(true);
+      // delete_skill is destructive — never a one-click held action.
+      expect(isProposableTool('delete_skill')).toBe(false);
+    });
   });
 
   describe('enqueueHeldAction', () => {
@@ -142,6 +148,19 @@ describe('held-action-executor', () => {
       const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
       expect(r.ok).toBe(false);
       expect(r.error).toMatch(/no email connector/);
+    });
+
+    it('executes a create_skill proposal through the workspace tool (the sanctioned writeSkill path)', async () => {
+      // In production buildToolsForWorkspace returns the create_skill tool whose
+      // execute() calls writeSkill (backup-protected). Here we stub that tool and
+      // assert executeHeldAction resolves + runs it with the proposed args.
+      const execSpy = vi.fn(async () => 'Created skill "retry-flaky-fetch".');
+      const server = makeServer(store, { name: 'create_skill', execute: execSpy });
+      hold({ toolName: 'create_skill', argsJson: JSON.stringify({ name: 'retry-flaky-fetch', content: '# Retry flaky fetch' }) });
+      const r = await executeHeldAction(server, store.getPendingAction('pa-1')!);
+      expect(r.ok).toBe(true);
+      expect(execSpy).toHaveBeenCalledWith({ name: 'retry-flaky-fetch', content: '# Retry flaky fetch' });
+      expect(store.getPendingAction('pa-1')!.status).toBe('executed');
     });
 
     it('refuses to run a held action past its expiry', async () => {
