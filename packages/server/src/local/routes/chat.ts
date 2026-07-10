@@ -1460,6 +1460,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           onToken: (token: string) => {
             sendEvent('token', { content: token });
           },
+          onGiveUp: (giveUpMessage: string) => {
+            // Steal #9 T3 — the tiered loop-guard aborted the run after a
+            // critical failure streak. Surface the give-up copy as a step so the
+            // client sees it immediately (it is also the loop's final content).
+            sendEvent('step', { content: giveUpMessage });
+          },
           onToolUse: (name: string, input: Record<string, unknown>) => {
             // Send human-readable step description + raw tool event
             const stepText = describeToolUse(name, input);

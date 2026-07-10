@@ -37,6 +37,13 @@ export interface AgentLoopConfig {
   onToken?: (token: string) => void;
   onToolUse?: (name: string, input: Record<string, unknown>) => void;
   onToolResult?: (name: string, input: Record<string, unknown>, result: string) => void;
+  /**
+   * Fired once when the tiered loop-guard hits a critical consecutive-failure
+   * streak (steal #9, T3) and the run is terminated. The route layer wires this
+   * to a user-facing `step` event; the same copy is also returned as the loop's
+   * final content.
+   */
+  onGiveUp?: (message: string) => void;
   maxTurns?: number;
   stream?: boolean;
   fetch?: typeof globalThis.fetch;
@@ -505,6 +512,25 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       });
       if (r.countedAsUsed) toolsUsed.push(r.toolName);
       messages.push({ role: 'tool', content: r.content, tool_call_id: r.toolCallId });
+
+      // Steal #9 T3 — a critical failure streak: give up rather than burn more
+      // turns retrying a tool that keeps failing. Surface the give-up copy and
+      // terminate the run.
+      if (r.abort) {
+        const giveUp = r.abortReason ?? r.content;
+        config.onGiveUp?.(giveUp);
+        logTurnEvent(turnId, {
+          stage: 'agent-loop.exit',
+          contentChars: giveUp.length,
+          toolsUsed,
+          reason: 'loop-guard-critical-abort',
+        });
+        return {
+          content: giveUp,
+          toolsUsed,
+          usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+        };
+      }
     }
   }
 

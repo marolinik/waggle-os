@@ -77,6 +77,14 @@ export interface ToolExecResult {
   countedAsUsed: boolean;
   /** Tool name resolved from the call (for caller's toolsUsed bookkeeping) */
   toolName: string;
+  /**
+   * Set by the tiered loop-guard (T3-critical) when a tool has failed enough
+   * consecutive times that continuing is futile. The agent loop must terminate
+   * the run and surface `abortReason` as a user-facing give-up message.
+   */
+  abort?: boolean;
+  /** User-facing give-up copy — only present when `abort` is true. */
+  abortReason?: string;
 }
 
 export async function executeToolCall(
@@ -202,16 +210,30 @@ export async function executeToolCall(
   // surrounding `let` is preserved from the original Review H3 rationale).
   let result = '';
   let countedAsUsed = false;
+  let abort = false;
+  let abortReason: string | undefined;
   const tool = toolMap.get(fnName);
-  if (!guard.check(fnName, fnArgs)) {
+  // Graduated failure tiers (steal #9) are consulted BEFORE the identical-args
+  // heuristic: a critical failure streak aborts, and any tier block short-
+  // circuits execution without advancing check()'s window/consecutive state.
+  const tiered = guard.checkTiered(fnName, fnArgs);
+  if (tiered.action === 'abort') {
+    abort = true;
+    abortReason = tiered.reason;
+    result = tiered.reason;
+  } else if (tiered.action === 'block') {
+    result = tiered.reason;
+  } else if (!guard.check(fnName, fnArgs)) {
     result = `Error: Loop detected — called ${fnName} with identical arguments too many times. Try a different approach.`;
   } else if (tool) {
     logTurnEvent(turnId, { stage: 'agent-loop.tool.enter', toolName: fnName, argsKeys: Object.keys(fnArgs) });
     try {
       result = await tool.execute(fnArgs);
+      guard.record(fnName, fnArgs, true);
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, resultChars: result.length, error: false });
     } catch (err) {
       result = `Error executing ${fnName}: ${(err as Error).message}`;
+      guard.record(fnName, fnArgs, false);
       logTurnEvent(turnId, { stage: 'agent-loop.tool.exit', toolName: fnName, error: true, errorMessage: (err as Error).message });
     }
     countedAsUsed = true;
@@ -270,5 +292,5 @@ export async function executeToolCall(
   // on, and fencing them as "do not obey" would defeat recovery. §C / untrusted-context.ts.
   const compressed = compressToolOutput(result);
   const modelFacing = countedAsUsed ? untrustedContextWrapper(fnName, compressed) : compressed;
-  return { content: modelFacing, toolCallId: toolCall.id, countedAsUsed, toolName: fnName };
+  return { content: modelFacing, toolCallId: toolCall.id, countedAsUsed, toolName: fnName, abort, abortReason };
 }
