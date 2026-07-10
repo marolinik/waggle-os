@@ -22,10 +22,11 @@ export const ESSENTIAL_SETTINGS_TAB_IDS = [
   'billing',  // Trial / Pro / Teams subscription (visibility within depends on user's billing tier)
 ] as const;
 
-/** 6 tabs visible at Standard — Essential + workspace ops. */
+/** 7 tabs visible at Standard — Essential + workspace ops. */
 export const STANDARD_SETTINGS_TAB_IDS = [
   ...ESSENTIAL_SETTINGS_TAB_IDS,
   'permissions',  // Default autonomy + external gates (Tools surface)
+  'channels',     // IM channels (Slack/Telegram/WhatsApp/Discord) — CHANNELS-ARC P4
   'team',         // Team Sync URL + token (still gated by billing TEAMS LOCKED_TABS layer)
   'backup',       // Memory backup + restore
 ] as const;

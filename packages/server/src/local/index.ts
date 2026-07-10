@@ -121,7 +121,7 @@ import { costRoutes } from './routes/cost.js';
 import { backupRoutes } from './routes/backup.js';
 import { offlineRoutes } from './routes/offline.js';
 import { weaverRoutes } from './routes/weaver.js';
-import { eventRoutes, closeAuditDb, cleanupAuditEvents } from './routes/events.js';
+import { eventRoutes, closeAuditDb, cleanupAuditEvents, emitAuditEvent } from './routes/events.js';
 import { closeTeamsDb } from './routes/team.js';
 import { pinRoutes } from './routes/pins.js';
 import { documentRoutes } from './routes/documents.js';
@@ -129,6 +129,10 @@ import { fileRoutes } from './routes/files.js';
 import { browseRoutes } from './routes/browse.js';
 import { browserExtRoutes } from './routes/browser-ext.js';
 import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
+import { ChannelManager } from './channels/manager.js';
+import { channelRoutes } from './channels/routes.js';
+import { DreamJournal } from './dream-journal.js';
+import { dreamRoutes } from './routes/dreams.js';
 import { oauthRoutes } from './routes/oauth.js';
 import { waggleSignalRoutes } from './routes/waggle-signals.js';
 import { providerRoutes } from './routes/providers.js';
@@ -1475,6 +1479,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     server.agentState.skills.push(...fresh);
   };
 
+  // Dream Diary — records the nightly curation runs below so /api/dreams can
+  // narrate them to the user (docs/plans/DREAM-DIARY-2026-07-09.md).
+  const dreamJournal = new DreamJournal(fullConfig.dataDir);
+  server.decorate('dreamJournal', dreamJournal);
+
   // Local scheduler — runs cron jobs in-process (Solo, no Redis/BullMQ)
   const persistCronHistory = makeRecordExecutionCallback(cronStore);
   const scheduler = new LocalScheduler(cronStore, async (schedule) => {
@@ -1490,6 +1499,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               log.info(`[cron] Index reconciliation: FTS=${result.ftsFixed} vec=${result.vecFixed} fixed (personal)`);
             }
             // Reconcile workspace minds
+            let ftsTotal = result.ftsFixed;
+            let vecTotal = result.vecFixed;
             const workspaces = wsManager.list();
             for (const ws of workspaces) {
               const wsDb = getWorkspaceMindDb(ws.id);
@@ -1498,8 +1509,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 if (wsResult.ftsFixed > 0 || wsResult.vecFixed > 0) {
                   log.info(`[cron] Index reconciliation: FTS=${wsResult.ftsFixed} vec=${wsResult.vecFixed} fixed (workspace "${ws.name}")`);
                 }
+                ftsTotal += wsResult.ftsFixed;
+                vecTotal += wsResult.vecFixed;
               }
             }
+            dreamJournal.record('index_reconcile', { ftsFixed: ftsTotal, vecFixed: vecTotal });
           } catch (err) {
             log.warn(`[cron] Index reconciliation failed: ${(err as Error).message}`);
           }
@@ -1572,6 +1586,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               log.info(`[cron] Harvest sync: ${totalFrames} frames from ${totalItems} items across ${sourcesScanned} source(s)`
                 + (totalCouldNotVerify > 0 ? ` (${totalCouldNotVerify} could not be verified against the erasure list — skipped, fail-closed)` : ''));
             }
+            dreamJournal.record('harvest_sync', {
+              framesSaved: totalFrames,
+              itemsScanned: totalItems,
+              sourcesScanned,
+              couldNotVerify: totalCouldNotVerify,
+            });
           } catch (err) {
             log.warn(`[cron] Harvest sync failed: ${(err as Error).message}`);
           }
@@ -1595,6 +1615,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                 log.warn(`[cron] Memory compaction: workspace "${ws.name}" failed: ${(innerErr as Error).message}`);
               }
             }
+            dreamJournal.record('memory_compact', {
+              temporaryPruned: personalResult.temporaryPruned + wsTempPruned,
+              deprecatedPruned: personalResult.deprecatedPruned + wsDepPruned,
+              pframesMerged: personalResult.pframesMerged + wsMerged,
+            });
             const total =
               personalResult.temporaryPruned + personalResult.deprecatedPruned + personalResult.pframesMerged +
               wsTempPruned + wsDepPruned + wsMerged;
@@ -1636,6 +1661,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
               const wsDb = getWorkspaceMindDb(ws.id);
               if (wsDb) minds.push({ label: `workspace "${ws.name}"`, db: wsDb });
             }
+            let laneFramesProcessed = 0;
+            let laneFacts = 0;
+            let laneEvents = 0;
+            let laneProfiles = 0;
             for (const mind of minds) {
               try {
                 // D1 follow-up: one-time vector repair + chunk backfill per
@@ -1656,11 +1685,21 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
                     `profiles=${r.written?.profilesWritten ?? 0}` +
                     (r.errors.length ? ` (errors: ${r.errors.join('; ').slice(0, 200)})` : '')
                   );
+                  laneFramesProcessed += r.framesProcessed;
+                  laneFacts += r.written?.factsWritten ?? 0;
+                  laneEvents += r.written?.eventsWritten ?? 0;
+                  laneProfiles += r.written?.profilesWritten ?? 0;
                 }
               } catch (innerErr) {
                 log.warn(`[cron] Memory lanes (${mind.label}) failed: ${(innerErr as Error).message}`);
               }
             }
+            dreamJournal.record('memory_lane_extract', {
+              framesProcessed: laneFramesProcessed,
+              factsWritten: laneFacts,
+              eventsWritten: laneEvents,
+              profilesWritten: laneProfiles,
+            });
           } catch (err) {
             log.warn(`[cron] Memory lane extraction failed: ${(err as Error).message}`);
           }
@@ -2327,6 +2366,39 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(browseRoutes);
   await server.register(browserExtRoutes);
   await server.register(telegramRoutes);
+  // IM channel adapters (Slack/Telegram/WhatsApp/Discord) — see
+  // docs/plans/CHANNELS-ARC-2026-07-09.md. Manager owns adapter lifecycle;
+  // adapters run agent turns through loopback POST /api/chat.
+  {
+    const channelManager = new ChannelManager({
+      dataDir: server.localConfig.dataDir,
+      port: server.localConfig.port,
+      vault: { get: (key: string) => server.vault?.get(key) ?? null },
+      log: {
+        info: (msg: string) => server.log.info(msg),
+        warn: (msg: string) => server.log.warn(msg),
+      },
+      listWorkspaceIds: () => wsManager.list().map(w => w.id),
+      onAudit: (event) => emitAuditEvent(server, {
+        workspaceId: 'default',
+        eventType: event.type,
+        input: JSON.stringify({ platform: event.platform, detail: event.detail ?? '' }),
+      }),
+    });
+    server.decorate('channelManager', channelManager);
+    // Auto-start enabled channels once the server is up; skip under test to
+    // keep unit runs hermetic (mirrors the teams-server VITEST guard below).
+    if (!process.env.VITEST && process.env.NODE_ENV !== 'test') {
+      server.addHook('onReady', async () => {
+        await channelManager.startEnabled();
+      });
+    }
+    server.addHook('onClose', async () => {
+      await channelManager.stopAll();
+    });
+  }
+  await server.register(channelRoutes);
+  await server.register(dreamRoutes);
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
   await server.register(stripeRoutes);

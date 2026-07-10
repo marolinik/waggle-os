@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
   Download, Upload, Link2, Building, Wrench, DollarSign, Key, Lock, BarChart3, Trash2,
-  RotateCcw, GraduationCap, HelpCircle, AlertTriangle,
+  RotateCcw, GraduationCap, HelpCircle, AlertTriangle, MessageCircle,
 } from 'lucide-react';
 import PlanCards from '@/components/os/billing/PlanCards';
 import { useToast } from '@/hooks/use-toast';
@@ -33,17 +33,19 @@ import ModelPilotCard from '@/components/os/ModelPilotCard';
 import { ModelGate } from '@/components/os/model-gate/ModelGate';
 import EraseDataDialog from '@/components/os/overlays/EraseDataDialog';
 import TelegramDigestCard from '@/components/os/settings/TelegramDigestCard';
+import ChannelsSettings from '@/components/os/settings/ChannelsSettings';
 import CoverageCompassCard from '@/components/os/settings/CoverageCompassCard';
 import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
 import { SectionLabel } from '@/components/os/warm';
 
-type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'team' | 'backup' | 'enterprise' | 'advanced';
+type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'channels' | 'team' | 'backup' | 'enterprise' | 'advanced';
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
   { id: 'models', label: 'Models', icon: Cpu },
   { id: 'billing', label: 'Plan', icon: DollarSign },
   { id: 'permissions', label: 'Permissions', icon: Shield },
+  { id: 'channels', label: 'Channels', icon: MessageCircle },
   { id: 'team', label: 'Team', icon: Users },
   { id: 'backup', label: 'Backup', icon: Database },
   { id: 'enterprise', label: 'Enterprise', icon: Building },
@@ -799,6 +801,9 @@ const SettingsApp = () => {
             </div>
           </div>
         )}
+
+        {/* ═══ CHANNELS ═══ */}
+        {activeTab === 'channels' && <ChannelsSettings />}
 
         {/* ═══ TEAM ═══ */}
         {activeTab === 'team' && LOCKED_TABS.team && (

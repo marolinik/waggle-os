@@ -221,6 +221,8 @@ test-results/
 tests/screenshots/
 s*.png
 screen*.png
+# …but never the committed persona avatars (sales-rep/support-agent match s*.png)
+!apps/web/src/assets/personas/*.png
 tmp_bench_results.json
 tmp_bench_results-v5.json
 # R6/LPV eval run dumps — transient; verdicts live in docs/plans/*-RESULTS-*.md

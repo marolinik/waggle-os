@@ -37,7 +37,11 @@ export type AuditEventType =
   | 'export'
   | 'cron_trigger'
   | 'data_erase_requested'
-  | 'data_reimport_reconsented';
+  | 'data_reimport_reconsented'
+  // IM channel pairing trail (docs/plans/CHANNELS-ARC-2026-07-09.md §security)
+  | 'channel_pair'
+  | 'channel_pair_failed'
+  | 'channel_unpair';
 
 export interface AuditEvent {
   id?: number;
