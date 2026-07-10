@@ -10,7 +10,19 @@ This guide walks you through installing Waggle, configuring your API key, creati
 
 ## Installation
 
-### Option 1: Desktop App (Recommended)
+### Option 1: One-line self-host (Linux / macOS)
+
+Best for a VPS or homelab, where you want a headless server rather than the desktop app:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/marolinik/waggle-os/main/install.sh | bash
+```
+
+The installer checks prerequisites (Node.js 20+, git — no sudo), clones the repo, builds the packages and web UI, then starts the sidecar and prints its URL (`http://127.0.0.1:3333`). A short wizard (all Enter-defaulted) lets you change the install dir, port, and data dir; add `--yes` to accept every default non-interactively. It boots in echo mode with zero API keys, so the UI works right away — add a provider key later under **Settings → API Keys**.
+
+Manage the server afterward with `scripts/waggle-server.sh {start|stop|status|logs}`. Windows users should use the desktop app (Option 2) — the one-line installer targets Linux and macOS only.
+
+### Option 2: Desktop App (Recommended)
 
 Download the latest release for your platform from [GitHub Releases](https://github.com/marolinik/waggle/releases).
 
@@ -20,7 +32,7 @@ Download the latest release for your platform from [GitHub Releases](https://git
 
 The desktop app bundles a Node.js sidecar that runs the local server automatically.
 
-### Option 2: CLI / Web
+### Option 3: CLI / Web
 
 If you prefer a browser-based interface or want to run Waggle without the desktop shell:
 
@@ -37,7 +49,7 @@ npx tsx src/local/start.ts
 
 The server starts on http://localhost:3333. Open it in any browser.
 
-### Option 3: CLI REPL
+### Option 4: CLI REPL
 
 For a terminal-native experience:
 

@@ -1,0 +1,111 @@
+name: Installer Smoke
+
+# Authoritative Linux proof for the one-line self-host installer (steal #5).
+# The installer is developed on Windows, where the esbuild-hoist trap and CRLF
+# quirks are Windows-only — so a green `bash -n` locally is NOT proof it works
+# for the VPS/homelab audience. This job runs install.sh end-to-end from a
+# clean ubuntu runner: it actually installs, builds packages, boots the sidecar,
+# and asserts /health returns 200, then tears it down and asserts the port frees.
+on:
+  pull_request:
+    paths:
+      - install.sh
+      - scripts/waggle-server.sh
+      - .github/workflows/installer-smoke.yml
+  push:
+    paths:
+      - install.sh
+      - scripts/waggle-server.sh
+      - .github/workflows/installer-smoke.yml
+  workflow_dispatch:
+
+jobs:
+  installer-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Isolated from the checkout so we exercise the real "copy + fresh install"
+      # path, not an in-place build of the working tree.
+      WAGGLE_INSTALL_DIR: ${{ runner.temp }}/waggle
+      WAGGLE_DATA_DIR: ${{ runner.temp }}/wdata
+      WAGGLE_PORT: "3947"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # shellcheck ships pre-installed on ubuntu-latest runners. Findings are
+      # failures — the installer is user-facing shell that runs unsupervised via
+      # `curl | bash`, so lint cleanliness is a correctness gate, not a nicety.
+      - name: shellcheck installer scripts
+        run: shellcheck install.sh scripts/waggle-server.sh
+
+      # The real E2E. --local-source copies THIS checkout (tracked + untracked,
+      # excluding node_modules/dist) into a scratch dir, then does a from-scratch
+      # npm install + build:packages there. --no-web keeps it to API/echo mode
+      # (no vite build); --no-start hands the boot to waggle-server.sh below so we
+      # test the process manager too.
+      - name: Install (install.sh --yes, from-scratch)
+        run: |
+          ./install.sh \
+            --yes \
+            --no-web \
+            --no-start \
+            --local-source "$GITHUB_WORKSPACE" \
+            --dir "$WAGGLE_INSTALL_DIR" \
+            --data-dir "$WAGGLE_DATA_DIR" \
+            --port "$WAGGLE_PORT"
+
+      - name: Start the sidecar (waggle-server.sh start)
+        run: |
+          bash "$WAGGLE_INSTALL_DIR/scripts/waggle-server.sh" start \
+            --port "$WAGGLE_PORT" \
+            --data-dir "$WAGGLE_DATA_DIR"
+
+      # Defensive re-poll. waggle-server.sh already blocks until /health is 200
+      # (up to 60s; the sidecar spends ~9s on marketplace sync before listening),
+      # so this normally passes on the first attempt. The wider 90s budget guards
+      # against a slow cold runner without making the assertion flaky.
+      - name: Wait for /health (HTTP 200)
+        run: |
+          url="http://127.0.0.1:${WAGGLE_PORT}/health"
+          for i in $(seq 1 90); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$url" || echo 000)"
+            if [ "$code" = "200" ]; then
+              echo "healthy after ${i}s (HTTP 200)"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::/health did not return 200 within 90s"
+          echo "--- last sidecar log lines ---"
+          tail -n 40 "$WAGGLE_DATA_DIR/server.log" 2>/dev/null || true
+          exit 1
+
+      - name: Status
+        run: |
+          bash "$WAGGLE_INSTALL_DIR/scripts/waggle-server.sh" status \
+            --port "$WAGGLE_PORT" \
+            --data-dir "$WAGGLE_DATA_DIR"
+
+      - name: Stop
+        run: |
+          bash "$WAGGLE_INSTALL_DIR/scripts/waggle-server.sh" stop \
+            --port "$WAGGLE_PORT" \
+            --data-dir "$WAGGLE_DATA_DIR"
+
+      - name: Assert port is free after stop
+        run: |
+          url="http://127.0.0.1:${WAGGLE_PORT}/health"
+          if curl -fsS -o /dev/null --max-time 3 "$url"; then
+            echo "::error::/health still responding on port ${WAGGLE_PORT} after stop"
+            exit 1
+          fi
+          echo "port ${WAGGLE_PORT} is free"
+
+      - name: Dump sidecar log on failure
+        if: failure()
+        run: tail -n 100 "$WAGGLE_DATA_DIR/server.log" 2>/dev/null || echo "(no log file)"

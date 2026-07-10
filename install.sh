@@ -63,7 +63,7 @@ die()  { echo "${C_RED}error:${C_RESET} $*" >&2; exit 1; }
 
 on_interrupt() {
   # Restore sane terminal state if a wizard read was interrupted, then abort.
-  [ -e /dev/tty ] && stty sane </dev/tty >/dev/null 2>&1 || true
+  if [ -e /dev/tty ]; then stty sane </dev/tty >/dev/null 2>&1 || true; fi
   echo
   die "Aborted by user."
 }
@@ -267,7 +267,8 @@ verify_runtime() {
 write_marker() {
   local marker="$INSTALL_DIR/$MARKER_NAME"
   if [ -f "$marker" ]; then
-    local backup="${marker}.$(date +%Y%m%d%H%M%S).bak"
+    local backup
+    backup="${marker}.$(date +%Y%m%d%H%M%S).bak"
     cp "$marker" "$backup" 2>/dev/null || true
     info "Backed up existing marker to ${backup}"
   fi

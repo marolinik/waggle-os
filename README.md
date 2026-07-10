@@ -57,6 +57,22 @@ The monorepo has **28 packages** under `packages/`. They split into two groups.
 
 ## Quick Start
 
+### Self-host in one line (Linux / macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/marolinik/waggle-os/main/install.sh | bash
+```
+
+Best for a VPS or homelab — this runs a headless Waggle server (no desktop shell):
+
+- **Checks prerequisites, clones, builds, and starts** the Node.js sidecar, then prints the URL (`http://127.0.0.1:3333`). A 5-question wizard — install dir, port, data dir, build web UI, start now — is all Enter-defaulted; pass `--yes` to accept every default non-interactively.
+- **Boots with zero API keys** in echo mode so the UI works immediately. Add a provider key later under **Settings → API Keys**, where it is stored in the encrypted vault — keys are never passed on the command line.
+- **No sudo, ever.** A missing prerequisite prints the exact per-OS install command and exits; the installer never installs system packages for you.
+
+Manage the running server with the installed wrapper: `scripts/waggle-server.sh status | logs | stop | start`. Re-running the one-liner against an existing install prints an upgrade hint instead of reinstalling.
+
+### Run from source (development)
+
 ```bash
 # Prerequisites: Node.js >= 20, npm
 npm install

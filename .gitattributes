@@ -54,3 +54,8 @@ benchmarks/results/pilot-2026-04-26/*.log -text
 benchmarks/results/pilot-2026-04-26/prompts-archive/*.md -text
 benchmarks/results/pilot-2026-04-26/invalidated/*.jsonl -text
 decisions/*.md -text
+
+# Installer arc (steal #5, 2026-07-10): the shell installer + process manager
+# are consumed by `curl | bash` on Linux/macOS. A CRLF checkout would break the
+# shebang and `read`/`printf` parsing, so pin them to LF regardless of core.autocrlf.
+*.sh text eol=lf
