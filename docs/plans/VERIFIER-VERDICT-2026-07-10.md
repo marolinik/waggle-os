@@ -3,7 +3,9 @@
 **Date:** 2026-07-10 · **Auditor:** Fable adversarial verifier (read-only) · **Branch:** `feat/steals-2-3`
 **Under audit:** `d07fb03b` (Wave 2), `ce9f67ea` (Wave 1), plan `docs/plans/SELF-EVOLUTION-ARC-2026-07-10.md`
 
-## VERDICT: REJECTED
+## VERDICT: REJECTED → **APPROVED** after re-audit of `a4bcfe28` (see "Re-audit" at end)
+
+*(Original first-pass verdict below, retained for the record.)*
 
 One HIGH finding blocks approval. The core trust boundary (no *autonomous* disk/skill/memory
 write when disabled or unapproved) **holds and is well-tested** — the rejection is about the
@@ -147,3 +149,53 @@ a fingerprint update. Worst case is one duplicate/missed suppression — never a
 ## Path to APPROVED
 Fix **F1** (render held create_skill content in ApprovalsApp + a test). F2/F3 are strongly
 recommended before shipping self-evolution to users but can be listed follow-ups. F4-F6 are notes.
+
+---
+
+# Re-audit — fix commit `a4bcfe28` (2026-07-10)
+
+## FINAL VERDICT: APPROVED (zero CRITICAL, zero HIGH)
+
+Re-read the full diff of `a4bcfe28` and ran every affected suite myself from the worktree.
+
+### F1 (HIGH) — CLOSED
+`ApprovalsApp.tsx`: new `SkillPreview` renders the skill **name** up front + an
+expander showing the **exact bytes** `writeSkill` will persist, for any held action
+carrying `{name, content}` (`:251-253` gate, `:289-291` render). Content is rendered
+as text inside `<pre>{content}</pre>` — React-escaped, no `dangerouslySetInnerHTML`,
+so no XSS from an attacker-shaped skill body. Not shown for `send_email` (no
+`{name,content}`). The approver can no longer approve blind. Locked by
+`ApprovalsApp.test.tsx` (3/3): name visible, content collapsed-by-default then
+expandable to exact bytes then collapsible, absent for send_email, generic for any
+`{name,content}`.
+
+### F2 (MEDIUM) — CLOSED
+`memory-write-lint.ts`: bare `cannot/can't/could not/unable to` now fires ONLY when
+immediately followed by a capability verb (`connect|authenticate|access|load|run|…`),
+and `is down` carries a `(?!\s+for\s+maintenance)` lookahead. Verified against the
+three cited false-positives — all now `allow`: "cannot **stand** Sketch",
+"can't **work** without their Jira integration", "our API is down **for maintenance**".
+Real symptoms still caught ("failed to authenticate", "keeps timing out", "unavailable",
+"cannot **connect**"). Residual is a few exotic-verb false-negatives — the *safe*
+direction (memory kept). 35/35 lint tests pass.
+
+### F3 (MEDIUM) — CLOSED
+Intercept extracted to `held-action-executor.ts::decideReviewTurnTool()`; `chat.ts:1172`
+rewired to call it; `enqueueHeldAction`/`isProposableTool` imports removed with no
+dangling references (grep clean). Extraction is behavior-preserving (proposable→held+step,
+non-proposable→deny step, always `cancel:true`). Now unit-tested at the exact break point
+(`held-action-executor.test.ts` +3): create_skill → held row created & NOT written inline;
+`bash` (non-proposable) → denied, no row; injection-tripping create_skill → refused, no row.
+
+### Regression check — the previously-sound boundary is intact
+The persona tool-filter, `proposeHeld`-before-grant-store ordering, gated-`create_skill`→held
+path, and default-OFF watcher are all unchanged by this commit. No new autonomous-write path.
+
+### Verification I ran (worktree root, not the main checkout)
+- vitest: memory-write-lint **35/35**, idle-watcher **17/17**, notification-gate **14/14**,
+  session-reviewer-persona **2/2**, held-action-executor **17/17**, ApprovalsApp **3/3**.
+- tsc `--noEmit`: packages/agent **0**, packages/server **0**, apps/web **0**.
+
+### Remaining residuals (declared LOW — do not block)
+F4 (mtime-keyed fired-set → possible spurious re-review), F5 (RAM daily-cap/fired-set reset
+on restart), F6 (non-atomic NotificationGate save). Acceptable for v1; track as follow-ups.
