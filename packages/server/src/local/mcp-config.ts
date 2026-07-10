@@ -26,8 +26,8 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import { randomUUID } from 'node:crypto';
-import type { McpRuntime } from '@waggle/agent';
+import { randomUUID, createHash } from 'node:crypto';
+import type { McpRuntime, McpServerConfig } from '@waggle/agent';
 
 /** One persisted server entry (installer-compatible + workspaceId). */
 export interface PersistedMcpEntry {
@@ -189,4 +189,177 @@ export function populateMcpRuntimeFromConfig(
     log?.info(` Registered ${registered.length} persisted MCP server(s): ${registered.join(', ')}`);
   }
   return { registered, skipped };
+}
+
+// ── Hot-reload (.mcp.json) — steal #7 ─────────────────────────────────────
+//
+// Bring a running McpRuntime back into agreement with the on-disk config
+// WITHOUT a restart: a (mtime, sha256) signature fast-path skips the common
+// no-op case; a 3-way diff applies the delta surgically. State is preserved —
+// a changed server is only restarted if it was already running, additions are
+// registered stopped (matching the C4 boot loader), and a corrupt file NEVER
+// tears anything down. Triggered explicitly (POST /api/mcps/reload) and cheaply
+// piggybacked on GET /api/mcps.
+
+interface McpFileSignature {
+  mtimeMs: number;
+  hash: string;
+}
+
+/** Last-observed signature per config path (module-scoped: one runtime per process). */
+const mcpSignatureCache = new Map<string, McpFileSignature | 'missing'>();
+
+export interface McpReloadResult {
+  changed: boolean;
+  added: string[];
+  removed: string[];
+  /** Changed servers that were re-registered with new config. */
+  reregistered: string[];
+  /** Re-registered servers that were running and got restarted. */
+  restarted: string[];
+  skipped: Array<{ name: string; reason: string }>;
+  /** Set on parse failure — servers were left untouched. */
+  error?: string;
+}
+
+/** Reset the signature cache — test-only (each temp config starts clean). */
+export function _resetMcpSignatureCache(): void {
+  mcpSignatureCache.clear();
+}
+
+/** Config equality between a live runtime config and a persisted entry. */
+function entryConfigEqual(a: McpServerConfig, b: PersistedMcpEntry): boolean {
+  return (
+    a.command === b.command &&
+    JSON.stringify(a.args ?? []) === JSON.stringify(b.args ?? []) &&
+    JSON.stringify(a.env ?? {}) === JSON.stringify(b.env ?? {}) &&
+    (a.workspaceId ?? null) === (b.workspaceId ?? null)
+  );
+}
+
+/**
+ * Reconcile the runtime against `<dataDir>/.mcp.json` if the file changed since
+ * the last call. Cheap when unchanged (mtime short-circuit). Never throws.
+ */
+export async function refreshMcpIfChanged(
+  runtime: McpRuntime,
+  dataDir: string,
+  log?: { info?: (msg: string) => void; warn?: (msg: string) => void },
+): Promise<McpReloadResult> {
+  const empty: McpReloadResult = {
+    changed: false, added: [], removed: [], reregistered: [], restarted: [], skipped: [],
+  };
+  const file = mcpConfigPath(dataDir);
+
+  let stat: fs.Stats | null;
+  try { stat = fs.statSync(file); } catch { stat = null; }
+  const cached = mcpSignatureCache.get(file);
+
+  // Fast path: unchanged mtime (or still-missing file) → nothing to do.
+  if (stat === null) {
+    if (cached === 'missing') return empty;
+  } else if (cached && cached !== 'missing' && cached.mtimeMs === stat.mtimeMs) {
+    return empty;
+  }
+
+  let content = '';
+  let hash = 'missing';
+  if (stat !== null) {
+    try {
+      content = fs.readFileSync(file, 'utf-8');
+    } catch (err) {
+      log?.warn?.(`[mcp-config] reload read failed: ${(err as Error).message}`);
+      return empty;
+    }
+    hash = createHash('sha256').update(content).digest('hex');
+    // Same bytes, new mtime (a touch) — refresh the signature and no-op.
+    if (cached && cached !== 'missing' && cached.hash === hash) {
+      mcpSignatureCache.set(file, { mtimeMs: stat.mtimeMs, hash });
+      return empty;
+    }
+  }
+
+  // Parse explicitly (NOT loadMcpConfig — it quarantines + empties a corrupt
+  // file, which would masquerade here as "every server removed").
+  let desiredRaw: Record<string, unknown>;
+  if (stat === null) {
+    desiredRaw = {};
+  } else {
+    try {
+      const parsed = JSON.parse(content) as Partial<McpConfigFile>;
+      if (parsed === null || typeof parsed !== 'object'
+          || typeof parsed.mcpServers !== 'object' || parsed.mcpServers === null) {
+        throw new Error('missing mcpServers object');
+      }
+      desiredRaw = parsed.mcpServers as Record<string, unknown>;
+    } catch (err) {
+      // Bad file: warn, keep running servers, and record the signature so we
+      // don't re-warn until the file changes again.
+      log?.warn?.(`[mcp-config] reload skipped — unparseable .mcp.json: ${(err as Error).message}`);
+      mcpSignatureCache.set(file, { mtimeMs: stat.mtimeMs, hash });
+      return { ...empty, error: (err as Error).message };
+    }
+  }
+
+  const desired = new Map<string, PersistedMcpEntry>();
+  const skipped: Array<{ name: string; reason: string }> = [];
+  for (const [name, entry] of Object.entries(desiredRaw)) {
+    const invalid = validateMcpEntry(name, entry);
+    if (invalid) { skipped.push({ name, reason: invalid }); continue; }
+    desired.set(name, entry as PersistedMcpEntry);
+  }
+
+  const added: string[] = [];
+  const removed: string[] = [];
+  const reregistered: string[] = [];
+  const restarted: string[] = [];
+
+  // Removed: registered in the runtime, absent from the desired config.
+  for (const name of Object.keys(runtime.getServerStates())) {
+    if (!desired.has(name)) {
+      await runtime.removeServer(name); // stops the process if running
+      removed.push(name);
+    }
+  }
+
+  // Added / changed.
+  for (const [name, entry] of desired) {
+    const existing = runtime.getServer(name);
+    if (!existing) {
+      try {
+        runtime.addServer({ name, command: entry.command, args: entry.args, env: entry.env, workspaceId: entry.workspaceId });
+        added.push(name); // registered stopped (no surprise spawn)
+      } catch (err) {
+        skipped.push({ name, reason: (err as Error).message });
+      }
+      continue;
+    }
+    if (entryConfigEqual(existing.config, entry)) continue;
+
+    const state = existing.getState();
+    const wasRunning = state === 'ready' || state === 'starting';
+    await runtime.removeServer(name);
+    try {
+      runtime.addServer({ name, command: entry.command, args: entry.args, env: entry.env, workspaceId: entry.workspaceId });
+      reregistered.push(name);
+      if (wasRunning) {
+        try {
+          await runtime.getServer(name)!.start();
+          restarted.push(name);
+        } catch (err) {
+          skipped.push({ name, reason: `restart failed: ${(err as Error).message}` });
+        }
+      }
+    } catch (err) {
+      skipped.push({ name, reason: (err as Error).message });
+    }
+  }
+
+  mcpSignatureCache.set(file, stat === null ? 'missing' : { mtimeMs: stat.mtimeMs, hash });
+
+  const changed = added.length > 0 || removed.length > 0 || reregistered.length > 0;
+  if (changed) {
+    log?.info?.(`[mcp-config] hot-reload: +${added.length} -${removed.length} ~${reregistered.length}`);
+  }
+  return { changed, added, removed, reregistered, restarted, skipped };
 }

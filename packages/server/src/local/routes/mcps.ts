@@ -38,6 +38,7 @@ import {
   saveMcpServerEntry,
   removeMcpServerEntry,
   validateMcpEntry,
+  refreshMcpIfChanged,
   type PersistedMcpEntry,
 } from '../mcp-config.js';
 import { authHeaders, clampStr, clampStrArray } from './validate.js';
@@ -139,8 +140,21 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     state?: McpServerState;
   }
 
+  /** Adapt fastify's logger to the mcp-config helper's minimal shape. */
+  const reloadLog = {
+    info: (msg: string) => fastify.log.info(msg),
+    warn: (msg: string) => fastify.log.warn(msg),
+  };
+
   fastify.get('/api/mcps', async () => {
     const runtime = getRuntime();
+    // Cheap signature-checked hot-reload (steal #7): a no-op when .mcp.json is
+    // unchanged; picks up out-of-band edits (e.g. marketplace install to a
+    // different dataDir) without a restart. Never blocks the listing.
+    if (runtime) {
+      try { await refreshMcpIfChanged(runtime, dataDir(), reloadLog); }
+      catch (err) { fastify.log.warn({ err }, 'mcp hot-reload (GET piggyback) failed'); }
+    }
     const persisted = loadMcpConfig(dataDir()).mcpServers;
     const runtimeNames = new Set(Object.keys(runtime?.getServerStates() ?? {}));
     const installedNames = new Set([...Object.keys(persisted), ...runtimeNames]);
@@ -180,6 +194,19 @@ export async function mcpRoutes(fastify: FastifyInstance) {
     }
 
     return { mcps, total: mcps.length, installed: installedNames.size };
+  });
+
+  // ── POST /api/mcps/reload — explicit hot-reload of .mcp.json (steal #7) ──
+  // Reconciles the runtime with the on-disk config: added servers registered
+  // (stopped), removed servers stopped + dropped, changed servers re-registered
+  // (and restarted only if they were running). A no-op when nothing changed.
+  fastify.post('/api/mcps/reload', async (_request, reply) => {
+    const runtime = getRuntime();
+    if (!runtime) {
+      return reply.code(503).send({ error: 'MCP runtime not available' });
+    }
+    const result = await refreshMcpIfChanged(runtime, dataDir(), reloadLog);
+    return result;
   });
 
   // ── POST /api/mcps/install — free (Solo), delegates to the marketplace ──
