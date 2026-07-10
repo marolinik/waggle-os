@@ -69,6 +69,14 @@ LOGFILE="$DATA_DIR/server.log"
 HEALTH_URL="http://127.0.0.1:${PORT}/health"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+#
+# Liveness model: /health is the OS-agnostic source of truth for "is the server
+# up?". The recorded PID is only needed to *signal* the process on stop. We
+# never delete a pidfile just because a liveness probe said "no" — a POSIX
+# `kill -0` returns false for a native Windows PID under msys/Git Bash even
+# while the process is very much alive, and treating that false negative as
+# "stale" would orphan a running server. So pid_alive falls back to tasklist,
+# and stop falls back to taskkill, where POSIX signalling can't see the PID.
 
 # GET a URL, succeed only on a 2xx response. curl > wget; no pure-bash HTTP.
 http_ok() {
@@ -93,30 +101,47 @@ http_body() {
   fi
 }
 
-# Is a PID alive? POSIX kill -0.
-pid_alive() {
-  local pid="$1"
-  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+# Is the server actually accepting requests? The real readiness signal.
+server_up() { http_ok "$HEALTH_URL"; }
+
+# Read the recorded PID from the pidfile (digits only), or empty. Never mutates.
+read_pid() {
+  [ -f "$PIDFILE" ] || return 0
+  tr -dc '0-9' <"$PIDFILE" 2>/dev/null || true
 }
 
-# Read a live PID from the pidfile, or empty. Cleans a stale pidfile.
-read_live_pid() {
-  [ -f "$PIDFILE" ] || { echo ""; return; }
-  local pid
-  pid="$(cat "$PIDFILE" 2>/dev/null | tr -dc '0-9')"
-  if pid_alive "$pid"; then
-    echo "$pid"
-  else
-    rm -f "$PIDFILE" 2>/dev/null || true
-    echo ""
+# Is a PID alive? POSIX kill -0, with a Windows/msys tasklist fallback for the
+# native-PID case where kill -0 gives a false negative.
+pid_alive() {
+  local pid="$1"
+  [ -n "$pid" ] || return 1
+  if kill -0 "$pid" 2>/dev/null; then return 0; fi
+  if command -v tasklist >/dev/null 2>&1; then
+    tasklist //FI "PID eq ${pid}" //NH 2>/dev/null | grep -q "${pid}" && return 0
   fi
+  return 1
+}
+
+# Send a signal (TERM|KILL) to a PID. Falls back to taskkill when POSIX kill
+# cannot reach a native Windows PID (msys/Git Bash).
+signal_pid() {
+  local sig="$1" pid="$2"
+  if kill -"$sig" "$pid" 2>/dev/null; then return 0; fi
+  if command -v taskkill >/dev/null 2>&1; then
+    if [ "$sig" = "KILL" ]; then
+      taskkill //PID "$pid" //F >/dev/null 2>&1 && return 0
+    else
+      taskkill //PID "$pid" >/dev/null 2>&1 && return 0
+    fi
+  fi
+  return 1
 }
 
 # Poll $HEALTH_URL until healthy or timeout (seconds). Pure-bash 1s cadence.
 wait_for_health() {
   local timeout="${1:-45}" i=0
   while [ "$i" -lt "$timeout" ]; do
-    if http_ok "$HEALTH_URL"; then return 0; fi
+    if server_up; then return 0; fi
     sleep 1
     i=$((i + 1))
   done
@@ -142,9 +167,9 @@ resolve_tsx() {
 
 cmd_start() {
   local existing
-  existing="$(read_live_pid)"
-  if [ -n "$existing" ]; then
-    echo "Waggle is already running (pid ${existing}) at http://127.0.0.1:${PORT}"
+  existing="$(read_pid)"
+  if server_up || pid_alive "$existing"; then
+    echo "Waggle is already running${existing:+ (pid ${existing})} at http://127.0.0.1:${PORT}"
     return 0
   fi
 
@@ -172,11 +197,11 @@ cmd_start() {
     nohup "$tsx_bin" src/local/start.ts >>"$LOGFILE" 2>&1 &
   )
 
-  # The sidecar writes server.pid itself once it is listening; give it a beat,
-  # then wait on /health as the real readiness signal.
+  # The sidecar writes server.pid itself once it is listening; /health is the
+  # real readiness signal we wait on.
   if wait_for_health 60; then
     local pid
-    pid="$(read_live_pid)"
+    pid="$(read_pid)"
     echo "Waggle is running${pid:+ (pid ${pid})} at http://127.0.0.1:${PORT}"
     return 0
   fi
@@ -188,46 +213,59 @@ cmd_start() {
 
 cmd_stop() {
   local pid
-  pid="$(read_live_pid)"
-  if [ -z "$pid" ]; then
-    echo "Waggle is not running (no live pid at ${PIDFILE})."
+  pid="$(read_pid)"
+
+  if ! server_up && ! pid_alive "$pid"; then
+    echo "Waggle is not running."
+    rm -f "$PIDFILE" 2>/dev/null || true
     return 0
   fi
 
+  if [ -z "$pid" ]; then
+    echo "Waggle appears to be running on port ${PORT} but no pid file was found at ${PIDFILE}." >&2
+    echo "Cannot signal it safely; stop the process listening on ${PORT} manually." >&2
+    exit 1
+  fi
+
   echo "Stopping Waggle (pid ${pid})..."
-  kill -TERM "$pid" 2>/dev/null || true
+  signal_pid TERM "$pid" || true
 
   local i=0
   while [ "$i" -lt 3 ]; do
-    pid_alive "$pid" || break
+    if ! server_up && ! pid_alive "$pid"; then break; fi
     sleep 1
     i=$((i + 1))
   done
 
-  if pid_alive "$pid"; then
+  if server_up || pid_alive "$pid"; then
     echo "Process did not exit after TERM; sending KILL."
-    kill -KILL "$pid" 2>/dev/null || true
+    signal_pid KILL "$pid" || true
+    sleep 1
   fi
 
   rm -f "$PIDFILE" 2>/dev/null || true
+
+  if server_up; then
+    echo "Warning: /health still responding on port ${PORT} after stop." >&2
+    exit 1
+  fi
   echo "Waggle stopped."
 }
 
 cmd_status() {
   local pid
-  pid="$(read_live_pid)"
-  if [ -z "$pid" ]; then
-    echo "Waggle: stopped"
-    return 0
-  fi
-  echo "Waggle: running (pid ${pid}) at http://127.0.0.1:${PORT}"
-  if http_ok "$HEALTH_URL"; then
+  pid="$(read_pid)"
+  if server_up; then
+    echo "Waggle: running${pid:+ (pid ${pid})} at http://127.0.0.1:${PORT}"
     echo "Health: OK"
     local body
     body="$(http_body "$HEALTH_URL")"
     [ -n "$body" ] && echo "  $body"
+  elif pid_alive "$pid"; then
+    echo "Waggle: process ${pid} alive but /health not responding on port ${PORT}"
   else
-    echo "Health: pid alive but /health not responding on port ${PORT}"
+    echo "Waggle: stopped"
+    rm -f "$PIDFILE" 2>/dev/null || true
   fi
 }
 
