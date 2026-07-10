@@ -51,6 +51,14 @@ EOF
 }
 
 # ── Arg parsing ───────────────────────────────────────────────────────────────
+# True when $1 is a decimal integer within the valid TCP port range (1-65535).
+valid_port() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
 CMD="${1:-}"
 shift || true
 while [ $# -gt 0 ]; do
@@ -63,6 +71,8 @@ while [ $# -gt 0 ]; do
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+
+valid_port "$PORT" || { echo "Error: invalid --port '${PORT}': must be an integer between 1 and 65535." >&2; exit 2; }
 
 PIDFILE="$DATA_DIR/server.pid"
 LOGFILE="$DATA_DIR/server.log"
@@ -78,7 +88,30 @@ HEALTH_URL="http://127.0.0.1:${PORT}/health"
 # "stale" would orphan a running server. So pid_alive falls back to tasklist,
 # and stop falls back to taskkill, where POSIX signalling can't see the PID.
 
-# GET a URL, succeed only on a 2xx response. curl > wget; no pure-bash HTTP.
+# Pure-bash HTTP/1.0 GET over /dev/tcp: succeed only on a 2xx status line.
+# Fallback for minimal images that ship neither curl nor wget, so a healthy
+# sidecar is never reported as "did not become healthy" for lack of an HTTP
+# client. Plaintext + loopback only (no TLS, no redirects) — exactly what the
+# /health endpoint this script polls needs. Degrades to "return 2" (the same
+# no-client error as before) if this bash was built without /dev/tcp support.
+http_ok_devtcp() {
+  local url="$1" rest host port path line
+  rest="${url#http://}"
+  path="/${rest#*/}"; [ "$path" = "/${rest}" ] && path="/"
+  host="${rest%%/*}"
+  port="${host##*:}"; host="${host%%:*}"
+  [ "$port" = "$host" ] && port=80
+  exec 3<>"/dev/tcp/${host}/${port}" 2>/dev/null || return 2
+  printf 'GET %s HTTP/1.0\r\nHost: %s\r\nConnection: close\r\n\r\n' "$path" "$host" >&3
+  if ! IFS= read -r -t 3 line <&3; then exec 3<&- 3>&-; return 1; fi
+  exec 3<&- 3>&-
+  case "$line" in
+    HTTP/*" 2"[0-9][0-9]*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# GET a URL, succeed only on a 2xx response. curl > wget > pure-bash /dev/tcp.
 http_ok() {
   local url="$1"
   if command -v curl >/dev/null 2>&1; then
@@ -86,8 +119,7 @@ http_ok() {
   elif command -v wget >/dev/null 2>&1; then
     wget -q -T 3 -O /dev/null "$url" 2>/dev/null
   else
-    echo "Neither curl nor wget found; cannot check ${url}" >&2
-    return 2
+    http_ok_devtcp "$url"
   fi
 }
 

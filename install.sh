@@ -61,6 +61,14 @@ info() { echo "    $*"; }
 warn() { echo "${C_YELLOW}warning:${C_RESET} $*" >&2; }
 die()  { echo "${C_RED}error:${C_RESET} $*" >&2; exit 1; }
 
+# True when $1 is a decimal integer within the valid TCP port range (1-65535).
+valid_port() {
+  case "$1" in
+    ''|*[!0-9]*) return 1 ;;
+  esac
+  [ "$1" -ge 1 ] && [ "$1" -le 65535 ]
+}
+
 on_interrupt() {
   # Restore sane terminal state if a wizard read was interrupted, then abort.
   if [ -e /dev/tty ]; then stty sane </dev/tty >/dev/null 2>&1 || true; fi
@@ -91,6 +99,8 @@ while [ $# -gt 0 ]; do
     *) die "Unknown option: $1 (try --help)" ;;
   esac
 done
+
+valid_port "$PORT" || die "Invalid --port '${PORT}': must be an integer between 1 and 65535."
 
 # ── OS detection (for install hints; not a hard gate) ─────────────────────────
 UNAME_S="$(uname -s 2>/dev/null || echo unknown)"
@@ -218,7 +228,12 @@ run_wizard() {
   echo
   say "Setup (press Enter to accept each default)"
   ask INSTALL_DIR "Install directory" "$INSTALL_DIR"
-  ask PORT "Server port" "$PORT"
+  local __port_default="$PORT"
+  while :; do
+    ask PORT "Server port" "$__port_default"
+    valid_port "$PORT" && break
+    warn "Port must be an integer between 1 and 65535; try again."
+  done
   ask DATA_DIR "Data directory" "$DATA_DIR"
   ask_yesno BUILD_WEB "Build the web UI now" "$BUILD_WEB"
   ask_yesno START_NOW "Start the server when done" "$START_NOW"
@@ -243,13 +258,16 @@ verify_runtime() {
     db.close();
     console.log("sqlite-vec " + row.v);
   '
-  if ( cd "$INSTALL_DIR" && node -e "$script" ) 2>/tmp/waggle-verify.$$; then
-    info "$(cat /tmp/waggle-verify.$$ 2>/dev/null || true) — OK"
-    rm -f /tmp/waggle-verify.$$ 2>/dev/null || true
+  local errfile
+  errfile="$(mktemp "${TMPDIR:-/tmp}/waggle-verify.XXXXXX")" \
+    || die "Could not create a temporary file for the runtime check (is mktemp available?)."
+  if ( cd "$INSTALL_DIR" && node -e "$script" ) 2>"$errfile"; then
+    info "$(cat "$errfile" 2>/dev/null || true) — OK"
+    rm -f "$errfile" 2>/dev/null || true
     return 0
   fi
-  local err; err="$(cat /tmp/waggle-verify.$$ 2>/dev/null || true)"
-  rm -f /tmp/waggle-verify.$$ 2>/dev/null || true
+  local err; err="$(cat "$errfile" 2>/dev/null || true)"
+  rm -f "$errfile" 2>/dev/null || true
   warn "Native SQLite/sqlite-vec check failed:
     ${err}
   Remedies:
