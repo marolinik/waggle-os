@@ -34,8 +34,11 @@ export interface MemoryLintResult {
 const CAPABILITY_NOUN =
   /\b(tools?|skills?|connectors?|capabilit(?:y|ies)|integrations?|plugins?|mcp\s+servers?|apis?|connection)\b/i;
 
-// Failure verbs / phrases. Single broad words like "cannot" only fire when a
-// capability noun also appears in the same sentence (see classifySentence).
+// Failure verbs / phrases. A bare "cannot" / "can't" is NOT a failure signal on
+// its own — it also fronts preferences ("cannot stand Sketch") and dependence
+// ("can't work without Jira"), neither of which is a broken capability. It fires
+// only when directly followed by a capability verb (connect/authenticate/…), so
+// "cannot launch" trips but "cannot stand" / "can't work without" do not.
 const FAILURE_VERB = new RegExp(
   [
     /\bfail(?:ed|ing|s)?\b/.source,
@@ -46,10 +49,12 @@ const FAILURE_VERB = new RegExp(
     /\bno\s+longer\s+available\b/.source,
     /\berrors?\s+(?:out|when)\b/.source,
     /\b(?:return|throw|give|gave|got|threw|returns|throws|gives|returning|throwing)\s+(?:an?\s+)?errors?\b/.source,
-    /\b(?:ca\s*n['’]?t|can\s+not|cannot|could\s*n['’]?t|could\s+not|un(?:able|available)\s+to)\b/.source,
+    /\b(?:ca\s*n['’]?t|can\s*not|cannot|could\s*n['’]?t|could\s*not|unable\s+to)\s+(?:connect|authenticate|access|load|run|execute|reach|find|install|launch|open|start|respond|refresh|sync|fetch|retrieve|send|log\s*in|sign\s*in|complete|initiali[sz]e|render|save|read|write|be\s+reached|be\s+found)\b/.source,
     /\bbroken\b/.source,
     /\b(?:keeps?\s+)?(?:tim(?:e|ing)s?\s+out|timed\s+out|timing\s+out)\b/.source,
-    /\bis\s+down\b/.source,
+    // Planned downtime ("down for maintenance") is a status fact, not a broken
+    // capability — the lookahead lets it pass while "is down" still fires.
+    /\bis\s+down\b(?!\s+for\s+maintenance)/.source,
     /\bnot\s+responding\b/.source,
   ].join('|'),
   'i',

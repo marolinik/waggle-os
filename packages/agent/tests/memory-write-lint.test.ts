@@ -17,6 +17,8 @@ describe('memory-write-lint', () => {
       'The Playwright browser tool cannot launch on this machine.',
       'Failed to connect to Salesforce.',
       "The Stripe integration isn't working.",
+      // Bare "is down" still fires — only "down for maintenance" is exempt.
+      'The Notion MCP server is down right now.',
     ];
 
     for (const content of symptoms) {
@@ -48,6 +50,15 @@ describe('memory-write-lint', () => {
       'The report failed to impress the client.',
       "User's API key is stored in the vault.",
       'The Slack tool works great for the team.',
+      // ── F2 regression: a bare "cannot/can't" next to a capability noun is
+      //    NOT a broken-capability symptom. Preferences and dependence facts
+      //    (both legitimate memories) must pass.
+      "User's main tool is Figma; cannot stand Sketch.",           // preference
+      "User can't work without their Jira integration.",           // dependence (positive)
+      'Our API is down for maintenance this weekend.',             // planned status, not broken
+      "User loves the Notion integration but can't stand its mobile app.", // preference
+      "User can't imagine working without the Slack connector.",   // dependence (positive)
+      'The reporting tool cannot be beaten for speed.',            // praise
     ];
 
     for (const content of legit) {

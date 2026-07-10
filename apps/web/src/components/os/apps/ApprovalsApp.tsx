@@ -73,6 +73,36 @@ function summarizeInput(input: Record<string, unknown>): string {
   return '';
 }
 
+/**
+ * A held `create_skill` (and any proposal carrying `{name, content}`) must NOT
+ * approve blind: the approver sees the skill's name up front and can expand the
+ * exact bytes `writeSkill` will persist before allowing it. `summarizeInput`
+ * surfaces none of `{name, content}`, so without this the card showed only the
+ * tool name — a review-before-apply gap for the self-evolution loop.
+ */
+function SkillPreview({ name, content }: { name: string; content: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="mt-1 mb-2">
+      <p className="text-[11px] font-display text-[var(--text)]">
+        Skill: <span className="font-mono font-semibold text-honey">{name}</span>
+      </p>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        aria-expanded={expanded}
+        className="mt-1 inline-flex items-center gap-1 text-[10px] text-[var(--text-muted)] hover:text-foreground transition-colors"
+      >
+        {expanded ? 'Hide' : 'View'} skill content ({content.length} chars)
+      </button>
+      {expanded && (
+        <pre className="mt-1.5 max-h-48 overflow-auto rounded-md border border-border/30 bg-secondary/30 p-2 text-[10px] leading-relaxed text-[var(--text-muted)] font-mono whitespace-pre-wrap break-words">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 /** Error state for the trust surface — a failed load must never read as empty. */
 const ApprovalsError = ({ message, onRetry, retrying }: { message: string; onRetry: () => void; retrying: boolean }) => (
   <div role="alert" className="flex flex-col items-center justify-center h-full py-12 text-center">
@@ -221,6 +251,10 @@ const ApprovalsApp = () => {
           )}
           {pending.map(req => {
             const inputSummary = summarizeInput(req.input);
+            // A held create_skill's args are {name, content} — surfaced via
+            // SkillPreview so approval is never blind to the skill's bytes.
+            const skillName = typeof req.input.name === 'string' ? req.input.name : null;
+            const skillContent = typeof req.input.content === 'string' ? req.input.content : null;
             // Held (L2) actions have no "always allow" grant path — approve runs
             // them now. Risk is derived from the real tool name (trustworthy).
             const isHeld = req.source === 'held';
@@ -255,6 +289,9 @@ const ApprovalsApp = () => {
                     <Clock className="w-2.5 h-2.5" /> {formatRelative(req.timestamp)}
                   </span>
                 </div>
+                {skillName !== null && skillContent !== null && (
+                  <SkillPreview name={skillName} content={skillContent} />
+                )}
                 <div className="flex items-center gap-1.5">
                   {isHeld ? (
                     // Held (L2): no "always allow" grant path — approve runs it now.

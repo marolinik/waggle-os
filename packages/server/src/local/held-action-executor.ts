@@ -96,6 +96,49 @@ export function enqueueHeldAction(server: FastifyInstance, input: EnqueueInput):
   return { id };
 }
 
+export interface ReviewTurnDecision {
+  /** Audit step surfaced to the (headless) review stream. */
+  step: string;
+  /** Cancel reason for the pre:tool hook — a review turn never runs a tool inline. */
+  reason: string;
+  /** Enqueue outcome when the tool was proposable; null when the tool was denied. */
+  enqueued: EnqueueResult | null;
+}
+
+/**
+ * Decide what a self-evolution review turn does with a gated tool call. A
+ * proposable tool (create_skill, send_email, …) becomes a DURABLE held action
+ * awaiting human approval; any other gated tool is denied. Either way the tool
+ * is cancelled — a headless review turn never executes a tool inline, so the
+ * reviewer can never persist a skill (or send an email) without explicit
+ * human approval.
+ *
+ * Extracted from routes/chat.ts so this trust boundary is unit-testable: the
+ * chat.ts pre:tool hook that hosts this branch is only registered when
+ * `!hasCustomRunner`, and route-test harnesses inject a custom runner, so the
+ * branch is otherwise unreachable in a route test (same rationale as
+ * persona-tool-filter.ts).
+ */
+export function decideReviewTurnTool(server: FastifyInstance, input: EnqueueInput): ReviewTurnDecision {
+  const { tool } = input;
+  const reason = `Review turn: ${tool} held for approval`;
+  if (isProposableTool(tool)) {
+    const enq = enqueueHeldAction(server, input);
+    return {
+      step: 'refused' in enq
+        ? `⚠ ${tool} proposal refused (${enq.refused})`
+        : `📋 ${tool} held for your approval`,
+      reason,
+      enqueued: enq,
+    };
+  }
+  return {
+    step: `✖ ${tool} not permitted for review turns`,
+    reason,
+    enqueued: null,
+  };
+}
+
 export interface ExecuteResult {
   ok: boolean;
   status: PendingActionStatus;

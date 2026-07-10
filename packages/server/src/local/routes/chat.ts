@@ -40,7 +40,7 @@ import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter } from '../persona-tool-filter.js';
-import { enqueueHeldAction, isProposableTool } from '../held-action-executor.js';
+import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
 import type { GoalAncestry } from '@waggle/shared';
@@ -1169,23 +1169,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // NOT let a headless reviewer write a skill to disk. The trust boundary:
           // the reviewer can never persist a skill without explicit human approval.
           if (proposeHeldTurn) {
-            if (isProposableTool(ctx.toolName)) {
-              const enq = enqueueHeldAction(server, {
-                workspaceId: effectiveWorkspace || null,
-                source: `session-reviewer:${sessionId}`,
-                tool: ctx.toolName,
-                args,
-                summary: describeToolUse(ctx.toolName, args),
-              });
-              sendEvent('step', {
-                content: 'refused' in enq
-                  ? `\u26a0 ${ctx.toolName} proposal refused (${enq.refused})`
-                  : `\ud83d\udccb ${ctx.toolName} held for your approval`,
-              });
-            } else {
-              sendEvent('step', { content: `\u2716 ${ctx.toolName} not permitted for review turns` });
-            }
-            return { cancel: true, reason: `Review turn: ${ctx.toolName} held for approval` };
+            const decision = decideReviewTurnTool(server, {
+              workspaceId: effectiveWorkspace || null,
+              source: `session-reviewer:${sessionId}`,
+              tool: ctx.toolName,
+              args,
+              summary: describeToolUse(ctx.toolName, args),
+            });
+            sendEvent('step', { content: decision.step });
+            return { cancel: true, reason: decision.reason };
           }
 
           // H3: Auto-approve all tool requests when WAGGLE_AUTO_APPROVE=1 (testing only)
