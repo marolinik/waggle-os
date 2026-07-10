@@ -24,13 +24,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      # Isolated from the checkout so we exercise the real "copy + fresh install"
-      # path, not an in-place build of the working tree.
-      WAGGLE_INSTALL_DIR: ${{ runner.temp }}/waggle
-      WAGGLE_DATA_DIR: ${{ runner.temp }}/wdata
       WAGGLE_PORT: "3947"
     steps:
       - uses: actions/checkout@v4
+
+      # The `runner` context is not available in job-level env, so the scratch
+      # paths (isolated from the checkout to exercise the real "copy + fresh
+      # install" path) are computed here from $RUNNER_TEMP instead.
+      - name: Compute scratch paths
+        run: |
+          echo "WAGGLE_INSTALL_DIR=$RUNNER_TEMP/waggle" >> "$GITHUB_ENV"
+          echo "WAGGLE_DATA_DIR=$RUNNER_TEMP/wdata" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
