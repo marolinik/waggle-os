@@ -46,6 +46,8 @@ export type {
   SpawnFn,
 } from './cli-bridge.js';
 export { createCliBridge } from './cli-bridge.js';
+export type { RecallContextOptions } from './context-recall.js';
+export { recallPersonalAndWorkspace } from './context-recall.js';
 
 export type {
   Importance,

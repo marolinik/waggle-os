@@ -33,7 +33,14 @@ export function backupPathFor(configPath: string, isoTimestamp: string): string 
  */
 export function hookCommandFor(scriptPath: string, cliPath?: string): string {
   const cliFlag = cliPath && cliPath.length > 0 ? ` --cli-path "${cliPath}"` : '';
-  return `node "${scriptPath}"${cliFlag}`;
+  return `${hookNodeCommand()} "${scriptPath}"${cliFlag}`;
+}
+
+function hookNodeCommand(): string {
+  const configured = process.env.WAGGLE_HOOK_NODE_PATH?.trim();
+  if (!configured) return 'node';
+  if (configured.includes('"')) throw new Error('WAGGLE_HOOK_NODE_PATH cannot contain double quotes');
+  return `"${configured}"`;
 }
 
 /**

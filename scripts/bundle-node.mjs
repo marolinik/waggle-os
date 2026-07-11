@@ -3,6 +3,10 @@
  * Downloads the correct Node.js binary for the current platform and places it
  * in app/src-tauri/resources/ for Tauri bundling.
  *
+ * Defaults to the Node version running this script so copied native modules
+ * from node_modules match the bundled runtime ABI. Set
+ * WAGGLE_BUNDLED_NODE_VERSION to pin a different version intentionally.
+ *
  * Uses Node.js official distribution (https://nodejs.org/dist/).
  * Caches in scripts/.cache/ to avoid re-downloading.
  */
@@ -17,7 +21,11 @@ const root = path.resolve(__dirname, '..');
 const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 const cacheDir = path.join(__dirname, '.cache');
 
-const NODE_VERSION = '20.18.1';
+const NODE_VERSION = process.env.WAGGLE_BUNDLED_NODE_VERSION ?? process.versions.node;
+if (!/^\d+\.\d+\.\d+$/.test(NODE_VERSION)) {
+  console.error(`[bundle-node] FATAL — invalid Node.js version: ${NODE_VERSION}`);
+  process.exit(1);
+}
 const platform = process.platform;
 const arch = process.env.TARGET_ARCH || process.arch;
 

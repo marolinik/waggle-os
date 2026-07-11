@@ -2,6 +2,25 @@ import { describe, it, expect, vi } from 'vitest';
 import { HookRegistry, type HookEvent, type HookContext } from '../src/hooks.js';
 
 describe('HookRegistry', () => {
+  it('forks global hooks while isolating concurrent request handlers', async () => {
+    const parent = new HookRegistry();
+    const inherited: string[] = [];
+    parent.on('pre:tool', (ctx) => { inherited.push(String(ctx.sessionId)); });
+    const requestA = parent.fork();
+    const requestB = parent.fork();
+    requestA.on('pre:tool', (ctx) => ctx.sessionId === 'a'
+      ? { cancel: true, reason: 'request-a-only' }
+      : undefined);
+
+    const [a, b] = await Promise.all([
+      requestA.fire('pre:tool', { toolName: 'bash', sessionId: 'a' }),
+      requestB.fire('pre:tool', { toolName: 'bash', sessionId: 'b' }),
+    ]);
+
+    expect(a).toEqual({ cancelled: true, reason: 'request-a-only' });
+    expect(b).toEqual({ cancelled: false });
+    expect(inherited.sort()).toEqual(['a', 'b']);
+  });
   it('registers and fires pre:tool hooks', async () => {
     const registry = new HookRegistry();
     const fn = vi.fn();

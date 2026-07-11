@@ -6,15 +6,19 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { join, resolve } from 'node:path';
 import {
   launchTool,
   runHookCommand,
   hookPackageFor,
   HOOKS_COHORT,
+  resolveHookRuntime,
+  resolveSpawnInvocation,
+  type HookRuntimePaths,
   type ToolLauncherDeps,
   type ObservedHandle,
 } from '../src/tool-launcher.js';
-import { BUILTIN_TOOL_MANIFESTS, type ToolId } from '@waggle/shared';
+import { BUILTIN_TOOL_MANIFESTS, type ToolId, type ToolManifest } from '@waggle/shared';
 
 function captureSpawn() {
   const calls: Array<{
@@ -54,6 +58,14 @@ function captureExec(
     return result;
   };
   return { calls, execCapture };
+}
+
+function testHookRuntime(id: ToolId = 'claude-code'): HookRuntimePaths {
+  return {
+    nodePath: '/waggle/resources/node',
+    cliEntry: '/waggle/resources/node_modules/@waggle/hive-mind-cli/dist/index.js',
+    hookEntry: `/waggle/resources/node_modules/@waggle/hive-mind-hooks-${id}/dist/bin/${id}-hooks.js`,
+  };
 }
 
 // ── launchTool ──────────────────────────────────────────────────────
@@ -144,6 +156,50 @@ describe('launchTool', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('installedPath is required');
   });
+
+  it('accepts a launchable third-party adapter from the supplied registry', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    const thirdParty: ToolManifest = {
+      id: 'foo-cli',
+      displayName: 'Foo CLI',
+      launchable: true,
+      hookCapable: false,
+      hookPointer: '.foo/hive-mind-install.json',
+      detect: { kind: 'path', binaryName: 'foo' },
+      builtin: false,
+    };
+    const result = launchTool({
+      id: 'foo-cli',
+      installedPath: '/usr/local/bin/foo',
+      toolRegistry: [thirdParty],
+      deps: { spawnDetached },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.pid).toBe(12345);
+    expect(calls[0].binary).toBe('/usr/local/bin/foo');
+  });
+
+  it('refuses a registered adapter that is not launchable', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    const thirdParty: ToolManifest = {
+      id: 'foo-cli',
+      displayName: 'Foo CLI',
+      launchable: false,
+      hookCapable: false,
+      hookPointer: '.foo/hive-mind-install.json',
+      detect: { kind: 'path', binaryName: 'foo' },
+      builtin: false,
+    };
+    const result = launchTool({
+      id: 'foo-cli',
+      installedPath: '/usr/local/bin/foo',
+      toolRegistry: [thirdParty],
+      deps: { spawnDetached },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('not launchable');
+    expect(calls).toHaveLength(0);
+  });
 });
 
 // ── launchTool — self-enabling signal env (#1) ──────────────────────
@@ -215,75 +271,38 @@ describe('launchTool — self-enabling signal env', () => {
 // ── runHookCommand ──────────────────────────────────────────────────
 
 describe('runHookCommand', () => {
-  it('invokes npx with the right package + action for install', async () => {
+  it('invokes the packaged hook bin through bundled Node for install', async () => {
     const { calls, execCapture } = captureExec();
+    const runtime = testHookRuntime();
     const result = await runHookCommand({
       id: 'claude-code',
       action: 'install',
+      runtime,
+      dataDir: '/waggle-data',
       deps: { execCapture },
     });
     expect(result.ok).toBe(true);
-    expect(calls[0].binary).toBe('npx');
+    expect(calls[0].binary).toBe(runtime.nodePath);
     expect(calls[0].args).toEqual([
-      '--yes',
-      '@waggle/hive-mind-hooks-claude-code',
-      'install',
-    ]);
-  });
-
-  it('appends --cli-path when provided for install', async () => {
-    const { calls, execCapture } = captureExec();
-    await runHookCommand({
-      id: 'claude-code',
-      action: 'install',
-      cliPath: 'C:\\Users\\me\\AppData\\Roaming\\npm\\hive-mind-cli.js',
-      deps: { execCapture },
-    });
-    expect(calls[0].args).toEqual([
-      '--yes',
-      '@waggle/hive-mind-hooks-claude-code',
+      runtime.hookEntry,
       'install',
       '--cli-path',
-      'C:\\Users\\me\\AppData\\Roaming\\npm\\hive-mind-cli.js',
+      runtime.cliEntry,
     ]);
+    expect(calls[0].options?.env).toMatchObject({
+      WAGGLE_HOOK_NODE_PATH: runtime.nodePath,
+      HIVE_MIND_DATA_DIR: '/waggle-data',
+    });
   });
 
-  it('does not append --cli-path on verify even if provided (install-only flag)', async () => {
+  it('routes verify and uninstall without install-only CLI arguments', async () => {
     const { calls, execCapture } = captureExec();
-    await runHookCommand({
-      id: 'claude-code',
-      action: 'verify',
-      cliPath: '/usr/local/bin/hive-mind-cli',
-      deps: { execCapture },
-    });
-    expect(calls[0].args).not.toContain('--cli-path');
-  });
-
-  it('routes the verify action', async () => {
-    const { calls, execCapture } = captureExec();
-    await runHookCommand({
-      id: 'claude-code',
-      action: 'verify',
-      deps: { execCapture },
-    });
-    expect(calls[0].args).toEqual([
-      '--yes',
-      '@waggle/hive-mind-hooks-claude-code',
-      'verify',
-    ]);
-  });
-
-  it('routes the uninstall action', async () => {
-    const { calls, execCapture } = captureExec();
-    await runHookCommand({
-      id: 'claude-code',
-      action: 'uninstall',
-      deps: { execCapture },
-    });
-    expect(calls[0].args).toEqual([
-      '--yes',
-      '@waggle/hive-mind-hooks-claude-code',
-      'uninstall',
+    const runtime = testHookRuntime();
+    await runHookCommand({ id: 'claude-code', action: 'verify', runtime, deps: { execCapture } });
+    await runHookCommand({ id: 'claude-code', action: 'uninstall', runtime, deps: { execCapture } });
+    expect(calls.map((call) => call.args)).toEqual([
+      [runtime.hookEntry, 'verify'],
+      [runtime.hookEntry, 'uninstall'],
     ]);
   });
 
@@ -296,6 +315,7 @@ describe('runHookCommand', () => {
     const result = await runHookCommand({
       id: 'claude-code',
       action: 'install',
+      runtime: testHookRuntime(),
       deps: { execCapture },
     });
     expect(result.ok).toBe(true);
@@ -312,6 +332,7 @@ describe('runHookCommand', () => {
     const result = await runHookCommand({
       id: 'claude-code',
       action: 'install',
+      runtime: testHookRuntime(),
       deps: { execCapture },
     });
     expect(result.ok).toBe(false);
@@ -324,6 +345,7 @@ describe('runHookCommand', () => {
     const result = await runHookCommand({
       id: 'claude-code',
       action: 'install',
+      runtime: testHookRuntime(),
       deps: { execCapture },
     });
     expect(result.ok).toBe(false);
@@ -343,9 +365,10 @@ describe('runHookCommand', () => {
     'routes the hook command for HOOKS_COHORT tool (%s)',
     async (id) => {
       const { calls, execCapture } = captureExec();
-      const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });
+      const runtime = testHookRuntime(id);
+      const result = await runHookCommand({ id, action: 'install', runtime, deps: { execCapture } });
       expect(result.ok).toBe(true);
-      expect(calls[0].args).toEqual(['--yes', `@waggle/hive-mind-hooks-${id}`, 'install']);
+      expect(calls[0].args).toEqual([runtime.hookEntry, 'install', '--cli-path', runtime.cliEntry]);
     },
   );
 
@@ -357,6 +380,10 @@ describe('runHookCommand', () => {
     expect(result.ok).toBe(false);
     expect(result.error).toContain('not supported');
     expect(calls).toHaveLength(0);
+  });
+
+  it('fails closed when the packaged runtime payload cannot be resolved', () => {
+    expect(resolveHookRuntime('claude-code', { nodeModulesRoots: ['/missing'], fileExists: () => false })).toBeUndefined();
   });
 });
 
@@ -418,5 +445,80 @@ describe('launchTool observe mode', () => {
     expect(res.ok).toBe(false);
     expect(res.error).toBe('boom');
     expect(res.output).toBeUndefined();
+  });
+});
+
+describe('resolveHookRuntime', () => {
+  it('resolves the CLI and hook bin from an explicit staged node_modules root', () => {
+    const root = join('resources', 'node_modules');
+    const cliEntry = join(root, '@waggle', 'hive-mind-cli', 'dist', 'index.js');
+    const hookEntry = join(root, '@waggle', 'hive-mind-hooks-codex', 'dist', 'bin', 'codex-hooks.js');
+    const runtime = resolveHookRuntime('codex', {
+      nodePath: join('resources', 'node'),
+      nodeModulesRoots: [root],
+      fileExists: (candidate) => candidate === resolve(cliEntry) || candidate === resolve(hookEntry),
+    });
+    expect(runtime).toEqual({
+      nodePath: join('resources', 'node'),
+      cliEntry: resolve(cliEntry),
+      hookEntry: resolve(hookEntry),
+    });
+  });
+
+  it('injects the canonical Waggle data root for hook memory', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: '/usr/local/bin/claude',
+      dataDir: '/waggle-data',
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env?.HIVE_MIND_DATA_DIR).toBe('/waggle-data');
+  });
+
+  it('injects only the narrow Room credential and canonical run identity', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code', installedPath: '/usr/local/bin/claude',
+      runId: 'run-1', roomId: 'room-1', runToken: 'secret-run-token',
+      deps: { spawnDetached },
+    });
+    expect(calls[0].options.env).toMatchObject({
+      WAGGLE_RUN_ID: 'run-1',
+      WAGGLE_ROOM_ID: 'room-1',
+      WAGGLE_DANCE_TEAM_ID: 'room::room-1',
+      WAGGLE_SENDER_ID: 'run::run-1',
+      WAGGLE_RUN_TOKEN: 'secret-run-token',
+    });
+    expect(calls[0].options.env?.WAGGLE_SESSION_TOKEN).toBeUndefined();
+  });
+});
+
+describe('resolveSpawnInvocation', () => {
+  it('wraps Windows cmd shims through cmd.exe', () => {
+    const invocation = resolveSpawnInvocation(
+      'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd',
+      ['--version'],
+      'win32',
+    );
+    expect(invocation.binary).toBe('cmd.exe');
+    expect(invocation.args).toEqual([
+      '/d',
+      '/v:off',
+      '/s',
+      '/c',
+      'call "C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd" "--version"',
+    ]);
+    expect(invocation.windowsVerbatimArguments).toBe(true);
+  });
+
+  it('leaves Windows exe launches untouched', () => {
+    const invocation = resolveSpawnInvocation(
+      'C:\\Users\\test\\.local\\bin\\claude.exe',
+      ['--version'],
+      'win32',
+    );
+    expect(invocation.binary).toBe('C:\\Users\\test\\.local\\bin\\claude.exe');
+    expect(invocation.args).toEqual(['--version']);
   });
 });

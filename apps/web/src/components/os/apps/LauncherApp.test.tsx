@@ -9,7 +9,7 @@
  * static explainer content WITHOUT fabricating a live recall.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, within } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   adapter: {
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     launchTool: vi.fn(),
     manageHooks: vi.fn(),
     killTool: vi.fn(),
+    runExternalToolTask: vi.fn(),
     streamToolOutput: vi.fn(() => () => {}),
   },
 }));
@@ -47,6 +48,10 @@ beforeEach(() => {
   mocks.adapter.launchTool.mockResolvedValue({ ok: true, pid: 123 });
   mocks.adapter.manageHooks.mockResolvedValue({ ok: true });
   mocks.adapter.killTool.mockResolvedValue({ ok: true, pid: 123, reason: 'SIGTERM' });
+  mocks.adapter.runExternalToolTask.mockResolvedValue({
+    roomId: 'room-1',
+    runs: [{ runId: 'run-1', workspaceId: 'ws-1', status: 'queued', statusUrl: '/api/agent-runs/run-1' }],
+  });
 });
 afterEach(() => {
   cleanup();
@@ -117,6 +122,166 @@ describe('LauncherApp · live output (#4)', () => {
     fireEvent.click(badge);
     expect(await screen.findByText(/Waiting for output/i)).toBeInTheDocument();
     expect(mocks.adapter.streamToolOutput).toHaveBeenCalledWith(4242, expect.any(Object));
+  });
+});
+
+describe('LauncherApp · captured tasks', () => {
+  it('fans Codex and Hermes into two workspaces and opens their shared Room', async () => {
+    const onOpenRoom = vi.fn();
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'darwin',
+      detectedAt: '2026-07-11T00:00:00.000Z',
+      tools: [
+        {
+          id: 'codex',
+          displayName: 'Codex CLI',
+          installed: true,
+          installedPath: '/usr/local/bin/codex',
+          version: '0.144.1',
+          hooksInstalled: true,
+          hookPointerPath: '/home/.codex/hooks',
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: true,
+            structuredProgress: true,
+            resumable: true,
+            liveWaggleDance: false,
+          },
+          permissionModes: ['read-only', 'workspace-write', 'native'],
+        },
+        {
+          id: 'hermes',
+          displayName: 'Hermes',
+          installed: true,
+          installedPath: '/usr/local/bin/hermes',
+          version: '1.0.0',
+          hooksInstalled: true,
+          hookPointerPath: '/home/.hermes/hooks',
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: true,
+            structuredProgress: true,
+            resumable: true,
+            liveWaggleDance: true,
+          },
+          permissionModes: ['native'],
+        },
+        {
+          id: 'cursor',
+          displayName: 'Cursor',
+          installed: true,
+          installedPath: '/Applications/Cursor.app',
+          version: '1.0.0',
+          hooksInstalled: true,
+          hookPointerPath: '/home/.cursor/hooks',
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: false,
+            structuredProgress: false,
+            resumable: false,
+            liveWaggleDance: false,
+          },
+          permissionModes: [],
+        },
+        {
+          id: 'openclaw',
+          displayName: 'OpenClaw',
+          installed: false,
+          installedPath: null,
+          version: null,
+          hooksInstalled: false,
+          hookPointerPath: null,
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: true,
+            structuredProgress: true,
+            resumable: true,
+            liveWaggleDance: true,
+          },
+          permissionModes: ['native'],
+        },
+      ],
+    });
+    mocks.adapter.runExternalToolTask.mockResolvedValue({
+      roomId: 'room-multi',
+      runs: [
+        { runId: 'codex-a', toolId: 'codex', workspaceId: 'ws-a', status: 'queued', statusUrl: '/api/agent-runs/codex-a' },
+        { runId: 'codex-b', toolId: 'codex', workspaceId: 'ws-b', status: 'queued', statusUrl: '/api/agent-runs/codex-b' },
+        { runId: 'hermes-a', toolId: 'hermes', workspaceId: 'ws-a', status: 'queued', statusUrl: '/api/agent-runs/hermes-a' },
+        { runId: 'hermes-b', toolId: 'hermes', workspaceId: 'ws-b', status: 'queued', statusUrl: '/api/agent-runs/hermes-b' },
+        { runId: 'synthesis', toolId: 'hermes', workspaceId: 'ws-b', status: 'queued', statusUrl: '/api/agent-runs/synthesis' },
+      ],
+    });
+
+    render(
+      <LauncherApp
+        activeWorkspaceId="ws-a"
+        workspaces={[
+          { id: 'ws-a', name: 'Alpha' },
+          { id: 'ws-b', name: 'Beta' },
+        ]}
+        onOpenRoom={onOpenRoom}
+      />,
+    );
+
+    const codexCard = await screen.findByTestId('launcher-tool-codex');
+    fireEvent.click(within(codexCard).getByRole('button', { name: /run task/i }));
+    expect(screen.getByRole('checkbox', { name: 'Codex CLI' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Hermes' })).not.toBeChecked();
+    expect(screen.queryByRole('checkbox', { name: 'Cursor' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'OpenClaw' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Hermes' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Access for Codex CLI' }), {
+      target: { value: 'workspace-write' },
+    });
+    expect(screen.getByRole('combobox', { name: 'Access for Hermes' })).toHaveValue('native');
+    expect(screen.getByRole('checkbox', { name: 'Alpha' })).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Beta' }));
+    fireEvent.change(screen.getByLabelText('Task for Codex CLI'), {
+      target: { value: '  Compare both implementations  ' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /start in room/i }));
+
+    await waitFor(() => expect(mocks.adapter.runExternalToolTask).toHaveBeenCalledWith({
+      participants: [
+        { toolId: 'codex', access: 'workspace-write' },
+        { toolId: 'hermes', access: 'native' },
+      ],
+      workspaceIds: ['ws-a', 'ws-b'],
+      prompt: 'Compare both implementations',
+    }));
+    expect(screen.getByText('Started 2 agents across 2 workspaces (5 worker runs) — opening Room.')).toBeInTheDocument();
+    expect(onOpenRoom).toHaveBeenCalledWith('room-multi');
+  });
+
+  it('does not offer a captured task for a GUI-only tool', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'darwin',
+      detectedAt: '2026-07-11T00:00:00.000Z',
+      tools: [{
+        id: 'cursor',
+        displayName: 'Cursor',
+        installed: true,
+        installedPath: '/Applications/Cursor.app',
+        version: '1.0.0',
+        hooksInstalled: true,
+        hookPointerPath: '/home/.cursor/hooks',
+        capabilities: {
+          interactiveLaunch: true,
+          headlessTask: false,
+          structuredProgress: false,
+          resumable: false,
+          liveWaggleDance: false,
+        },
+        permissionModes: [],
+      }],
+    });
+
+    render(<LauncherApp workspaces={[{ id: 'ws-a', name: 'Alpha' }]} />);
+
+    expect(await screen.findByText('Cursor')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^launch$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /run task/i })).not.toBeInTheDocument();
   });
 });
 

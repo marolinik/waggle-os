@@ -1,13 +1,20 @@
-import type { FastifyPluginAsync } from 'fastify';
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { FrameStore, SessionStore } from '@waggle/core';
+import { scanForInjection } from '@waggle/agent';
 import {
   validateMessageTypeCombo,
   WaggleDanceDispatcher,
   type DispatchDeps,
 } from '@waggle/waggle-dance';
-import type { WaggleMessage, MessageType, MessageSubtype } from '@waggle/shared';
+import type {
+  CollaborationWorkerRun,
+  WaggleMessage,
+  MessageType,
+  MessageSubtype,
+} from '@waggle/shared';
 import { SignalBus } from '../signal-bus.js';
 import { installWaggleDanceBridge } from '../waggle-dance-bridge.js';
 
@@ -109,6 +116,10 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
     }
 
     const body = parsed.data;
+    const runAuth = authenticateRunRequest(server, request);
+    if (runAuth === null) {
+      return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_RUN_TOKEN' });
+    }
 
     // Validate type/subtype combo via the protocol module.
     if (
@@ -122,8 +133,12 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
       });
     }
 
-    const senderId = body.senderId ?? 'local';
-    const teamId = body.teamId ?? `personal::${senderId}`;
+    if (runAuth) {
+      const violation = validateRunEnvelope(runAuth, body);
+      if (violation) return reply.code(403).send({ error: 'Forbidden', code: 'RUN_SCOPE_VIOLATION', message: violation });
+    }
+    const senderId = runAuth ? `run::${runAuth.id}` : (body.senderId ?? 'local');
+    const teamId = runAuth ? `room::${runAuth.roomId}` : (body.teamId ?? `personal::${senderId}`);
 
     const message: WaggleMessage = {
       id: randomUUID(),
@@ -131,7 +146,12 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
       senderId,
       type: body.type as MessageType,
       subtype: body.subtype as MessageSubtype,
-      content: body.content,
+      content: runAuth ? {
+        ...body.content,
+        roomId: runAuth.roomId,
+        runId: runAuth.id,
+        workspaceId: runAuth.workspaceId,
+      } : body.content,
       referenceId: body.referenceId ?? null,
       routing: body.routing ?? null,
       createdAt: new Date(),
@@ -163,6 +183,15 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
         .code(400)
         .send({ error: dispatchResult.error, message });
     }
+
+    // Request handlers execute their local behavior but do not persist the
+    // envelope. Record successful requests once so Room peers can receive and
+    // answer them; broadcasts and responses are recorded by their callbacks.
+    if (message.type === 'request') {
+      bus.record(message);
+    }
+    if (runAuth) recordAuthenticatedRunSignal(server, runAuth, message);
+
     return reply.code(201).send({
       dispatched: true,
       response: dispatchResult.response,
@@ -179,6 +208,14 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
         .send({ error: 'Invalid query', details: parsed.error.flatten() });
     }
     const q = parsed.data;
+    const runAuth = authenticateRunRequest(server, request);
+    if (runAuth === null) {
+      return reply.code(401).send({ error: 'Unauthorized', code: 'INVALID_RUN_TOKEN' });
+    }
+    const runTeamId = runAuth ? `room::${runAuth.roomId}` : undefined;
+    if (runTeamId && q.teamId && q.teamId !== runTeamId) {
+      return reply.code(403).send({ error: 'Forbidden', code: 'RUN_SCOPE_VIOLATION' });
+    }
 
     // Validate subtype against the protocol enum if provided.
     const allowedSubtypes: MessageSubtype[] = [
@@ -193,13 +230,119 @@ const waggleDanceRoutesImpl: FastifyPluginAsync = async (server) => {
     const signals = bus.query({
       subtype: q.subtype as MessageSubtype | undefined,
       tool: q.tool,
-      teamId: q.teamId,
+      teamId: runTeamId ?? q.teamId,
       limit: q.limit,
       since: q.since,
     });
     return reply.code(200).send({ signals, total: signals.length });
   });
 };
+
+function recordAuthenticatedRunSignal(
+  server: FastifyInstance,
+  run: CollaborationWorkerRun,
+  message: WaggleMessage,
+): void {
+  if (message.type === 'request' || message.subtype === 'task_claim') return;
+  const summary = signalSummary(message.content);
+  if (!summary) return;
+  const scan = scanForInjection(summary, 'tool_output');
+  const safeSummary = scan.safe
+    ? summary.slice(0, 4_000)
+    : `[Quarantined agent signal: ${scan.flags.join(', ') || 'injection risk'}]`;
+  const current = server.agentRunRegistry.get(run.id);
+  if (!current || current.kind !== 'worker') return;
+
+  const personalFrameIds = [...(current.memoryRefs.personalFrameIds ?? [])];
+  const workspaceFrameIds = { ...(current.memoryRefs.workspaceFrameIds ?? {}) };
+  let personalStored = false;
+  try {
+    new SessionStore(server.multiMind.personal).ensure(
+      'agent-signals', 'agent-signals', 'Agent collaboration signals',
+    );
+    const frames = new FrameStore(server.multiMind.personal);
+    const frame = frames.createIFrame(
+      'agent-signals',
+      `[Agent collaboration signal]\nRoom: ${run.roomId}\nRun: ${run.id}\nWorkspace: ${run.workspaceId}\nTool: ${run.executor.toolId ?? 'agent'}\nSubtype: ${message.subtype}\nSummary: ${safeSummary.slice(0, 1_000)}`,
+      'normal',
+      'agent_inferred',
+    );
+    frames.setMetadata(frame.id, JSON.stringify({
+      messageId: message.id,
+      roomId: run.roomId,
+      runId: run.id,
+      workspaceId: run.workspaceId,
+      toolId: run.executor.toolId ?? null,
+      subtype: message.subtype,
+      injection: scan,
+    }));
+    if (!personalFrameIds.includes(frame.id)) personalFrameIds.push(frame.id);
+    personalStored = true;
+  } catch (err) {
+    server.log.warn({ err, runId: run.id }, 'failed to index authenticated agent signal');
+  }
+
+  const rawFrameId = message.content.frameId;
+  const frameId = typeof rawFrameId === 'number'
+    ? rawFrameId
+    : typeof rawFrameId === 'string' && /^\d+$/.test(rawFrameId) ? Number(rawFrameId) : undefined;
+  const workspaceStored = frameId !== undefined
+    && message.content.memoryWorkspace === run.workspaceId;
+  if (workspaceStored) {
+    workspaceFrameIds[run.workspaceId] = [
+      ...new Set([...(workspaceFrameIds[run.workspaceId] ?? []), frameId]),
+    ];
+  }
+
+  server.agentRunRegistry.update(run.id, {
+    ...(['queued', 'starting'].includes(current.status) ? { status: 'running' } : {}),
+    progress: { phase: message.subtype, message: safeSummary.slice(0, 500) },
+    result: { summary: safeSummary },
+    memoryRefs: {
+      status: personalStored && workspaceStored ? 'complete' : current.memoryRefs.status,
+      personalFrameIds,
+      workspaceFrameIds,
+    },
+  });
+}
+
+function signalSummary(content: Record<string, unknown>): string | undefined {
+  for (const key of ['summary', 'result', 'text', 'topic', 'message']) {
+    const value = content[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function authenticateRunRequest(
+  server: FastifyInstance,
+  request: FastifyRequest,
+): CollaborationWorkerRun | undefined | null {
+  const raw = request.headers['x-waggle-run-token'];
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string') return null;
+  return server.agentRunRegistry?.authenticateCredential(raw) ?? null;
+}
+
+function validateRunEnvelope(
+  run: CollaborationWorkerRun,
+  body: {
+    senderId?: string;
+    teamId?: string;
+    content: Record<string, unknown>;
+  },
+): string | undefined {
+  if (body.senderId && body.senderId !== `run::${run.id}`) return 'senderId is outside the credential scope';
+  if (body.teamId && body.teamId !== `room::${run.roomId}`) return 'teamId is outside the credential scope';
+  const reserved: Array<[string, string]> = [
+    ['roomId', run.roomId], ['runId', run.id], ['workspaceId', run.workspaceId],
+  ];
+  for (const [key, expected] of reserved) {
+    const value = body.content[key];
+    if (value !== undefined && value !== expected) return `${key} is outside the credential scope`;
+  }
+  return undefined;
+}
 
 /**
  * Plugin wrapped with fastify-plugin so the `signalBus` decoration

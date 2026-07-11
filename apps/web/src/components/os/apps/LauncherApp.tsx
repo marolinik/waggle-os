@@ -35,7 +35,11 @@ import {
   toolAcceptsInlinePrompt,
 } from '@/lib/launcher-prompt-args';
 import { ToolOutputPane } from './launcher/ToolOutputPane';
-import { BUILTIN_TOOL_MANIFESTS } from '@waggle/shared';
+import {
+  BUILTIN_TOOL_MANIFESTS,
+  type ExternalToolAccess,
+  type ToolCapabilities,
+} from '@waggle/shared';
 
 // #5 — derived from the shared manifest registry (single source of truth),
 // replacing the hand-maintained local copies. LAUNCH_COHORT = launchable tools;
@@ -48,6 +52,8 @@ const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m)
 interface DetectedTool {
   id: string;
   displayName: string;
+  capabilities?: ToolCapabilities;
+  permissionModes?: readonly ExternalToolAccess[];
   installed: boolean;
   installedPath: string | null;
   version: string | null;
@@ -62,7 +68,7 @@ interface DetectionResult {
   tools: DetectedTool[];
 }
 
-type ToolAction = 'launch' | 'install' | 'verify' | 'uninstall';
+type ToolAction = 'launch' | 'run' | 'install' | 'verify' | 'uninstall';
 
 /** Segmented-toggle view: A = the live launch UI; B = the memory-sharing explainer. */
 type LauncherView = 'a' | 'b';
@@ -82,9 +88,31 @@ interface ActionResult {
 interface LauncherAppProps {
   /** Active workspace id — injected into spawned tools as WAGGLE_WORKSPACE_ID. */
   activeWorkspaceId?: string;
+  workspaces?: Array<{ id: string; name: string; status?: string }>;
+  onOpenRoom?: (roomId: string) => void;
 }
 
-const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
+const ACCESS_LABELS: Record<ExternalToolAccess, string> = {
+  'read-only': 'Read only',
+  'workspace-write': 'Workspace write',
+  native: 'Native permissions',
+};
+
+const defaultAccessForTool = (tool: DetectedTool): ExternalToolAccess | null => {
+  const modes = tool.permissionModes ?? [];
+  return modes.includes('read-only') ? 'read-only' : (modes[0] ?? null);
+};
+
+const toolCanRunCapturedTask = (tool: DetectedTool): boolean =>
+  tool.installed &&
+  tool.capabilities?.headlessTask === true &&
+  (tool.permissionModes?.length ?? 0) > 0;
+
+const LauncherApp = ({
+  activeWorkspaceId,
+  workspaces = [],
+  onOpenRoom,
+}: LauncherAppProps = {}) => {
   const [view, setView] = useState<LauncherView>('a');
   const [detection, setDetection] = useState<DetectionResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,6 +120,10 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
   const [activeAction, setActiveAction] = useState<ActionState | null>(null);
   const [lastResult, setLastResult] = useState<ActionResult | null>(null);
   const [prompt, setPrompt] = useState('');
+  const [taskToolId, setTaskToolId] = useState<string | null>(null);
+  const [taskPrompt, setTaskPrompt] = useState('');
+  const [taskWorkspaceIds, setTaskWorkspaceIds] = useState<string[]>([]);
+  const [taskParticipants, setTaskParticipants] = useState<Record<string, ExternalToolAccess>>({});
   /**
    * AI-OS Phase 4 polish — set of tool ids currently running (at
    * least one tracked + alive pid). Used to render the 'Running'
@@ -220,7 +252,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
   );
 
   const doAction = useCallback(
-    async (tool: DetectedTool, action: ToolAction) => {
+    async (tool: DetectedTool, action: Exclude<ToolAction, 'run'>) => {
       setActiveAction({ toolId: tool.id, action });
       setLastResult(null);
       try {
@@ -293,6 +325,82 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
   );
 
   const tools = useMemo<DetectedTool[]>(() => detection?.tools ?? [], [detection]);
+  const availableWorkspaces = useMemo(
+    () => workspaces.filter((workspace) => workspace.status !== 'archived'),
+    [workspaces],
+  );
+  const taskCapableTools = useMemo(
+    () => tools.filter(toolCanRunCapturedTask),
+    [tools],
+  );
+
+  const openTaskComposer = useCallback((tool: DetectedTool) => {
+    const defaultAccess = defaultAccessForTool(tool);
+    if (!defaultAccess) return;
+    const defaultWorkspace = availableWorkspaces.find((workspace) => workspace.id === activeWorkspaceId)
+      ?? availableWorkspaces[0];
+    setTaskToolId(tool.id);
+    setTaskPrompt('');
+    setTaskWorkspaceIds(defaultWorkspace ? [defaultWorkspace.id] : []);
+    setTaskParticipants({ [tool.id]: defaultAccess });
+    setLastResult(null);
+  }, [activeWorkspaceId, availableWorkspaces]);
+
+  const toggleTaskParticipant = useCallback((tool: DetectedTool) => {
+    const defaultAccess = defaultAccessForTool(tool);
+    if (!defaultAccess) return;
+    setTaskParticipants((current) => {
+      if (current[tool.id]) {
+        const next = { ...current };
+        delete next[tool.id];
+        return next;
+      }
+      return { ...current, [tool.id]: defaultAccess };
+    });
+  }, []);
+
+  const toggleTaskWorkspace = useCallback((workspaceId: string) => {
+    setTaskWorkspaceIds((current) => current.includes(workspaceId)
+      ? current.filter((id) => id !== workspaceId)
+      : [...current, workspaceId]);
+  }, []);
+
+  const runCapturedTask = useCallback(async (tool: DetectedTool) => {
+    const task = taskPrompt.trim();
+    const participants = taskCapableTools.flatMap((candidate) => {
+      const access = taskParticipants[candidate.id];
+      return access ? [{ toolId: candidate.id, access }] : [];
+    });
+    if (!task || participants.length === 0 || taskWorkspaceIds.length === 0) return;
+    setActiveAction({ toolId: tool.id, action: 'run' });
+    setLastResult(null);
+    try {
+      const result = await adapter.runExternalToolTask({
+        participants,
+        workspaceIds: taskWorkspaceIds,
+        prompt: task,
+      });
+      setLastResult({
+        toolId: tool.id,
+        action: 'run',
+        ok: true,
+        message: `Started ${participants.length} agent${participants.length === 1 ? '' : 's'} across ${taskWorkspaceIds.length} workspace${taskWorkspaceIds.length === 1 ? '' : 's'} (${result.runs.length} worker run${result.runs.length === 1 ? '' : 's'}) — opening Room.`,
+      });
+      setTaskPrompt('');
+      setTaskToolId(null);
+      setTaskParticipants({});
+      onOpenRoom?.(result.roomId);
+    } catch (err) {
+      setLastResult({
+        toolId: tool.id,
+        action: 'run',
+        ok: false,
+        message: err instanceof Error ? err.message : 'Captured task failed to start',
+      });
+    } finally {
+      setActiveAction(null);
+    }
+  }, [onOpenRoom, taskCapableTools, taskParticipants, taskPrompt, taskWorkspaceIds]);
 
   return (
     <div className="flex flex-col h-full bg-background text-foreground">
@@ -426,6 +534,7 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
             return (
               <div
                 key={tool.id}
+                data-testid={`launcher-tool-${tool.id}`}
                 className="rounded-lg border border-border/40 bg-card/40 p-3 space-y-2"
               >
                 {/* Header row */}
@@ -497,6 +606,22 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                       )}
                       Launch
                     </Button>
+                    {toolCanRunCapturedTask(tool) && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="h-7 text-[11px]"
+                        onClick={() => openTaskComposer(tool)}
+                        disabled={isActive}
+                      >
+                        {isActive && activeAction?.action === 'run' ? (
+                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                        ) : (
+                          <Workflow className="w-3 h-3 mr-1" />
+                        )}
+                        Run task
+                      </Button>
+                    )}
                     {runningTools.has(tool.id) && (
                       <Button
                         size="sm"
@@ -560,6 +685,120 @@ const LauncherApp = ({ activeWorkspaceId }: LauncherAppProps = {}) => {
                         Uninstall hooks
                       </Button>
                     )}
+                  </div>
+                )}
+                {taskToolId === tool.id && toolCanRunCapturedTask(tool) && (
+                  <div
+                    className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3"
+                    data-testid={`captured-task-${tool.id}`}
+                  >
+                    <div>
+                      <p className="text-xs font-display font-semibold text-foreground">
+                        Captured agent team · started from {tool.displayName}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Each selected agent runs once per workspace. Progress, results, and memory return to one Room.
+                      </p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label htmlFor={`captured-task-prompt-${tool.id}`} className="text-[11px] font-medium text-foreground">
+                        Task
+                      </label>
+                      <textarea
+                        id={`captured-task-prompt-${tool.id}`}
+                        aria-label={`Task for ${tool.displayName}`}
+                        value={taskPrompt}
+                        onChange={(event) => setTaskPrompt(event.target.value)}
+                        rows={3}
+                        placeholder="Describe the result this agent should deliver…"
+                        className="w-full text-xs bg-background border border-border/50 rounded p-2 resize-y min-h-[64px] max-h-[220px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                    </div>
+                    <fieldset className="space-y-1.5">
+                      <legend className="text-[11px] font-medium text-foreground">Agents</legend>
+                      <div className="space-y-1.5">
+                        {taskCapableTools.map((candidate) => {
+                          const access = taskParticipants[candidate.id];
+                          return (
+                            <div
+                              key={candidate.id}
+                              className="flex flex-wrap items-center justify-between gap-2 rounded border border-border/40 bg-background/60 px-2 py-1.5"
+                            >
+                              <label className="flex items-center gap-2 text-[11px] text-foreground cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  aria-label={candidate.displayName}
+                                  checked={access !== undefined}
+                                  onChange={() => toggleTaskParticipant(candidate)}
+                                />
+                                <span>{candidate.displayName}</span>
+                              </label>
+                              {access && (
+                                <select
+                                  aria-label={`Access for ${candidate.displayName}`}
+                                  value={access}
+                                  onChange={(event) => setTaskParticipants((current) => ({
+                                    ...current,
+                                    [candidate.id]: event.target.value as ExternalToolAccess,
+                                  }))}
+                                  className="h-7 rounded border border-border/50 bg-background px-2 text-[11px] text-foreground"
+                                >
+                                  {(candidate.permissionModes ?? []).map((mode) => (
+                                    <option key={mode} value={mode}>{ACCESS_LABELS[mode]}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                    <fieldset className="space-y-1.5">
+                      <legend className="text-[11px] font-medium text-foreground">Workspaces</legend>
+                      {availableWorkspaces.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          {availableWorkspaces.map((workspace) => (
+                            <label
+                              key={workspace.id}
+                              className="flex items-center gap-2 rounded border border-border/40 bg-background/60 px-2 py-1.5 text-[11px] text-foreground cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={taskWorkspaceIds.includes(workspace.id)}
+                                onChange={() => toggleTaskWorkspace(workspace.id)}
+                              />
+                              <span className="truncate">{workspace.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground">Create a workspace before running a captured task.</p>
+                      )}
+                    </fieldset>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-[11px]"
+                        onClick={() => setTaskToolId(null)}
+                        disabled={isActive}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="h-7 text-[11px]"
+                        onClick={() => void runCapturedTask(tool)}
+                        disabled={isActive || !taskPrompt.trim() || Object.keys(taskParticipants).length === 0 || taskWorkspaceIds.length === 0}
+                      >
+                        {isActive && activeAction?.action === 'run' ? (
+                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                        ) : (
+                          <Workflow className="w-3 h-3 mr-1" />
+                        )}
+                        Start in Room
+                      </Button>
+                    </div>
                   </div>
                 )}
                 {inCohort && !tool.installed && (

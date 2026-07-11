@@ -28,7 +28,37 @@ import type {
   Command, CommandResult, WorkspaceType,
   ConnectorDefinition, ConnectorHealth, McpInstance, ExtensionType,
   InterpretResult, ResolvedAction,
+  CollaborationRun, CollaborationRunEvent, CollaborationRunSnapshot,
+  CollaborationRunControl, ExternalToolAccess, ToolDetectionResult,
 } from '@waggle/shared';
+
+export interface SpawnAgentResult {
+  id: string;
+  runId: string;
+  roomId: string;
+  workspaceId: string;
+  sessionId: string;
+  status: CollaborationRun['status'];
+  statusUrl: string;
+  resumable: boolean;
+  task: string;
+  persona: string;
+  model: string;
+}
+
+export interface AgentGroupRunResult {
+  jobId: string;
+  roomId?: string;
+  workspaceId?: string;
+  runIds?: string[];
+  groupId?: string;
+  groupName?: string;
+  strategy?: 'parallel' | 'sequential' | 'coordinator';
+  memberCount?: number;
+  task?: string;
+  status?: string;
+  message?: string;
+}
 
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
@@ -1573,7 +1603,7 @@ class LocalAdapter {
     await this.fetch(`/api/fleet/${workspaceId}/${serverAction}`, { method: 'POST' });
   }
 
-  async spawnAgent(data: { task: string; persona?: string; model?: string; parentWorkspaceId?: string }): Promise<FleetSession> {
+  async spawnAgent(data: { task: string; persona?: string; model?: string; parentWorkspaceId?: string }): Promise<SpawnAgentResult> {
     const res = await this.fetch('/api/fleet/spawn', { method: 'POST', body: JSON.stringify(data) });
     if (!res.ok) {
       // FR #15 Phase A: surface backend errors instead of returning the
@@ -1586,13 +1616,65 @@ class LocalAdapter {
       } catch { /* not JSON */ }
       throw new Error(`Spawn failed (${res.status}): ${detail ?? res.statusText}`);
     }
-    return res.json();
+    const body = await res.json() as Partial<SpawnAgentResult>;
+    if (!body.runId || !body.roomId || !body.workspaceId || !body.sessionId) {
+      throw new Error('Agent started without a canonical Room identity. Restart Waggle and try again.');
+    }
+    return body as SpawnAgentResult;
   }
 
   // --- Agent entity (UX-Refactor Phase 3 — S09/S18, B3 agents.json store) ---
   // Distinct from the legacy persona/fleet surfaces: these hit the new
   // /api/agents CRUD on the sidecar. `status/lastRunAt/successRate` on the
   // returned Agent are derived server-side at read (B3).
+
+  async getAgentRunSnapshot(): Promise<CollaborationRunSnapshot> {
+    const res = await this.fetch('/api/agent-runs/snapshot');
+    return res.json();
+  }
+
+  async getAgentRunEvents(since: number): Promise<{
+    lastSeq: number;
+    resetRequired: boolean;
+    events: CollaborationRunEvent[];
+    snapshot?: CollaborationRunSnapshot;
+  }> {
+    const res = await this.fetch(`/api/agent-runs/events?since=${Math.max(0, Math.floor(since))}`);
+    return res.json();
+  }
+
+  async controlAgentRun(
+    runId: string,
+    action: CollaborationRunControl,
+    message?: string,
+  ): Promise<CollaborationRun> {
+    const res = await this.fetch(`/api/agent-runs/${encodeURIComponent(runId)}/control`, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...(message ? { message } : {}) }),
+    });
+    const body = await res.json() as { run: CollaborationRun };
+    return body.run;
+  }
+
+  async runExternalToolTask(data: {
+    workspaceIds: string[];
+    prompt: string;
+    timeoutMs?: number;
+    sessionIds?: Record<string, string>;
+  } & (
+    | { toolId: string; access?: ExternalToolAccess; participants?: never }
+    | {
+      participants: Array<{ toolId: string; access: ExternalToolAccess }>;
+      toolId?: never;
+      access?: never;
+    }
+  )): Promise<{
+    roomId: string;
+    runs: Array<{ runId: string; workspaceId: string; toolId?: string; status: string; statusUrl: string }>;
+  }> {
+    const res = await this.fetch('/api/tools/run', { method: 'POST', body: JSON.stringify(data) });
+    return res.json();
+  }
 
   async listAgents(): Promise<Agent[]> {
     const res = await this.fetch('/api/agents');
@@ -2283,9 +2365,23 @@ class LocalAdapter {
     return res.json();
   }
 
-  async runAgentGroup(groupId: string, task: string): Promise<unknown> {
-    const res = await this.fetch(`/api/agent-groups/${groupId}/run`, { method: 'POST', body: JSON.stringify({ task, teamId: 'default' }) });
-    return res.json();
+  async runAgentGroup(
+    groupId: string,
+    task: string,
+    context: { workspaceId: string; teamId?: string },
+  ): Promise<AgentGroupRunResult> {
+    if (!context.workspaceId.trim()) throw new Error('workspaceId is required to run an agent group');
+    const res = await this.fetch(`/api/agent-groups/${groupId}/run`, {
+      method: 'POST',
+      body: JSON.stringify({
+        task,
+        workspaceId: context.workspaceId,
+        ...(context.teamId ? { teamId: context.teamId } : {}),
+      }),
+    });
+    const body = await res.json() as AgentGroupRunResult;
+    if (!body.jobId) throw new Error('Agent group run did not return a job id');
+    return body;
   }
 
   async getJobStatus(jobId: string): Promise<{ status: string; startedAt?: string; completedAt?: string; output?: unknown } | null> {
@@ -2800,20 +2896,7 @@ class LocalAdapter {
   // sidecar route. All are loopback-only and report only the user's
   // own machine — no remote calls.
 
-  async detectTools(): Promise<{
-    platform: string;
-    detectedAt: string;
-    tools: Array<{
-      id: string;
-      displayName: string;
-      installed: boolean;
-      installedPath: string | null;
-      version: string | null;
-      hooksInstalled: boolean;
-      hookPointerPath: string | null;
-      diagnostic?: string;
-    }>;
-  } | null> {
+  async detectTools(): Promise<ToolDetectionResult | null> {
     try {
       const res = await this.fetch('/api/tools/detect');
       if (!res.ok) return null;
@@ -2890,7 +2973,8 @@ class LocalAdapter {
     pid: number,
     handlers: { onLine: (line: string) => void; onExit: (code: number | null) => void },
   ): () => void {
-    return this.openSSE(`/api/tools/stream?pid=${pid}`, (es) => {
+    let close: () => void = () => {};
+    close = this.openSSE(`/api/tools/stream?pid=${pid}`, (es) => {
       es.addEventListener('line', (e) => {
         try {
           handlers.onLine(JSON.parse((e as MessageEvent).data).line);
@@ -2901,11 +2985,13 @@ class LocalAdapter {
       es.addEventListener('exit', (e) => {
         try {
           handlers.onExit(JSON.parse((e as MessageEvent).data).code ?? null);
+          close();
         } catch {
           /* skip malformed frame */
         }
       });
     });
+    return close;
   }
 
   async killTool(pid: number): Promise<{

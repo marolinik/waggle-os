@@ -23,7 +23,7 @@ describe('codex session-start handler', () => {
       exit: cap.exit,
       bridge,
     });
-    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 1, scope: 'personal' });
+    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 1, scope: 'personal', workspace: null });
     expect(cap.stdout).toHaveLength(1);
     const parsed = JSON.parse(cap.stdout[0]) as {
       hookSpecificOutput: { source: string; additionalContext: string };

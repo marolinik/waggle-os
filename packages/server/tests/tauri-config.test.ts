@@ -10,6 +10,66 @@ import path from 'node:path';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const TAURI_DIR = path.join(ROOT, 'app', 'src-tauri');
+const WINDOWS_1252_EXTRA_CODEPOINTS = new Set([
+  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030,
+  0x0160, 0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
+  0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
+]);
+const STAGED_DEPENDENCY_ALLOWLIST = new Set(['onnxruntime-web']);
+
+function isWindows1252PathSafe(value: string) {
+  for (const char of value) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code <= 0x7f || (code >= 0xa0 && code <= 0xff)) continue;
+    if (WINDOWS_1252_EXTRA_CODEPOINTS.has(code)) continue;
+    return false;
+  }
+  return true;
+}
+
+function listFiles(dir: string) {
+  const files: string[] = [];
+  const stack = [dir];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.isFile()) files.push(full);
+    }
+  }
+  return files;
+}
+
+function listPackageDirs(nodeModulesDir: string) {
+  if (!fs.existsSync(nodeModulesDir)) return [];
+  const packageDirs: string[] = [];
+  const stack = [nodeModulesDir];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const full = path.join(current, entry.name);
+      if (fs.existsSync(path.join(full, 'package.json'))) {
+        packageDirs.push(full);
+      }
+      stack.push(full);
+    }
+  }
+  return packageDirs;
+}
+
+function resolveWithinStagedResources(fromPackageDir: string, dep: string, resourcesDir: string) {
+  let current = fromPackageDir;
+  for (;;) {
+    const candidate = path.join(current, 'node_modules', ...dep.split('/'), 'package.json');
+    if (fs.existsSync(candidate)) return true;
+    if (path.resolve(current) === path.resolve(resourcesDir)) return false;
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
 
 describe('Tauri Production Configuration', () => {
   it('tauri.conf.json exists and has valid version', () => {
@@ -114,6 +174,56 @@ describe('Tauri Production Configuration', () => {
     expect(gitignore).toContain('app/src-tauri/resources/service.js');
     expect(gitignore).toContain('app/src-tauri/resources/service.js.map');
   });
+
+  it('bundle-node defaults to the Node version that stages native deps', () => {
+    const script = fs.readFileSync(path.join(ROOT, 'scripts', 'bundle-node.mjs'), 'utf-8');
+    expect(script).toContain(
+      'process.env.WAGGLE_BUNDLED_NODE_VERSION ?? process.versions.node',
+    );
+  });
+
+  it('sidecar resource preflight checks bundled Node ABI compatibility', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),
+      'utf-8',
+    );
+    expect(script).toContain('process.versions.modules');
+    expect(script).toContain('execFileSync(nodePath');
+  });
+
+  it('staged sidecar resources have Windows MSI codepage-safe relative paths', () => {
+    // WiX 3 links the en-US MSI with codepage 1252. Dependency test fixtures
+    // with paths such as "snowman" Unicode names must be pruned before MSI
+    // bundling or light.exe fails after the Rust build has already succeeded.
+    const resources = path.join(TAURI_DIR, 'resources');
+    const unsafe = listFiles(resources)
+      .map((file) => path.relative(resources, file))
+      .filter((file) => !isWindows1252PathSafe(file));
+
+    expect(unsafe).toEqual([]);
+  });
+
+  it('staged sidecar node_modules is self-contained after MSI extraction', () => {
+    // Running from app/src-tauri/resources can accidentally resolve missing
+    // packages from the repo root node_modules. The installed MSI layout cannot.
+    const resources = path.join(TAURI_DIR, 'resources');
+    const nodeModules = path.join(resources, 'node_modules');
+    const missing: string[] = [];
+
+    for (const packageDir of listPackageDirs(nodeModules)) {
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+      ) as { name?: string; dependencies?: Record<string, string> };
+      for (const dep of Object.keys(manifest.dependencies ?? {})) {
+        if (STAGED_DEPENDENCY_ALLOWLIST.has(dep)) continue;
+        if (!resolveWithinStagedResources(packageDir, dep, resources)) {
+          missing.push(`${path.relative(nodeModules, packageDir)} -> ${dep}`);
+        }
+      }
+    }
+
+    expect(missing).toEqual([]);
+  });
 });
 
 describe('CI/CD Configuration', () => {
@@ -148,6 +258,28 @@ describe('CI/CD Configuration', () => {
       'utf-8',
     );
     expect(workflow).toContain('stage-sidecar-deps');
+  });
+
+  it('release workflow builds packages before bundling the desktop sidecar', () => {
+    // Release builds must follow the same package -> sidecar ordering as the
+    // PR Tauri verification lane, otherwise tag artifacts can ship stale or
+    // missing workspace dist outputs even when PR verification was green.
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'release.yml'),
+      'utf-8',
+    );
+    const buildPackageIndexes = [...workflow.matchAll(/npm run build:packages/g)].map(
+      (match) => match.index ?? -1,
+    );
+    const sidecarIndexes = [...workflow.matchAll(/node scripts\/build-sidecar\.mjs/g)].map(
+      (match) => match.index ?? -1,
+    );
+
+    expect(buildPackageIndexes).toHaveLength(sidecarIndexes.length);
+    expect(sidecarIndexes).toHaveLength(2);
+    for (const [index, sidecarIndex] of sidecarIndexes.entries()) {
+      expect(buildPackageIndexes[index]).toBeLessThan(sidecarIndex);
+    }
   });
 });
 

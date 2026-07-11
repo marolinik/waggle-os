@@ -128,26 +128,27 @@ export async function agentRoutes(fastify: FastifyInstance) {
     if (!task.trim()) {
       return reply.code(400).send({ error: 'task is required' });
     }
+    if (!body?.teamId) {
+      return reply.code(400).send({ error: 'teamId is required to queue a group run' });
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.teamId)) {
+      return reply.code(400).send({ error: 'teamId must be a valid UUID' });
+    }
 
     // Build workflow template from group definition
     const { buildWorkflowFromGroup } = await import('../services/agent-group-executor.js');
     const workflow = buildWorkflowFromGroup({ ...group, description: group.description ?? undefined }, task);
 
-    // If teamId provided, also create a job record for tracking
-    let jobId: string | undefined;
-    if (body?.teamId) {
-      try {
-        const job = await agentService.createJob(request.userId, {
-          teamId: body.teamId,
-          jobType: 'group_execution',
-          input: { groupId: id, task, strategy: group.strategy, memberCount: group.members.length },
-        });
-        jobId = job.id;
-      } catch { /* non-blocking — job tracking is optional */ }
-    }
+    // Queue the same job type handled by the worker. The former path only
+    // inserted a database row with an unsupported job type, so runs stayed
+    // queued forever and no worker ever executed the workflow.
+    const job = await fastify.jobService.createJob(body.teamId, request.userId, 'group', {
+      groupId: id,
+      taskInput: { task },
+    });
 
     return reply.code(202).send({
-      jobId,
+      jobId: job.id,
       workflow: {
         name: workflow.name,
         steps: workflow.steps.length,

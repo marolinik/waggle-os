@@ -35,14 +35,17 @@ const CLI_BIN = 'hive-mind-cli';
 /**
  * Path resolution priority:
  *   1. HIVE_MIND_CLI_JS env override (CI / offline testing)
- *   2. Sibling checkout at ../hive-mind/packages/cli/dist/index.js
- *   3. Fall back to 'hive-mind-cli' on PATH (relies on cli-bridge's
+ *   2. In-monorepo package at packages/hive-mind-cli/dist/index.js
+ *   3. Sibling checkout at ../hive-mind/packages/cli/dist/index.js
+ *   4. Fall back to 'hive-mind-cli' on PATH (relies on cli-bridge's
  *      Windows shell:true codepath; acceptable for unit/integration but
  *      forced JS path keeps things hermetic).
  */
 function resolveCliJsPath(): string | undefined {
   const envOverride = process.env['HIVE_MIND_CLI_JS'];
   if (envOverride && existsSync(envOverride)) return envOverride;
+  const monorepo = resolve(import.meta.dirname, '..', '..', '..', 'hive-mind-cli', 'dist', 'index.js');
+  if (existsSync(monorepo)) return monorepo;
   const sibling = resolve(process.cwd(), '..', 'hive-mind', 'packages', 'cli', 'dist', 'index.js');
   if (existsSync(sibling)) return sibling;
   return undefined;

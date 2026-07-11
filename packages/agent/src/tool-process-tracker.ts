@@ -35,11 +35,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ToolId } from '@waggle/shared';
 
 export interface TrackedProcess {
   pid: number;
-  toolId: ToolId;
+  toolId: string;
   startedAt: string;
   workspaceId?: string;
   /**
@@ -209,7 +208,7 @@ export class ToolProcessTracker {
    */
   register(
     pid: number,
-    toolId: ToolId,
+    toolId: string,
     workspaceId?: string,
     opts?: { observed?: boolean },
   ): TrackedProcess {
@@ -231,9 +230,14 @@ export class ToolProcessTracker {
    * calls don't re-probe them.
    */
   list(): TrackedProcess[] {
+    let pruned = false;
     for (const pid of Array.from(this.processes.keys())) {
-      if (!this.isAlive(pid)) this.processes.delete(pid);
+      if (!this.isAlive(pid)) {
+        this.processes.delete(pid);
+        pruned = true;
+      }
     }
+    if (pruned) this.persist();
     return Array.from(this.processes.values());
   }
 

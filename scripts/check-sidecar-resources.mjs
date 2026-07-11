@@ -16,6 +16,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -25,8 +26,25 @@ const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 const missing = [];
 
 const nodeBinary = process.platform === 'win32' ? 'node.exe' : 'node';
-if (!fs.existsSync(path.join(resourcesDir, nodeBinary))) {
+const nodePath = path.join(resourcesDir, nodeBinary);
+if (!fs.existsSync(nodePath)) {
   missing.push(`resources/${nodeBinary} (run: node scripts/bundle-node.mjs)`);
+} else {
+  try {
+    const bundledAbi = execFileSync(nodePath, ['-p', 'process.versions.modules'], {
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    const currentAbi = process.versions.modules;
+    if (bundledAbi !== currentAbi) {
+      missing.push(
+        `resources/${nodeBinary} ABI ${bundledAbi} does not match current Node ABI ${currentAbi} ` +
+        '(run: node scripts/bundle-node.mjs with the same Node used for npm install/stage-sidecar-deps)',
+      );
+    }
+  } catch (err) {
+    missing.push(`resources/${nodeBinary} is not executable (${err.message})`);
+  }
 }
 
 const nativeDir = path.join(resourcesDir, 'native');
@@ -47,6 +65,23 @@ if (nativeEntries.length === 0) {
 const stagedDepsDir = path.join(resourcesDir, 'node_modules');
 if (!fs.existsSync(path.join(stagedDepsDir, 'better-sqlite3', 'package.json'))) {
   missing.push('resources/node_modules/* (run: node scripts/stage-sidecar-deps.mjs)');
+}
+
+// External agents and hook management run directly from this staged payload;
+// none of these packages are available from npm in a packaged installation.
+const hookRuntimeEntries = [
+  '@waggle/hive-mind-cli/dist/index.js',
+  '@waggle/hive-mind-hooks-claude-code/dist/bin/claude-code-hooks-cli.js',
+  '@waggle/hive-mind-hooks-codex/dist/bin/codex-hooks.js',
+  '@waggle/hive-mind-hooks-codex-desktop/dist/bin/codex-desktop-hooks.js',
+  '@waggle/hive-mind-hooks-cursor/dist/bin/cursor-hooks.js',
+  '@waggle/hive-mind-hooks-hermes/dist/bin/hermes-hooks.js',
+  '@waggle/hive-mind-hooks-openclaw/dist/bin/openclaw-hooks.js',
+];
+for (const entry of hookRuntimeEntries) {
+  if (!fs.existsSync(path.join(stagedDepsDir, ...entry.split('/')))) {
+    missing.push(`resources/node_modules/${entry} (run: node scripts/stage-sidecar-deps.mjs)`);
+  }
 }
 
 if (missing.length > 0) {

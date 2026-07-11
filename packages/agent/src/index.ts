@@ -502,6 +502,8 @@ export {
   launchTool,
   runHookCommand,
   hookPackageFor,
+  resolveHookRuntime,
+  resolveWaggleRuntime,
   type ToolLauncherDeps,
   type LaunchOptions,
   type LaunchResult,
@@ -509,6 +511,8 @@ export {
   type HookAction,
   type HookCommandOptions,
   type HookCommandResult,
+  type HookRuntimePaths,
+  type WaggleRuntimePaths,
 } from './tool-launcher.js';
 export {
   ToolProcessTracker,
@@ -525,3 +529,13 @@ export { renderGoalAncestry } from './goal-ancestry.js';
 export { getToolRegistry } from './tool-registry.js';
 export { loadThirdPartyManifests, type ManifestLoaderDeps } from './tool-manifest-loader.js';
 export { safeFetch, assertUrlAllowed, allowLocalFromEnv, EgressBlockedError } from './url-egress-guard.js';
+export {
+  runExternalTool,
+  buildExternalToolEnv,
+  type ExternalRunEvent,
+  type ExternalRunEventType,
+  type ExternalToolRunRequest,
+  type ExternalToolRunResult,
+  type ExternalProcessHandle,
+  type ExternalToolRunnerDeps,
+} from './external-tool-runner.js';

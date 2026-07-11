@@ -132,7 +132,7 @@ export const createCronSchema = z.object({
 });
 
 export const queueJobSchema = z.object({
-  jobType: z.enum(['chat', 'task', 'cron', 'waggle']),
+  jobType: z.enum(['chat', 'task', 'cron', 'waggle', 'group']),
   input: z.record(z.unknown()),
   teamId: z.string().uuid().optional(),
 });

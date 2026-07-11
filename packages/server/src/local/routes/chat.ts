@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
 import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
-import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 import { formatWorkspaceStatePrompt } from '../workspace-state.js';
@@ -43,6 +43,7 @@ import { applyPersonaToolFilter, filterMcpToolsForPersona } from '../persona-too
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
+import { bindChatCollaborationTools } from '../chat-collaboration.js';
 import type { GoalAncestry } from '@waggle/shared';
 import { GENERATION_FAILED_PREFIX } from '@waggle/shared';
 
@@ -695,6 +696,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // the hook into the shared hookRegistry, causing ghost confirmation prompts on every
     // subsequent request with closures pointing at dead sockets.
     let unregisterHook: (() => void) | undefined;
+    let requestHookRegistry: HookRegistry | undefined;
 
     // H-07 G4: hoist trace recorder/handle so the outer catch can finalize
     // aborted/errored traces with outcome='abandoned'. Without this, a failed
@@ -714,6 +716,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     try {
       const hasCustomRunner = !!server.agentRunner;
+      requestHookRegistry = hasCustomRunner ? undefined : hookRegistry.fork();
 
       // Resolve the agent runner (injectable for tests)
       const agentRunner: AgentRunner = server.agentRunner ?? runAgentLoop;
@@ -1134,7 +1137,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const autoApprove = AUTO_APPROVE;
         // Assignment (not declaration) — unregisterHook is declared at outer try scope
         // so the outer finally can always clean up regardless of which path we exit on.
-        unregisterHook = hasCustomRunner ? undefined : hookRegistry.on('pre:tool', async (ctx) => {
+        unregisterHook = requestHookRegistry?.on('pre:tool', async (ctx) => {
           if (!ctx.toolName) return;
           const args = (ctx.args ?? {}) as Record<string, unknown>;
 
@@ -1307,8 +1310,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         let effectiveTools = hasCustomRunner
           ? []
           : workspacePath
-            ? server.agentState.buildToolsForWorkspace(workspacePath)
+            ? wsSession?.tools
+              ?? server.agentState.buildToolsForWorkspace(workspacePath, sessionOrch, effectiveWorkspace)
             : allTools;
+        let spawnAvailableTools = effectiveTools;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
         // tool set. The always-available + read-only-write-strip policy lives in
@@ -1358,6 +1363,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             }
           }
 
+          spawnAvailableTools = effectiveTools;
           spawnAllowedToolNames = new Set(effectiveTools.map(t => t.name));
           const beforeNarrowing = effectiveTools.length;
           effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
@@ -1467,6 +1473,27 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           } catch { /* governance not available — allow all */ }
         }
 
+        // Bind collaboration producers to THIS request's workspace, session,
+        // security policy, and runner. Static startup tools are replaced only
+        // when their names survived persona/availability/intent filtering.
+        if (!hasCustomRunner) {
+          effectiveTools = bindChatCollaborationTools({
+            server,
+            visibleTools: effectiveTools,
+            workerTools: spawnAvailableTools,
+            workspaceId: effectiveWorkspace,
+            parentSessionId: sessionId,
+            parentTask: agentMessage,
+            model: resolvedModel,
+            runLoop: agentRunner,
+            securityContext: {
+              hooks: requestHookRegistry,
+              blockedTools: governancePolicies?.blockedTools,
+              allowedToolNames: spawnAllowedToolNames,
+            },
+          });
+        }
+
         // Iteration budget — prevents runaway agent loops
         const iterBudget = new IterationBudget({
           maxIterations: 90,
@@ -1483,7 +1510,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           messages: windowedMessages,
           stream: true,
           maxTurns: 200, // Persistent agents need many turns for complex research + document generation
-          hooks: hasCustomRunner ? undefined : hookRegistry,
+          hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
           pluginTools,
@@ -1665,18 +1692,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 });
               }
             : undefined,
-        };
-
-        // SEC: publish the request-scoped security context so sub-agents /
-        // workflow workers spawned during this run inherit the SAME approval
-        // gate, governance denylist, and persona allowlist as the main loop.
-        // Without this, spawned agents ran the full tool pool with no
-        // confirmation gate (the sub-agent confirmation-bypass). Cleared in the
-        // outer finally so it never leaks into a later run.
-        server.agentState.spawnSecurityContext = hasCustomRunner ? null : {
-          hooks: hookRegistry,
-          blockedTools: governancePolicies?.blockedTools,
-          allowedToolNames: spawnAllowedToolNames,
         };
 
         // ── Run agent with credential pool + fallback chain ──
@@ -2096,10 +2111,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
-      // SEC: drop the request-scoped spawn security context. It must not leak
-      // into a later run, which could otherwise apply a stale workspace's
-      // governance / persona restrictions to a freshly spawned sub-agent.
-      server.agentState.spawnSecurityContext = null;
       // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
       // already unregisters and sets to undefined; this guarantees we never leak the
       // hook into the shared hookRegistry on any exception path.

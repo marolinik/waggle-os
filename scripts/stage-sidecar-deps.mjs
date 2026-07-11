@@ -29,6 +29,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
@@ -38,6 +39,16 @@ const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 // Must match the metafile path written by build-sidecar.mjs (temp, not repo).
 const metaFile = path.join(os.tmpdir(), 'waggle-sidecar-meta.json');
 const stageDir = path.join(resourcesDir, 'node_modules');
+const hookRuntimeBuild = path.join(root, 'scripts', 'build-hook-runtime.mjs');
+const HOOK_RUNTIME_ROOTS = new Set([
+  '@waggle/hive-mind-cli',
+  '@waggle/hive-mind-hooks-claude-code',
+  '@waggle/hive-mind-hooks-codex',
+  '@waggle/hive-mind-hooks-codex-desktop',
+  '@waggle/hive-mind-hooks-cursor',
+  '@waggle/hive-mind-hooks-hermes',
+  '@waggle/hive-mind-hooks-openclaw',
+]);
 
 const platform = process.platform;
 const arch = process.env.TARGET_ARCH || process.arch;
@@ -77,6 +88,24 @@ const SKIP = new Set([
 ]);
 
 const BUILTINS = new Set(builtinModules);
+const RUNTIME_PRUNED_DIR_NAMES = new Set([
+  '.github',
+  '__tests__',
+  'benchmark',
+  'benchmarks',
+  'coverage',
+  'example',
+  'examples',
+  'fixture',
+  'fixtures',
+  'test',
+  'tests',
+]);
+const WINDOWS_1252_EXTRA_CODEPOINTS = new Set([
+  0x20ac, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030,
+  0x0160, 0x2039, 0x0152, 0x017d, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
+  0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
+]);
 
 /** Map an import specifier to its top-level package name (handles scopes/subpaths). */
 function toPackageName(spec) {
@@ -129,13 +158,29 @@ function resolvePkgDir(name, fromDir) {
 }
 
 let copiedPackages = 0;
+let prunedRuntimeDirs = 0;
+
+function isWorkspacePackageDir(pkgDir) {
+  const realDir = fs.realpathSync.native(pkgDir);
+  return [path.join(root, 'packages'), path.join(root, 'apps')].some((workspaceRoot) => {
+    const relative = path.relative(workspaceRoot, realDir);
+    return relative !== '' && !relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative);
+  });
+}
 
 /** Recursively copy a package dir, preserving native binaries and nested deps. */
 function copyPackage(srcDir, name) {
   const destDir = path.join(stageDir, name);
   if (fs.existsSync(destDir)) return; // already staged (dedup by flat name)
   fs.mkdirSync(path.dirname(destDir), { recursive: true });
-  fs.cpSync(srcDir, destDir, { recursive: true, dereference: true });
+  const copyOptions = { recursive: true, dereference: true };
+  if (isWorkspacePackageDir(srcDir)) {
+    // npm does not publish a workspace package's local node_modules. Copying
+    // it from a dereferenced workspace symlink would leak dev-only packages;
+    // production dependencies are staged separately from the manifest below.
+    copyOptions.filter = (source) => path.basename(source) !== 'node_modules';
+  }
+  fs.cpSync(srcDir, destDir, copyOptions);
   copiedPackages++;
 }
 
@@ -154,12 +199,12 @@ function readManifest(pkgDir) {
  * nested node_modules ride along inside their parent for version-pinned deps.
  */
 function stageClosure(rootNames) {
-  const staged = new Set();
+  const processedDirs = new Set();
   const queue = [...rootNames].map((name) => ({ name, fromDir: root }));
 
   while (queue.length > 0) {
     const { name, fromDir } = queue.shift();
-    if (SKIP.has(name) || staged.has(name)) continue;
+    if (SKIP.has(name)) continue;
 
     const pkgDir = resolvePkgDir(name, fromDir);
     if (!pkgDir) {
@@ -167,17 +212,19 @@ function stageClosure(rootNames) {
       // guards these or never reaches them — nothing to stage.
       continue;
     }
-    staged.add(name);
+    const pkgKey = fs.realpathSync.native(pkgDir);
+    if (processedDirs.has(pkgKey)) continue;
+    processedDirs.add(pkgKey);
     copyPackage(pkgDir, name);
 
     const manifest = readManifest(pkgDir);
     const deps = { ...manifest.dependencies, ...manifest.optionalDependencies };
     for (const dep of Object.keys(deps)) {
-      if (SKIP.has(dep) || staged.has(dep)) continue;
+      if (SKIP.has(dep)) continue;
       queue.push({ name: dep, fromDir: pkgDir });
     }
   }
-  return staged;
+  return processedDirs;
 }
 
 /**
@@ -246,6 +293,122 @@ function pruneSkipListed(dir) {
   }
 }
 
+function isPackageContainer(dir) {
+  const base = path.basename(dir);
+  if (base === 'node_modules') return true;
+  return base.startsWith('@') && path.basename(path.dirname(dir)) === 'node_modules';
+}
+
+/**
+ * npm packages often ship tests, fixtures, examples, and CI metadata. They are
+ * not loaded by the packaged sidecar, and they can contain filenames that WiX
+ * cannot encode in the en-US MSI database codepage.
+ */
+function pruneRuntimeOnlyDirs(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(dir, entry.name);
+    const name = entry.name.toLowerCase();
+    if (!isPackageContainer(dir) && RUNTIME_PRUNED_DIR_NAMES.has(name)) {
+      fs.rmSync(full, { recursive: true, force: true });
+      prunedRuntimeDirs++;
+      continue;
+    }
+    pruneRuntimeOnlyDirs(full);
+  }
+}
+
+function isWindows1252PathSafe(value) {
+  for (const char of value) {
+    const code = char.codePointAt(0) || 0;
+    if (code <= 0x7f || (code >= 0xa0 && code <= 0xff)) continue;
+    if (WINDOWS_1252_EXTRA_CODEPOINTS.has(code)) continue;
+    return false;
+  }
+  return true;
+}
+
+function listFiles(dir) {
+  const files = [];
+  const stack = [dir];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.isFile()) files.push(full);
+    }
+  }
+  return files;
+}
+
+function listPackageDirs(nodeModulesDir) {
+  if (!fs.existsSync(nodeModulesDir)) return [];
+  const packageDirs = [];
+  const stack = [nodeModulesDir];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const full = path.join(current, entry.name);
+      if (fs.existsSync(path.join(full, 'package.json'))) {
+        packageDirs.push(full);
+      }
+      stack.push(full);
+    }
+  }
+  return packageDirs;
+}
+
+function resolveWithinStagedResources(fromPackageDir, dep) {
+  let current = fromPackageDir;
+  for (;;) {
+    const candidate = path.join(current, 'node_modules', ...dep.split('/'), 'package.json');
+    if (fs.existsSync(candidate)) return true;
+    if (path.resolve(current) === path.resolve(resourcesDir)) return false;
+    const parent = path.dirname(current);
+    if (parent === current) return false;
+    current = parent;
+  }
+}
+
+function assertStagedNodeModulesSelfContained() {
+  const missing = [];
+  for (const packageDir of listPackageDirs(stageDir)) {
+    const manifest = readManifest(packageDir);
+    for (const dep of Object.keys(manifest.dependencies || {})) {
+      if (SKIP.has(dep)) continue;
+      if (!resolveWithinStagedResources(packageDir, dep)) {
+        missing.push(`${path.relative(stageDir, packageDir)} -> ${dep}`);
+      }
+    }
+  }
+
+  if (missing.length === 0) return;
+  console.error(
+    '[stage-sidecar-deps] FATAL - staged node_modules is not self-contained:\n'
+    + missing.map((dep) => `  - ${dep}`).join('\n')
+    + '\n  Add the missing transitive runtime dependency to the staged closure.',
+  );
+  process.exit(1);
+}
+
+function assertWindowsMsiSafeResourcePaths() {
+  if (platform !== 'win32') return;
+  const unsafe = listFiles(resourcesDir)
+    .map((file) => path.relative(resourcesDir, file))
+    .filter((file) => !isWindows1252PathSafe(file));
+
+  if (unsafe.length === 0) return;
+  console.error(
+    '[stage-sidecar-deps] FATAL - staged resource paths are not Windows MSI codepage-safe:\n'
+    + unsafe.map((file) => `  - ${file}`).join('\n')
+    + '\n  Prune the package payload or configure an MSI codepage before bundling.',
+  );
+  process.exit(1);
+}
+
 function dirSizeMB(dir) {
   let bytes = 0;
   const stack = [dir];
@@ -265,20 +428,32 @@ function dirSizeMB(dir) {
 // ── main ───────────────────────────────────────────────────────────
 console.log(`[stage-sidecar-deps] Platform: ${platform}-${arch}`);
 
+// These workspace packages are loaded by hook installers/external agents, not
+// by the sidecar bundle itself, so the esbuild metafile cannot discover them.
+// Build them explicitly before copying their production dependency closure.
+execFileSync(process.execPath, [hookRuntimeBuild], { cwd: root, stdio: 'inherit' });
+
 // Fresh stage dir each run so a removed dep never lingers in a stale bundle.
 fs.rmSync(stageDir, { recursive: true, force: true });
 fs.mkdirSync(stageDir, { recursive: true });
 
 const externals = readExternalPackages();
-const staged = [...externals].filter((n) => !SKIP.has(n)).sort();
+const runtimeRoots = new Set([...externals, ...HOOK_RUNTIME_ROOTS]);
+const staged = [...runtimeRoots].filter((n) => !SKIP.has(n)).sort();
 const skipped = [...externals].filter((n) => SKIP.has(n)).sort();
-console.log(`[stage-sidecar-deps] Bundle externals: ${externals.size} (${staged.length} to stage, ${skipped.length} skipped)`);
+console.log(`[stage-sidecar-deps] Bundle/runtime roots: ${runtimeRoots.size} (${staged.length} to stage, ${skipped.length} skipped)`);
 if (skipped.length) console.log(`[stage-sidecar-deps]   skipped: ${skipped.join(', ')}`);
 
-const closure = stageClosure(externals);
+const closure = stageClosure(runtimeRoots);
 
 pruneOnnxRuntime();
 pruneSkipListed(stageDir);
+pruneRuntimeOnlyDirs(stageDir);
+if (prunedRuntimeDirs > 0) {
+  console.log(`[stage-sidecar-deps] Pruned ${prunedRuntimeDirs} runtime-unused package artifact dir(s)`);
+}
+assertWindowsMsiSafeResourcePaths();
+assertStagedNodeModulesSelfContained();
 
 console.log(
   `[stage-sidecar-deps] Staged ${copiedPackages} packages `

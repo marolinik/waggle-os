@@ -4,10 +4,10 @@ import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
 
 const AgentsRoute = () => {
-  const { workspaces } = useShell();
+  const { workspaces, activeWorkspaceId } = useShell();
   return (
     <SurfaceBoundary appName="Agents">
-      <AgentsApp workspaces={workspaces} />
+      <AgentsApp workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} />
     </SurfaceBoundary>
   );
 };

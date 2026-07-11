@@ -233,6 +233,30 @@ describe('P1b-SSE client', () => {
     expect(FakeEventSource.instances.every(i => !i.closed)).toBe(true);
   });
 
+  it('tool output stream closes permanently after exit instead of reconnecting and replaying old output', async () => {
+    vi.useFakeTimers();
+    const a = await connectedAdapter('tok-A');
+    const lines: string[] = [];
+    let exitCode: number | null | undefined;
+
+    a.streamToolOutput(4242, {
+      onLine: (line) => lines.push(line),
+      onExit: (code) => { exitCode = code; },
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    const first = FakeEventSource.instances[0];
+    first.fireNamed('line', { line: 'mock observed output' });
+    first.fireNamed('exit', { code: 0 });
+    expect(lines).toEqual(['mock observed output']);
+    expect(exitCode).toBe(0);
+    expect(first.closed).toBe(true);
+
+    first.fireError();
+    await vi.advanceTimersByTimeAsync(1100);
+    expect(FakeEventSource.instances).toHaveLength(1);
+  });
+
   it('harvest: ready resolves on handshake; close stops the stream', async () => {
     const a = await connectedAdapter('tok-A');
     const sub = a.subscribeHarvestProgress(() => {});

@@ -40,15 +40,15 @@ describe('resolvePaths (openclaw)', () => {
     expect(paths.handlerSourcePath).toBe(explicit);
   });
 
-  it('derives the compiled handler.js sibling from moduleUrl (dist/<file>.js → dist/handler.js)', () => {
+  it('derives the self-contained handler bundle sibling from moduleUrl', () => {
     const moduleUrl = pathToFileURL(resolve('/pkg/dist/install.js')).href;
     const paths = resolvePaths({ home: resolve('/h'), moduleUrl });
-    expect(paths.handlerSourcePath).toBe(resolve('/pkg/dist/handler.js'));
+    expect(paths.handlerSourcePath).toBe(resolve('/pkg/dist/handler.bundle.cjs'));
   });
 
-  it('falls back to cwd/dist/handler.js when neither moduleUrl nor handlerSourcePath is given', () => {
+  it('falls back to cwd/dist/handler.bundle.cjs when neither override is given', () => {
     const paths = resolvePaths({ home: resolve('/h') });
-    expect(paths.handlerSourcePath).toBe(resolve(process.cwd(), 'dist', 'handler.js'));
+    expect(paths.handlerSourcePath).toBe(resolve(process.cwd(), 'dist', 'handler.bundle.cjs'));
   });
 });
 

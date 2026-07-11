@@ -66,6 +66,17 @@ describe('ToolOutputBuffer', () => {
     expect(tail.exitCode).toBe(0);
   });
 
+  it('finalizes the buffer and notifies a process-state observer from one exit subscription', () => {
+    const buf = new ToolOutputBuffer();
+    const f = fakeHandle();
+    let observedCode: number | null | undefined;
+    buf.attach(109, f.handle, (code) => { observedCode = code; });
+    f.emit('settled\n');
+    f.end(7);
+    expect(buf.getTail(109)).toMatchObject({ exited: true, exitCode: 7 });
+    expect(observedCode).toBe(7);
+  });
+
   it('subscribe replays existing lines then streams new ones, atomically', () => {
     const buf = new ToolOutputBuffer();
     const f = fakeHandle();

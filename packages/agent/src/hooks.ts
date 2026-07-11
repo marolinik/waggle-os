@@ -44,6 +44,13 @@ export class HookRegistry {
   private activityLog: HookActivityEntry[] = [];
   private static MAX_LOG = 50;
 
+  constructor(private readonly parent?: HookRegistry) {}
+
+  /** Create a request-local registry that inherits global hooks without sharing new handlers. */
+  fork(): HookRegistry {
+    return new HookRegistry(this);
+  }
+
   on(event: HookEvent, fn: HookFn): () => void {
     if (!this.hooks.has(event)) this.hooks.set(event, new Set());
     this.hooks.get(event)!.add(fn);
@@ -60,6 +67,13 @@ export class HookRegistry {
   }
 
   async fire(event: HookEvent, ctx: HookContext): Promise<HookResult> {
+    if (this.parent) {
+      const inherited = await this.parent.fire(event, ctx);
+      if (inherited.cancelled) {
+        this.recordActivity(event, true, inherited.reason, ctx.workspaceId);
+        return inherited;
+      }
+    }
     const fns = this.hooks.get(event);
     if (!fns || fns.size === 0) {
       this.recordActivity(event, false, undefined, ctx.workspaceId);

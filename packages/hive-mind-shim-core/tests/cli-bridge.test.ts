@@ -231,6 +231,15 @@ describe('createCliBridge.recallMemory', () => {
     const wireArgs = JSON.parse(records[0].args[4] as string) as Record<string, unknown>;
     expect(wireArgs).toMatchObject({ query: 'x', limit: 5, scope: 'all', profile: 'recent' });
   });
+
+  it('can force personal recall while a workspace is active', async () => {
+    const records: MockSpawnRecord[] = [];
+    const spawnImpl = makeSpawnImpl(records, { stdout: jsonResultEnvelope([]) });
+    const bridge = createCliBridge({ spawnImpl, max_retries: 0, initial_workspace_id: 'workspace-a' });
+    await bridge.recallMemory('', { scope: 'personal', workspace: null });
+    const wireArgs = JSON.parse(records[0].args[4] as string) as Record<string, unknown>;
+    expect(wireArgs).toEqual({ query: '', scope: 'personal' });
+  });
 });
 
 describe('createCliBridge.cleanupFrames', () => {
@@ -266,5 +275,18 @@ describe('createCliBridge workspace state', () => {
     const spawnImpl = makeSpawnImpl([], { stdout: jsonResultEnvelope({}) });
     const bridge = createCliBridge({ spawnImpl, max_retries: 0, initial_workspace_id: 'startup-ws' });
     expect(bridge.getActiveWorkspaceId()).toBe('startup-ws');
+  });
+
+  it('seeds the active workspace from WAGGLE_WORKSPACE_ID', () => {
+    const previous = process.env.WAGGLE_WORKSPACE_ID;
+    process.env.WAGGLE_WORKSPACE_ID = 'workspace-from-launch';
+    try {
+      const spawnImpl = makeSpawnImpl([], { stdout: jsonResultEnvelope({}) });
+      const bridge = createCliBridge({ spawnImpl, max_retries: 0 });
+      expect(bridge.getActiveWorkspaceId()).toBe('workspace-from-launch');
+    } finally {
+      if (previous === undefined) delete process.env.WAGGLE_WORKSPACE_ID;
+      else process.env.WAGGLE_WORKSPACE_ID = previous;
+    }
   });
 });

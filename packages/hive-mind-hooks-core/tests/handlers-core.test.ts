@@ -26,7 +26,7 @@ describe('makeSessionStartHandler', () => {
     expect(payload.recallLimit).toBe(7);
     const out = await h.run(payload, makeCtx(bridge));
 
-    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 7, scope: 'personal' });
+    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 7, scope: 'personal', workspace: null });
     // Mock adapter renames the inject seam to { additional_context }.
     expect(out).toMatchObject({ additional_context: expect.stringContaining('past observation') });
   });
@@ -153,7 +153,7 @@ describe('makeOpenclawHandler — lifecycle dispatch', () => {
     };
     await handler.handle(input, makeCtx(bridge));
 
-    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 20, scope: 'personal' });
+    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 20, scope: 'personal', workspace: null });
     // Simulate the adapter's documented mutation seam working end-to-end.
     bootstrapFiles.push('recalled');
     expect((input.event.context as { bootstrapFiles: string[] }).bootstrapFiles).toEqual(['recalled']);
@@ -353,6 +353,9 @@ describe('makeStopHandler — WAGGLE_SIGNAL_EMIT opt-in', () => {
     expect(body.senderId).toBe('cursor-hook');
     expect(body.content.tool).toBe('cursor');
     expect(body.content.importance).toBe('critical');
+    expect(body.content.frameId).toBe('frame-1');
+    expect(body.content.memoryWorkspace).toBe('personal');
+    expect(body.content.summary).toContain('never commit secrets');
   });
 
   it('still saves the frame even when the signal endpoint is unreachable (fail-open)', async () => {

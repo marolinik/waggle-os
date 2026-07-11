@@ -33,20 +33,25 @@
  *
  * Phase 2A scope:
  *   - Backend module + sidecar routes only. Frontend dock in 2B.
- *   - LAUNCH cohort: all 7 supported tools may be *launched*.
- *   - HOOK install/verify/uninstall is restricted to claude-code:
- *     it is the only tool with a published hook package that ships a
- *     bin (`@waggle/hive-mind-hooks-claude-code`). The other tools'
- *     hook packages are Wave 2/3 `export {}` stubs with no bin, so
- *     `npx @waggle/hive-mind-hooks-<id>` would always fail for the
- *     user. Hook actions therefore route through HOOKS_COHORT, NOT
- *     LAUNCH_COHORT.
+ *   - Launch is registry-validated: all built-ins plus launchable
+ *     third-party adapters may be launched when the caller supplies the
+ *     runtime registry.
+ *   - HOOK install/verify/uninstall is restricted to HOOKS_COHORT:
+ *     those tools have hook packages that ship a real bin. Hook actions
+ *     therefore route through HOOKS_COHORT, not the launchable registry.
  */
 
 import { spawn, execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { delimiter, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import type { ToolId } from '@waggle/shared';
-import { LAUNCH_COHORT, BUILTIN_TOOL_MANIFESTS } from '@waggle/shared';
+import type { ToolId, ToolManifest } from '@waggle/shared';
+import { BUILTIN_TOOL_MANIFESTS } from '@waggle/shared';
+import {
+  resolveToolCommandInvocation,
+  type ToolCommandInvocation,
+} from './tool-command.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -120,14 +125,22 @@ function defaultSpawnDetached(
   options: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): { pid: number | null; error?: string } {
   try {
-    const child = spawn(binary, args, {
+    const invocation = resolveSpawnInvocation(binary, args);
+    const child = spawn(invocation.binary, invocation.args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env ?? {}) },
       detached: true,
       stdio: 'ignore',
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
+    });
+    child.once('error', () => {
+      // Keep async spawn failures from becoming unhandled process errors.
     });
     if (child.pid) child.unref();
-    return { pid: child.pid ?? null };
+    return {
+      pid: child.pid ?? null,
+      ...(child.pid == null ? { error: 'spawn returned no pid' } : {}),
+    };
   } catch (err) {
     return {
       pid: null,
@@ -142,12 +155,17 @@ function defaultSpawnObserved(
   options: { cwd?: string; env?: NodeJS.ProcessEnv },
 ): { pid: number | null; error?: string; handle?: ObservedHandle } {
   try {
-    const child = spawn(binary, args, {
+    const invocation = resolveSpawnInvocation(binary, args);
+    const child = spawn(invocation.binary, invocation.args, {
       cwd: options.cwd,
       env: { ...process.env, ...(options.env ?? {}) },
       // NOT detached, NOT unref'd: observation requires holding the pipes,
       // so the child is tethered to the sidecar lifecycle.
       stdio: ['ignore', 'pipe', 'pipe'],
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
+    });
+    child.once('error', () => {
+      // Keep async spawn failures from becoming unhandled process errors.
     });
     if (child.pid == null) {
       return { pid: null, error: 'spawn returned no pid' };
@@ -170,16 +188,26 @@ function defaultSpawnObserved(
   }
 }
 
+export function resolveSpawnInvocation(
+  binary: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+): ToolCommandInvocation {
+  return resolveToolCommandInvocation(binary, args, platform);
+}
+
 async function defaultExecCapture(
   binary: string,
   args: string[],
   options?: { timeoutMs?: number; env?: NodeJS.ProcessEnv },
 ): Promise<{ stdout: string; stderr: string; code: number } | null> {
   try {
-    const { stdout, stderr } = await execFileAsync(binary, args, {
+    const invocation = resolveToolCommandInvocation(binary, args);
+    const { stdout, stderr } = await execFileAsync(invocation.binary, invocation.args, {
       timeout: options?.timeoutMs ?? 30000,
       env: { ...process.env, ...(options?.env ?? {}) },
       shell: false,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
       maxBuffer: 4 * 1024 * 1024,
     });
     return { stdout, stderr, code: 0 };
@@ -217,8 +245,8 @@ function resolveDeps(opts: ToolLauncherDeps): ResolvedDeps {
 // ── Public surface ─────────────────────────────────────────────────
 
 export interface LaunchOptions {
-  /** The tool to launch. Must be in LAUNCH_COHORT. */
-  id: ToolId;
+  /** The tool to launch. Must resolve to a launchable manifest. */
+  id: string;
   /**
    * Absolute path to the binary. Typically supplied from a prior
    * `detectInstalledTools()` call. Required because Phase 0
@@ -254,6 +282,13 @@ export interface LaunchOptions {
    * address the UI itself reached.
    */
   sidecarUrl?: string;
+  /** Canonical Waggle/Hive Mind data root for launched hook processes. */
+  dataDir?: string;
+  /** Canonical collaboration identity for authenticated hook signals. */
+  runId?: string;
+  roomId?: string;
+  /** Ephemeral credential accepted only by WaggleDance transport routes. */
+  runToken?: string;
   /**
    * When true, launch in OBSERVED mode (piped stdio) so stdout/stderr can be
    * streamed to the dock. The process is tethered to the sidecar (dies on
@@ -263,6 +298,8 @@ export interface LaunchOptions {
   observe?: boolean;
   /** Test deps overrides. */
   deps?: ToolLauncherDeps;
+  /** Registry used to validate launchability. Defaults to the built-in tools. */
+  toolRegistry?: readonly ToolManifest[];
 }
 
 export interface LaunchResult {
@@ -290,12 +327,21 @@ export interface LaunchResult {
  *     caller is expected to pass through a fresh detection result).
  */
 export function launchTool(opts: LaunchOptions): LaunchResult {
-  if (!LAUNCH_COHORT.includes(opts.id)) {
+  const manifest = (opts.toolRegistry ?? BUILTIN_TOOL_MANIFESTS).find((m) => m.id === opts.id);
+  if (!manifest) {
     return {
       ok: false,
       pid: null,
       executed: { binary: opts.installedPath, args: opts.args ?? [] },
-      error: `Tool '${opts.id}' is outside the Phase 2 launch cohort (claude-code, cursor, claude-desktop).`,
+      error: `Tool '${opts.id}' is not registered for launch.`,
+    };
+  }
+  if (!manifest.launchable) {
+    return {
+      ok: false,
+      pid: null,
+      executed: { binary: opts.installedPath, args: opts.args ?? [] },
+      error: `Tool '${opts.id}' is registered but not launchable.`,
     };
   }
   if (!opts.installedPath) {
@@ -319,6 +365,16 @@ export function launchTool(opts: LaunchOptions): LaunchResult {
   }
   if (opts.sidecarUrl) {
     env.WAGGLE_SIDECAR_URL = opts.sidecarUrl;
+  }
+  if (opts.dataDir) {
+    env.HIVE_MIND_DATA_DIR = opts.dataDir;
+  }
+  if (opts.runId && opts.roomId && opts.runToken) {
+    env.WAGGLE_RUN_ID = opts.runId;
+    env.WAGGLE_ROOM_ID = opts.roomId;
+    env.WAGGLE_DANCE_TEAM_ID = `room::${opts.roomId}`;
+    env.WAGGLE_SENDER_ID = `run::${opts.runId}`;
+    env.WAGGLE_RUN_TOKEN = opts.runToken;
   }
   // Observed mode: piped-stdio spawn that surfaces a live output handle.
   // Tethered to the sidecar (not unref'd) and tracked in-memory only.
@@ -356,12 +412,10 @@ export interface HookCommandOptions {
   id: ToolId;
   /** install / verify / uninstall. */
   action: HookAction;
-  /**
-   * Optional `--cli-path <path>` for Windows installs where the
-   * default `hive-mind-cli` resolution fails (see the claude-code
-   * hook README). Falls through verbatim to the installer.
-   */
-  cliPath?: string;
+  /** Waggle data root injected into hook memory commands. */
+  dataDir?: string;
+  /** Server-resolved runtime override for tests/embedded hosts. */
+  runtime?: HookRuntimePaths;
   /** Test deps overrides. */
   deps?: ToolLauncherDeps;
 }
@@ -375,7 +429,34 @@ export interface HookCommandResult {
   /** Process exit code (0 = success). */
   code: number;
   error?: string;
+  errorCode?: 'hook_runtime_missing';
 }
+
+export interface HookRuntimePaths {
+  nodePath: string;
+  cliEntry: string;
+  hookEntry: string;
+}
+
+export interface WaggleRuntimePaths {
+  nodePath: string;
+  cliEntry: string;
+}
+
+interface RuntimeResolveDeps {
+  nodePath?: string;
+  nodeModulesRoots?: string[];
+  fileExists?: (path: string) => boolean;
+}
+
+const HOOK_BIN_BY_TOOL: Partial<Record<ToolId, string>> = {
+  'claude-code': 'dist/bin/claude-code-hooks-cli.js',
+  codex: 'dist/bin/codex-hooks.js',
+  'codex-desktop': 'dist/bin/codex-desktop-hooks.js',
+  cursor: 'dist/bin/cursor-hooks.js',
+  hermes: 'dist/bin/hermes-hooks.js',
+  openclaw: 'dist/bin/openclaw-hooks.js',
+};
 
 /**
  * Map ToolId → npm package name of the hive-mind hook installer.
@@ -384,6 +465,42 @@ export interface HookCommandResult {
  */
 export function hookPackageFor(id: ToolId): string {
   return `@waggle/hive-mind-hooks-${id}`;
+}
+
+export function resolveHookRuntime(
+  id: ToolId,
+  deps: RuntimeResolveDeps = {},
+): HookRuntimePaths | undefined {
+  const fileExists = deps.fileExists ?? existsSync;
+  const hookRelative = HOOK_BIN_BY_TOOL[id];
+  if (!hookRelative) return undefined;
+  for (const root of runtimeNodeModulesRoots(deps.nodeModulesRoots)) {
+    const cliEntry = join(root, '@waggle', 'hive-mind-cli', 'dist', 'index.js');
+    const hookEntry = join(root, '@waggle', `hive-mind-hooks-${id}`, ...hookRelative.split('/'));
+    if (fileExists(cliEntry) && fileExists(hookEntry)) {
+      return { nodePath: deps.nodePath ?? process.execPath, cliEntry, hookEntry };
+    }
+  }
+  return undefined;
+}
+
+export function resolveWaggleRuntime(deps: RuntimeResolveDeps = {}): WaggleRuntimePaths | undefined {
+  const fileExists = deps.fileExists ?? existsSync;
+  for (const root of runtimeNodeModulesRoots(deps.nodeModulesRoots)) {
+    const cliEntry = join(root, '@waggle', 'hive-mind-cli', 'dist', 'index.js');
+    if (fileExists(cliEntry)) return { nodePath: deps.nodePath ?? process.execPath, cliEntry };
+  }
+  return undefined;
+}
+
+function runtimeNodeModulesRoots(explicit?: string[]): string[] {
+  const sourceNodeModules = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'node_modules');
+  const roots = explicit ?? [
+    ...(process.env.NODE_PATH ?? '').split(delimiter).filter(Boolean),
+    join(process.cwd(), 'node_modules'),
+    sourceNodeModules,
+  ];
+  return [...new Set(roots.map((candidate) => resolve(candidate)))];
 }
 
 /**
@@ -411,11 +528,28 @@ export async function runHookCommand(
     };
   }
   const deps = resolveDeps(opts.deps ?? {});
-  const args = ['--yes', hookPackageFor(opts.id), opts.action];
-  if (opts.cliPath && opts.action === 'install') {
-    args.push('--cli-path', opts.cliPath);
+  const runtime = opts.runtime ?? resolveHookRuntime(opts.id);
+  if (!runtime) {
+    return {
+      ok: false,
+      action: opts.action,
+      packageName: hookPackageFor(opts.id),
+      stdout: '',
+      stderr: '',
+      code: -1,
+      errorCode: 'hook_runtime_missing',
+      error: 'The packaged hook runtime is missing. Reinstall Waggle or run the hook-runtime staging step.',
+    };
   }
-  const result = await deps.execCapture('npx', args, { timeoutMs: 60000 });
+  const args = [runtime.hookEntry, opts.action];
+  if (opts.action === 'install') args.push('--cli-path', runtime.cliEntry);
+  const result = await deps.execCapture(runtime.nodePath, args, {
+    timeoutMs: 60000,
+    env: {
+      WAGGLE_HOOK_NODE_PATH: runtime.nodePath,
+      ...(opts.dataDir ? { HIVE_MIND_DATA_DIR: opts.dataDir } : {}),
+    },
+  });
   if (!result) {
     return {
       ok: false,

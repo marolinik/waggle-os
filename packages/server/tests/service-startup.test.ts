@@ -1,8 +1,25 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import net from 'node:net';
-import { checkPortAvailable } from '../src/local/service.js';
+import { checkPortAvailable, resolveServicePort } from '../src/local/service.js';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Service Startup', () => {
+  describe('resolveServicePort', () => {
+    it('honors the desktop-selected WAGGLE_PORT when no explicit option is provided', () => {
+      vi.stubEnv('WAGGLE_PORT', '38179');
+      expect(resolveServicePort()).toBe(38179);
+    });
+
+    it('prefers an explicit port and rejects invalid environment values', () => {
+      vi.stubEnv('WAGGLE_PORT', 'not-a-port');
+      expect(resolveServicePort(41234)).toBe(41234);
+      expect(resolveServicePort()).toBe(3333);
+    });
+  });
+
   describe('checkPortAvailable', () => {
     it('returns true for a free port', async () => {
       // Use a random high port that's very unlikely to be in use

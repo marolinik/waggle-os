@@ -4,11 +4,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import type { CollaborationWorkerRun } from '@waggle/shared';
 import {
+  applyRunEvent,
   applyStatusEvent,
   dedupeAgents,
   pruneRecent,
   flattenWorkspaceMap,
+  hydrateRunSnapshot,
   type RoomAgent,
   type StatusEvent,
   type WorkspaceAgents,
@@ -77,7 +80,7 @@ describe('applyStatusEvent — parallel agents (P6)', () => {
     expect(next.recent.map((a) => a.id)).toEqual(['b']);
   });
 
-  it('auto-completes previously-live agents missing from the new event', () => {
+  it('preserves previously-live siblings missing from a delta event', () => {
     const prior: WorkspaceAgents = {
       live: [mkAgent({ id: 'was-live', status: 'running', startedAt: NOW - 30_000 })],
       recent: [],
@@ -87,11 +90,20 @@ describe('applyStatusEvent — parallel agents (P6)', () => {
       mkAgent({ id: 'new-one', status: 'running' }),
     ]);
     const next = applyStatusEvent(prior, event, NOW);
-    expect(next.live.map((a) => a.id)).toEqual(['new-one']);
-    expect(next.recent.map((a) => a.id)).toEqual(['was-live']);
-    const auto = next.recent.find((a) => a.id === 'was-live')!;
-    expect(auto.status).toBe('done');
-    expect(auto.completedAt).toBe(NOW);
+    expect(next.live.map((a) => a.id).sort()).toEqual(['new-one', 'was-live']);
+    expect(next.recent).toEqual([]);
+  });
+
+  it('completes missing agents only for an explicit snapshot event', () => {
+    const prior: WorkspaceAgents = {
+      live: [mkAgent({ id: 'was-live', status: 'running', startedAt: NOW - 30_000 })],
+      recent: [],
+      lastUpdatedAt: NOW - 30_000,
+    };
+    const next = applyStatusEvent(prior, { ...mkEvent('default', []), mode: 'snapshot' }, NOW);
+    expect(next.live).toEqual([]);
+    expect(next.recent[0]).toMatchObject({ id: 'was-live', status: 'done' });
+    expect(next.recent[0].completedAt).toBe(NOW);
   });
 
   it('dedupes by id when the server re-emits the same agent', () => {
@@ -175,5 +187,71 @@ describe('flattenWorkspaceMap', () => {
     const a2Entry = liveAgents.find((e) => e.agent.id === 'a2')!;
     expect(a1Entry.workspaceId).toBe('ws1');
     expect(a2Entry.workspaceId).toBe('ws2');
+  });
+});
+
+function mkRun(
+  id: string,
+  workspaceId: string,
+  status: CollaborationWorkerRun['status'] = 'running',
+): CollaborationWorkerRun {
+  return {
+    schemaVersion: 1,
+    kind: 'worker',
+    id,
+    roomId: 'room-1',
+    rootRunId: 'room-1',
+    parentRunId: 'room-1',
+    workspaceId,
+    source: 'external_tool',
+    executor: { kind: 'external_tool', toolId: 'codex', model: 'gpt-test' },
+    title: `Codex ${workspaceId}`,
+    task: `Work in ${workspaceId}`,
+    status,
+    memoryRefs: { status: 'pending', personalFrameIds: [], workspaceFrameIds: {} },
+    capabilities: { cancel: true, pause: false, resume: false, message: false },
+    metrics: { toolsUsed: ['read_file'] },
+    revision: 1,
+    createdAt: new Date(NOW).toISOString(),
+    updatedAt: new Date(NOW).toISOString(),
+    startedAt: new Date(NOW).toISOString(),
+  };
+}
+
+describe('durable collaboration runs', () => {
+  it('hydrates workers into their exact workspaces without removing legacy agents', () => {
+    const current = new Map<string, WorkspaceAgents>([[
+      'ws1',
+      { live: [mkAgent({ id: 'legacy' })], recent: [], lastUpdatedAt: NOW },
+    ]]);
+    const next = hydrateRunSnapshot(current, [mkRun('run-a', 'ws1'), mkRun('run-b', 'ws2')], NOW);
+    expect(next.get('ws1')?.live.map((agent) => agent.id).sort()).toEqual(['legacy', 'run-a']);
+    expect(next.get('ws2')?.live.map((agent) => agent.id)).toEqual(['run-b']);
+    expect(next.get('ws1')?.live.find((agent) => agent.id === 'run-a')).toMatchObject({
+      origin: 'run', roomId: 'room-1', toolId: 'codex', runStatus: 'running',
+      toolsUsed: ['read_file'],
+    });
+  });
+
+  it('applies full run deltas by id and keeps sibling runs live', () => {
+    const hydrated = hydrateRunSnapshot(
+      new Map(),
+      [mkRun('run-a', 'ws1'), mkRun('run-b', 'ws1')],
+      NOW,
+    );
+    const completed = {
+      ...mkRun('run-a', 'ws1', 'completed'),
+      revision: 2,
+      completedAt: new Date(NOW + 1_000).toISOString(),
+      result: { summary: 'Finished' },
+      memoryRefs: { status: 'complete' as const, personalFrameIds: [1], workspaceFrameIds: { ws1: [2] } },
+    };
+    const next = applyRunEvent(hydrated, {
+      seq: 10, type: 'upsert', run: completed, timestamp: new Date(NOW + 1_000).toISOString(),
+    }, NOW + 1_000);
+    expect(next.get('ws1')?.live.map((agent) => agent.id)).toEqual(['run-b']);
+    expect(next.get('ws1')?.recent[0]).toMatchObject({
+      id: 'run-a', status: 'done', resultSummary: 'Finished', memoryStatus: 'complete',
+    });
   });
 });

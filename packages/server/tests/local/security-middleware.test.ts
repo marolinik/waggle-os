@@ -18,11 +18,13 @@ import { securityMiddleware, RateLimiter, ENDPOINT_RATE_LIMITS } from '../../src
 async function createTestServer(opts?: {
   rateLimiter?: { maxRequests?: number; windowMs?: number };
   sessionToken?: string;
+  authenticateRunToken?: (token: string) => boolean;
 }) {
   const server = Fastify({ logger: false });
   await server.register(securityMiddleware, {
     rateLimiter: opts?.rateLimiter,
     sessionToken: opts?.sessionToken,
+    authenticateRunToken: opts?.authenticateRunToken,
   });
 
   // Simple test routes
@@ -39,6 +41,12 @@ async function createTestServer(opts?: {
     return { ok: true };
   });
   server.post('/api/backup', async () => {
+    return { ok: true };
+  });
+  server.post('/api/waggle-dance/signal', async () => {
+    return { ok: true };
+  });
+  server.get('/api/waggle-dance/signals', async () => {
     return { ok: true };
   });
   server.post('/api/vault/:name/reveal', async () => {
@@ -401,6 +409,40 @@ describe('Bearer Token Authentication', () => {
       });
       expect(res.statusCode).toBe(200);
       expect(res.json().ok).toBe(true);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it('accepts a narrow run token only on WaggleDance transport routes', async () => {
+    const runToken = 'run-token-with-enough-entropy-1234567890';
+    const server = await createTestServer({
+      sessionToken: TEST_TOKEN,
+      authenticateRunToken: (candidate) => candidate === runToken,
+    });
+    try {
+      const send = await server.inject({
+        method: 'POST', url: '/api/waggle-dance/signal',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(send.statusCode).toBe(200);
+      const receive = await server.inject({
+        method: 'GET', url: '/api/waggle-dance/signals',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(receive.statusCode).toBe(200);
+
+      const unrelated = await server.inject({
+        method: 'GET', url: '/api/test',
+        headers: { 'x-waggle-run-token': runToken },
+      });
+      expect(unrelated.statusCode).toBe(401);
+      const wrong = await server.inject({
+        method: 'POST', url: '/api/waggle-dance/signal',
+        headers: { 'x-waggle-run-token': 'wrong-run-token-with-enough-entropy-123' },
+      });
+      expect(wrong.statusCode).toBe(401);
+      expect(wrong.json().code).toBe('INVALID_TOKEN');
     } finally {
       await server.close();
     }

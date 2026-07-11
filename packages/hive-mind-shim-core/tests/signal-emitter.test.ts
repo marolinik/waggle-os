@@ -102,6 +102,36 @@ describe('emitSignalToWaggleDance', () => {
     });
   });
 
+  it('authenticates with the narrow run token without putting it in the body', async () => {
+    const f = makeOkFetch();
+    const token = 'run-token-with-at-least-thirty-two-bytes-1234';
+    await emitSignalToWaggleDance({
+      type: 'broadcast',
+      subtype: 'discovery',
+      content: { topic: 'safe' },
+      runToken: token,
+      fetchImpl: f,
+    });
+    expect((f.calls[0].init?.headers as Record<string, string>)['x-waggle-run-token']).toBe(token);
+    expect(f.calls[0].init?.body).not.toContain(token);
+  });
+
+  it('reads WAGGLE_RUN_TOKEN for installed hook processes', async () => {
+    const previous = process.env.WAGGLE_RUN_TOKEN;
+    const token = 'environment-run-token-with-enough-entropy-1234';
+    process.env.WAGGLE_RUN_TOKEN = token;
+    try {
+      const f = makeOkFetch();
+      await emitSignalToWaggleDance({
+        type: 'broadcast', subtype: 'discovery', content: {}, fetchImpl: f,
+      });
+      expect((f.calls[0].init?.headers as Record<string, string>)['x-waggle-run-token']).toBe(token);
+    } finally {
+      if (previous === undefined) delete process.env.WAGGLE_RUN_TOKEN;
+      else process.env.WAGGLE_RUN_TOKEN = previous;
+    }
+  });
+
   it('defaults senderId to "hook" when not provided', async () => {
     const f = makeOkFetch();
     await emitSignalToWaggleDance({

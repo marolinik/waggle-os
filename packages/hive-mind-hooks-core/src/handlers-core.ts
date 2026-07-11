@@ -31,6 +31,7 @@ import {
   type MemoryHit,
 } from '@waggle/hive-mind-shim-core';
 import type { EventAdapter, ExtractContext, Lifecycle } from './event-adapter.js';
+import { recallPersonalAndWorkspace } from '@waggle/hive-mind-shim-core';
 import type { HookContext, HookHandler } from './hook-shared.js';
 
 // ── Extracted payloads (the shared bodies operate on these) ────────────
@@ -111,9 +112,8 @@ export async function runSessionStartBody(
   ctx: HookContext,
 ): Promise<unknown> {
   ctx.logger.debug('recall starting', { limit: payload.recallLimit });
-  const hits = await ctx.bridge.recallMemory('', {
+  const hits = await recallPersonalAndWorkspace(ctx.bridge, '', {
     limit: payload.recallLimit,
-    scope: 'personal',
   });
   ctx.logger.debug('recall complete', { hits: hits.length });
   const text = formatHitsForContext(hits);
@@ -208,6 +208,9 @@ export async function runStopBody(
         tool: a.source,
         sessionId: payload.sessionId,
         topic: summary.slice(0, 160),
+        summary,
+        frameId: result.id,
+        memoryWorkspace: result.workspace,
         cwd: payload.cwd,
       },
       { senderId: `${a.source}-hook` },

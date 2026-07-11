@@ -383,6 +383,126 @@ export const AGENT_RUN_STATES = [
   'waiting_for_approval', 'completed', 'archived',
 ] as const;
 export type AgentRunState = (typeof AGENT_RUN_STATES)[number];
+
+/**
+ * Canonical runtime record for work performed inside the Room. This is
+ * intentionally separate from `AgentRunState` above: that union describes the
+ * lifecycle of a saved Agent blueprint, while collaboration runs are concrete
+ * executions by Waggle agents or external tools.
+ */
+export const COLLABORATION_RUN_SOURCES = [
+  'external_tool', 'fleet', 'chat_subagent', 'workflow', 'agent_group',
+] as const;
+export type CollaborationRunSource = (typeof COLLABORATION_RUN_SOURCES)[number];
+
+export const COLLABORATION_RUN_STATUSES = [
+  'queued', 'starting', 'running', 'waiting_for_approval', 'paused',
+  'cancelling', 'completed', 'failed', 'cancelled', 'interrupted',
+] as const;
+export type CollaborationRunStatus = (typeof COLLABORATION_RUN_STATUSES)[number];
+
+export const COLLABORATION_RUN_CONTROLS = ['cancel', 'pause', 'resume', 'message'] as const;
+export type CollaborationRunControl = (typeof COLLABORATION_RUN_CONTROLS)[number];
+
+export interface CollaborationRunExecutor {
+  kind: 'external_tool' | 'waggle_agent' | 'coordinator';
+  toolId?: string;
+  pid?: number;
+  agentId?: string;
+  personaId?: string;
+  model?: string;
+}
+
+export interface CollaborationRunProgress {
+  message: string;
+  phase?: string;
+  current?: number;
+  total?: number;
+}
+
+export interface CollaborationRunResult {
+  summary?: string;
+  sessionId?: string;
+  traceId?: string;
+  artifacts?: string[];
+  exitCode?: number | null;
+  error?: string;
+}
+
+export interface CollaborationRunMetrics {
+  toolsUsed?: string[];
+  inputTokens?: number;
+  outputTokens?: number;
+  costUsd?: number;
+}
+
+export interface CollaborationRunMemoryRefs {
+  status: 'pending' | 'complete' | 'partial' | 'failed';
+  personalFrameIds: number[];
+  workspaceFrameIds: Record<string, number[]>;
+}
+
+export interface CollaborationRunCapabilities {
+  cancel: boolean;
+  pause: boolean;
+  resume: boolean;
+  message: boolean;
+}
+
+/**
+ * One executable leaf is bound to exactly one `workspaceId`. A Room/root run
+ * may coordinate several leaves and therefore carries only `workspaceIds`.
+ */
+interface CollaborationRunBase {
+  schemaVersion: 1;
+  id: string;
+  roomId: string;
+  rootRunId: string;
+  source: CollaborationRunSource;
+  executor: CollaborationRunExecutor;
+  title: string;
+  task: string;
+  status: CollaborationRunStatus;
+  progress?: CollaborationRunProgress;
+  result?: CollaborationRunResult;
+  metrics?: CollaborationRunMetrics;
+  memoryRefs: CollaborationRunMemoryRefs;
+  capabilities: CollaborationRunCapabilities;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+/** A Room is the durable coordination root and may span many workspaces. */
+export interface CollaborationRoomRun extends CollaborationRunBase {
+  kind: 'room';
+  parentRunId: null;
+  workspaceIds: string[];
+}
+
+/** An executable participant is always bound to one concrete workspace. */
+export interface CollaborationWorkerRun extends CollaborationRunBase {
+  kind: 'worker';
+  parentRunId: string;
+  workspaceId: string;
+  retryOfRunId?: string;
+}
+
+export type CollaborationRun = CollaborationRoomRun | CollaborationWorkerRun;
+
+export interface CollaborationRunEvent {
+  seq: number;
+  type: 'upsert';
+  run: CollaborationRun;
+  timestamp: string;
+}
+
+export interface CollaborationRunSnapshot {
+  lastSeq: number;
+  runs: CollaborationRun[];
+}
 /** PRD §15.2 / §12.13 extension domains (B7 ratified: drop 'external_tool' —
  *  external tools surface via connectors/MCPs — and add 'agent'). Const tuple
  *  so the Extend routes validate the `type` facet against the runtime list. */

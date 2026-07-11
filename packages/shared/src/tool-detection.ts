@@ -42,6 +42,38 @@ export type ToolDetectSpec =
   | { kind: 'path'; binaryName: string }
   | { kind: 'candidates' };
 
+export type ExternalToolAccess = 'read-only' | 'workspace-write' | 'native';
+export type ToolPromptTransport = 'stdin' | 'arg' | 'temp-file';
+export type ToolOutputDialect =
+  | 'claude-stream-json'
+  | 'codex-jsonl'
+  | 'hermes-text'
+  | 'openclaw-json'
+  | 'text'
+  | 'json'
+  | 'jsonl';
+export type ToolWorkspaceBinding = 'cwd' | 'flag' | 'managed-agent';
+
+/** Declarative, shell-free contract for one capturable agent task. */
+export interface ToolTaskSpec {
+  argvTemplate: readonly string[];
+  resumeArgvTemplate?: readonly string[];
+  accessArgs: Partial<Record<ExternalToolAccess, readonly string[]>>;
+  promptTransport: ToolPromptTransport;
+  outputDialect: ToolOutputDialect;
+  workspaceBinding: ToolWorkspaceBinding;
+  permissionModes: readonly ExternalToolAccess[];
+  resumable: boolean;
+}
+
+export interface ToolCapabilities {
+  interactiveLaunch: boolean;
+  headlessTask: boolean;
+  structuredProgress: boolean;
+  resumable: boolean;
+  liveWaggleDance: boolean;
+}
+
 /**
  * AI-OS #5 — declarative descriptor for one external tool. The single source of
  * truth for the per-tool facts that used to be duplicated across SUPPORTED_TOOLS
@@ -62,6 +94,10 @@ export interface ToolManifest {
    * launcher-prompt-args.ts. Captured in v1; application is a fast-follow.
    */
   promptArgTemplate?: string[];
+  /** Explicit capability split: opening an app is not the same as running a task. */
+  capabilities?: ToolCapabilities;
+  /** Present only when the adapter has a verified, capturable headless lane. */
+  task?: ToolTaskSpec;
   /** true = first-party (the 7); false/absent = loaded third-party. */
   builtin?: boolean;
 }
@@ -72,13 +108,75 @@ export interface ToolManifest {
  * pointer consts derive from these manifests.
  */
 export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
-  { id: 'claude-code', displayName: 'Claude Code', launchable: true, hookCapable: true, hookPointer: '.claude/hive-mind-install.json', detect: { kind: 'path', binaryName: 'claude' }, builtin: true },
-  { id: 'claude-desktop', displayName: 'Claude Desktop', launchable: true, hookCapable: false, hookPointer: '.config/Claude/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true },
-  { id: 'cursor', displayName: 'Cursor', launchable: true, hookCapable: true, hookPointer: '.cursor/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true },
-  { id: 'codex', displayName: 'Codex CLI', launchable: true, hookCapable: true, hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'path', binaryName: 'codex' }, builtin: true },
-  { id: 'codex-desktop', displayName: 'Codex Desktop', launchable: true, hookCapable: true, hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true },
-  { id: 'hermes', displayName: 'Hermes Agent', launchable: true, hookCapable: true, hookPointer: '.hermes/hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true },
-  { id: 'openclaw', displayName: 'OpenClaw', launchable: true, hookCapable: true, hookPointer: '.openclaw/hive-mind-install.json', detect: { kind: 'path', binaryName: 'openclaw' }, builtin: true },
+  {
+    id: 'claude-code', displayName: 'Claude Code', launchable: true, hookCapable: true,
+    hookPointer: '.claude/hive-mind-install.json', detect: { kind: 'path', binaryName: 'claude' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
+    task: {
+      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--no-session-persistence', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      accessArgs: {
+        'read-only': ['--permission-mode', 'plan'],
+        'workspace-write': ['--permission-mode', 'acceptEdits'],
+        native: [],
+      },
+      promptTransport: 'stdin', outputDialect: 'claude-stream-json', workspaceBinding: 'cwd',
+      permissionModes: ['read-only', 'workspace-write', 'native'], resumable: true,
+    },
+  },
+  {
+    id: 'claude-desktop', displayName: 'Claude Desktop', launchable: true, hookCapable: false,
+    hookPointer: '.config/Claude/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
+  },
+  {
+    id: 'cursor', displayName: 'Cursor', launchable: true, hookCapable: true,
+    hookPointer: '.cursor/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
+  },
+  {
+    id: 'codex', displayName: 'Codex CLI', launchable: true, hookCapable: true,
+    hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'path', binaryName: 'codex' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
+    task: {
+      argvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
+      resumeArgvTemplate: ['{accessArgs}', 'exec', '--ignore-user-config', '--ignore-rules', '--ephemeral', '--skip-git-repo-check', 'resume', '{sessionId}', '--json', '--color', 'never', '-C', '{workspacePath}', '-'],
+      accessArgs: {
+        'read-only': ['--ask-for-approval', 'never', '--sandbox', 'read-only'],
+        'workspace-write': ['--ask-for-approval', 'never', '--sandbox', 'workspace-write'],
+        native: [],
+      },
+      promptTransport: 'stdin', outputDialect: 'codex-jsonl', workspaceBinding: 'flag',
+      permissionModes: ['read-only', 'workspace-write', 'native'], resumable: true,
+    },
+  },
+  {
+    id: 'codex-desktop', displayName: 'Codex Desktop', launchable: true, hookCapable: true,
+    hookPointer: '.codex/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
+  },
+  {
+    id: 'hermes', displayName: 'Hermes Agent', launchable: true, hookCapable: true,
+    hookPointer: '.hermes/hive-mind-install.json', detect: { kind: 'path', binaryName: 'hermes' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: false, resumable: true, liveWaggleDance: false },
+    task: {
+      argvTemplate: ['chat', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
+      resumeArgvTemplate: ['chat', '--resume', '{sessionId}', '-q', '{prompt}', '-Q', '--source', 'tool', '--ignore-rules', '--max-turns', '12', '--checkpoints'],
+      accessArgs: { native: [] }, promptTransport: 'arg', outputDialect: 'hermes-text', workspaceBinding: 'cwd',
+      permissionModes: ['native'], resumable: true,
+    },
+  },
+  {
+    id: 'openclaw', displayName: 'OpenClaw', launchable: true, hookCapable: true,
+    hookPointer: '.openclaw/hive-mind-install.json', detect: { kind: 'path', binaryName: 'openclaw' }, builtin: true,
+    capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
+    task: {
+      argvTemplate: ['agent', '--agent', '{agentId}', '--session-key', 'agent:{agentId}:waggle:{runId}', '--message-file', '{promptFile}', '--json', '--timeout', '{timeoutSeconds}'],
+      resumeArgvTemplate: ['agent', '--agent', '{agentId}', '--session-key', 'agent:{agentId}:waggle:{sessionId}', '--message-file', '{promptFile}', '--json', '--timeout', '{timeoutSeconds}'],
+      accessArgs: { native: [] }, promptTransport: 'temp-file', outputDialect: 'openclaw-json', workspaceBinding: 'managed-agent',
+      permissionModes: ['native'], resumable: true,
+    },
+  },
 ] as const;
 
 /**
@@ -130,6 +228,18 @@ export interface DetectedTool {
   /** Tool id — a built-in ToolId or a loaded third-party adapter id (#5). */
   id: string;
   displayName: string;
+  /** True when the tool manifest allows launching from the dock. */
+  launchable?: boolean;
+  /** True when the tool manifest declares hook support. */
+  hookCapable?: boolean;
+  /** True for the built-in seven tools; false for loaded adapters. */
+  builtin?: boolean;
+  /** True when the manifest can accept the launch prompt inline. */
+  acceptsInlinePrompt?: boolean;
+  /** Canonical split between opening the app and running a captured task. */
+  capabilities?: ToolCapabilities;
+  /** Access modes supported by the manifest's captured-task contract. */
+  permissionModes?: readonly ExternalToolAccess[];
   installed: boolean;
   installedPath: string | null;
   version: string | null;
@@ -147,6 +257,6 @@ export interface ToolDetectionResult {
   platform: NodeJS.Platform | 'other';
   /** ISO timestamp at which the detection completed. */
   detectedAt: string;
-  /** Per-tool detection result. Order matches SUPPORTED_TOOLS. */
+  /** Per-tool detection result. Registry order: built-ins first, then adapters. */
   tools: DetectedTool[];
 }

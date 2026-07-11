@@ -14,8 +14,8 @@ import type { HookRegistry } from './hooks.js';
  * Request-scoped security context threaded into a spawned sub-agent / workflow
  * worker so it inherits the SAME restrictions as the chat request that spawned
  * it. Without this, sub-agents ran with the full tool pool and no approval gate
- * (the sub-agent confirmation-bypass). Populated per request by the chat route
- * via `server.agentState.spawnSecurityContext` and read at spawn time.
+ * (the sub-agent confirmation-bypass). Request-bound hosts capture this context
+ * directly; `getSpawnSecurityContext` remains for legacy/static embedders.
  */
 export interface SpawnSecurityContext {
   /** Approval-gate hooks — the shared registry carrying the request's pre:tool confirmation gate. */
@@ -75,6 +75,9 @@ export interface SubAgentResult {
   duration: number;
   /** Timestamp when the result was stored */
   completedAt: number;
+  /** Present when the run terminated without a usable result. */
+  error?: string;
+  status?: 'completed' | 'failed' | 'cancelled';
 }
 
 export interface SubAgentStatusEvent {
@@ -86,6 +89,56 @@ export interface SubAgentStatusEvent {
   toolsUsed: string[];
   startedAt: number;
   completedAt?: number;
+}
+
+export interface SubAgentRunView {
+  id: string;
+  name: string;
+  role: string;
+  task: string;
+  status: 'queued' | 'starting' | 'running' | 'waiting_for_approval' | 'paused'
+    | 'cancelling' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+  result?: string;
+  error?: string;
+  toolsUsed?: string[];
+  usage?: { inputTokens: number; outputTokens: number };
+  startedAt?: number;
+  completedAt?: number;
+}
+
+export interface SubAgentRunHandle {
+  /** Canonical public run id (for example, the durable AgentRunRegistry id). */
+  runId: string;
+  signal?: AbortSignal;
+  dispose?: () => void;
+}
+
+/**
+ * Optional host adapter for durable, workspace-scoped run lifecycle state.
+ * The agent package stays storage-agnostic; local/server mode maps this onto
+ * AgentRunRegistry + Room + memory + WaggleDance.
+ */
+export interface SubAgentRunAdapter {
+  start: (input: {
+    provisionalAgentId: string;
+    name: string;
+    role: string;
+    task: string;
+    model: string;
+    startedAt: number;
+  }) => Promise<SubAgentRunHandle> | SubAgentRunHandle;
+  complete?: (handle: SubAgentRunHandle, result: SubAgentResult) => Promise<void> | void;
+  fail?: (handle: SubAgentRunHandle, input: {
+    name: string;
+    role: string;
+    task: string;
+    error: string;
+    duration: number;
+    completedAt: number;
+    cancelled: boolean;
+  }) => Promise<void> | void;
+  list?: () => Promise<SubAgentRunView[]> | SubAgentRunView[];
+  get?: (idOrName: string) => Promise<SubAgentRunView | undefined> | SubAgentRunView | undefined;
 }
 
 export interface SubAgentToolsDeps {
@@ -134,6 +187,8 @@ export interface SubAgentToolsDeps {
    * fail-closes destructive ops.
    */
   getSpawnSecurityContext?: () => SpawnSecurityContext | undefined;
+  /** Durable host lifecycle. Falls back to the legacy in-memory maps when absent. */
+  runAdapter?: SubAgentRunAdapter;
 }
 
 // In-memory registry of spawned sub-agents and their results
@@ -242,9 +297,10 @@ export function createSubAgentTools(deps: SubAgentToolsDeps): ToolDefinition[] {
         toolNames = filterSpawnToolNames(toolNames, secCtx);
         const subTools = availableTools.filter(t => toolNames.includes(t.name));
 
-        // Generate agent ID
+        // Generate a provisional ID. Hosts with a durable run registry replace
+        // it with their canonical public run ID before execution starts.
         agentCounter++;
-        const id = `agent-${agentCounter}-${Date.now()}`;
+        const provisionalId = `agent-${agentCounter}-${Date.now()}`;
 
         // Build sub-agent system prompt
         const systemPrompt = `# Sub-Agent: ${name}
@@ -261,6 +317,24 @@ ${task}
 - If you can't complete the task with the tools available, explain what you need.
 - When done, provide a clear summary of your findings/results.`;
 
+        const startTime = Date.now();
+        let runHandle: SubAgentRunHandle | undefined;
+        let id = provisionalId;
+        try {
+          runHandle = await deps.runAdapter?.start({
+            provisionalAgentId: provisionalId,
+            name,
+            role,
+            task,
+            model,
+            startedAt: startTime,
+          });
+          if (runHandle?.runId) id = runHandle.runId;
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          return `## Sub-Agent Error: ${name}\n**Error:** Could not start the run: ${errMsg}`;
+        }
+
         const agentDef: SubAgentDef = {
           id,
           name,
@@ -271,10 +345,10 @@ ${task}
           maxTurns,
           createdAt: Date.now(),
         };
-        activeAgents.set(id, agentDef);
+        if (!deps.runAdapter) activeAgents.set(id, agentDef);
 
-        // Run the sub-agent loop
-        const startTime = Date.now();
+        // Run the sub-agent loop. This deliberately remains delegate-and-wait:
+        // the request-scoped approval gate must stay alive for the full child run.
         // Bug #9: emit running status so the Room canvas can render a live tile.
         deps.onSubAgentStatus?.({
           agentId: id,
@@ -295,6 +369,7 @@ ${task}
             messages: [{ role: 'user', content: task }],
             maxTurns,
             stream: false, // Sub-agents don't stream to the user
+            signal: runHandle?.signal,
             // W2.9 + SEC: sub-agents respect approval gates and memory validation
             // hooks. Prefer the request-scoped registry (carries this request's
             // pre:tool confirmation gate) over the static deps.hooks.
@@ -312,6 +387,10 @@ ${task}
               : undefined,
           });
 
+          if (runHandle?.signal?.aborted) {
+            throw new Error('Sub-agent run was cancelled');
+          }
+
           const duration = Date.now() - startTime;
           const subResult: SubAgentResult = {
             agentId: id,
@@ -322,9 +401,12 @@ ${task}
             toolsUsed: result.toolsUsed,
             duration,
             completedAt: Date.now(),
+            status: 'completed',
           };
-          agentResults.set(id, subResult);
-          evictOldestResult();
+          if (!deps.runAdapter) {
+            agentResults.set(id, subResult);
+            evictOldestResult();
+          }
           activeAgents.delete(id);
 
           // Gap L: persist completed sub-agent result into the active mind
@@ -335,6 +417,13 @@ ${task}
               await deps.onSubAgentComplete(subResult);
             } catch {
               // Swallow — persistence is best-effort. Caller should log on its side.
+            }
+          }
+          if (runHandle && deps.runAdapter?.complete) {
+            try {
+              await deps.runAdapter.complete(runHandle, subResult);
+            } catch {
+              // Durable observability is best-effort; never hide the usable result.
             }
           }
 
@@ -350,11 +439,39 @@ ${task}
             completedAt: Date.now(),
           });
 
-          return `## Sub-Agent Result: ${name}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${result.content}`;
+          return `## Sub-Agent Result: ${name}\n**Run ID:** ${id}\n**Role:** ${role}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ') || 'none'}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens} total\n\n---\n\n${result.content}`;
         } catch (err) {
           const duration = Date.now() - startTime;
           activeAgents.delete(id);
           const errMsg = err instanceof Error ? err.message : String(err);
+          const completedAt = Date.now();
+          const cancelled = runHandle?.signal?.aborted ?? false;
+          const failedResult: SubAgentResult = {
+            agentId: id,
+            agentName: name,
+            role,
+            response: '',
+            usage: { inputTokens: 0, outputTokens: 0 },
+            toolsUsed: [],
+            duration,
+            completedAt,
+            error: errMsg,
+            status: cancelled ? 'cancelled' : 'failed',
+          };
+          if (!deps.runAdapter) {
+            agentResults.set(id, failedResult);
+            evictOldestResult();
+          }
+
+          if (runHandle && deps.runAdapter?.fail) {
+            try {
+              await deps.runAdapter.fail(runHandle, {
+                name, role, task, error: errMsg, duration, completedAt, cancelled,
+              });
+            } catch {
+              // Preserve the main-agent-visible error even if the host store failed.
+            }
+          }
 
           // Bug #9: emit error status so the Room canvas marks the tile failed.
           deps.onSubAgentStatus?.({
@@ -365,10 +482,12 @@ ${task}
             task,
             toolsUsed: [],
             startedAt: startTime,
-            completedAt: Date.now(),
+            completedAt,
           });
 
-          return `## Sub-Agent Error: ${name}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Error:** ${errMsg}`;
+          return `## Sub-Agent Error: ${name}\n**Run ID:** ${id}\n**Duration:** ${(duration / 1000).toFixed(1)}s\n**Error:** ${errMsg}`;
+        } finally {
+          try { runHandle?.dispose?.(); } catch { /* already released */ }
         }
       },
     },
@@ -382,6 +501,23 @@ ${task}
         properties: {},
       },
       execute: async () => {
+        if (deps.runAdapter?.list) {
+          const runs = await deps.runAdapter.list();
+          if (runs.length === 0) {
+            return 'No sub-agents spawned yet. Use spawn_agent to create one.';
+          }
+          let output = `## Agents (${runs.length})\n`;
+          for (const run of runs) {
+            const tokenCount = (run.usage?.inputTokens ?? 0) + (run.usage?.outputTokens ?? 0);
+            output += `- **${run.name}** (${run.id}) — ${run.role}, ${run.status}`;
+            if (tokenCount > 0) output += `, ${tokenCount} tokens`;
+            output += '\n';
+            const preview = run.result ?? run.error;
+            if (preview) output += `  Preview: ${preview.slice(0, 120)}${preview.length > 120 ? '...' : ''}\n`;
+          }
+          return output;
+        }
+
         const active = Array.from(activeAgents.values());
         const completed = Array.from(agentResults.values());
 
@@ -422,6 +558,21 @@ ${task}
       },
       execute: async (args) => {
         const agentId = args.agent_id as string;
+        if (deps.runAdapter?.get) {
+          const run = await deps.runAdapter.get(agentId);
+          if (!run) {
+            return `No result found for agent "${agentId}". It may not exist. Use list_agents to see available agents.`;
+          }
+          if (!['completed', 'failed', 'cancelled', 'interrupted'].includes(run.status)) {
+            return `Agent "${agentId}" is ${run.status}. Wait for it to complete.`;
+          }
+          if (run.status !== 'completed') {
+            return `## Sub-Agent ${run.status}: ${run.name}\n**Role:** ${run.role}\n**Error:** ${run.error ?? 'The run did not produce a result.'}`;
+          }
+          const usage = run.usage ?? { inputTokens: 0, outputTokens: 0 };
+          return `## Result: ${run.name}\n**Role:** ${run.role}\n**Tools used:** ${(run.toolsUsed ?? []).join(', ') || 'none'}\n**Tokens:** ${usage.inputTokens + usage.outputTokens}\n\n---\n\n${run.result ?? ''}`;
+        }
+
         // Support lookup by ID or by name
         let result = agentResults.get(agentId);
         if (!result) {
@@ -438,6 +589,9 @@ ${task}
             }
           }
           return `No result found for agent "${agentId}". It may not exist. Use list_agents to see available agents.`;
+        }
+        if (result.error) {
+          return `## Sub-Agent ${result.status ?? 'failed'}: ${result.agentName}\n**Role:** ${result.role}\n**Error:** ${result.error}`;
         }
         return `## Result: ${result.agentName}\n**Role:** ${result.role}\n**Duration:** ${(result.duration / 1000).toFixed(1)}s\n**Tools used:** ${result.toolsUsed.join(', ')}\n**Tokens:** ${result.usage.inputTokens + result.usage.outputTokens}\n\n---\n\n${result.response}`;
       },

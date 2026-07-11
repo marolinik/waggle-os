@@ -68,8 +68,16 @@ export class ToolOutputBuffer {
     this.scheduleEvict = deps.scheduleEvict ?? defaultScheduleEvict;
   }
 
-  /** Begin buffering a freshly-spawned observed process's output. */
-  attach(pid: number, handle: ObservedHandle): void {
+  /**
+   * Begin buffering a freshly-spawned observed process's output. The optional
+   * exit observer shares the same underlying subscription so a minimal handle
+   * cannot lose buffer finalization when the caller also tracks process state.
+   */
+  attach(
+    pid: number,
+    handle: ObservedHandle,
+    onExit?: (code: number | null) => void,
+  ): void {
     const entry: Entry = {
       lines: [],
       bytes: 0,
@@ -81,7 +89,10 @@ export class ToolOutputBuffer {
     };
     this.entries.set(pid, entry);
     handle.onData((chunk) => this.ingest(pid, chunk));
-    handle.onExit((code) => this.finalize(pid, code));
+    handle.onExit((code) => {
+      this.finalize(pid, code);
+      onExit?.(code);
+    });
   }
 
   has(pid: number): boolean {

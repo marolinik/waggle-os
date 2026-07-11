@@ -104,6 +104,53 @@ describe('SubagentOrchestrator', () => {
     expect(callOrder).toEqual(['Step A', 'Step B']);
   });
 
+  it('runs each dependency-ready wave concurrently and honors per-step models', async () => {
+    const started: string[] = [];
+    const releases = new Map<string, () => void>();
+    let active = 0;
+    let maxActive = 0;
+    runner.mockImplementation(async (config: AgentLoopConfig) => {
+      const name = config.systemPrompt.match(/Sub-Agent: (.+)/)?.[1] ?? 'unknown';
+      started.push(name);
+      active++;
+      maxActive = Math.max(maxActive, active);
+      if (name !== 'Step C') {
+        await new Promise<void>((resolve) => releases.set(name, resolve));
+      }
+      active--;
+      return {
+        content: `Done: ${name}`,
+        usage: { inputTokens: 1, outputTokens: 1 },
+        toolsUsed: [],
+      };
+    });
+
+    const running = orchestrator.runWorkflow({
+      name: 'parallel-wave',
+      description: 'Parallel work followed by a dependent step',
+      steps: [
+        { name: 'Step A', role: 'researcher', task: 'A', model: 'model-a' },
+        { name: 'Step B', role: 'writer', task: 'B', model: 'model-b' },
+        {
+          name: 'Step C', role: 'analyst', task: 'C', model: 'model-c',
+          dependsOn: ['Step A', 'Step B'], contextFrom: ['Step A', 'Step B'],
+        },
+      ],
+      aggregation: 'last',
+    });
+
+    await vi.waitFor(() => expect(started).toEqual(['Step A', 'Step B']));
+    expect(maxActive).toBe(2);
+    expect(started).not.toContain('Step C');
+    releases.get('Step A')?.();
+    releases.get('Step B')?.();
+
+    const result = await running;
+    expect(started).toEqual(['Step A', 'Step B', 'Step C']);
+    expect(runner.mock.calls.map(([config]) => config.model)).toEqual(['model-a', 'model-b', 'model-c']);
+    expect([...result.results.values()].map((worker) => worker.model)).toEqual(['model-a', 'model-b', 'model-c']);
+  });
+
   it('contextFrom injects previous results into system prompt', async () => {
     const systemPrompts: string[] = [];
     runner.mockImplementation(async (config: AgentLoopConfig) => {

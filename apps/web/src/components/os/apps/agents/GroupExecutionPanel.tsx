@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import {
-  Activity, X, StopCircle, Clock, Loader2, CheckCircle2, XCircle,
+  Activity, X, StopCircle, Clock, Loader2, CheckCircle2, XCircle, ExternalLink,
 } from 'lucide-react';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { PERSONAS } from '@/lib/personas';
@@ -51,6 +51,12 @@ const GroupExecutionPanel = ({ exec, agents, strategy, onDismiss, onCancel }: Gr
           {exec.status === 'cancelled' ? 'Cancelled' : isFinished ? 'Execution Complete' : 'Running…'}
         </span>
         <span className="text-[11px] font-mono text-muted-foreground">{elapsed.toFixed(1)}s</span>
+        <a
+          href={`/room?room=${encodeURIComponent(exec.roomId)}`}
+          className="ml-1 flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
+        >
+          <ExternalLink className="w-3 h-3" /> Open Room
+        </a>
         {isRunning && (
           <button
             onClick={onCancel}

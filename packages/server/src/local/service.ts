@@ -57,6 +57,15 @@ export function resolveDataDir(optionDataDir?: string): string {
   return optionDataDir ?? (process.env.WAGGLE_DATA_DIR || path.join(os.homedir(), '.waggle'));
 }
 
+/** Resolve the listen port: explicit option > validated WAGGLE_PORT > 3333. */
+export function resolveServicePort(optionPort?: number): number {
+  if (optionPort !== undefined) return optionPort;
+  const envPort = Number.parseInt(process.env.WAGGLE_PORT ?? '', 10);
+  return Number.isInteger(envPort) && envPort > 0 && envPort <= 65_535
+    ? envPort
+    : DEFAULT_PORT;
+}
+
 /**
  * Check if this is a fresh install (no personal.mind, no default.mind).
  */
@@ -121,7 +130,7 @@ function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
  */
 export async function startService(options?: ServiceOptions): Promise<ServiceResult> {
   const dataDir = resolveDataDir(options?.dataDir);
-  const port = options?.port ?? DEFAULT_PORT;
+  const port = resolveServicePort(options?.port);
   const litellmPort = options?.litellmPort ?? 4000;
   const skipLiteLLM = options?.skipLiteLLM ?? false;
   const emit = options?.onProgress ?? (() => {});

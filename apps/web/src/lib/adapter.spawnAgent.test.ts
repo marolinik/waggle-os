@@ -19,13 +19,20 @@ describe('LocalAdapter.spawnAgent', () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(
         JSON.stringify({
-          id: 'test-session',
+          id: 'run-1',
+          runId: 'run-1',
+          roomId: 'room-1',
           workspaceId: 'ws-1',
-          status: 'running',
-          startedAt: '2026-04-19T00:00:00Z',
+          sessionId: 'spawn-run-1',
+          status: 'queued',
+          statusUrl: '/api/agent-runs/run-1',
+          resumable: false,
+          task: 'test',
+          persona: 'researcher',
+          model: 'claude-sonnet-4-6',
         }),
         {
-          status: 200,
+          status: 202,
           headers: { 'Content-Type': 'application/json' },
         },
       ),
@@ -81,10 +88,30 @@ describe('LocalAdapter.spawnAgent', () => {
     const adapter = new LocalAdapter('http://test-server:9999');
     const result = await adapter.spawnAgent({ task: 'test' });
     expect(result).toEqual({
-      id: 'test-session',
+      id: 'run-1',
+      runId: 'run-1',
+      roomId: 'room-1',
       workspaceId: 'ws-1',
-      status: 'running',
-      startedAt: '2026-04-19T00:00:00Z',
+      sessionId: 'spawn-run-1',
+      status: 'queued',
+      statusUrl: '/api/agent-runs/run-1',
+      resumable: false,
+      task: 'test',
+      persona: 'researcher',
+      model: 'claude-sonnet-4-6',
     });
+  });
+
+  it('rejects a legacy response without canonical run and Room identity', async () => {
+    fetchSpy.mockResolvedValueOnce(new Response(
+      JSON.stringify({ id: 'legacy-session', workspaceId: 'ws-1', status: 'running' }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    ));
+
+    const adapter = new LocalAdapter('http://test-server:9999');
+
+    await expect(adapter.spawnAgent({ task: 'test' })).rejects.toThrow(
+      'Agent started without a canonical Room identity',
+    );
   });
 });

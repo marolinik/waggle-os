@@ -26,6 +26,7 @@ export interface WorkerState {
   error?: string;
   toolsUsed: string[];
   usage: { inputTokens: number; outputTokens: number };
+  model?: string;
 }
 
 export interface WorkflowStep {
@@ -40,6 +41,8 @@ export interface WorkflowStep {
   contextFrom?: string[];
   /** Max turns for this worker */
   maxTurns?: number;
+  /** Optional per-member model override. */
+  model?: string;
 }
 
 export interface WorkflowTemplate {
@@ -56,6 +59,8 @@ export interface OrchestratorConfig {
   litellmUrl: string;
   litellmApiKey: string;
   defaultModel?: string;
+  /** Abort all workers when the owning async job is cancelled. */
+  signal?: AbortSignal;
   /** Approval-gate hooks forwarded into each worker loop (fallback when no request context). */
   hooks?: HookRegistry;
   /**
@@ -128,6 +133,7 @@ export class SubagentOrchestrator extends EventEmitter {
         task: step.task,
         toolsUsed: [],
         usage: { inputTokens: 0, outputTokens: 0 },
+        model: step.model ?? this.config.defaultModel,
       };
       this.workers.set(id, pendingState);
       this.emit('worker:status', { workerId: id, status: 'pending', workerState: pendingState });
@@ -137,32 +143,19 @@ export class SubagentOrchestrator extends EventEmitter {
     const completed = new Set<string>();
     const steps = [...template.steps];
 
-    // Process steps respecting dependencies (topological order, sequential execution)
+    // Process dependency-ready waves concurrently. Dependency chains still
+    // produce one worker per wave; parallel templates start all ready members.
     while (completed.size < steps.length) {
-      let progressed = false;
-
-      for (const step of steps) {
-        if (completed.has(step.name)) continue;
-
-        // Check if all dependencies are met
-        const deps = step.dependsOn ?? [];
-        const depsReady = deps.every(d => completed.has(d));
-        if (!depsReady) continue;
-
-        // Run this worker (reuse the pre-created pending worker ID)
-        const workerState = await this.runWorker(step, contextResults, stepWorkerIds.get(step.name));
-
-        // Store result for downstream context injection
-        if (workerState.status === 'done' && workerState.result) {
-          contextResults.set(step.name, workerState.result);
-        }
-
-        completed.add(step.name);
-        progressed = true;
-      }
+      const ready = steps.filter((step) => {
+        // A context source is also an execution dependency: starting the
+        // consumer before that source finishes would silently omit context.
+        const prerequisites = new Set([...(step.dependsOn ?? []), ...(step.contextFrom ?? [])]);
+        return !completed.has(step.name)
+          && [...prerequisites].every((dependency) => completed.has(dependency));
+      });
 
       // Safety: if no progress was made, we have a circular dependency — break
-      if (!progressed) {
+      if (ready.length === 0) {
         const remaining = steps.filter(s => !completed.has(s.name));
         for (const step of remaining) {
           const name = step.name;
@@ -181,6 +174,18 @@ export class SubagentOrchestrator extends EventEmitter {
           completed.add(name);
         }
         break;
+      }
+
+      const wave = await Promise.all(
+        ready.map((step) => this.runWorker(step, contextResults, stepWorkerIds.get(step.name))),
+      );
+      for (let index = 0; index < ready.length; index++) {
+        const step = ready[index];
+        const workerState = wave[index];
+        if (workerState.status === 'done' && workerState.result) {
+          contextResults.set(step.name, workerState.result);
+        }
+        completed.add(step.name);
       }
     }
 
@@ -218,6 +223,7 @@ export class SubagentOrchestrator extends EventEmitter {
       task: step.task,
       toolsUsed: [],
       usage: { inputTokens: 0, outputTokens: 0 },
+      model: step.model ?? this.config.defaultModel,
     };
     workerState.status = 'running';
     workerState.startedAt = Date.now();
@@ -239,12 +245,13 @@ export class SubagentOrchestrator extends EventEmitter {
       const result = await this.config.runLoop({
         litellmUrl: this.config.litellmUrl,
         litellmApiKey: this.config.litellmApiKey,
-        model: this.config.defaultModel ?? 'claude-sonnet-4-6',
+        model: step.model ?? this.config.defaultModel ?? 'claude-sonnet-4-6',
         systemPrompt,
         tools,
         messages: [{ role: 'user', content: step.task }],
         maxTurns: step.maxTurns ?? 50,
         stream: false,
+        signal: this.config.signal,
         // SEC: worker loops respect the request's approval gate + governance
         // denylist. The executeToolCall critical floor still fail-closes
         // destructive ops even when no gate is wired.

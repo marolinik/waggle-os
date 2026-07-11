@@ -37,15 +37,19 @@ interface AgentGroupData {
 export function buildWorkflowFromGroup(group: AgentGroupData, task: string): WorkflowTemplate {
   const strategy = group.strategy || 'sequential';
 
-  const steps: WorkflowStep[] = group.members
+  const steps: WorkflowStep[] = [...group.members]
     .sort((a, b) => (a.executionOrder ?? 0) - (b.executionOrder ?? 0))
     .map((member, index, arr) => {
+      const personaInstructions = member.systemPrompt?.trim()
+        ? `\n\n## Agent Instructions\n${member.systemPrompt.trim()}`
+        : '';
       const step: WorkflowStep = {
         name: member.name ?? `agent-${member.agentId}`,
         role: member.roleInGroup ?? member.role ?? 'worker',
-        task,
+        task: `${task}${personaInstructions}`,
         tools: member.tools,
         maxTurns: 10,
+        model: member.model,
       };
 
       switch (strategy) {
@@ -66,7 +70,7 @@ export function buildWorkflowFromGroup(group: AgentGroupData, task: string): Wor
           // First member is coordinator, others depend on coordinator's output
           if (index === 0) {
             step.role = 'coordinator';
-            step.task = `You are the coordinator. Break down this task and delegate to your team:\n\n${task}`;
+            step.task = `You are the coordinator. Break down this task and delegate to your team:\n\n${step.task}`;
           } else {
             const coordinatorName = arr[0].name ?? `agent-${arr[0].agentId}`;
             step.dependsOn = [coordinatorName];

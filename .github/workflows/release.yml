@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Build packages (shared -> core -> agent -> server)
+        run: npm run build:packages
+
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs
 
@@ -93,6 +96,9 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Build packages (shared -> core -> agent -> server)
+        run: npm run build:packages
 
       - name: Build sidecar
         run: node scripts/build-sidecar.mjs

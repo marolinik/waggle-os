@@ -208,6 +208,9 @@ describe('stop handler — WAGGLE_SIGNAL_EMIT (Phase 1E)', () => {
     // emission per the Importance→emit mapping (critical → critical).
     expect(content.importance).toBe('critical');
     expect(content.sessionId).toBe('sess-cc');
+    expect(content.frameId).toBe('frame-1');
+    expect(content.memoryWorkspace).toBe('personal');
+    expect(content.summary).toContain('never commit secrets');
   });
 
   it('does not emit on a normal-importance turn (emission policy floor)', async () => {

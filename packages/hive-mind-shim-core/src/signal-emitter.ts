@@ -74,6 +74,8 @@ export interface EmitSignalOptions {
    *   options.url > env.WAGGLE_SIDECAR_URL > http://127.0.0.1:3333
    */
   url?: string;
+  /** Narrow collaboration credential. Defaults to env.WAGGLE_RUN_TOKEN. */
+  runToken?: string;
   /** Override the request timeout (default 2000ms). */
   timeoutMs?: number;
   /**
@@ -117,6 +119,14 @@ function resolveUrl(opts: EmitSignalOptions): string {
   return fromEnv && fromEnv.length > 0 ? fromEnv : 'http://127.0.0.1:3333';
 }
 
+function resolveRunToken(opts: EmitSignalOptions): string | undefined {
+  const value = opts.runToken ?? (
+    typeof process !== 'undefined' && process.env ? process.env.WAGGLE_RUN_TOKEN : undefined
+  );
+  if (!value || value.length < 32 || value.length > 200 || /[\r\n]/.test(value)) return undefined;
+  return value;
+}
+
 function warn(opts: EmitSignalOptions, message: string): void {
   if (opts.onWarn) {
     opts.onWarn(message);
@@ -142,6 +152,7 @@ export async function emitSignalToWaggleDance(
   const url = resolveUrl(opts);
   const timeoutMs = opts.timeoutMs ?? 2000;
   const fetchFn = opts.fetchImpl ?? fetch;
+  const runToken = resolveRunToken(opts);
 
   const body = {
     type: opts.type,
@@ -159,7 +170,10 @@ export async function emitSignalToWaggleDance(
   try {
     const res = await fetchFn(`${url}/api/waggle-dance/signal`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(runToken ? { 'x-waggle-run-token': runToken } : {}),
+      },
       body: JSON.stringify(body),
       signal: controller.signal,
     });

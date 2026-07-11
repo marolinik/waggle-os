@@ -14,6 +14,14 @@ import { runStatus, renderStatusResult } from './commands/status.js';
 import { runMcpStart } from './commands/mcp-start.js';
 import { runMcpCall, renderMcpCallResult } from './commands/mcp-call.js';
 import { runDoctor, renderDoctorResult } from './commands/doctor.js';
+import {
+  renderDanceReceive,
+  renderDanceSend,
+  runDanceReceive,
+  runDanceSend,
+  type DanceMessageSubtype,
+  type DanceMessageType,
+} from './commands/dance.js';
 import type { CliEnv } from './setup.js';
 import type { Importance } from '@waggle/hive-mind-core';
 
@@ -190,6 +198,29 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
       return fmt === 'json' ? json(result) : renderMcpCallResult(result, 'plain');
     }
 
+    case 'dance-send': {
+      const message = (values['message'] as string | undefined) ?? positionals.join(' ');
+      if (!message) throw new Error('dance send requires --message or positional text');
+      const result = await runDanceSend({
+        type: (values['type'] as DanceMessageType | undefined) ?? 'broadcast',
+        subtype: (values['subtype'] as DanceMessageSubtype | undefined) ?? 'discovery',
+        message,
+        referenceId: values['reference-id'] as string | undefined,
+        timeoutMs: intArg(values, 'timeout-ms'),
+      });
+      return fmt === 'json' ? json(result) : renderDanceSend(result);
+    }
+
+    case 'dance-receive': {
+      const result = await runDanceReceive({
+        since: values['since'] as string | undefined,
+        limit: intArg(values, 'limit'),
+        subtype: values['subtype'] as DanceMessageSubtype | undefined,
+        timeoutMs: intArg(values, 'timeout-ms'),
+      });
+      return fmt === 'json' ? json(result) : renderDanceReceive(result);
+    }
+
     case 'doctor': {
       // Wave 1 cleanup — self-diagnostic smoke test independent of upstream hook.
       // Spawn probe (Windows .cmd shim) → save+recall frame → cache cleanup.
@@ -210,6 +241,6 @@ export async function dispatch(args: DispatchArgs): Promise<string | undefined> 
     }
 
     default:
-      throw new Error(`Unknown subcommand: "${subcommand}". Try: init, status, doctor, recall-context, save-session, harvest-local, cognify, compile-wiki, maintenance, mcp start, mcp call <tool>`);
+      throw new Error(`Unknown subcommand: "${subcommand}". Try: init, status, doctor, recall-context, save-session, harvest-local, cognify, compile-wiki, maintenance, mcp start, mcp call <tool>, dance send, dance receive`);
   }
 }

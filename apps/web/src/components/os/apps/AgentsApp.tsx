@@ -38,6 +38,7 @@ import type { BackendPersona } from './agents/types';
  */
 interface AgentsAppProps {
   workspaces?: Workspace[];
+  activeWorkspaceId?: string | null;
 }
 
 /**
@@ -55,7 +56,7 @@ export function resetAgentsRouteCache(): void {
   rosterCache.resetForTests();
 }
 
-const AgentsApp = ({ workspaces }: AgentsAppProps) => {
+const AgentsApp = ({ workspaces, activeWorkspaceId }: AgentsAppProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
   // Cold-load race guard (same fix as HomeCockpit): wait for the adapter's
@@ -246,7 +247,7 @@ const AgentsApp = ({ workspaces }: AgentsAppProps) => {
 
       {view === 'templates' ? (
         <div className="flex-1 min-h-0">
-          <TemplatesView onUseTemplate={useTemplate} />
+          <TemplatesView onUseTemplate={useTemplate} activeWorkspaceId={activeWorkspaceId} />
         </div>
       ) : (
         <>

@@ -498,7 +498,11 @@ const ShellLayout = () => {
       <NotificationInbox open={ov.showNotifications} onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
       <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />
       <SpawnAgentDialog open={ov.showSpawnAgent} onClose={() => ov.setShowSpawnAgent(false)}
-        workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)} />
+        workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)}
+        onSpawned={({ roomId, runId }) => {
+          ov.setShowSpawnAgent(false);
+          navigate(`/room?room=${encodeURIComponent(roomId)}&run=${encodeURIComponent(runId)}`);
+        }} />
       {shouldShowCoachMarks({
         completed: onboardingState.completed,
         tooltipsDismissed: !!onboardingState.tooltipsDismissed,

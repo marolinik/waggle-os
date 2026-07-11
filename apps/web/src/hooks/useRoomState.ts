@@ -2,17 +2,24 @@
  * useRoomState — subscribes to `subagent_status` SSE events and maintains
  * a per-workspace map of live sub-agents for the Room canvas.
  *
- * The server emits the full current roster of agents on every status
- * change (not deltas), so each event replaces the workspace's agent list.
- * Completed agents stick around in the "recent" bucket for 15 minutes so
- * they don't vanish from view the instant they finish.
+ * Legacy chat subagents arrive as SSE deltas. Durable external/Fleet/group
+ * runs hydrate from the AgentRun snapshot and replay journal, so reconnects
+ * do not lose participants or results. Completed agents remain in "recent"
+ * for 15 minutes.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { adapter } from '@/lib/adapter';
 import {
+  applyCanonicalRunEvents,
+  applyRunEvent,
   applyStatusEvent,
+  filterWorkspaceMapByRoom,
+  hydrateCanonicalRuns,
+  hydrateRunSnapshot,
+  indexCanonicalRooms,
   pruneRecent,
+  type CanonicalRunMap,
   type RoomAgent as _RoomAgent,
   type WorkspaceAgents,
 } from '@/lib/room-state-reducer';
@@ -20,21 +27,27 @@ import {
 // Re-export the type at the old import path so RoomApp doesn't need changes.
 export type RoomAgent = _RoomAgent;
 
-export function useRoomState() {
+export function useRoomState(focusedRoomId?: string) {
   const [workspaceMap, setWorkspaceMap] = useState<Map<string, WorkspaceAgents>>(() => new Map());
+  const [runsById, setRunsById] = useState<CanonicalRunMap>(() => new Map());
   // P7/D15 B2: a broken SSE channel must be distinguishable from an idle room.
   // `connecting` covers the brief subscribe window; `error` flags a subscribe
   // failure so RoomApp can show reconnect instead of "no agents running".
   const [connecting, setConnecting] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [streamError, setStreamError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const reconnect = useCallback(() => setReconnectNonce((n) => n + 1), []);
 
   useEffect(() => {
     let unsub: (() => void) | undefined;
+    let disposed = false;
+    let syncing = false;
+    let lastSeq: number | null = null;
     setConnecting(true);
-    setError(null);
+    setStreamError(null);
+    setSyncError(null);
     try {
       unsub = adapter.subscribeSubagentStatus((event) => {
         setWorkspaceMap(prev => {
@@ -46,16 +59,58 @@ export function useRoomState() {
           return next;
         });
       });
-      // Subscription established (the SSE contract emits the roster only on a
-      // status change, so absence of events = idle, not still-connecting).
-      setConnecting(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect to the Room');
+      setStreamError(err instanceof Error ? err.message : 'Failed to connect to the Room');
       setConnecting(false);
       console.error('[useRoomState] SSE subscribe failed:', err);
     }
 
-    return () => unsub?.();
+    const syncRuns = async () => {
+      if (syncing || disposed) return;
+      syncing = true;
+      try {
+        if (lastSeq === null) {
+          const snapshot = await adapter.getAgentRunSnapshot();
+          if (disposed) return;
+          lastSeq = snapshot.lastSeq;
+          setRunsById(hydrateCanonicalRuns(snapshot.runs));
+          setWorkspaceMap((prev) => hydrateRunSnapshot(prev, snapshot.runs));
+        } else {
+          const replay = await adapter.getAgentRunEvents(lastSeq);
+          if (disposed) return;
+          lastSeq = replay.lastSeq;
+          setRunsById((prev) => {
+            if (replay.resetRequired && replay.snapshot) {
+              return hydrateCanonicalRuns(replay.snapshot.runs);
+            }
+            return applyCanonicalRunEvents(prev, replay.events);
+          });
+          setWorkspaceMap((prev) => {
+            if (replay.resetRequired && replay.snapshot) {
+              return hydrateRunSnapshot(prev, replay.snapshot.runs);
+            }
+            return replay.events.reduce(
+              (state, event) => applyRunEvent(state, event),
+              prev,
+            );
+          });
+        }
+        setSyncError(null);
+      } catch (err) {
+        if (!disposed) setSyncError(err instanceof Error ? err.message : 'Failed to sync Room runs');
+      } finally {
+        syncing = false;
+        if (!disposed) setConnecting(false);
+      }
+    };
+    void syncRuns();
+    const poll = setInterval(() => { void syncRuns(); }, 1_000);
+
+    return () => {
+      disposed = true;
+      clearInterval(poll);
+      unsub?.();
+    };
   }, [reconnectNonce]);
 
   // Periodically prune recent entries so stale ones fall off even without new events.
@@ -77,14 +132,47 @@ export function useRoomState() {
     return () => clearInterval(interval);
   }, []);
 
-  const allWorkspaceIds = useMemo(() => [...workspaceMap.keys()], [workspaceMap]);
+  const canonicalRooms = useMemo(() => indexCanonicalRooms(runsById), [runsById]);
+  const focusedRoom = focusedRoomId ? canonicalRooms.roomsById.get(focusedRoomId) : undefined;
+  const focusedWorkers = focusedRoomId
+    ? (canonicalRooms.childrenByRoomId.get(focusedRoom?.id ?? focusedRoomId) ?? [])
+    : [];
+  const visibleWorkspaceMap = useMemo(
+    () => focusedRoomId
+      ? filterWorkspaceMapByRoom(workspaceMap, focusedRoom?.roomId ?? focusedRoomId)
+      : workspaceMap,
+    [focusedRoom, focusedRoomId, workspaceMap],
+  );
+  const allWorkspaceIds = useMemo(() => [...visibleWorkspaceMap.keys()], [visibleWorkspaceMap]);
   const totalLive = useMemo(() => {
     let count = 0;
-    for (const data of workspaceMap.values()) count += data.live.length;
+    for (const data of visibleWorkspaceMap.values()) count += data.live.length;
     return count;
-  }, [workspaceMap]);
+  }, [visibleWorkspaceMap]);
 
-  const getWorkspace = (workspaceId: string): WorkspaceAgents | undefined => workspaceMap.get(workspaceId);
+  const getWorkspace = (workspaceId: string): WorkspaceAgents | undefined => visibleWorkspaceMap.get(workspaceId);
+  const getRoomWorkers = (roomId: string) => {
+    const rootId = canonicalRooms.roomsById.get(roomId)?.id ?? roomId;
+    return canonicalRooms.childrenByRoomId.get(rootId) ?? [];
+  };
+  const error = syncError ?? streamError;
 
-  return { workspaceMap, allWorkspaceIds, totalLive, getWorkspace, connecting, error, reconnect };
+  return {
+    workspaceMap: visibleWorkspaceMap,
+    allWorkspaceMap: workspaceMap,
+    allWorkspaceIds,
+    totalLive,
+    getWorkspace,
+    runsById,
+    rooms: canonicalRooms.rooms,
+    roomsById: canonicalRooms.roomsById,
+    childrenByRoomId: canonicalRooms.childrenByRoomId,
+    getRoomWorkers,
+    focusedRoomId,
+    focusedRoom,
+    focusedWorkers,
+    connecting,
+    error,
+    reconnect,
+  };
 }

@@ -11,6 +11,8 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { persistMessage } from './chat-persistence.js';
 import { createLogger } from '../logger.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
+import { spawnIsolatedFleetRun } from '../fleet-run-executor.js';
+import { resolveUsableModel } from '../model-availability.js';
 
 /**
  * AI-OS #6 fast-follow — durable "why" for an agent spawn: project ← workspace
@@ -79,10 +81,20 @@ export async function fleetRoutes(fastify: FastifyInstance) {
   // actually executes the task; this Phase A delivers the visible-state
   // halves of PM acceptance: live session count + Waggle Dance signal.
   fastify.post<{
-    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string };
+    Body: { task: string; persona?: string; model?: string; parentWorkspaceId?: string; goal?: string; agentId?: string };
   }>('/api/fleet/spawn', async (request, reply) => {
-    const { task, persona, model, parentWorkspaceId, goal } = request.body;
+    const { task, persona, model, parentWorkspaceId, goal, agentId } = request.body;
     if (!task) return reply.code(400).send({ error: 'task is required' });
+
+    // The durable registry is present in every production sidecar. Keep the
+    // legacy workspace-session path below only for lightweight route tests and
+    // old embedders that register fleetRoutes in isolation.
+    if (fastify.agentRunRegistry) {
+      const spawned = await spawnIsolatedFleetRun(fastify, {
+        task, persona, model, parentWorkspaceId, goal, agentId,
+      });
+      return reply.code(spawned.statusCode).send(spawned.body);
+    }
 
     const wsId = parentWorkspaceId || fastify.workspaceManager.getDefault() || fastify.workspaceManager.list()[0]?.id || 'default-workspace';
     const sessionManager = fastify.sessionManager;
@@ -105,10 +117,11 @@ export async function fleetRoutes(fastify: FastifyInstance) {
     // default to model:'auto').
     const isSentinel = (m?: string | null): boolean => !m || m === 'auto' || m === 'default';
     const wsModel = fastify.workspaceManager?.get(wsId)?.model;
-    const resolvedModel = (!isSentinel(model) ? model : undefined)
+    const selectedModel = (!isSentinel(model) ? model : undefined)
       ?? (!isSentinel(wsModel) ? wsModel : undefined)
       ?? fastify.agentState?.currentModel
       ?? 'default';
+    const resolvedModel = await resolveUsableModel(fastify, selectedModel);
 
     let session;
     try {

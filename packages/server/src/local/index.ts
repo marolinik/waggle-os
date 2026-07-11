@@ -95,6 +95,7 @@ import { teamRoutes } from './routes/team.js';
 import { taskRoutes } from './routes/tasks.js';
 import { capabilitiesRoutes } from './routes/capabilities.js';
 import { toolsRoutes } from './routes/tools.js';
+import { externalToolRunRoutes } from './routes/external-tool-runs.js';
 import { waggleDanceRoutes } from './routes/waggle-dance.js';
 import { commandRoutes } from './routes/commands.js';
 import { commandRoutes as commandCenterRoutes } from './routes/command.js';
@@ -146,12 +147,14 @@ import { profileRoutes } from './routes/profile.js';
 import { telemetryRoutes } from './routes/telemetry.js';
 import { stripeRoutes } from '../stripe/index.js';
 import { agentGroupRoutes } from './routes/agent-groups.js';
+import { localJobRoutes } from './routes/jobs.js';
 import { agentEntityRoutes } from './routes/agents.js';
 import { automationRoutes } from './routes/automations.js';
 import { harvestRoutes } from './routes/harvest.js';
 import { wikiRoutes } from './routes/wiki.js';
 import { identityRoutes } from './routes/identity.js';
 import { agentRunRoutes } from './routes/agent-run.js';
+import { agentRunsRoutes } from './routes/agent-runs.js';
 import { localInferenceRoutes } from './routes/local-inference.js';
 import { complianceRoutes } from './routes/compliance.js';
 import { OfflineManager } from './offline-manager.js';
@@ -174,6 +177,8 @@ import { generateMonthlyAssessment, saveAssessmentToMind } from './monthly-asses
 import { WorkspaceSessionManager } from './workspace-sessions.js';
 import { maxWorkspaceSessionsForTier } from './tier-session-cap.js';
 import { EventEmitter } from 'node:events';
+import { LocalJobStore } from './job-store.js';
+import { AgentRunRegistry } from './agent-run-registry.js';
 
 export interface LocalConfig {
   port: number;
@@ -349,6 +354,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   fullConfig.tier = resolvedTier;
 
   const server = Fastify({ logger: false });
+  const localJobStore = new LocalJobStore();
+  server.decorate('localJobStore', localJobStore);
+  const agentRunRegistry = new AgentRunRegistry(path.join(fullConfig.dataDir, 'agent-runs.json'));
+  server.decorate('agentRunRegistry', agentRunRegistry);
 
   // ── Global error handler ──
   // Fastify's own logger is disabled here, so without this an unhandled route
@@ -2314,6 +2323,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // Security middleware — headers + rate limiting + bearer auth (local server only)
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
+    authenticateRunToken: (token) => agentRunRegistry.authenticateCredential(token) !== undefined,
   });
 
   // D1: session-token bootstrap. Auth-exempt (you cannot require the token to fetch
@@ -2383,6 +2393,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(taskRoutes);
   await server.register(capabilitiesRoutes);
   await server.register(toolsRoutes);
+  await server.register(externalToolRunRoutes);
   await server.register(waggleDanceRoutes);
   await server.register(commandRoutes);
   // UX-Refactor Phase 1: Home Cockpit (S01) + Command Center (S00/S03) surfaces.
@@ -2479,11 +2490,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(dreamRoutes);
   await server.register(telemetryRoutes);
   await server.register(agentGroupRoutes);
+  await server.register(localJobRoutes);
   await server.register(stripeRoutes);
   await server.register(harvestRoutes);
   await server.register(wikiRoutes);
   await server.register(identityRoutes);
   await server.register(agentRunRoutes);
+  await server.register(agentRunsRoutes);
   await server.register(localInferenceRoutes);
   await server.register(complianceRoutes);
 
@@ -2867,6 +2880,8 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   // Cleanup on close
   server.addHook('onClose', async () => {
     // Stop cron scheduler
+    localJobStore.close();
+    agentRunRegistry.close();
     stopMarketplaceBackgroundSync();
     scheduler.stop();
     evolutionService.stop();

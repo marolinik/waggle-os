@@ -86,7 +86,8 @@ export interface MemoryHit {
 
 export interface RecallMemoryOptions {
   limit?: number;
-  workspace?: string;
+  /** Explicit workspace id; null forces personal memory even when a workspace is active. */
+  workspace?: string | null;
   scope?: 'current' | 'personal' | 'all';
   profile?: 'balanced' | 'recent' | 'important' | 'connected';
 }
@@ -236,7 +237,7 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
   const defaultMaxRetries = opts.max_retries ?? DEFAULT_MAX_RETRIES;
   const log = opts.logger ?? createLogger({ name: 'shim-core/cli-bridge' });
   const spawnImpl: SpawnFn = opts.spawnImpl ?? (spawn as unknown as SpawnFn);
-  let activeWorkspaceId: string | undefined = opts.initial_workspace_id;
+  let activeWorkspaceId: string | undefined = opts.initial_workspace_id ?? workspaceIdFromEnvironment();
 
   async function callMcpTool<T>(
     toolName: string,
@@ -322,7 +323,9 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
   ): Promise<MemoryHit[]> {
     const wireArgs: Record<string, unknown> = { query };
     if (recallOpts.limit !== undefined) wireArgs['limit'] = recallOpts.limit;
-    const targetWorkspace = recallOpts.workspace ?? activeWorkspaceId;
+    const targetWorkspace = Object.hasOwn(recallOpts, 'workspace')
+      ? recallOpts.workspace ?? undefined
+      : activeWorkspaceId;
     if (targetWorkspace) wireArgs['workspace'] = targetWorkspace;
     if (recallOpts.scope !== undefined) wireArgs['scope'] = recallOpts.scope;
     if (recallOpts.profile !== undefined) wireArgs['profile'] = recallOpts.profile;
@@ -358,4 +361,10 @@ export function createCliBridge(opts: CliBridgeOptions = {}): CliBridge {
     setWorkspaceById,
     getActiveWorkspaceId,
   };
+}
+
+function workspaceIdFromEnvironment(): string | undefined {
+  const value = process.env.WAGGLE_WORKSPACE_ID?.trim();
+  if (!value || value.length > 200 || /[\0\r\n]/.test(value)) return undefined;
+  return value;
 }

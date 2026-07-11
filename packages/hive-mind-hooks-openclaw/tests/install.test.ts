@@ -1,8 +1,10 @@
 import { describe, expect, it, afterEach } from 'vitest';
 import { mkdtemp, mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import JSON5 from 'json5';
 import { install } from '../src/install.js';
 import { HIVE_ENTRY_KEY, HOOKS_KEY } from '../src/json5-merger.js';
@@ -159,6 +161,33 @@ describe('install (openclaw)', () => {
     expect(hookMd).toContain('message:received');
     expect(hookMd).toContain('message:sent');
     expect(hookMd).toContain('session:compact:before');
+  });
+
+  it('copies a self-contained handler that imports and runs with NODE_PATH empty', async () => {
+    env = await bootstrap(undefined);
+    const buildScript = fileURLToPath(new URL('../scripts/build-handler.mjs', import.meta.url));
+    const handlerEntry = fileURLToPath(new URL('../src/handler.ts', import.meta.url));
+    execFileSync(process.execPath, [buildScript, handlerEntry, env.handlerSource], {
+      cwd: env.home,
+      stdio: 'pipe',
+    });
+
+    await install({ home: env.home, handlerSourcePath: env.handlerSource });
+    const installedHandler = join(env.hiveHookDir, 'handler.js');
+    const installedUrl = pathToFileURL(installedHandler).href;
+    const runInstalledHandler = [
+      `const module = await import(${JSON.stringify(installedUrl)});`,
+      `if (typeof module.default !== 'function') throw new Error('default export is not a function');`,
+      `await module.default({ type: 'noop', action: 'noop' });`,
+    ].join('\n');
+
+    // Both the handler path and cwd are outside the repository/package tree.
+    // Any remaining @waggle import would fail with this empty resolution path.
+    execFileSync(process.execPath, ['--input-type=module', '--eval', runInstalledHandler], {
+      cwd: env.home,
+      env: { ...process.env, NODE_PATH: '' },
+      stdio: 'pipe',
+    });
   });
 
   // ── pointer + lifecycles + cli-path ───────────────────────────────────

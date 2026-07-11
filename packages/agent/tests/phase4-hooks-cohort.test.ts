@@ -25,6 +25,7 @@ import { dirname, join } from 'node:path';
 import {
   runHookCommand,
   HOOKS_COHORT,
+  type HookRuntimePaths,
   type ToolLauncherDeps,
 } from '../src/tool-launcher.js';
 import { SUPPORTED_TOOLS, LAUNCH_COHORT, type ToolId } from '@waggle/shared';
@@ -36,6 +37,14 @@ function hookPackageHasBin(id: ToolId): boolean {
   const pkgPath = join(PACKAGES_DIR, `hive-mind-hooks-${id}`, 'package.json');
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { bin?: unknown };
   return pkg.bin != null && Object.keys(pkg.bin as object).length > 0;
+}
+
+function runtimeFor(id: ToolId): HookRuntimePaths {
+  return {
+    nodePath: '/resources/node',
+    cliEntry: '/resources/node_modules/@waggle/hive-mind-cli/dist/index.js',
+    hookEntry: `/resources/node_modules/@waggle/hive-mind-hooks-${id}/dist/bin/hooks.js`,
+  };
 }
 
 describe('HOOKS_COHORT grounding (R8-001)', () => {
@@ -116,7 +125,7 @@ describe('runHookCommand refuses binless stub tools (R8-002)', () => {
 });
 
 describe('runHookCommand still routes the real target (regression guard)', () => {
-  it('invokes npx for claude-code install', async () => {
+  it('invokes the packaged bin for claude-code install', async () => {
     const calls: string[][] = [];
     const execCapture: NonNullable<ToolLauncherDeps['execCapture']> = async (
       _binary,
@@ -128,14 +137,16 @@ describe('runHookCommand still routes the real target (regression guard)', () =>
     const result = await runHookCommand({
       id: 'claude-code',
       action: 'install',
+      runtime: runtimeFor('claude-code'),
       deps: { execCapture },
     });
     expect(result.ok).toBe(true);
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual([
-      '--yes',
-      '@waggle/hive-mind-hooks-claude-code',
+      runtimeFor('claude-code').hookEntry,
       'install',
+      '--cli-path',
+      runtimeFor('claude-code').cliEntry,
     ]);
   });
 });

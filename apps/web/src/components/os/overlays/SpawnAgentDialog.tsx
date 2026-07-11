@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Rocket, RefreshCw, ChevronDown, ChevronRight, ArrowLeft, Zap, Key } from 'lucide-react';
-import { adapter } from '@/lib/adapter';
+import { adapter, type SpawnAgentResult } from '@/lib/adapter';
 import { PERSONAS } from '@/lib/personas';
 import { countProvidersWithKeys, selectDefaultModel } from '@/lib/spawn-agent-helpers';
 import { useToast } from '@/hooks/use-toast';
@@ -22,7 +22,7 @@ interface SpawnAgentDialogProps {
   workspaces: Workspace[];
   activeWorkspaceId?: string;
   onWorkspaceCreated?: (ws: Workspace) => void;
-  onSpawned?: () => void;
+  onSpawned?: (result: SpawnAgentResult) => void;
 }
 
 const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWorkspaceCreated, onSpawned }: SpawnAgentDialogProps) => {
@@ -32,6 +32,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
   const [models, setModels] = useState<string[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [spawnError, setSpawnError] = useState<string | null>(null);
   /** How many providers have a vault key configured — drives the empty-state copy. */
   const [providersWithKeys, setProvidersWithKeys] = useState<number | null>(null);
   // W2C: keep the fetched provider catalog so raw router ids render as friendly names.
@@ -72,16 +73,21 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       if (modelList.length === 0) {
         try {
           const active = await adapter.getModel();
-          if (active) modelList = [active];
+          const activeProviderReady = providers.providers.some((provider) => provider.hasKey && (
+            active.startsWith(`${provider.id}/`)
+            || (provider.models ?? []).some((candidate) => (
+              candidate.id === active || candidate.id.endsWith(`/${active}`)
+            ))
+          ));
+          if (active && activeProviderReady) modelList = [active];
         } catch (err) {
           console.error('[SpawnAgentDialog] runtime-model fallback failed:', err);
         }
       }
       // P35 fix — third-tier fallback: when LiteLLM is unreachable AND
-      // no runtime model is set, but the user has providers configured
-      // (vault keys present), synthesize the model list from those
-      // providers' declared model catalogs. Eliminates the "no models
-      // available" empty state when 13 providers are configured.
+      // no runtime model is set, use the live provider catalogs returned by
+      // /api/providers. This keeps the spawn picker aligned with the same
+      // provider API inventory used by Settings and onboarding.
       if (modelList.length === 0 && providers.providers.length > 0) {
         const fromProviders = providers.providers
           .filter((p) => p.hasKey)
@@ -95,7 +101,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
       setProvidersWithKeys(countProvidersWithKeys(providers.providers));
       setProviderList(providers.providers as Provider[]);
       const defaultModel = selectDefaultModel(wsModel, modelList);
-      setForm(f => ({ ...f, model: f.model || defaultModel }));
+      setForm(f => ({ ...f, model: modelList.includes(f.model) ? f.model : defaultModel }));
     } catch (err) {
       setModelsError(err instanceof Error ? err.message : 'Failed to fetch models');
     } finally {
@@ -105,14 +111,39 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
 
   useEffect(() => {
     if (!open) return;
+    setSpawnError(null);
     if (activeWorkspaceId) {
       setForm(f => ({ ...f, workspaceId: f.workspaceId || activeWorkspaceId }));
     }
     void fetchModels();
   }, [open, activeWorkspaceId, fetchModels]);
 
+  const selectedWorkspaceExists = form.workspaceMode === 'new'
+    ? Boolean(form.newWorkspaceName.trim())
+    : workspaces.some(ws => ws.id === form.workspaceId && ws.status !== 'archived');
+  const selectedModelReady = !loadingModels
+    && modelsError === null
+    && Boolean(form.model)
+    && models.includes(form.model);
+  const canSubmit = Boolean(form.task.trim() && selectedWorkspaceExists && selectedModelReady);
+
   const handleSpawn = async () => {
-    if (!form.task.trim()) return;
+    setSpawnError(null);
+    if (!form.task.trim()) {
+      setSpawnError('Describe the task before launching the agent.');
+      setStep('config');
+      return;
+    }
+    if (!selectedWorkspaceExists) {
+      setSpawnError('Choose an existing workspace or create a new one.');
+      setStep('config');
+      return;
+    }
+    if (!selectedModelReady) {
+      setSpawnError('Choose an available model. Refresh models or configure a provider in Settings.');
+      setStep('config');
+      return;
+    }
     setSpawning(true);
     try {
       let targetWorkspaceId = form.workspaceId;
@@ -128,25 +159,26 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
         onWorkspaceCreated?.(ws);
       }
 
-      await adapter.spawnAgent({
-        task: form.task,
+      const result = await adapter.spawnAgent({
+        task: form.task.trim(),
         persona: form.persona || undefined,
         model: form.model,
         parentWorkspaceId: targetWorkspaceId || undefined,
       });
 
       toast({
-        title: 'Agent spawned',
-        description: `Running on ${formatModelLabel(form.model, providerList)} — see Waggle Dance for live signals.`,
+        title: 'Agent running',
+        description: `Opening Room · ${formatModelLabel(result.model, providerList)} · run ${result.runId.slice(0, 8)}`,
       });
       onClose();
       setStep('config');
       setForm({ task: '', persona: '', model: models[0] || '', workspaceMode: 'existing', workspaceId: activeWorkspaceId || '', newWorkspaceName: '' });
-      onSpawned?.();
+      onSpawned?.(result);
     } catch (err) {
       // FR #15 Phase A: previously caught silently — backend errors now
       // surface to the user so a half-broken spawn is visible immediately.
       const message = err instanceof Error ? err.message : 'Failed to spawn agent';
+      setSpawnError(message);
       console.error('[SpawnAgentDialog] spawn failed:', err);
       toast({
         title: 'Spawn failed',
@@ -156,10 +188,6 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
     }
     finally { setSpawning(false); }
   };
-
-  const canSubmit = form.task.trim() && (
-    form.workspaceMode === 'existing' ? form.workspaceId : form.newWorkspaceName.trim()
-  );
 
   const targetWorkspaceName = form.workspaceMode === 'existing'
     ? workspaces.find(w => w.id === form.workspaceId)?.name || 'Unknown'
@@ -181,6 +209,12 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
               : 'Review the details below before launching.'}
           </DialogDescription>
         </DialogHeader>
+
+        {spawnError && (
+          <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {spawnError}
+          </div>
+        )}
 
         {step === 'config' ? (
           <>
@@ -223,6 +257,9 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                     ))}
                     {workspaces.length === 0 && (
                       <p className="col-span-2 text-xs text-muted-foreground py-2 text-center">No workspaces — create a new one</p>
+                    )}
+                    {workspaces.length > 0 && !selectedWorkspaceExists && (
+                      <p className="col-span-2 text-xs text-destructive py-1">Choose an available workspace.</p>
                     )}
                   </div>
                 ) : (
@@ -356,7 +393,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
               <Button
                 size="sm"
                 disabled={!canSubmit}
-                onClick={() => setStep('confirm')}
+                onClick={() => { setSpawnError(null); setStep('confirm'); }}
                 className="gap-1.5"
               >
                 Review & Launch
@@ -434,7 +471,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
               </Button>
               <Button
                 size="sm"
-                disabled={spawning}
+                disabled={spawning || !canSubmit}
                 onClick={handleSpawn}
                 className="gap-1.5"
               >

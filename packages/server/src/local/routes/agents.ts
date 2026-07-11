@@ -101,7 +101,12 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
   /** In-process record of the last fleet spawn per agent (C23 one-shot runs).
    *  Keys liveStatus/pause to the agent's OWN spawn session instead of a
    *  workspace+persona heuristic (see file header "Run keying"). */
-  const activeRuns = new Map<string, { workspaceId: string; sessionId: string }>();
+  const activeRuns = new Map<string, { workspaceId: string; sessionId: string; runId?: string }>();
+
+  function latestDurableRun(agentId: string) {
+    return server.agentRunRegistry?.list({ source: 'fleet', limit: 1_000 })
+      .find((run) => run.kind === 'worker' && run.executor.agentId === agentId);
+  }
 
   /** One bounded scan over recent traces, grouped by `agent:{id}` tag.
    *  successRate = (success+verified) / finalized; pending excluded.
@@ -142,6 +147,14 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
    *  No recorded run (or a session in 'error') → undefined → stored status.
    *  A mere open chat session in a shared workspace never reports 'running'. */
   function liveStatus(agent: AgentRecord): AgentRunState | undefined {
+    const durable = latestDurableRun(agent.id);
+    if (durable) {
+      if (durable.status === 'failed' || durable.status === 'interrupted') return 'failed';
+      if (durable.status === 'completed' || durable.status === 'cancelled') return 'completed';
+      if (durable.status === 'paused') return 'paused';
+      if (durable.status === 'waiting_for_approval') return 'waiting_for_approval';
+      return 'running';
+    }
     const run = activeRuns.get(agent.id);
     if (!run) return undefined;
     try {
@@ -395,6 +408,7 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
           ...(agent.personaId ? { persona: agent.personaId } : {}),
           model: agent.model,
           ...(workspaceId ? { parentWorkspaceId: workspaceId } : {}),
+          agentId: agent.id,
           // #6 fast-follow — carry the agent's durable goal as the ancestry "why".
           ...(agent.goal ? { goal: agent.goal } : {}),
         },
@@ -409,27 +423,34 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
       activeRuns.set(agent.id, {
         workspaceId: String(body.workspaceId ?? workspaceId ?? ''),
         sessionId: String(body.sessionId ?? ''),
+        ...(body.runId ? { runId: String(body.runId) } : {}),
       });
 
       // B3 derived-at-read substrate: tag a trace with this agent's id so
       // lastRunAt/successRate have a deterministic key (traces have no agent
       // column). The spawn loop has no completion hook, so this trace stays
       // `pending` — counted for lastRunAt, excluded from successRate.
-      try {
-        server.traceStore.start({
-          sessionId: String(body.sessionId ?? ''),
-          personaId: agent.personaId ?? null,
-          workspaceId: String(body.workspaceId ?? workspaceId ?? ''),
-          model: String(body.model ?? agent.model),
-          input: task,
-          tags: [`agent:${agent.id}`],
-        });
-      } catch { /* trace recording is best-effort */ }
+      if (!body.runId) {
+        try {
+          server.traceStore.start({
+            sessionId: String(body.sessionId ?? ''),
+            personaId: agent.personaId ?? null,
+            workspaceId: String(body.workspaceId ?? workspaceId ?? ''),
+            model: String(body.model ?? agent.model),
+            input: task,
+            tags: [`agent:${agent.id}`],
+          });
+        } catch { /* legacy trace recording is best-effort */ }
+      }
 
       return {
+        runId: body.runId,
+        roomId: body.roomId,
         sessionId: body.sessionId,
         workspaceId: body.workspaceId ?? workspaceId,
         status: body.status,
+        statusUrl: body.statusUrl,
+        resumable: body.resumable ?? false,
         task,
       };
     },
@@ -446,6 +467,23 @@ export const agentEntityRoutes: FastifyPluginAsync = async (server) => {
   server.post<{ Params: { id: string } }>('/api/agents/:id/pause', async (request, reply) => {
     const agent = getAgent(dataDir, request.params.id);
     if (!agent) return reply.status(404).send({ error: 'Agent not found' });
+
+    const durable = latestDurableRun(agent.id);
+    if (durable) {
+      if (['completed', 'failed', 'cancelled', 'interrupted'].includes(durable.status)) {
+        return reply.status(404).send({ error: 'No active run for this agent' });
+      }
+      try {
+        await server.agentRunRegistry.control(durable.id, 'cancel');
+        activeRuns.delete(agent.id);
+        return { ok: true, paused: 0, cancelled: 1, runId: durable.id };
+      } catch (err) {
+        return reply.status(409).send({
+          error: 'run_control_failed',
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     const run = activeRuns.get(agent.id);
     if (!run) {

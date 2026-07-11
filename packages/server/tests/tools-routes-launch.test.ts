@@ -14,6 +14,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { once } from 'node:events';
+import { spawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -22,8 +24,37 @@ import { MindDB, FrameStore, SessionStore } from '@waggle/core';
 
 vi.mock('@waggle/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@waggle/agent')>();
+  const builtinsOnly = actual.getToolRegistry({
+    dir: '/no-adapters',
+    readDir: () => [],
+    readFile: () => '',
+  });
+  const thirdPartyAdapter = {
+    id: 'foo-cli',
+    displayName: 'Foo CLI',
+    launchable: true,
+    hookCapable: false,
+    hookPointer: '.foo/hive-mind-install.json',
+    detect: { kind: 'path' as const, binaryName: 'foo' },
+    promptArgTemplate: ['--print', '{prompt}'],
+    builtin: false,
+  };
   return {
     ...actual,
+    getToolRegistry: vi.fn(() => [...builtinsOnly, thirdPartyAdapter]),
+    detectInstalledTools: vi.fn(async () => ({
+      platform: process.platform,
+      detectedAt: new Date().toISOString(),
+      tools: [...builtinsOnly, thirdPartyAdapter].map((manifest) => ({
+        id: manifest.id,
+        displayName: manifest.displayName,
+        installed: true,
+        installedPath: `/server-detected/${manifest.id}`,
+        version: 'test',
+        hooksInstalled: false,
+        hookPointerPath: null,
+      })),
+    })),
     launchTool: vi.fn((opts: { id: string; installedPath: string }) => ({
       ok: true,
       pid: 99999,
@@ -59,9 +90,24 @@ function cleanupDir(dir: string): void {
   }
 }
 
+function spawnSleeper(): ChildProcess {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    stdio: 'ignore',
+  });
+  if (child.pid == null) throw new Error('test sleeper did not start');
+  return child;
+}
+
+async function stopChild(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill();
+  await once(child, 'exit');
+}
+
 describe('POST /api/tools/launch', () => {
   let server: FastifyInstance;
   let tmpDir: string;
+  let workspaceId: string;
 
   beforeAll(async () => {
     tmpDir = createTmpDir('launch');
@@ -75,6 +121,7 @@ describe('POST /api/tools/launch', () => {
 
     server = await buildLocalServer({ dataDir: tmpDir });
     await server.ready();
+    workspaceId = server.workspaceManager.getDefault() ?? server.workspaceManager.list()[0]!.id;
   });
 
   afterAll(async () => {
@@ -90,8 +137,8 @@ describe('POST /api/tools/launch', () => {
       headers: { 'content-type': 'application/json' },
       payload: {
         id: 'claude-code',
-        installedPath: '/usr/local/bin/claude',
-        workspaceId: 'ws-test',
+        installedPath: '/attacker/controlled/claude',
+        workspaceId,
       },
     });
     expect(res.statusCode).toBe(202);
@@ -101,10 +148,54 @@ describe('POST /api/tools/launch', () => {
     expect(launchTool).toHaveBeenCalledWith(
       expect.objectContaining({
         id: 'claude-code',
-        installedPath: '/usr/local/bin/claude',
-        workspaceId: 'ws-test',
+        installedPath: '/server-detected/claude-code',
+        workspaceId,
+        dataDir: tmpDir,
+        runId: expect.stringMatching(/^run_/),
+        roomId: expect.stringMatching(/^room_/),
+        runToken: expect.any(String),
       }),
     );
+    expect(body.roomId).toMatch(/^room_/);
+    expect(body.runId).toMatch(/^run_/);
+    expect(server.agentRunRegistry.get(body.runId)).toMatchObject({
+      roomId: body.roomId,
+      workspaceId,
+      status: 'running',
+      executor: { pid: 99999 },
+    });
+  });
+
+  it('settles an observed process from its exit event without polling the process route', async () => {
+    vi.mocked(launchTool).mockClear();
+    const exitListeners: Array<(code: number | null) => void> = [];
+    vi.mocked(launchTool).mockReturnValueOnce({
+      ok: true,
+      pid: 876543,
+      executed: { binary: '/server-detected/claude-code', args: [] },
+      output: {
+        onData: () => {},
+        onExit: (listener) => { exitListeners.push(listener); },
+      },
+    });
+    const response = await injectWithAuth(server, {
+      method: 'POST', url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        id: 'claude-code', installedPath: '/usr/local/bin/claude', workspaceId,
+        observe: true,
+      },
+    });
+    const body = response.json() as { runId: string };
+    const call = vi.mocked(launchTool).mock.calls[0][0] as { runToken?: string };
+    expect(server.agentRunRegistry.authenticateCredential(call.runToken ?? '')?.id).toBe(body.runId);
+
+    for (const listener of exitListeners) listener(0);
+
+    expect(server.agentRunRegistry.get(body.runId)).toMatchObject({
+      status: 'completed', result: { summary: 'Interactive tool process exited successfully' },
+    });
+    expect(server.agentRunRegistry.authenticateCredential(call.runToken ?? '')).toBeUndefined();
   });
 
   it('passes signalEmit:true so a dock launch lights the bus (#1)', async () => {
@@ -128,14 +219,18 @@ describe('POST /api/tools/launch', () => {
     }
   });
 
-  it('rejects missing installedPath', async () => {
+  it('does not require or trust a client-supplied executable path', async () => {
+    vi.mocked(launchTool).mockClear();
     const res = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/tools/launch',
       headers: { 'content-type': 'application/json' },
       payload: { id: 'claude-code' },
     });
-    expect(res.statusCode).toBe(400);
+    expect(res.statusCode).toBe(202);
+    expect(launchTool).toHaveBeenLastCalledWith(
+      expect.objectContaining({ installedPath: '/server-detected/claude-code' }),
+    );
   });
 
   it('rejects unknown tool id', async () => {
@@ -146,6 +241,28 @@ describe('POST /api/tools/launch', () => {
       payload: { id: 'made-up-tool', installedPath: '/somewhere' },
     });
     expect(res.statusCode).toBe(400);
+  });
+
+  it('launches a registered third-party adapter and applies its prompt template', async () => {
+    vi.mocked(launchTool).mockClear();
+    const res = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: {
+        id: 'foo-cli',
+        installedPath: '/server-detected/foo-cli',
+        prompt: 'summarize this workspace',
+      },
+    });
+    expect(res.statusCode).toBe(202);
+    expect(launchTool).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'foo-cli',
+        installedPath: '/server-detected/foo-cli',
+        args: ['--print', 'summarize this workspace'],
+      }),
+    );
   });
 
   it('returns 400 when launch fails (out-of-cohort)', async () => {
@@ -182,8 +299,8 @@ describe('POST /api/tools/launch', () => {
       headers: { 'content-type': 'application/json' },
       payload: {
         id: 'claude-code',
-        installedPath: '/usr/local/bin/claude',
-        workspaceId: 'ws-track',
+        installedPath: '/server-detected/claude-code',
+        workspaceId,
       },
     });
     expect(res.statusCode).toBe(202);
@@ -191,7 +308,7 @@ describe('POST /api/tools/launch', () => {
     const match = tracked.find((p) => p.pid === fakePid);
     expect(match).toBeDefined();
     expect(match?.toolId).toBe('claude-code');
-    expect(match?.workspaceId).toBe('ws-track');
+    expect(match?.workspaceId).toBe(workspaceId);
   });
 });
 
@@ -359,9 +476,9 @@ describe('POST /api/tools/hooks', () => {
     );
   });
 
-  it('forwards cliPath through to the launcher', async () => {
+  it('rejects a client-supplied CLI path instead of executing it', async () => {
     vi.mocked(runHookCommand).mockClear();
-    await injectWithAuth(server, {
+    const response = await injectWithAuth(server, {
       method: 'POST',
       url: '/api/tools/hooks',
       headers: { 'content-type': 'application/json' },
@@ -371,9 +488,8 @@ describe('POST /api/tools/hooks', () => {
         cliPath: 'C:\\hive-mind-cli.js',
       },
     });
-    expect(runHookCommand).toHaveBeenCalledWith(
-      expect.objectContaining({ cliPath: 'C:\\hive-mind-cli.js' }),
-    );
+    expect(response.statusCode).toBe(400);
+    expect(runHookCommand).not.toHaveBeenCalled();
   });
 
   it.each(['install', 'verify', 'uninstall'])(
@@ -431,6 +547,24 @@ describe('POST /api/tools/hooks', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().stderr).toContain('permission denied');
   });
+
+  it('returns 503 when the packaged hook runtime is missing', async () => {
+    vi.mocked(runHookCommand).mockResolvedValueOnce({
+      ok: false,
+      action: 'install',
+      packageName: '@waggle/hive-mind-hooks-claude-code',
+      stdout: '', stderr: '', code: -1,
+      errorCode: 'hook_runtime_missing',
+      error: 'runtime missing',
+    });
+    const res = await injectWithAuth(server, {
+      method: 'POST', url: '/api/tools/hooks',
+      headers: { 'content-type': 'application/json' },
+      payload: { id: 'claude-code', action: 'install' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().errorCode).toBe('hook_runtime_missing');
+  });
 });
 
 // ── loopbackSidecarUrl helper (#1) ──────────────────────────────────
@@ -478,36 +612,87 @@ describe('POST /api/tools/launch — persistence + reconcile', () => {
     if (tmpDir) cleanupDir(tmpDir);
   });
 
-  it('writes a pidfile on launch and reconciles it after a restart', async () => {
-    // Use this runner's pid (guaranteed alive) so it survives the
-    // reconcile liveness probe on the rebuilt server.
-    vi.mocked(launchTool).mockReturnValueOnce({
-      ok: true,
-      pid: process.pid,
-      executed: { binary: '/x', args: [] },
-    });
+  it('rebinds cancel control for an alive detached process after restart', async () => {
+    const child = spawnSleeper();
+    let server1: FastifyInstance | undefined;
+    let server2: FastifyInstance | undefined;
+    try {
+      vi.mocked(launchTool).mockClear();
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: child.pid!,
+        executed: { binary: '/x', args: [] },
+      });
 
-    const server1 = await buildLocalServer({ dataDir: tmpDir });
-    await server1.ready();
-    const res = await injectWithAuth(server1, {
-      method: 'POST',
-      url: '/api/tools/launch',
-      headers: { 'content-type': 'application/json' },
-      payload: { id: 'claude-code', installedPath: '/x', workspaceId: 'ws-persist' },
-    });
-    expect(res.statusCode).toBe(202);
-    const pidfile = path.join(tmpDir, 'launched-processes.json');
-    expect(fs.existsSync(pidfile)).toBe(true);
-    await server1.close();
+      server1 = await buildLocalServer({ dataDir: tmpDir });
+      await server1.ready();
+      const workspaceId = server1.workspaceManager.getDefault() ?? server1.workspaceManager.list()[0]!.id;
+      const response = await injectWithAuth(server1, {
+        method: 'POST', url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', installedPath: '/x', workspaceId },
+      });
+      expect(response.statusCode).toBe(202);
+      const { runId } = response.json() as { runId: string };
+      const runToken = (vi.mocked(launchTool).mock.calls[0][0] as { runToken: string }).runToken;
+      expect(fs.existsSync(path.join(tmpDir, 'launched-processes.json'))).toBe(true);
+      await server1.close();
+      server1 = undefined;
 
-    // Restart: a fresh server on the same dataDir reconciles the pidfile.
-    const server2 = await buildLocalServer({ dataDir: tmpDir });
-    await server2.ready();
-    const tracked = server2.toolProcessTracker?.list() ?? [];
-    const match = tracked.find((p) => p.pid === process.pid);
-    expect(match).toBeDefined();
-    expect(match?.toolId).toBe('claude-code');
-    expect(match?.workspaceId).toBe('ws-persist');
-    await server2.close();
+      server2 = await buildLocalServer({ dataDir: tmpDir });
+      await server2.ready();
+      expect(server2.agentRunRegistry.get(runId)?.status).toBe('running');
+      expect(server2.agentRunRegistry.authenticateCredential(runToken)).toBeUndefined();
+      expect(server2.toolProcessTracker?.list().some((process) => process.pid === child.pid)).toBe(true);
+
+      const cancelled = await server2.agentRunRegistry.control(runId, 'cancel');
+      expect(cancelled.status).toBe('cancelled');
+      expect(server2.toolProcessTracker?.list().some((process) => process.pid === child.pid)).toBe(false);
+    } finally {
+      if (server1) await server1.close();
+      if (server2) await server2.close();
+      await stopChild(child);
+    }
+  }, 10_000);
+
+  it('marks a detached run interrupted when its process disappeared during restart', async () => {
+    const child = spawnSleeper();
+    let server1: FastifyInstance | undefined;
+    let server2: FastifyInstance | undefined;
+    try {
+      vi.mocked(launchTool).mockClear();
+      vi.mocked(launchTool).mockReturnValueOnce({
+        ok: true,
+        pid: child.pid!,
+        executed: { binary: '/x', args: [] },
+      });
+
+      server1 = await buildLocalServer({ dataDir: tmpDir });
+      await server1.ready();
+      const workspaceId = server1.workspaceManager.getDefault() ?? server1.workspaceManager.list()[0]!.id;
+      const response = await injectWithAuth(server1, {
+        method: 'POST', url: '/api/tools/launch',
+        headers: { 'content-type': 'application/json' },
+        payload: { id: 'claude-code', installedPath: '/x', workspaceId },
+      });
+      const { runId } = response.json() as { runId: string };
+      const runToken = (vi.mocked(launchTool).mock.calls[0][0] as { runToken: string }).runToken;
+      await server1.close();
+      server1 = undefined;
+      await stopChild(child);
+
+      server2 = await buildLocalServer({ dataDir: tmpDir });
+      await server2.ready();
+      expect(server2.agentRunRegistry.get(runId)).toMatchObject({
+        status: 'interrupted',
+        result: { error: 'External process was not running when Waggle restarted' },
+      });
+      expect(server2.agentRunRegistry.authenticateCredential(runToken)).toBeUndefined();
+      expect(server2.toolProcessTracker?.list().some((process) => process.pid === child.pid)).toBe(false);
+    } finally {
+      if (server1) await server1.close();
+      if (server2) await server2.close();
+      await stopChild(child);
+    }
   });
 });

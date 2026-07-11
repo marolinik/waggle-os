@@ -9,8 +9,10 @@ import { describe, it, expect } from 'vitest';
 import { SUPPORTED_TOOLS, type ToolId } from '@waggle/shared';
 import {
   detectInstalledTools,
+  selectPathLookupCandidate,
   type ToolDetectionDeps,
 } from '../src/tool-detection.js';
+import { resolveToolCommandInvocation } from '../src/tool-command.js';
 import type { ManifestLoaderDeps } from '../src/tool-manifest-loader.js';
 
 type DetectOpts = ToolDetectionDeps & { manifestLoader?: ManifestLoaderDeps };
@@ -54,13 +56,66 @@ describe('detectInstalledTools', () => {
       manifestLoader: {
         dir: '/fake',
         readDir: () => ['foo.json'],
-        readFile: () => JSON.stringify({ id: 'foo-cli', displayName: 'Foo', launchable: true, hookCapable: false, hookPointer: '.foo/hm.json', detect: { kind: 'path', binaryName: 'foo' } }),
+        readFile: () => JSON.stringify({
+          id: 'foo-cli',
+          displayName: 'Foo',
+          launchable: true,
+          hookCapable: false,
+          hookPointer: '.foo/hm.json',
+          detect: { kind: 'path', binaryName: 'foo' },
+          promptArgTemplate: ['--print', '{prompt}'],
+          task: {
+            argvTemplate: ['run', '{prompt}', '{accessArgs}'],
+            accessArgs: {
+              'read-only': ['--read-only'],
+              'workspace-write': ['--workspace-write'],
+            },
+            promptTransport: 'arg',
+            outputDialect: 'jsonl',
+            workspaceBinding: 'cwd',
+            permissionModes: ['read-only', 'workspace-write'],
+            resumable: false,
+          },
+        }),
       },
     }));
     const foo = result.tools.find((t) => t.id === 'foo-cli');
     expect(foo?.installed).toBe(true);
     expect(foo?.installedPath).toBe('/usr/bin/foo');
+    expect(foo?.launchable).toBe(true);
+    expect(foo?.hookCapable).toBe(false);
+    expect(foo?.builtin).toBe(false);
+    expect(foo?.acceptsInlinePrompt).toBe(true);
+    expect(foo?.capabilities).toEqual({
+      interactiveLaunch: true,
+      headlessTask: true,
+      structuredProgress: true,
+      resumable: false,
+      liveWaggleDance: false,
+    });
+    expect(foo?.permissionModes).toEqual(['read-only', 'workspace-write']);
     expect(result.tools).toHaveLength(SUPPORTED_TOOLS.length + 1);
+  });
+
+  it('carries canonical task capabilities for headless and GUI-only built-ins', async () => {
+    const result = await detectInstalledTools(makeDeps());
+    const codex = result.tools.find((tool) => tool.id === 'codex');
+    const cursor = result.tools.find((tool) => tool.id === 'cursor');
+
+    expect(codex?.capabilities).toMatchObject({
+      interactiveLaunch: true,
+      headlessTask: true,
+      structuredProgress: true,
+      resumable: true,
+    });
+    expect(codex?.permissionModes).toEqual(['read-only', 'workspace-write', 'native']);
+    expect(cursor?.capabilities).toMatchObject({
+      interactiveLaunch: true,
+      headlessTask: false,
+      structuredProgress: false,
+      resumable: false,
+    });
+    expect(cursor?.permissionModes).toEqual([]);
   });
 
   it('reports platform and ISO detectedAt', async () => {
@@ -138,7 +193,7 @@ describe('claude-code detector', () => {
         exists: async (p) => existsSet.has(p),
         pathFromEnv: () => installed,
         execVersion: async () => 'claude 1.2.3',
-        readJson: async (p) => (p === pointer ? { backup } : null),
+        readJson: async (p) => (p === pointer ? { settings_backup: backup } : null),
       }),
     );
     const t = result.tools.find((x) => x.id === 'claude-code')!;
@@ -161,7 +216,7 @@ describe('claude-code detector', () => {
         execVersion: async () => 'claude 1.2.3',
         readJson: async (p) =>
           p === pointer
-            ? { backup: '/Users/test/.claude/settings.json.hive-mind-backup.X' }
+            ? { settings_backup: '/Users/test/.claude/settings.json.hive-mind-backup.X' }
             : null,
       }),
     );
@@ -229,7 +284,7 @@ describe('cursor detector', () => {
         platform: 'darwin',
         home: '/Users/test',
         exists: async (p) => existsSet.has(p),
-        readJson: async (p) => (p === pointer ? { backup } : null),
+        readJson: async (p) => (p === pointer ? { settings_backup: backup } : null),
       }),
     );
     const t = result.tools.find((x) => x.id === 'cursor')!;
@@ -297,6 +352,49 @@ describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw â
     expect(t.installed).toBe(true);
     expect(t.installedPath).toBe(installed);
     expect(t.version).toBe('codex 0.5.0');
+  });
+
+  it('recognizes a healthy create-if-missing hook install with no backup', async () => {
+    const installed = '/usr/local/bin/codex';
+    const pointer = '/Users/test/.codex/hive-mind-install.json';
+    const configPath = '/Users/test/.codex/hooks.json';
+    const hooksDir = '/waggle/runtime/codex/hooks';
+    const existsSet = new Set([installed, pointer, configPath, hooksDir]);
+    const result = await detectInstalledTools(makeDeps({
+      platform: 'darwin', home: '/Users/test',
+      exists: async (candidate) => existsSet.has(candidate),
+      pathFromEnv: (name) => name === 'codex' ? installed : null,
+      execVersion: async () => 'codex 0.5.0',
+      readJson: async (candidate) => candidate === pointer ? {
+        settings_backup: null,
+        created_by_us: true,
+        config_path: configPath,
+        hooks_dir: hooksDir,
+        installed_hooks: ['session-start'],
+      } : null,
+    }));
+    expect(result.tools.find((tool) => tool.id === 'codex')?.hooksInstalled).toBe(true);
+  });
+
+  it('reports WindowsApps Codex as installed but not launchable when Windows blocks exec', async () => {
+    const installed =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.623.19656.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        platform: 'win32',
+        exists: async (p) => p === installed,
+        pathFromEnv: (name) => (name === 'codex' ? installed : null),
+        execVersion: async () => null,
+      }),
+    );
+
+    const t = result.tools.find((x) => x.id === 'codex')!;
+    expect(t.installed).toBe(true);
+    expect(t.installedPath).toBe(installed);
+    expect(t.version).toBeNull();
+    expect(t.launchable).toBe(false);
+    expect(t.diagnostic).toMatch(/WindowsApps/i);
+    expect(t.diagnostic).toMatch(/PATH CLI/i);
   });
 
   it('detects hermes CLI when present on PATH', async () => {
@@ -373,5 +471,73 @@ describe('hermetic safety', () => {
     const r2 = await detectInstalledTools(makeDeps());
     // Both calls produce the same shape on the same injected deps.
     expect(r1.tools.map((t) => t.id)).toEqual(r2.tools.map((t) => t.id));
+  });
+});
+
+describe('selectPathLookupCandidate', () => {
+  it('prefers a Windows command shim over an extensionless POSIX shim', () => {
+    const stdout = [
+      'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw',
+      'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd',
+    ].join('\r\n');
+
+    expect(selectPathLookupCandidate(stdout, 'win32')).toBe(
+      'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd',
+    );
+  });
+
+  it('keeps the first lookup result on POSIX', () => {
+    const stdout = ['/usr/local/bin/openclaw', '/opt/bin/openclaw'].join('\n');
+
+    expect(selectPathLookupCandidate(stdout, 'linux')).toBe('/usr/local/bin/openclaw');
+  });
+});
+
+describe('resolveToolCommandInvocation', () => {
+  it('resolves npm Windows cmd shims to their Node module target', () => {
+    const shim = [
+      '@ECHO off',
+      'GOTO start',
+      ':find_dp0',
+      'SET dp0=%~dp0',
+      'EXIT /b',
+      ':start',
+      'SETLOCAL',
+      'CALL :find_dp0',
+      'endLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & "%_prog%"  "%dp0%\\node_modules\\openclaw\\openclaw.mjs" %*',
+    ].join('\n');
+    const invocation = resolveToolCommandInvocation(
+      'C:\\Users\\test\\AppData\\Roaming\\npm\\openclaw.cmd',
+      ['foo&echoBAD', '100%'],
+      'win32',
+      {
+        readTextFile: () => shim,
+        fileExists: () => false,
+      },
+    );
+
+    expect(invocation).toEqual({
+      binary: 'node',
+      args: [
+        'C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\openclaw\\openclaw.mjs',
+        'foo&echoBAD',
+        '100%',
+      ],
+    });
+  });
+
+  it('wraps non-npm Windows cmd shims through a quoted cmd.exe call', () => {
+    const invocation = resolveToolCommandInvocation(
+      'C:\\Tools\\custom.cmd',
+      ['--version'],
+      'win32',
+      { readTextFile: () => null },
+    );
+
+    expect(invocation).toEqual({
+      binary: 'cmd.exe',
+      args: ['/d', '/v:off', '/s', '/c', 'call "C:\\Tools\\custom.cmd" "--version"'],
+      windowsVerbatimArguments: true,
+    });
   });
 });

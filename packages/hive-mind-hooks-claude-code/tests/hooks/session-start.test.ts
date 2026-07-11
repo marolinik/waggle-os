@@ -35,7 +35,7 @@ describe('session-start handler', () => {
       bridge,
     });
     // Commit 1.4: switchWorkspace removed — only recallMemory should fire.
-    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 1, scope: 'personal' });
+    expect(bridge.recallMemory).toHaveBeenCalledWith('', { limit: 1, scope: 'personal', workspace: null });
     expect(cap.stdout).toHaveLength(1);
     const parsed = JSON.parse(cap.stdout[0]) as { hookSpecificOutput: { additionalContext: string } };
     expect(parsed.hookSpecificOutput.additionalContext).toContain('past observation');

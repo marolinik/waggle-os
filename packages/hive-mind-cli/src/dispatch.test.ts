@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -6,6 +6,7 @@ import { PassThrough } from 'node:stream';
 import { openPersonalMind, type CliEnv } from './setup.js';
 import { dispatch } from './dispatch.js';
 import { runMcpCall } from './commands/mcp-call.js';
+import { runDanceReceive, runDanceSend } from './commands/dance.js';
 
 describe('cli dispatch', () => {
   let dataDir: string;
@@ -25,6 +26,9 @@ describe('cli dispatch', () => {
 
   afterEach(() => {
     env.close();
+    vi.unstubAllGlobals();
+    delete process.env.WAGGLE_DANCE_URL;
+    delete process.env.WAGGLE_RUN_TOKEN;
     try { rmSync(dataDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
@@ -206,6 +210,61 @@ describe('cli dispatch', () => {
     expect(parsed.wipeImports).toBeDefined();
     expect(parsed.cognify).toBeDefined();
     expect(parsed.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('dispatches a scoped WaggleDance message with the run credential header', async () => {
+    process.env.WAGGLE_DANCE_URL = 'http://127.0.0.1:3333';
+    process.env.WAGGLE_RUN_TOKEN = 'run-token-with-enough-entropy-123456789';
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    vi.stubGlobal('fetch', async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({ url: String(input), init });
+      return new Response(JSON.stringify({
+        dispatched: true,
+        message: { id: 'message-1', subtype: 'knowledge_check' },
+      }), { status: 201, headers: { 'content-type': 'application/json' } });
+    });
+
+    const output = await dispatch({
+      subcommand: 'dance-send',
+      values: { json: true, type: 'request', subtype: 'knowledge_check', message: 'Who has the schema?' },
+      positionals: [],
+    });
+    expect(JSON.parse(output!)).toMatchObject({ sent: true, message: { id: 'message-1' } });
+    expect(requests[0].url).toBe('http://127.0.0.1:3333/api/waggle-dance/signal');
+    expect((requests[0].init?.headers as Record<string, string>)['x-waggle-run-token']).toBe(process.env.WAGGLE_RUN_TOKEN);
+    expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({
+      type: 'request', subtype: 'knowledge_check', content: { query: 'Who has the schema?' },
+    });
+  });
+
+  it('receives only through a loopback WaggleDance transport', async () => {
+    const requests: string[] = [];
+    const result = await runDanceReceive({
+      env: {
+        WAGGLE_DANCE_URL: 'http://localhost:4444/',
+        WAGGLE_RUN_TOKEN: 'run-token-with-enough-entropy-123456789',
+      },
+      since: '2026-07-11T00:00:00.000Z',
+      limit: 2,
+      fetch: async (input) => {
+        requests.push(String(input));
+        return new Response(JSON.stringify({
+          signals: [{ id: 'one', subtype: 'routed_share' }], total: 1,
+        }), { status: 200 });
+      },
+    });
+    expect(result).toMatchObject({ total: 1, signals: [{ id: 'one' }] });
+    expect(requests[0]).toContain('/api/waggle-dance/signals?');
+    expect(requests[0]).toContain('limit=2');
+
+    await expect(runDanceSend({
+      env: {
+        WAGGLE_DANCE_URL: 'https://attacker.example',
+        WAGGLE_RUN_TOKEN: 'run-token-with-enough-entropy-123456789',
+      },
+      type: 'broadcast', subtype: 'discovery', message: 'no',
+      fetch: async () => { throw new Error('must not send'); },
+    })).rejects.toThrow(/loopback/);
   });
 
   it('rejects unknown subcommand', async () => {

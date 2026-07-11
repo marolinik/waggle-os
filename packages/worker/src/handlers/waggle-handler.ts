@@ -10,10 +10,31 @@ import { teamEntities, tasks } from '../../../server/src/db/schema.js';
 import { sql } from 'drizzle-orm';
 import { WaggleDanceDispatcher } from '@waggle/waggle-dance';
 import type { WaggleMessage } from '@waggle/shared';
+import { CapabilityRouter, createSystemTools } from '@waggle/agent';
 
-export async function waggleHandler(job: Job<JobData>, db: Db): Promise<Record<string, unknown>> {
-  const { teamId, input } = job.data;
-  const inputObj = input as Record<string, unknown>;
+export interface WaggleHandlerDeps {
+  enqueueWorker?: (input: {
+    teamId: string;
+    userId: string;
+    task: string;
+    role: string;
+    context?: string;
+  }) => Promise<string>;
+}
+
+export function createWaggleHandler(deps: WaggleHandlerDeps = {}) {
+  const capabilityRouter = new CapabilityRouter({
+    toolNames: createSystemTools(process.cwd()).map(tool => tool.name),
+    skills: [],
+    plugins: [],
+    mcpServers: [],
+    subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
+    connectors: [],
+  });
+
+  return async function waggleHandler(job: Job<JobData>, db: Db): Promise<Record<string, unknown>> {
+    const { teamId, userId, input } = job.data;
+    const inputObj = input as Record<string, unknown>;
 
   // ── Protocol message routing (type + subtype present) ────────────
   if (inputObj.type && inputObj.subtype) {
@@ -26,27 +47,33 @@ export async function waggleHandler(job: Job<JobData>, db: Db): Promise<Record<s
         return entities.map((e: typeof entities[number]) => `[${e.entityType}] ${e.name}`).join('\n') || 'No matching knowledge found.';
       },
       resolveCapability: (query: string) => {
-        // Stub for now — full capability router wiring needs agent package context
-        // In production, this would use CapabilityRouter.resolve(query)
-        return [{ source: 'native', name: query, description: `Capability: ${query}`, available: true }];
+        return capabilityRouter.resolve(query).map(route => ({
+          source: route.source,
+          name: route.name,
+          description: route.description,
+          available: route.available,
+        }));
       },
       spawnWorker: async (task: string, role: string, context?: string) => {
-        // Enqueue a new job for the task
-        // In production: job.queue.add('task', { teamId, userId: job.data.userId, ... })
-        return `Worker spawned for: ${task} (role: ${role})${context ? ` with context` : ''}`;
+        if (!deps.enqueueWorker) {
+          throw new Error('Worker delegation is unavailable in this runtime');
+        }
+
+        const childJobId = await deps.enqueueWorker({ teamId, userId, task, role, ...(context ? { context } : {}) });
+        return `Worker job ${childJobId} queued for: ${task} (${role})`;
       },
     });
 
-    // `inputObj` is untrusted job-data; the dispatcher revalidates the
-    // type/subtype combo at runtime before acting on it.
-    const result = await dispatcher.dispatch(inputObj as unknown as WaggleMessage);
-    return {
-      dispatched: true,
-      type: inputObj.type,
-      subtype: inputObj.subtype,
-      ...result,
-    };
-  }
+      // `inputObj` is untrusted job-data; the dispatcher revalidates the
+      // type/subtype combo at runtime before acting on it.
+      const result = await dispatcher.dispatch(inputObj as unknown as WaggleMessage);
+      return {
+        dispatched: true,
+        type: inputObj.type,
+        subtype: inputObj.subtype,
+        ...result,
+      };
+    }
 
   // ── Legacy fallback: topic-based hive query ──────────────────────
   const topic = (inputObj.topic as string) ?? '';
@@ -62,13 +89,23 @@ export async function waggleHandler(job: Job<JobData>, db: Db): Promise<Record<s
     .where(sql`${tasks.teamId} = ${teamId} AND ${tasks.title} ILIKE ${searchTerm}`)
     .limit(5);
 
-  return {
-    topic,
-    existingKnowledge: entities.length,
-    entities: entities.map((e: typeof entities[number]) => ({ id: e.id, name: e.name, type: e.entityType })),
-    relatedTasks: relatedTasks.length,
-    tasks: relatedTasks.map((t: typeof relatedTasks[number]) => ({ id: t.id, title: t.title, status: t.status })),
-    gaps: ['[Stub] Full analysis would identify specific knowledge gaps'],
-    recommendation: `[Agent stub] Found ${entities.length} entities and ${relatedTasks.length} related tasks for "${topic}"`,
+    const gaps = [
+      ...(entities.length === 0 ? [`No team knowledge matched "${topic}".`] : []),
+      ...(relatedTasks.length === 0 ? [`No team tasks matched "${topic}".`] : []),
+    ];
+
+    return {
+      topic,
+      existingKnowledge: entities.length,
+      entities: entities.map((e: typeof entities[number]) => ({ id: e.id, name: e.name, type: e.entityType })),
+      relatedTasks: relatedTasks.length,
+      tasks: relatedTasks.map((t: typeof relatedTasks[number]) => ({ id: t.id, title: t.title, status: t.status })),
+      gaps,
+      recommendation: entities.length === 0 && relatedTasks.length === 0
+        ? `Create a knowledge entry or task for "${topic}" so the team can build a shared record.`
+        : `Review the ${entities.length} matching knowledge entr${entities.length === 1 ? 'y' : 'ies'} and ${relatedTasks.length} matching task${relatedTasks.length === 1 ? '' : 's'} for "${topic}".`,
+    };
   };
 }
+
+export const waggleHandler = createWaggleHandler();

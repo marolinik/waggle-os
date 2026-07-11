@@ -1,3 +1,4 @@
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -57,6 +58,59 @@ fn resolve_node_path() -> String {
     "node".to_string()
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum ServiceScriptKind {
+    Bundled,
+    DevSource,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ServiceScript {
+    path: PathBuf,
+    kind: ServiceScriptKind,
+}
+
+fn find_dev_service_script(current_dir: &Path) -> Option<PathBuf> {
+    for dir in current_dir.ancestors() {
+        let candidate = dir
+            .join("packages")
+            .join("server")
+            .join("src")
+            .join("local")
+            .join("service.ts");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn resolve_service_script(
+    exe_dir: Option<&Path>,
+    current_dir: &Path,
+) -> Result<ServiceScript, String> {
+    if let Some(dir) = exe_dir {
+        let bundled = dir.join("resources").join("service.js");
+        if bundled.exists() {
+            return Ok(ServiceScript {
+                path: bundled,
+                kind: ServiceScriptKind::Bundled,
+            });
+        }
+    }
+
+    if cfg!(debug_assertions) {
+        if let Some(script) = find_dev_service_script(current_dir) {
+            return Ok(ServiceScript {
+                path: script,
+                kind: ServiceScriptKind::DevSource,
+            });
+        }
+    }
+
+    Err("Unable to locate sidecar service.js resource".to_string())
+}
+
 /// Build the Command used to spawn the sidecar process.
 /// Shared by both the sync auto-start path and the async `ensure_service` tauri command.
 fn build_service_command(port: u16) -> Result<Command, String> {
@@ -66,40 +120,22 @@ fn build_service_command(port: u16) -> Result<Command, String> {
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()));
 
-    let service_script = if cfg!(debug_assertions) {
-        let app_dir = std::env::current_dir().map_err(|e| e.to_string())?;
-        let script = app_dir
-            .parent()
-            .ok_or("no parent")?
-            .parent()
-            .ok_or("no grandparent")?
-            .join("packages")
-            .join("server")
-            .join("src")
-            .join("local")
-            .join("service.ts");
-        script.to_string_lossy().to_string()
-    } else {
-        exe_dir
-            .as_ref()
-            .map(|d| d.join("resources").join("service.js").to_string_lossy().to_string())
-            .unwrap_or_else(|| "resources/service.js".to_string())
-    };
+    let current_dir = std::env::current_dir().map_err(|e| e.to_string())?;
+    let service_script = resolve_service_script(exe_dir.as_deref(), &current_dir)?;
 
-    let mut cmd = if cfg!(debug_assertions) {
+    let mut cmd = if service_script.kind == ServiceScriptKind::DevSource {
         let mut c = Command::new(&node_path);
-        c.arg("--import").arg("tsx").arg(&service_script);
+        c.arg("--import").arg("tsx").arg(&service_script.path);
         c
     } else {
         let mut c = Command::new(&node_path);
-        c.arg(&service_script);
+        c.arg(&service_script.path);
         c
     };
 
     cmd.env("WAGGLE_PORT", port.to_string());
 
-    // Production-only environment setup
-    if !cfg!(debug_assertions) {
+    if service_script.kind == ServiceScriptKind::Bundled {
         cmd.env("WAGGLE_SKIP_LITELLM", "1");
 
         if let Some(ref dir) = exe_dir {
@@ -135,12 +171,58 @@ fn build_service_command(port: u16) -> Result<Command, String> {
 
             let ort_dir = native_dir.join("onnxruntime");
             if ort_dir.exists() {
-                cmd.env("ONNXRUNTIME_NODE_BINDING_PATH", ort_dir.to_string_lossy().as_ref());
+                cmd.env(
+                    "ONNXRUNTIME_NODE_BINDING_PATH",
+                    ort_dir.to_string_lossy().as_ref(),
+                );
             }
         }
     }
 
     Ok(cmd)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn service_script_prefers_bundled_resource_when_present() {
+        let root =
+            std::env::temp_dir().join(format!("waggle-service-script-{}", std::process::id()));
+        let resources = root.join("resources");
+        std::fs::create_dir_all(&resources).expect("creates temp resources");
+        std::fs::write(resources.join("service.js"), "console.log('ok')").expect("writes service");
+
+        let script = resolve_service_script(Some(&root), Path::new("D:/Projects/waggle-os"))
+            .expect("bundled script resolves");
+
+        assert_eq!(script.kind, ServiceScriptKind::Bundled);
+        assert_eq!(script.path, resources.join("service.js"));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dev_service_script_searches_current_dir_ancestors() {
+        let root =
+            std::env::temp_dir().join(format!("waggle-dev-service-script-{}", std::process::id()));
+        let script = root
+            .join("packages")
+            .join("server")
+            .join("src")
+            .join("local")
+            .join("service.ts");
+        std::fs::create_dir_all(script.parent().expect("script parent")).expect("creates dirs");
+        std::fs::write(&script, "export {};").expect("writes service");
+
+        let nested = root.join("app").join("src-tauri");
+        std::fs::create_dir_all(&nested).expect("creates nested cwd");
+
+        assert_eq!(find_dev_service_script(&nested), Some(script));
+
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
 
 /// Synchronously spawn the sidecar process if not already running. Does not wait
@@ -233,15 +315,22 @@ pub fn start_watchdog(app: AppHandle, port: u16) {
                         }
 
                         if restart_count >= MAX_RESTARTS {
-                            let _ = app.emit("waggle://service-status",
-                                serde_json::json!({ "status": "failed" }));
+                            let _ = app.emit(
+                                "waggle://service-status",
+                                serde_json::json!({ "status": "failed" }),
+                            );
                             eprintln!("[waggle] Watchdog: max restarts exceeded, giving up");
                             break;
                         }
 
-                        let _ = app.emit("waggle://service-status",
-                            serde_json::json!({ "status": "restarting" }));
-                        eprintln!("[waggle] Watchdog: server unresponsive, respawning (attempt {})", restart_count + 1);
+                        let _ = app.emit(
+                            "waggle://service-status",
+                            serde_json::json!({ "status": "restarting" }),
+                        );
+                        eprintln!(
+                            "[waggle] Watchdog: server unresponsive, respawning (attempt {})",
+                            restart_count + 1
+                        );
 
                         // R7-003: self-heal — reap the dead child (so spawn_service_sync's
                         // is_some() early-return clears) then respawn the sidecar in place.

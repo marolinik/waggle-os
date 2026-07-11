@@ -281,7 +281,7 @@ describe('Agent API', () => {
       .limit(1);
     expect(job).toBeDefined();
     expect(job.status).toBe('queued');
-    expect(job.jobType).toBe('group_execution');
+    expect(job.jobType).toBe('group');
     expect(job.userId).toBe(user1Id);
   });
 

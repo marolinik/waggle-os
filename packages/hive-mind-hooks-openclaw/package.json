@@ -16,10 +16,11 @@
     "./handler": "./dist/handler.js"
   },
   "scripts": {
-    "build": "tsc --build",
-    "build:clean": "tsc --build --clean",
+    "build": "tsc --build && node scripts/build-handler.mjs",
+    "build:clean": "tsc --build --clean && node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist/handler.bundle.cjs', { force: true })\"",
+    "prepack": "npm run build",
     "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
-    "test": "vitest run",
+    "test": "npm run build && node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/hive-mind-hooks-openclaw/tests",
     "test:watch": "vitest"
   },
   "engines": {

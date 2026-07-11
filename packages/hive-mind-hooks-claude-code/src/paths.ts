@@ -80,7 +80,10 @@ export function hookCommandFor(
   // Quote paths so spaces in user home dir (Windows: "C:\Users\Marko Markovic\")
   // don't fragment the command. Claude Code parses this string with shell rules.
   const cliFlag = cliPath && cliPath.length > 0 ? ` --cli-path "${cliPath}"` : '';
-  return `node "${scriptPath}"${cliFlag}`;
+  const configuredNode = process.env.WAGGLE_HOOK_NODE_PATH?.trim();
+  if (configuredNode?.includes('"')) throw new Error('WAGGLE_HOOK_NODE_PATH cannot contain double quotes');
+  const nodeCommand = configuredNode ? `"${configuredNode}"` : 'node';
+  return `${nodeCommand} "${scriptPath}"${cliFlag}`;
 }
 
 export function backupPathFor(settingsPath: string, isoTimestamp: string): string {

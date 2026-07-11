@@ -293,7 +293,14 @@ export interface SecurityMiddlewareOpts {
   rateLimiter?: RateLimiterConfig;
   /** Session token for bearer auth. When set, all non-exempt routes require Authorization header. */
   sessionToken?: string;
+  /** Validate a narrow per-run credential for the two WaggleDance transport routes. */
+  authenticateRunToken?: (token: string) => boolean;
 }
+
+const RUN_TOKEN_PATHS = new Set([
+  '/api/waggle-dance/signal',
+  '/api/waggle-dance/signals',
+]);
 
 async function securityMiddlewarePlugin(
   fastify: FastifyInstance,
@@ -366,7 +373,13 @@ async function securityMiddlewarePlugin(
         AUTH_EXEMPT_PATHS.some(p => requestPath === p) ||
         isNonApiGet ||
         (trustLocalhost && isLocalhost);
-      if (!isAuthExempt) {
+      const rawRunToken = request.headers['x-waggle-run-token'];
+      const runToken = typeof rawRunToken === 'string' ? rawRunToken : undefined;
+      const runTokenEligible = RUN_TOKEN_PATHS.has(requestPath);
+      const runTokenValid = Boolean(
+        runTokenEligible && runToken && opts.authenticateRunToken?.(runToken),
+      );
+      if (!isAuthExempt && !runTokenValid) {
         const authHeader = request.headers.authorization;
         // P1b-SSE: header-less GETs on the SSE allowlist may authenticate via
         // `?token=` (EventSource cannot send headers). A header, when present,
@@ -381,7 +394,10 @@ async function securityMiddlewarePlugin(
           }
         } else {
           if (!authHeader) {
-            return reply.code(401).send({ error: 'Unauthorized', code: 'MISSING_TOKEN' });
+            return reply.code(401).send({
+              error: 'Unauthorized',
+              code: runToken ? 'INVALID_TOKEN' : 'MISSING_TOKEN',
+            });
           }
           const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
           if (token !== sessionToken) {

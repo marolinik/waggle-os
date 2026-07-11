@@ -2,12 +2,18 @@
 import LauncherApp from '@/components/os/apps/LauncherApp';
 import SurfaceBoundary from './SurfaceBoundary';
 import { useShell } from '@/providers/ShellContext';
+import { useNavigate } from 'react-router-dom';
 
 const LauncherRoute = () => {
-  const { activeWorkspaceId } = useShell();
+  const { activeWorkspaceId, workspaces } = useShell();
+  const navigate = useNavigate();
   return (
     <SurfaceBoundary appName="Tool Launcher">
-      <LauncherApp activeWorkspaceId={activeWorkspaceId ?? undefined} />
+      <LauncherApp
+        activeWorkspaceId={activeWorkspaceId ?? undefined}
+        workspaces={workspaces}
+        onOpenRoom={(roomId) => navigate(`/room?room=${encodeURIComponent(roomId)}`)}
+      />
     </SurfaceBoundary>
   );
 };

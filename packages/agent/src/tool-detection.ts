@@ -52,10 +52,29 @@ import {
   type ToolDetectionResult,
   type ToolManifest,
 } from '@waggle/shared';
+import { resolveToolCommandInvocation } from './tool-command.js';
 import { getToolRegistry } from './tool-registry.js';
 import type { ManifestLoaderDeps } from './tool-manifest-loader.js';
 
 const execFileAsync = promisify(execFile);
+const CODEX_WINDOWS_APPS_DIAGNOSTIC =
+  'Codex was found in WindowsApps, but Windows blocks command-line launch from that app alias. Install a PATH CLI build of Codex or launch Codex from Start, then refresh.';
+
+function isBlockedWindowsAppsCodexPath(
+  id: string,
+  platform: NodeJS.Platform,
+  installedPath: string,
+): boolean {
+  if (id !== 'codex' || platform !== 'win32') return false;
+  const normalized = installedPath.replace(/\//g, '\\').toLowerCase();
+  return (
+    normalized.includes('\\windowsapps\\openai.codex_')
+    && (
+      normalized.endsWith('\\app\\resources\\codex.exe')
+      || normalized.endsWith('\\app\\resources\\codex')
+    )
+  );
+}
 
 // ── Injectable deps ─────────────────────────────────────────────────
 
@@ -108,10 +127,12 @@ async function defaultExecVersion(
   args: string[],
 ): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync(binary, args, {
+    const invocation = resolveToolCommandInvocation(binary, args);
+    const { stdout } = await execFileAsync(invocation.binary, invocation.args, {
       timeout: 5000,
       // Don't allow shell expansion; binary paths must be literal.
       shell: false,
+      windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
     });
     const trimmed = stdout.trim();
     return trimmed.length > 0 ? trimmed : null;
@@ -137,11 +158,26 @@ async function defaultPathFromEnv(name: string): Promise<string | null> {
       timeout: 3000,
       shell: false,
     });
-    const first = stdout.split(/\r?\n/).find((l) => l.trim().length > 0);
-    return first ? first.trim() : null;
+    return selectPathLookupCandidate(stdout, process.platform);
   } catch {
     return null;
   }
+}
+
+export function selectPathLookupCandidate(
+  stdout: string,
+  platform: NodeJS.Platform = process.platform,
+): string | null {
+  const candidates = stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (platform !== 'win32') return candidates[0] ?? null;
+  return (
+    candidates.find((candidate) => /\.(?:exe|cmd|bat|com)$/i.test(candidate))
+    ?? candidates[0]
+    ?? null
+  );
 }
 
 // ── Resolved deps (caller overrides + production defaults) ──────────
@@ -198,12 +234,29 @@ async function probeHooks(rel: string, deps: ResolvedDeps): Promise<HookProbe> {
   if (!parsed || typeof parsed !== 'object') {
     return { hooksInstalled: false, hookPointerPath: pointerPath };
   }
-  const backup = (parsed as Record<string, unknown>).backup;
-  if (typeof backup !== 'string' || backup.length === 0) {
-    return { hooksInstalled: false, hookPointerPath: pointerPath };
+  const pointer = parsed as Record<string, unknown>;
+  // Current installers use settings_backup. Keep the legacy `backup` alias so
+  // older installs remain detectable during upgrade.
+  const backup = Object.hasOwn(pointer, 'settings_backup')
+    ? pointer.settings_backup
+    : pointer.backup;
+  const hooksDir = pointer.hooks_dir;
+  const hooksDirValid = hooksDir === undefined || hooksDir === null
+    ? true
+    : typeof hooksDir === 'string' && hooksDir.length > 0 && await deps.exists(hooksDir);
+  if (!hooksDirValid) return { hooksInstalled: false, hookPointerPath: pointerPath };
+  if (typeof backup === 'string' && backup.length > 0) {
+    return { hooksInstalled: await deps.exists(backup), hookPointerPath: pointerPath };
   }
-  const backupExists = await deps.exists(backup);
-  return { hooksInstalled: backupExists, hookPointerPath: pointerPath };
+  // Create-if-missing adapters correctly have no backup. Their pointer is
+  // healthy only while the config they created still exists.
+  if (backup === null && pointer.created_by_us === true && typeof pointer.config_path === 'string') {
+    return {
+      hooksInstalled: await deps.exists(pointer.config_path),
+      hookPointerPath: pointerPath,
+    };
+  }
+  return { hooksInstalled: false, hookPointerPath: pointerPath };
 }
 
 // ── Per-tool detectors ──────────────────────────────────────────────
@@ -240,12 +293,17 @@ async function detectByPath(
   }
   const versionRaw = await deps.execVersion(resolved, ['--version']);
   const hookProbe = await probeHooks(hookPointer, deps);
+  const blockedWindowsAppsCodex =
+    versionRaw === null && isBlockedWindowsAppsCodexPath(id, deps.platform, resolved);
   return {
     ...base,
     installed: true,
     installedPath: resolved,
     version: versionRaw,
-    diagnostic: versionRaw ? undefined : '--version exec failed',
+    launchable: blockedWindowsAppsCodex ? false : undefined,
+    diagnostic: blockedWindowsAppsCodex
+      ? CODEX_WINDOWS_APPS_DIAGNOSTIC
+      : versionRaw ? undefined : '--version exec failed',
     ...hookProbe,
   };
 }
@@ -363,14 +421,32 @@ const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[]> = {
   'codex-desktop': codexDesktopCandidatePaths,
 };
 
+function withManifestMetadata(tool: DetectedTool, manifest: ToolManifest): DetectedTool {
+  return {
+    ...tool,
+    launchable: tool.launchable ?? manifest.launchable,
+    hookCapable: manifest.hookCapable,
+    builtin: manifest.builtin === true,
+    acceptsInlinePrompt: Boolean(manifest.promptArgTemplate?.length),
+    capabilities: manifest.capabilities,
+    permissionModes: manifest.task?.permissionModes ?? [],
+  };
+}
+
 /** Detect one tool from its manifest: PATH lookup, or the candidate resolver. */
 async function detectFromManifest(m: ToolManifest, deps: ResolvedDeps): Promise<DetectedTool> {
   if (m.detect.kind === 'path') {
-    return detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName);
+    return withManifestMetadata(
+      await detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName),
+      m,
+    );
   }
   const resolver = CANDIDATE_RESOLVERS[m.id];
   const candidates = resolver ? resolver(deps) : [];
-  return detectByCandidates(m.id, candidates, deps, /* withVersion */ false, m.hookPointer, m.displayName);
+  return withManifestMetadata(
+    await detectByCandidates(m.id, candidates, deps, /* withVersion */ false, m.hookPointer, m.displayName),
+    m,
+  );
 }
 
 /**

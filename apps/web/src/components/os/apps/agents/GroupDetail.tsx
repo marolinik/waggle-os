@@ -58,6 +58,24 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
           if (res.status) updated.status = res.status as GroupExecState['status'];
           if (res.completedAt) updated.completedAt = new Date(res.completedAt).getTime();
           if (res.output) updated.output = res.output as Record<string, unknown>;
+          const workerSnapshots = (res.output as { workers?: Array<Record<string, unknown>> } | undefined)?.workers;
+          if (Array.isArray(workerSnapshots)) {
+            updated.members = updated.members.map((member, index) => {
+              const worker = workerSnapshots[index];
+              if (!worker) return member;
+              const workerStatus = worker.status === 'running' || worker.status === 'done' || worker.status === 'failed'
+                ? worker.status
+                : 'pending';
+              return {
+                ...member,
+                status: workerStatus,
+                startedAt: typeof worker.startedAt === 'number' ? worker.startedAt : member.startedAt,
+                completedAt: typeof worker.completedAt === 'number' ? worker.completedAt : member.completedAt,
+                result: typeof worker.result === 'string' ? worker.result : member.result,
+                error: typeof worker.error === 'string' ? worker.error : member.error,
+              };
+            });
+          }
           if (res.status === 'running') {
             const now = Date.now();
             updated.members = updated.members.map((m, i) => {
@@ -72,7 +90,10 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
           }
           if (res.status === 'completed') {
             updated.members = updated.members.map(m => ({
-              ...m, status: 'done' as const, completedAt: m.completedAt ?? Date.now(), result: m.result ?? 'Completed',
+              ...m,
+              status: m.status === 'failed' ? 'failed' as const : 'done' as const,
+              completedAt: m.completedAt ?? Date.now(),
+              result: m.result ?? (m.status === 'failed' ? undefined : 'Completed'),
             }));
           }
           if (res.status === 'failed') {

@@ -6,8 +6,9 @@ import { JobProcessor, type JobData } from './job-processor.js';
 import Redis from 'ioredis';
 import { chatHandler } from './handlers/chat-handler.js';
 import { taskHandler } from './handlers/task-handler.js';
-import { waggleHandler } from './handlers/waggle-handler.js';
 import { groupHandler } from './handlers/group-handler.js';
+import { createWaggleHandler } from './handlers/waggle-handler.js';
+import { JobService } from '../../server/src/services/job-service.js';
 
 const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 
@@ -22,11 +23,21 @@ export function createWorker(redisUrl = REDIS_URL, databaseUrl?: string, queueNa
   const db = createDb(resolvedDbUrl);
   const processor = new JobProcessor();
   const redisPub = new Redis(redisUrl);
+  const jobService = new JobService(db, redisUrl, queueName);
 
   // Register job handlers
   processor.register('chat', chatHandler);
   processor.register('task', taskHandler);
-  processor.register('waggle', waggleHandler);
+  processor.register('waggle', createWaggleHandler({
+    enqueueWorker: async ({ teamId, userId, task, role, context }) => {
+      const childJob = await jobService.createJob(teamId, userId, 'chat', {
+        message: task,
+        role,
+        ...(context ? { context } : {}),
+      });
+      return childJob.id;
+    },
+  }));
   processor.register('group', groupHandler);
   // TODO(pre-launch): Replace with real cron execution handler
   processor.register('cron', async (job) => ({ result: 'cron handler placeholder', input: job.data.input }));
@@ -73,9 +84,10 @@ export function createWorker(redisUrl = REDIS_URL, databaseUrl?: string, queueNa
   // Clean up shared Redis publisher when worker closes
   worker.on('closed', () => {
     redisPub.quit().catch(() => {});
+    jobService.close().catch(() => {});
   });
 
-  return { worker, processor, db, redisPub };
+  return { worker, processor, db, redisPub, jobService };
 }
 
 // Start if run directly

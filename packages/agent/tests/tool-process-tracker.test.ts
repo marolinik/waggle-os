@@ -21,6 +21,13 @@ describe('ToolProcessTracker', () => {
     expect(tracker.list()).toHaveLength(1);
   });
 
+  it('registers third-party adapter ids', () => {
+    const tracker = new ToolProcessTracker({ isAlive: () => true });
+    const rec = tracker.register(4321, 'foo-cli');
+    expect(rec.toolId).toBe('foo-cli');
+    expect(tracker.list()[0].toolId).toBe('foo-cli');
+  });
+
   it('omits workspaceId from the record when not provided', () => {
     const tracker = new ToolProcessTracker({ isAlive: () => true });
     const rec = tracker.register(1234, 'cursor');
@@ -225,6 +232,22 @@ describe('ToolProcessTracker — persistence', () => {
     tracker.register(5, 'hermes');
     tracker.forget(5);
     expect(store.current).toEqual([]);
+  });
+
+  it('persists dead pid pruning performed by list()', () => {
+    const store = memStore();
+    const alive = new Set([5, 6]);
+    const tracker = new ToolProcessTracker({
+      isAlive: (pid) => alive.has(pid),
+      loadPersisted: store.loadPersisted,
+      savePersisted: store.savePersisted,
+    });
+    tracker.register(5, 'hermes');
+    tracker.register(6, 'cursor');
+
+    alive.delete(6);
+    expect(tracker.list().map((process) => process.pid)).toEqual([5]);
+    expect(store.current.map((process) => process.pid)).toEqual([5]);
   });
 
   it('persists on kill', async () => {

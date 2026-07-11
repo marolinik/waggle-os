@@ -42,7 +42,7 @@ export interface OpenclawPaths {
   hookMdPath: string;
   /** `~/.openclaw/hooks/hive-mind/handler.js` — the compiled handler we copy in. */
   installedHandlerPath: string;
-  /** Source of the compiled handler in THIS package's `dist/` (copied on install). */
+  /** Source of the self-contained handler bundle in THIS package's `dist/`. */
   handlerSourcePath: string;
 }
 
@@ -75,13 +75,13 @@ export function allHookBasenames(): readonly HookBasename[] {
 }
 
 /**
- * Resolve the compiled `handler.js` shipped in this package's `dist/`.
+ * Resolve the self-contained handler bundle shipped in this package's `dist/`.
  * The compiled install module lives at `<pkg>/dist/<file>.js`; dirname gives
- * `<pkg>/dist/`, so `handler.js` is a sibling.
+ * `<pkg>/dist/`, so `handler.bundle.cjs` is a sibling.
  */
 function handlerSourceFromModuleUrl(moduleUrl: string): string {
   const dir = dirname(fileURLToPath(moduleUrl));
-  return resolve(dir, 'handler.js');
+  return resolve(dir, 'handler.bundle.cjs');
 }
 
 export function resolvePaths(opts: ResolvePathsOptions = {}): OpenclawPaths {
@@ -101,7 +101,7 @@ export function resolvePaths(opts: ResolvePathsOptions = {}): OpenclawPaths {
     handlerSourcePath = handlerSourceFromModuleUrl(opts.moduleUrl);
   } else {
     // Fallback for ad-hoc test use — install.ts always passes moduleUrl.
-    handlerSourcePath = resolve(process.cwd(), 'dist', 'handler.js');
+    handlerSourcePath = resolve(process.cwd(), 'dist', 'handler.bundle.cjs');
   }
 
   return {

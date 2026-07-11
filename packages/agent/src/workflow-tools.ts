@@ -1,5 +1,5 @@
 import type { ToolDefinition } from './tools.js';
-import { SubagentOrchestrator, type OrchestratorConfig, type WorkflowTemplate } from './subagent-orchestrator.js';
+import { SubagentOrchestrator, type OrchestratorConfig, type WorkerState, type WorkflowTemplate } from './subagent-orchestrator.js';
 import { WORKFLOW_TEMPLATES, listWorkflowTemplates } from './workflow-templates.js';
 import { detectTaskShape } from './task-shape.js';
 import { composeWorkflow, validateTemplate, type ComposerContext } from './workflow-composer.js';
@@ -11,6 +11,31 @@ import { BUILTIN_HARNESSES, getHarnessById } from './builtin-harnesses.js';
 import type { HookRegistry } from './hooks.js';
 import type { LoadedSkill } from './prompt-loader.js';
 
+export interface WorkflowRunHandle {
+  runId: string;
+  signal?: AbortSignal;
+  dispose?: () => void;
+}
+
+/** Host lifecycle adapter for durable workflow Rooms and their workers. */
+export interface WorkflowRunAdapter {
+  start: (input: {
+    workflowName: string;
+    task: string;
+    template: WorkflowTemplate;
+  }) => Promise<WorkflowRunHandle> | WorkflowRunHandle;
+  worker?: (handle: WorkflowRunHandle, event: {
+    workerId: string;
+    status: string;
+    workerState: WorkerState;
+  }) => Promise<void> | void;
+  complete?: (handle: WorkflowRunHandle, output: {
+    results: Map<string, WorkerState>;
+    aggregated: string;
+  }) => Promise<void> | void;
+  fail?: (handle: WorkflowRunHandle, error: Error) => Promise<void> | void;
+}
+
 export interface WorkflowToolsConfig extends OrchestratorConfig {
   hooks?: HookRegistry;
   /** Currently loaded skills — passed to the composer for skill matching */
@@ -19,6 +44,8 @@ export interface WorkflowToolsConfig extends OrchestratorConfig {
   subAgentsAvailable?: boolean;
   /** Optional callback for worker status changes — used by server to relay events to UI via SSE */
   onWorkerStatus?: (event: { workerId: string; status: string; workerState: import('./subagent-orchestrator.js').WorkerState }) => void;
+  /** Durable host lifecycle. Generic embedders may omit it. */
+  runAdapter?: WorkflowRunAdapter;
 }
 
 export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition[] {
@@ -145,8 +172,6 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
           return 'Provide either a template name or an inline_template.';
         }
 
-        const orchestrator = new SubagentOrchestrator(config);
-
         // Fire workflow:start hook
         if (config.hooks) {
           const hookResult = await config.hooks.fire('workflow:start', {
@@ -160,21 +185,59 @@ export function createWorkflowTools(config: WorkflowToolsConfig): ToolDefinition
         }
 
         // Emit progress updates — relay to external callback if provided
+        let runHandle: WorkflowRunHandle | undefined;
+        try {
+          runHandle = await config.runAdapter?.start({ workflowName, task, template });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return `## Workflow Error: ${template.name}\nCould not start the durable run: ${message}`;
+        }
+
+        const orchestrator = new SubagentOrchestrator({
+          ...config,
+          signal: runHandle?.signal ?? config.signal,
+        });
+
         orchestrator.on('worker:status', (event) => {
           if (config.onWorkerStatus) {
             config.onWorkerStatus(event);
           }
+          if (runHandle && config.runAdapter?.worker) {
+            try {
+              const pending = config.runAdapter.worker(runHandle, event);
+              if (pending && typeof (pending as Promise<void>).catch === 'function') {
+                void (pending as Promise<void>).catch(() => undefined);
+              }
+            } catch {
+              // Room observability must never stop the workflow itself.
+            }
+          }
         });
 
-        const { results, aggregated } = await orchestrator.runWorkflow(template);
+        let results: Map<string, WorkerState>;
+        let aggregated: string;
+        try {
+          ({ results, aggregated } = await orchestrator.runWorkflow(template));
+          if (runHandle && config.runAdapter?.complete) {
+            await config.runAdapter.complete(runHandle, { results, aggregated });
+          }
 
-        // Fire workflow:end hook
-        if (config.hooks) {
-          await config.hooks.fire('workflow:end', {
-            toolName: 'orchestrate_workflow',
-            workflowName,
-            workflowTask: task,
-          });
+          // Fire workflow:end hook
+          if (config.hooks) {
+            await config.hooks.fire('workflow:end', {
+              toolName: 'orchestrate_workflow',
+              workflowName,
+              workflowTask: task,
+            });
+          }
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          if (runHandle && config.runAdapter?.fail) {
+            try { await config.runAdapter.fail(runHandle, error); } catch { /* preserve original */ }
+          }
+          return `## Workflow Error: ${template.name}\n${error.message}`;
+        } finally {
+          try { runHandle?.dispose?.(); } catch { /* already released */ }
         }
 
         // Build summary

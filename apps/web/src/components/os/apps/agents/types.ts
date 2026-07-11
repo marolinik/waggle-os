@@ -44,6 +44,7 @@ export interface MemberExecState {
 
 export interface GroupExecState {
   jobId: string;
+  roomId: string;
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
   task: string;
   startedAt: number;

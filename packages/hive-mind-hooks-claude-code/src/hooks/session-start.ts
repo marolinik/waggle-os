@@ -15,7 +15,7 @@
  * output — the session starts as it would have without the shim.
  */
 
-import type { MemoryHit } from '@waggle/hive-mind-shim-core';
+import { recallPersonalAndWorkspace, type MemoryHit } from '@waggle/hive-mind-shim-core';
 import {
   pickStringFromObject,
   runHook,
@@ -73,7 +73,7 @@ export const sessionStartHandler: HookHandler<SessionStartPayload, SessionStartO
 
   async run(payload, { bridge, logger }): Promise<SessionStartOutput | undefined> {
     logger.debug('recall starting', { limit: payload.recallLimit });
-    const hits = await bridge.recallMemory('', { limit: payload.recallLimit, scope: 'personal' });
+    const hits = await recallPersonalAndWorkspace(bridge, '', { limit: payload.recallLimit });
     logger.debug('recall complete', { hits: hits.length });
     return {
       hookSpecificOutput: {
