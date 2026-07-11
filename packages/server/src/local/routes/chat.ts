@@ -288,6 +288,11 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
 
   // Context compression: track previous summaries per session for iterative compression
   const compressionSummaries = new Map<string, string>();
+  // #12: frame id of each session's persisted compaction summary — later
+  // compaction passes update that frame in place instead of stacking near-
+  // duplicates. In-memory like compressionSummaries (a sidecar restart just
+  // means the next pass creates a fresh frame — rare, benign).
+  const compactionFrameIds = new Map<string, number>();
 
   // Credential pool: lazily initialized per-provider key pools for round-robin + cooldown
   const credentialPools = new Map<string, CredentialPool>();
@@ -1476,6 +1481,34 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             sendEvent('step', { content: `Context compressed: ${compressionResult.originalTokens}→${compressionResult.compressedTokens} tokens` });
             if (compressionResult.summary) {
               compressionSummaries.set(sessionId, compressionResult.summary);
+
+              // #12: dual-use — persist the summary the compressor already
+              // paid for as a durable memory frame (skipped for automated
+              // turns per #13). The summary aggregates tool/connector output,
+              // so scan it before it can enter durable memory; fail-soft with
+              // the W4A closed-DB guard so persistence never fails the turn.
+              if (!isAutomatedTurn) {
+                const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
+                if (summaryScan.score >= 0.7) {
+                  log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
+                } else {
+                  try {
+                    const frameId = await sessionOrch.persistCompactionSummary(
+                      compressionResult.summary, sessionId, compactionFrameIds.get(sessionId) ?? null,
+                    );
+                    if (frameId != null) {
+                      compactionFrameIds.set(sessionId, frameId);
+                      sendEvent('step', { content: 'Session summary saved to memory' });
+                    }
+                  } catch (e) {
+                    if (isClosedDbError(e)) {
+                      log.warn(`[context-compression] summary persist skipped — mind handle closed mid-turn (session=${sessionId})`);
+                    } else {
+                      log.warn(`[context-compression] summary persist failed: ${e instanceof Error ? e.message : e}`);
+                    }
+                  }
+                }
+              }
             }
           }
         } else {
@@ -2217,6 +2250,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     sessionHistories.delete(sessionId);
     systemPromptCache.delete(sessionId);
     compressionSummaries.delete(sessionId);
+    compactionFrameIds.delete(sessionId); // #12: next compaction starts a fresh frame
     sessionToolSequences.delete(sessionId);
     return reply.send({ ok: true, cleared: sessionId });
   });

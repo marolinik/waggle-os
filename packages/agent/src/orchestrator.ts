@@ -32,6 +32,7 @@ import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } fro
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
 import { runPatternWriteBack } from './pattern-write-back.js';
+import { isSelfIncapacityAssertion } from './memory-sign-gate.js';
 import {
   fetchRecentFrames,
   loadRecentContext as loadRecentContextImpl,
@@ -139,6 +140,8 @@ export class Orchestrator {
 
   /** Workspace-specific layers (null when no workspace is active) */
   private workspaceLayers: WorkspaceLayers | null = null;
+  /** Personal-mind cognify pipeline (#12: compaction-summary persistence). */
+  private cognify: CognifyPipeline;
   /** W4.2: memoized reranker promise — resolves undefined on creation failure. */
   private rerankerPromise: Promise<Reranker | undefined> | null = null;
 
@@ -174,6 +177,7 @@ export class Orchestrator {
       knowledge: this.knowledge,
       search: this.search,
     });
+    this.cognify = cognify;
 
     this.tools = createMindTools({
       db: this.db,
@@ -880,6 +884,38 @@ export class Orchestrator {
       assistantMsg,
       opts,
     );
+  }
+
+  /**
+   * #12: persist the context-compaction summary as a memory frame — the
+   * dual-use of the one compaction LLM call (already re-injected into live
+   * context by the compressor; this makes it durable). Zero extra LLM cost:
+   * cognify's entity extraction is regex. One frame per session, updated in
+   * place on later compaction passes (each pass is a superset — the previous
+   * summary feeds the summarizer). Routes to the workspace mind when active,
+   * else personal (mirrors save_memory). Returns the frame id, or null when
+   * nothing was persisted.
+   */
+  async persistCompactionSummary(
+    summary: string,
+    sessionKey: string,
+    priorFrameId?: number | null,
+  ): Promise<number | null> {
+    if (!summary.trim()) return null;
+    // Sign-gate: a summary that reads as self-incapacity ("I can't…") is
+    // audit-only, not recallable fact.
+    const importance = isSelfIncapacityAssertion(summary) ? 'temporary' : 'normal';
+    const content = `[Session summary — ${sessionKey}]\n\n${summary}`;
+
+    const frames = this.workspaceLayers?.frames ?? this.frames;
+    const cognify = this.workspaceLayers?.cognify ?? this.cognify;
+
+    if (priorFrameId != null && frames.getById(priorFrameId)) {
+      const updated = frames.update(priorFrameId, content, importance);
+      return updated ? priorFrameId : null;
+    }
+    const result = await cognify.cognify(content, importance, undefined, undefined, 'system');
+    return result.frameId;
   }
 
   getTools(): ToolDefinition[] {
