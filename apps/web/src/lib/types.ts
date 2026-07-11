@@ -627,6 +627,17 @@ export interface Skill {
    */
   verified?: boolean;
   confidence?: number;
+  /**
+   * #15 requirement badge: presence check of the skill's declared `requires:`
+   * prerequisites (env keys + binaries) from GET /api/skills. null/absent ⇒
+   * no declared requirements (no badge). Badge-only v1 — unsatisfied skills
+   * stay active.
+   */
+  requirements?: {
+    satisfied: boolean;
+    missingEnv: string[];
+    missingBins: string[];
+  } | null;
 }
 
 export interface FleetSession {

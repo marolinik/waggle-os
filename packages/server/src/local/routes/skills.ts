@@ -6,7 +6,7 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const log = createLogger('skills');
 import { PluginManager, getStarterSkillsDir, listStarterSkills, listCapabilityPacks, getPackManifest } from '@waggle/sdk';
-import { loadSkills, loadSkillHygiene, loadSkillAudit, clearAuditBadge, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, type SkillTemplate } from '@waggle/agent';
+import { loadSkills, loadSkillHygiene, loadSkillAudit, clearAuditBadge, SkillRecommender, assessTrust, generateSkillMarkdown, writeSkill, deleteSkill as deleteSkillWrite, parseSkillFrontmatter, extractSkillRequirements, checkSkillRequirements, type SkillTemplate, type SkillRequirements, type SkillRequirementsStatus } from '@waggle/agent';
 import { computeSkillHash } from '@waggle/core';
 
 /** Capability family definitions — user-job-first grouping */
@@ -360,7 +360,7 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
         .trim()
         .slice(0, 200);
     return {
-      skills: skills.map(s => {
+      skills: await Promise.all(skills.map(async s => {
         // Provenance comes from the on-disk file's frontmatter — loadSkills may
         // strip it, so read the raw file. Absent provenance ⇒ legacy/bundled ⇒
         // 'built-in': attributing stock skills to the user made the user-vs-
@@ -368,6 +368,7 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
         let initiator: 'agent' | 'user' | 'built-in' = 'built-in';
         let provSource: string | undefined;
         let preview = cleanPreview(s.content);
+        let declaredReqs: SkillRequirements | null = null;
         try {
           const raw = fs.readFileSync(path.join(skillsDir, `${s.name}.md`), 'utf-8');
           const parsed = parseSkillFrontmatter(raw);
@@ -377,7 +378,17 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
           preview = parsed.frontmatter.description
             ? cleanPreview(parsed.frontmatter.description)
             : cleanPreview(parsed.body);
+          // #15 requirement badge: declared `requires:` prerequisites.
+          declaredReqs = extractSkillRequirements(raw);
         } catch { /* not on disk (starter/builtin) — keep the content-based preview */ }
+        // #15 badge-only v1: env keys count as present when set in the process
+        // env OR stored in the vault (D2). Presence booleans only, never values.
+        let requirements: SkillRequirementsStatus | null = null;
+        if (declaredReqs) {
+          requirements = await checkSkillRequirements(declaredReqs, {
+            hasEnv: (k) => k in process.env || (server.vault?.has(k) ?? false),
+          });
+        }
         const hygieneEntry = hygiene[s.name];
         const auditEntry = audit[s.name];
         // §D2 staleness-on-read: a "verified" badge is only honest while the content
@@ -400,8 +411,10 @@ export const skillRoutes: FastifyPluginAsync = async (server) => {
           // §D2: the sellable "verified" badge — only when the audit confirmed it AND the content is unchanged.
           verified,
           confidence: verified ? auditEntry?.confidence : undefined,
+          // #15: null ⇒ no declared requirements (no badge).
+          requirements,
         };
-      }),
+      })),
       count: skills.length,
       directory: skillsDir,
     };

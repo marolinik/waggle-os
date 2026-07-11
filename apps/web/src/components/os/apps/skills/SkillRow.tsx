@@ -28,6 +28,13 @@ interface SkillRowProps {
   onVerify?: (skill: Skill) => void;
 }
 
+/** #15: tooltip body for the "setup needed" badge — lists every missing item. */
+const missingSummary = (r: NonNullable<Skill['requirements']>): string =>
+  `Missing: ${[
+    ...r.missingEnv.map((k) => `${k} (env)`),
+    ...r.missingBins.map((b) => `${b} (binary)`),
+  ].join(', ')}`;
+
 const SkillRow = ({ skill, testing, verifying, onTest, onEdit, onVerify }: SkillRowProps) => (
   <li className="flex items-center gap-2.5 rounded-lg border border-border/60 bg-card/40 px-2.5 py-2">
     <FileCode2 className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -45,6 +52,12 @@ const SkillRow = ({ skill, testing, verifying, onTest, onEdit, onVerify }: Skill
         tone="healthy"
         label={`verified${skill.confidence != null ? ` · ${Math.round(skill.confidence * 100)}%` : ''}`}
       />
+    )}
+    {skill.requirements && !skill.requirements.satisfied && (
+      /* #15 badge-only v1: skill stays active; tooltip lists what's missing. */
+      <span title={missingSummary(skill.requirements)} className="shrink-0">
+        <StatusBadge tone="attention" label="setup needed" />
+      </span>
     )}
     <StatusBadge tone={STATUS_TONE[skill.status]} label={skill.status === 'update-available' ? 'Update available' : skill.status} />
     {onVerify && (

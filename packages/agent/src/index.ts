@@ -372,6 +372,10 @@ export {
   parseSkillFrontmatter, serializeFrontmatter, nextScope, SKILL_SCOPE_ORDER,
   type SkillFrontmatter, type SkillScope,
 } from './skill-frontmatter.js';
+export {
+  extractSkillRequirements, checkSkillRequirements, clearSkillRequirementsCache,
+  type SkillRequirements, type SkillRequirementsStatus, type SkillRequirementDeps,
+} from './skill-requirements.js';
 export { generateSkillMarkdown, type SkillTemplate } from './skill-creator.js';
 export {
   autoExtractAndCreateSkill, skillFilename,

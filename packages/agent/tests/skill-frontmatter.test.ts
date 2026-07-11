@@ -233,6 +233,57 @@ body`;
     });
   });
 
+  // #15 requirement badges — requires: { env, bins }
+  describe('requires — env + bins (#15)', () => {
+    it('parses a requires block with env and bins', () => {
+      const content = `---
+name: Video Tool
+requires:
+  env: [OPENAI_API_KEY, REPLICATE_API_TOKEN]
+  bins: [ffmpeg, git]
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.requires).toEqual({
+        env: ['OPENAI_API_KEY', 'REPLICATE_API_TOKEN'],
+        bins: ['ffmpeg', 'git'],
+      });
+    });
+
+    it('parses an env-only requires block (comma-separated form)', () => {
+      const content = `---
+requires:
+  env: OPENAI_API_KEY, TAVILY_API_KEY
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.requires).toEqual({ env: ['OPENAI_API_KEY', 'TAVILY_API_KEY'] });
+    });
+
+    it('leaves requires undefined when absent or empty', () => {
+      const { frontmatter: absent } = parseSkillFrontmatter('---\nname: X\n---\nbody');
+      expect(absent.requires).toBeUndefined();
+      const { frontmatter: empty } = parseSkillFrontmatter('---\nrequires:\nname: X\n---\nbody');
+      expect(empty.requires).toBeUndefined();
+      expect(empty.name).toBe('X');
+    });
+
+    it('requires block coexists with a permissions block', () => {
+      const content = `---
+permissions:
+  network: true
+requires:
+  bins: [docker]
+name: Both
+---
+body`;
+      const { frontmatter } = parseSkillFrontmatter(content);
+      expect(frontmatter.permissions!.network).toBe(true);
+      expect(frontmatter.requires).toEqual({ bins: ['docker'] });
+      expect(frontmatter.name).toBe('Both');
+    });
+  });
+
   describe('nextScope', () => {
     it('returns the next scope up', () => {
       expect(nextScope('personal')).toBe('workspace');
@@ -281,6 +332,20 @@ body`;
       const out = serializeFrontmatter({ name: 'NoProv' }, 'body');
       expect(out).not.toContain('initiator:');
       expect(out).not.toContain('source:');
+    });
+
+    it('round-trips requires through parse (#15)', () => {
+      const out = serializeFrontmatter(
+        { name: 'Req', requires: { env: ['OPENAI_API_KEY'], bins: ['ffmpeg', 'git'] } },
+        '# body',
+      );
+      const { frontmatter } = parseSkillFrontmatter(out);
+      expect(frontmatter.requires).toEqual({ env: ['OPENAI_API_KEY'], bins: ['ffmpeg', 'git'] });
+    });
+
+    it('omits requires when absent or empty (#15)', () => {
+      expect(serializeFrontmatter({ name: 'NoReq' }, 'body')).not.toContain('requires:');
+      expect(serializeFrontmatter({ name: 'EmptyReq', requires: {} }, 'body')).not.toContain('requires:');
     });
   });
 });

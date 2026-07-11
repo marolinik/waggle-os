@@ -12,6 +12,7 @@
 
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { clearSkillRequirementsCache } from '@waggle/agent';
 import { isLocalRequest } from '../origin-guard.js';
 import { validateBody } from '../../validate-body.js';
 
@@ -144,6 +145,11 @@ export async function vaultRoutes(fastify: FastifyInstance) {
     const { name, value, type } = request.body as z.infer<typeof vaultUpsertSchema>;
 
     fastify.vault.set(name, value, type ? { credentialType: type } : undefined);
+
+    // #15 requirement badges: a newly stored key can satisfy a skill's
+    // `requires:` — drop cached requirement lookups so the next
+    // GET /api/skills reflects the new setup immediately.
+    clearSkillRequirementsCache();
 
     return { success: true, name };
   });

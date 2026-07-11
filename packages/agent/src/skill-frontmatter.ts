@@ -64,6 +64,15 @@ export interface SkillFrontmatter {
     secrets: boolean;
     browserAutomation: boolean;
   }>;
+  /**
+   * #15 requirement badges: external prerequisites this skill needs to work —
+   * env/vault key names and executable names. Presence is checked (badge-only
+   * v1); values are never read or surfaced.
+   */
+  requires?: {
+    env?: string[];
+    bins?: string[];
+  };
 }
 
 export interface ParsedSkill {
@@ -94,10 +103,12 @@ export function parseSkillFrontmatter(content: string): ParsedSkill {
   const afterDelimiter = endIndex + 4; // '\n---' is 4 chars
   const body = content.slice(afterDelimiter).replace(/^\r?\n/, '').trimEnd();
 
-  // Simple YAML parser: handles top-level key: value and nested permissions block
+  // Simple YAML parser: handles top-level key: value and nested permissions/requires blocks
   const frontmatter: SkillFrontmatter = {};
   let inPermissions = false;
+  let inRequires = false;
   const permissions: Record<string, boolean> = {};
+  const requires: { env?: string[]; bins?: string[] } = {};
 
   for (const line of fmBlock.split('\n')) {
     const trimmed = line.trim();
@@ -105,9 +116,15 @@ export function parseSkillFrontmatter(content: string): ParsedSkill {
     // Skip empty lines and comments
     if (!trimmed || trimmed.startsWith('#')) continue;
 
-    // Check for permissions block start
+    // Check for nested block starts (mutually exclusive)
     if (trimmed === 'permissions:') {
       inPermissions = true;
+      inRequires = false;
+      continue;
+    }
+    if (trimmed === 'requires:') {
+      inRequires = true;
+      inPermissions = false;
       continue;
     }
 
@@ -122,6 +139,19 @@ export function parseSkillFrontmatter(content: string): ParsedSkill {
       } else {
         // No longer indented = end of permissions block
         inPermissions = false;
+      }
+    }
+
+    if (inRequires) {
+      if (line.startsWith('  ') || line.startsWith('\t')) {
+        const match = trimmed.match(/^(env|bins):\s*(.+)$/);
+        if (match) {
+          const items = parseListValue(match[2]);
+          if (items.length > 0) requires[match[1] as 'env' | 'bins'] = items;
+        }
+        continue;
+      } else {
+        inRequires = false;
       }
     }
 
@@ -148,8 +178,17 @@ export function parseSkillFrontmatter(content: string): ParsedSkill {
   if (Object.keys(permissions).length > 0) {
     frontmatter.permissions = permissions as SkillFrontmatter['permissions'];
   }
+  if (requires.env || requires.bins) {
+    frontmatter.requires = requires;
+  }
 
   return { frontmatter, body };
+}
+
+/** Parse a list value: JSON-array form ([a, b, c]) or comma-separated. */
+function parseListValue(v: string): string[] {
+  const inner = v.replace(/^\[|\]$/g, '');
+  return inner.split(',').map(s => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
 }
 
 function isSkillScope(s: string): s is SkillScope {
@@ -190,6 +229,11 @@ export function serializeFrontmatter(fm: SkillFrontmatter, body: string): string
     for (const [k, v] of Object.entries(fm.permissions)) {
       lines.push(`  ${k}: ${v}`);
     }
+  }
+  if (fm.requires && ((fm.requires.env?.length ?? 0) > 0 || (fm.requires.bins?.length ?? 0) > 0)) {
+    lines.push('requires:');
+    if (fm.requires.env && fm.requires.env.length > 0) lines.push(`  env: [${fm.requires.env.join(', ')}]`);
+    if (fm.requires.bins && fm.requires.bins.length > 0) lines.push(`  bins: [${fm.requires.bins.join(', ')}]`);
   }
   lines.push('---', body);
   return lines.join('\n');
