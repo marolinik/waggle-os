@@ -23,6 +23,8 @@ import type { ChannelAdapter, ChannelAdapterStatus, ChannelMessage, ChannelPlatf
 
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 10;
+const MESSAGE_DEDUP_TTL_MS = 24 * 60 * 60 * 1000;
+const MESSAGE_DEDUP_MAX = 2_000;
 
 export const APPROVAL_NEEDED_REPLY =
   'This request needs a tool approval — open the Waggle app to review and approve it.';
@@ -34,11 +36,14 @@ export const CHANNEL_VAULT_KEYS: Record<ChannelPlatform, string[]> = {
   telegram: ['telegram_bot_token'],
   discord: ['discord_bot_token'],
   slack: ['slack_app_token', 'slack_bot_token'],
-  whatsapp: [], // Baileys manages its own auth-state directory
+  whatsapp: [], // No user-entered token; Baileys state uses an encrypted Vault entry.
 };
 
-interface VaultReader {
+interface ChannelVault {
   get(key: string): { value: string } | null | undefined;
+  has(key: string): boolean;
+  set(key: string, value: string, metadata?: Record<string, unknown>): void;
+  delete(key: string): boolean;
 }
 
 interface ManagerLog {
@@ -50,10 +55,14 @@ export interface ChannelManagerOptions {
   dataDir: string;
   /** Sidecar HTTP port for loopback /api/chat calls. */
   port: number;
-  vault: VaultReader;
+  /** Sidecar bearer token for protected loopback /api/chat calls. */
+  sessionToken: string;
+  vault: ChannelVault;
   log: ManagerLog;
   /** For /workspace validation; absent → any id accepted. */
   listWorkspaceIds?: () => string[];
+  /** Human-friendly workspace names for /workspace name-or-id resolution. */
+  listWorkspaces?: () => Array<{ id: string; name: string }>;
   /** Audit sink (pair/unpair events — names match AuditEventType). */
   onAudit?: (event: {
     type: 'channel_pair' | 'channel_pair_failed' | 'channel_unpair';
@@ -72,6 +81,8 @@ export class ChannelManager {
   private readonly opts: ChannelManagerOptions;
   private readonly adapters = new Map<ChannelPlatform, ChannelAdapter>();
   private readonly rateBuckets = new Map<string, number[]>();
+  private readonly inboundQueues = new Map<string, Promise<void>>();
+  private readonly seenMessageIds = new Map<string, number>();
   private readonly chatTurn: typeof runChannelChatTurn;
 
   constructor(opts: ChannelManagerOptions) {
@@ -157,10 +168,11 @@ export class ChannelManager {
       return new SlackAdapter({ appToken, botToken, onMessage, log: this.opts.log });
     }
     if (platform === 'whatsapp') {
-      // No vault credential — Baileys pairs via QR and persists its own
-      // auth state under dataDir/channels/whatsapp-auth.
+      // No user-entered credential: Baileys pairs via QR and persists all
+      // resulting session state through the encrypted Vault adapter.
       return new WhatsAppAdapter({
         dataDir: this.opts.dataDir,
+        vault: this.opts.vault,
         onMessage,
         log: this.opts.log,
       });
@@ -179,6 +191,21 @@ export class ChannelManager {
   // ── Inbound pipeline ─────────────────────────────────────────────────
 
   async handleInbound(msg: ChannelMessage): Promise<void> {
+    const queueKey = `${msg.platform}:${msg.chatId}`;
+    const previous = this.inboundQueues.get(queueKey) ?? Promise.resolve();
+    const queued = previous
+      .catch(() => undefined)
+      .then(() => this.processInbound(msg));
+    this.inboundQueues.set(queueKey, queued);
+    try {
+      await queued;
+    } finally {
+      if (this.inboundQueues.get(queueKey) === queued) this.inboundQueues.delete(queueKey);
+    }
+  }
+
+  private async processInbound(msg: ChannelMessage): Promise<void> {
+    if (this.isDuplicate(msg)) return;
     if (!this.allowRate(`${msg.platform}:${msg.senderId}`)) return;
 
     const text = msg.text.trim();
@@ -216,16 +243,18 @@ export class ChannelManager {
     if (/^\/status\b/i.test(text)) {
       const status = adapter?.getStatus();
       const ws = this.resolveWorkspace(msg);
-      await reply(`Waggle connected ✓\nWorkspace: ${ws}\nTransport: ${status?.connected ? 'healthy' : 'degraded'}`);
+      await reply(`Waggle connected ✓\nWorkspace: ${this.workspaceLabel(ws)}\nTransport: ${status?.connected ? 'healthy' : 'degraded'}`);
       return;
     }
 
     // 4. Agent turn via loopback chat.
     const result = await this.chatTurn({
       port: this.opts.port,
+      sessionToken: this.opts.sessionToken,
       message: msg.text,
       workspace: this.resolveWorkspace(msg),
       session: sessionIdFor(msg),
+      proposeHeld: true,
     });
 
     if (result.approvalRequired && !result.content) {
@@ -244,23 +273,59 @@ export class ChannelManager {
   private handleWorkspaceCommand(msg: ChannelMessage, text: string): string {
     const arg = text.replace(/^\/workspace\b/i, '').trim();
     if (!arg) {
-      return `Current workspace: ${this.resolveWorkspace(msg)}\nUse "/workspace <id>" to switch this chat, "/workspace default" to clear.`;
+      const current = this.resolveWorkspace(msg);
+      return `Current workspace: ${this.workspaceLabel(current)}\nUse "/workspace <name or id>" to switch this chat, "/workspace default" to clear.`;
     }
     if (arg === 'default') {
       this.pairing.setWorkspaceOverride(msg.platform, msg.chatId, null);
-      return `This chat now uses the channel default workspace (${this.pairing.getConfig(msg.platform).defaultWorkspace}).`;
+      const defaultWorkspace = this.pairing.getConfig(msg.platform).defaultWorkspace;
+      return `This chat now uses the channel default workspace (${this.workspaceLabel(defaultWorkspace)}).`;
     }
-    const known = this.opts.listWorkspaceIds?.();
-    if (known && !known.includes(arg)) {
-      return `Unknown workspace "${arg}". Available: ${known.slice(0, 20).join(', ') || '(none)'}`;
+    const workspaces = this.opts.listWorkspaces?.()
+      ?? this.opts.listWorkspaceIds?.().map(id => ({ id, name: id }));
+    const normalizedArg = arg.toLocaleLowerCase();
+    const match = workspaces?.find(workspace => workspace.id === arg)
+      ?? workspaces?.find(workspace => workspace.name.toLocaleLowerCase() === normalizedArg);
+    if (workspaces && !match) {
+      const available = workspaces.slice(0, 20).map(workspace => workspace.name).join(', ') || '(none)';
+      return `Unknown workspace "${arg}". Available: ${available}`;
     }
-    this.pairing.setWorkspaceOverride(msg.platform, msg.chatId, arg);
-    return `This chat is now routed to workspace "${arg}".`;
+    const workspaceId = match?.id ?? arg;
+    this.pairing.setWorkspaceOverride(msg.platform, msg.chatId, workspaceId);
+    return `This chat is now routed to workspace "${match?.name ?? workspaceId}".`;
   }
 
   private resolveWorkspace(msg: ChannelMessage): string {
     return this.pairing.getWorkspaceOverride(msg.platform, msg.chatId)
       ?? this.pairing.getConfig(msg.platform).defaultWorkspace;
+  }
+
+  private isDuplicate(msg: ChannelMessage): boolean {
+    if (!msg.messageId) return false;
+    const now = Date.now();
+    const key = `${msg.platform}:${msg.chatId}:${msg.messageId}`;
+    const seenAt = this.seenMessageIds.get(key);
+    if (seenAt !== undefined && now - seenAt < MESSAGE_DEDUP_TTL_MS) return true;
+    if (seenAt !== undefined) this.seenMessageIds.delete(key);
+
+    if (this.seenMessageIds.size >= MESSAGE_DEDUP_MAX) {
+      const cutoff = now - MESSAGE_DEDUP_TTL_MS;
+      for (const [seenKey, seenAt] of this.seenMessageIds) {
+        if (seenAt < cutoff) this.seenMessageIds.delete(seenKey);
+      }
+      while (this.seenMessageIds.size >= MESSAGE_DEDUP_MAX) {
+        const oldest = this.seenMessageIds.keys().next().value as string | undefined;
+        if (!oldest) break;
+        this.seenMessageIds.delete(oldest);
+      }
+    }
+    this.seenMessageIds.set(key, now);
+    return false;
+  }
+
+  private workspaceLabel(workspaceId: string): string {
+    const workspace = this.opts.listWorkspaces?.().find(item => item.id === workspaceId);
+    return workspace ? `${workspace.name} (${workspace.id})` : workspaceId;
   }
 
   private allowRate(key: string): boolean {

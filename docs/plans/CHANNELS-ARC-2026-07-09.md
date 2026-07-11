@@ -7,6 +7,8 @@
 > Gates at completion: server tsc 0, server suite 2183 ✓, apps/web 1575 ✓, web build ✓.
 > Bonus fix: `.gitignore` `s*.png` was swallowing sales-rep/support-agent avatars → main's web build was broken on clean checkout; fixed with scoped negation + committed binaries.
 > Residual (not blocking): live end-to-end verification with real bot tokens; WhatsApp real-device pairing; approval-over-IM (explicitly out of v1).
+
+> **2026-07-11 hardening:** protected-route auth, headless held approvals, atomic config validation, message dedup/order, named workspace routing, responsive Settings UX, and clean-install drift were corrected on `codex/channels-ux-hardening`. WhatsApp's Baileys auth state now lives in the encrypted Waggle Vault; existing `channels/whatsapp-auth` state migrates once and is removed only after a successful encrypted write. Corrupt state fails closed and remains available for recovery. Verification: Channels backend 89/89, focused web 12/12, clean install, package/web builds, fresh sidecar boot, desktop/mobile browser flows, and real unpaired Baileys QR startup. See `docs/audits/2026-07-11-channels-ux-hardening.md`.
 **Origin:** CowAgent teardown (`docs/analysis/cowagent-vs-waggle-2026-07-09.md`) steal #4 — IM reach as distribution surface.
 
 ## Founder decisions (locked — do not re-raise)

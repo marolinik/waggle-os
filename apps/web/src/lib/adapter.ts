@@ -41,6 +41,28 @@ const IMPORTANCE_NUM_TO_STRING: Record<number, FrameImportance> = {
 const DEFAULT_SERVER = 'http://127.0.0.1:3333';
 const LOCAL_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]', '::1']);
 
+export type ChannelPlatform = 'telegram' | 'discord' | 'slack' | 'whatsapp';
+
+export interface ChannelStatus {
+  platform: ChannelPlatform;
+  running: boolean;
+  connected: boolean;
+  lastError?: string;
+  lastActivityAt?: number;
+  qr?: string;
+  paired?: boolean;
+  config: { enabled: boolean; defaultWorkspace: string };
+  secrets: Record<string, string | null>;
+}
+
+export interface ChannelPairedSender {
+  senderId: string;
+  senderName?: string;
+  pairedAt: number;
+}
+
+export type ChannelPairings = Partial<Record<ChannelPlatform, ChannelPairedSender[]>>;
+
 export function resolveDefaultServerUrl(
   locationLike: Pick<Location, 'protocol' | 'hostname' | 'port' | 'origin'> | undefined =
     typeof window !== 'undefined' ? window.location : undefined,
@@ -2009,6 +2031,62 @@ class LocalAdapter {
 
   async saveSettings(settings: Partial<Settings>): Promise<void> {
     await this.fetch('/api/settings', { method: 'PUT', body: JSON.stringify(settings) });
+  }
+
+  async getChannels(): Promise<ChannelStatus[]> {
+    const res = await this.fetch('/api/channels');
+    return res.json();
+  }
+
+  async getChannelPairings(): Promise<ChannelPairings> {
+    const res = await this.fetch('/api/channels/pairing');
+    return res.json();
+  }
+
+  async saveChannelConfig(
+    platform: ChannelPlatform,
+    config: {
+      enabled?: boolean;
+      defaultWorkspace?: string;
+      secrets?: Record<string, string>;
+    },
+  ): Promise<{ ok: boolean; config: { enabled: boolean; defaultWorkspace: string } }> {
+    const res = await this.fetch(`/api/channels/${platform}/config`, {
+      method: 'POST',
+      body: JSON.stringify(config),
+    });
+    return res.json();
+  }
+
+  async setChannelRunning(
+    platform: ChannelPlatform,
+    running: boolean,
+  ): Promise<{ ok: boolean; status?: ChannelStatus }> {
+    const res = await this.fetch(`/api/channels/${platform}/${running ? 'start' : 'stop'}`, {
+      method: 'POST',
+    });
+    return res.json();
+  }
+
+  async createChannelPairingCode(
+    platform: ChannelPlatform,
+  ): Promise<{ code: string; expiresAt: number }> {
+    const res = await this.fetch('/api/channels/pairing-code', {
+      method: 'POST',
+      body: JSON.stringify({ platform }),
+    });
+    return res.json();
+  }
+
+  async revokeChannelSender(
+    platform: ChannelPlatform,
+    senderId: string,
+  ): Promise<{ ok: boolean }> {
+    const res = await this.fetch('/api/channels/pairing', {
+      method: 'DELETE',
+      body: JSON.stringify({ platform, senderId }),
+    });
+    return res.json();
   }
 
   // P4 — Permissions: defaultAutonomy + externalGates + workspaceOverrides.

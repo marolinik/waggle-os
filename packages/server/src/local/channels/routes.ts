@@ -89,26 +89,62 @@ export const channelRoutes: FastifyPluginAsync = async (server) => {
 
     const { enabled, defaultWorkspace, secrets } = request.body ?? {};
 
-    if (secrets) {
+    if (enabled !== undefined && typeof enabled !== 'boolean') {
+      return reply.status(400).send({ error: 'enabled must be a boolean' });
+    }
+
+    let validatedWorkspace = defaultWorkspace;
+    if (defaultWorkspace !== undefined) {
+      if (typeof defaultWorkspace !== 'string' || !defaultWorkspace.trim() || defaultWorkspace.length > 200) {
+        return reply.status(400).send({ error: 'defaultWorkspace must be a valid workspace id' });
+      }
+      validatedWorkspace = defaultWorkspace.trim();
+      const workspaceExists = server.workspaceManager?.list()
+        .some(workspace => workspace.id === validatedWorkspace);
+      if (!workspaceExists) {
+        return reply.status(400).send({ error: `Unknown workspace: ${validatedWorkspace}` });
+      }
+    }
+
+    if (secrets !== undefined && (!secrets || typeof secrets !== 'object' || Array.isArray(secrets))) {
+      return reply.status(400).send({ error: 'secrets must be an object' });
+    }
+
+    const secretEntries = Object.entries(secrets ?? {});
+    if (secretEntries.length > 0) {
       const allowed = new Set(CHANNEL_VAULT_KEYS[platform]);
-      for (const [key, value] of Object.entries(secrets)) {
+      for (const [key, value] of secretEntries) {
         if (!allowed.has(key)) {
           return reply.status(400).send({ error: `Unknown secret key for ${platform}: ${key}` });
         }
         if (typeof value !== 'string' || value.length === 0 || value.length > 512) {
           return reply.status(400).send({ error: `Invalid value for ${key}` });
         }
-        server.vault?.set(key, value, { credentialType: 'api_key' });
       }
+      if (!server.vault) return reply.status(503).send({ error: 'Vault is not available' });
+    }
+
+    for (const [key, value] of secretEntries) {
+      server.vault!.set(key, value, { credentialType: 'api_key' });
     }
 
     const current = manager.pairing.getConfig(platform);
     const next = {
       enabled: enabled ?? current.enabled,
-      defaultWorkspace: defaultWorkspace ?? current.defaultWorkspace,
+      defaultWorkspace: validatedWorkspace ?? current.defaultWorkspace,
     };
     manager.pairing.setConfig(platform, next);
     log.info(`[channels] ${platform} config updated (enabled=${next.enabled})`);
+    emitAuditEvent(server, {
+      workspaceId: next.defaultWorkspace,
+      eventType: 'channel_config_change',
+      input: JSON.stringify({
+        platform,
+        enabled: next.enabled,
+        defaultWorkspace: next.defaultWorkspace,
+        secretKeysUpdated: secretEntries.map(([key]) => key),
+      }),
+    });
 
     await manager.restartIfRunning(platform).catch(e => {
       log.warn(`[channels] ${platform} restart after config change failed: ${e instanceof Error ? e.message : e}`);

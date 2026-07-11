@@ -41,7 +41,8 @@ export type AuditEventType =
   // IM channel pairing trail (docs/plans/CHANNELS-ARC-2026-07-09.md §security)
   | 'channel_pair'
   | 'channel_pair_failed'
-  | 'channel_unpair';
+  | 'channel_unpair'
+  | 'channel_config_change';
 
 export interface AuditEvent {
   id?: number;

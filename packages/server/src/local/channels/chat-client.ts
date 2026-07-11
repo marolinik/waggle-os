@@ -21,6 +21,8 @@ export interface ChatTurnResult {
 
 export interface ChatTurnRequest {
   port: number;
+  /** Sidecar session token for the protected loopback API. */
+  sessionToken: string;
   message: string;
   workspace: string;
   /** Persisted session id — one per IM conversation. */
@@ -29,9 +31,9 @@ export interface ChatTurnRequest {
   /** Per-turn persona override (e.g. 'session-reviewer' for the idle watcher). */
   persona?: string;
   /**
-   * Self-evolution review turn: hold gated proposable tools for human approval
-   * instead of prompting live over an SSE stream nobody is watching. See the
-   * `proposeHeld` field on POST /api/chat.
+   * Headless turn: hold gated proposable tools for human approval instead of
+   * prompting live over an SSE stream nobody is watching. Used by channels and
+   * self-evolution reviews. See the `proposeHeld` field on POST /api/chat.
    */
   proposeHeld?: boolean;
 }
@@ -72,7 +74,10 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
   try {
     const response = await fetch(`http://127.0.0.1:${req.port}/api/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${req.sessionToken}`,
+      },
       body: JSON.stringify({
         message: req.message,
         workspace: req.workspace,

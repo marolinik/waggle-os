@@ -48,7 +48,13 @@ function makeManager(extra: Partial<ConstructorParameters<typeof ChannelManager>
   return new ChannelManager({
     dataDir: dir,
     port: 3333,
-    vault: { get: () => ({ value: '12345678:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }) },
+    sessionToken: 'test-session-token',
+    vault: {
+      get: () => ({ value: '12345678:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }),
+      has: () => true,
+      set: () => undefined,
+      delete: () => false,
+    },
     log: noopLog,
     chatTurnImpl: chatTurn as never,
     adapterFactory: () => adapter,
@@ -120,6 +126,8 @@ describe('paired conversation', () => {
       workspace: 'default',
       session: 'channel-telegram-chat-1',
       port: 3333,
+      sessionToken: 'test-session-token',
+      proposeHeld: true,
     }));
     expect(adapter.sent[0]?.text).toBe('agent says hi');
   });
@@ -146,6 +154,38 @@ describe('paired conversation', () => {
     chatTurn.mockResolvedValueOnce({ content: '', approvalRequired: false, error: 'boom' });
     await manager.handleInbound(msg());
     expect(adapter.sent[0]?.text).toContain('boom');
+  });
+
+  it('suppresses a redelivered platform message id', async () => {
+    const manager = makeManager();
+    await pairAndStart(manager);
+    const inbound = msg({ text: 'only once', messageId: 'message-1' });
+
+    await manager.handleInbound(inbound);
+    await manager.handleInbound(inbound);
+
+    expect(chatTurn).toHaveBeenCalledTimes(1);
+    expect(adapter.sent).toHaveLength(1);
+  });
+
+  it('serializes overlapping turns in the same chat', async () => {
+    const manager = makeManager();
+    await pairAndStart(manager);
+    let releaseFirst!: () => void;
+    chatTurn.mockImplementationOnce(() => new Promise(resolve => {
+      releaseFirst = () => resolve({ content: 'first reply', approvalRequired: false });
+    }));
+    chatTurn.mockResolvedValueOnce({ content: 'second reply', approvalRequired: false });
+
+    const first = manager.handleInbound(msg({ text: 'first', messageId: 'ordered-1' }));
+    const second = manager.handleInbound(msg({ text: 'second', messageId: 'ordered-2' }));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(chatTurn).toHaveBeenCalledTimes(1);
+
+    releaseFirst();
+    await Promise.all([first, second]);
+    expect(chatTurn.mock.calls.map(call => call[0].message)).toEqual(['first', 'second']);
+    expect(adapter.sent.map(sent => sent.text)).toEqual(['first reply', 'second reply']);
   });
 });
 
@@ -180,6 +220,35 @@ describe('/workspace command', () => {
     await manager.handleInbound(msg({ text: '/workspace ws-x' }));
     await manager.handleInbound(msg({ chatId: 'chat-2', text: 'hi' }));
     expect(chatTurn).toHaveBeenCalledWith(expect.objectContaining({ workspace: 'default' }));
+  });
+
+  it('accepts a human workspace name and stores its stable id', async () => {
+    const manager = makeManager({
+      listWorkspaces: () => [
+        { id: 'ws-a', name: 'Client Alpha' },
+        { id: 'ws-b', name: 'Internal Ops' },
+      ],
+    } as never);
+    await pairAndStart(manager);
+
+    await manager.handleInbound(msg({ text: '/workspace Client Alpha' }));
+
+    expect(manager.pairing.getWorkspaceOverride('telegram', 'chat-1')).toBe('ws-a');
+    expect(adapter.sent[0]?.text).toContain('Client Alpha');
+  });
+});
+
+describe('/status command', () => {
+  it('shows a human workspace name while retaining its stable id', async () => {
+    const manager = makeManager({
+      listWorkspaces: () => [{ id: 'ws-main', name: 'Client Alpha' }],
+    });
+    manager.pairing.setConfig('telegram', { enabled: true, defaultWorkspace: 'ws-main' });
+    await pairAndStart(manager);
+
+    await manager.handleInbound(msg({ text: '/status' }));
+
+    expect(adapter.sent[0]?.text).toContain('Workspace: Client Alpha (ws-main)');
   });
 });
 
@@ -231,7 +300,8 @@ describe('lifecycle', () => {
     const manager = new ChannelManager({
       dataDir: dir,
       port: 3333,
-      vault: { get: () => null },
+      sessionToken: 'test-session-token',
+      vault: { get: () => null, has: () => false, set: () => undefined, delete: () => false },
       log: noopLog,
     });
     await expect(manager.start('telegram')).rejects.toThrow(/not configured/);

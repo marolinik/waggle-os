@@ -8,12 +8,30 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { BufferJSON, initAuthCreds } from '@whiskeysockets/baileys';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { WhatsAppAdapter, WHATSAPP_MAX_TEXT, disconnectStatusCode } from '../src/local/channels/whatsapp-adapter.js';
+import {
+  WhatsAppAdapter,
+  WHATSAPP_AUTH_VAULT_KEY,
+  WHATSAPP_MAX_TEXT,
+  disconnectStatusCode,
+  useVaultWhatsAppAuthState,
+} from '../src/local/channels/whatsapp-adapter.js';
 import type { WaSocketLike } from '../src/local/channels/whatsapp-adapter.js';
 import type { ChannelMessage } from '../src/local/channels/types.js';
 
 const noopLog = { info: () => undefined, warn: () => undefined };
+
+class FakeAuthVault {
+  readonly entries = new Map<string, string>();
+  get(key: string) {
+    const value = this.entries.get(key);
+    return value === undefined ? null : { value };
+  }
+  has(key: string): boolean { return this.entries.has(key); }
+  set(key: string, value: string): void { this.entries.set(key, value); }
+  delete(key: string): boolean { return this.entries.delete(key); }
+}
 
 type Handler = (arg: unknown) => void;
 
@@ -52,8 +70,10 @@ let adapter: WhatsAppAdapter | null = null;
 function makeAdapter() {
   const sockets: FakeWaSocket[] = [];
   const received: ChannelMessage[] = [];
+  const vault = new FakeAuthVault();
   const a = new WhatsAppAdapter({
     dataDir: dir,
+    vault,
     onMessage: async m => { received.push(m); },
     log: noopLog,
     socketFactory: async () => {
@@ -63,7 +83,7 @@ function makeAdapter() {
     },
     backoffCapMs: 10,
   });
-  return { a, sockets, received };
+  return { a, sockets, received, vault };
 }
 
 async function tick(ms = 30): Promise<void> {
@@ -102,6 +122,90 @@ describe('WhatsAppAdapter pairing + status', () => {
     fs.mkdirSync(path.join(dir, 'channels', 'whatsapp-auth'), { recursive: true });
     fs.writeFileSync(path.join(dir, 'channels', 'whatsapp-auth', 'creds.json'), '{}', 'utf8');
     expect(adapter.getStatus().paired).toBe(true);
+  });
+
+  it('reports paired=true from registered encrypted Vault credentials', async () => {
+    const ctx = makeAdapter();
+    ctx.vault.set(WHATSAPP_AUTH_VAULT_KEY, JSON.stringify({
+      version: 1,
+      creds: { registered: true },
+      keys: [],
+    }));
+    adapter = ctx.a;
+    await adapter.start();
+    expect(adapter.getStatus().paired).toBe(true);
+  });
+});
+
+describe('WhatsApp encrypted auth state', () => {
+  it('persists and reloads credentials and signal keys without plaintext files', async () => {
+    const vault = new FakeAuthVault();
+    const legacyDir = path.join(dir, 'channels', 'whatsapp-auth');
+    const first = await useVaultWhatsAppAuthState(vault, legacyDir);
+    first.state.creds.registered = true;
+    await first.state.keys.set({
+      'pre-key': {
+        '7': { private: Buffer.from([1, 2]), public: Buffer.from([3, 4]) },
+      },
+    });
+    first.saveCreds();
+
+    expect(vault.entries.has(WHATSAPP_AUTH_VAULT_KEY)).toBe(true);
+    expect(fs.existsSync(legacyDir)).toBe(false);
+
+    const reloaded = await useVaultWhatsAppAuthState(vault, legacyDir);
+    const keys = await reloaded.state.keys.get('pre-key', ['7']);
+    expect(reloaded.state.creds.registered).toBe(true);
+    expect(Buffer.from(keys['7'].private)).toEqual(Buffer.from([1, 2]));
+    expect(Buffer.from(keys['7'].public)).toEqual(Buffer.from([3, 4]));
+  });
+
+  it('migrates a legacy multi-file pairing before deleting plaintext', async () => {
+    const vault = new FakeAuthVault();
+    const legacyDir = path.join(dir, 'channels', 'whatsapp-auth');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    const creds = initAuthCreds();
+    creds.registered = true;
+    fs.writeFileSync(
+      path.join(legacyDir, 'creds.json'),
+      JSON.stringify(creds, BufferJSON.replacer),
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(legacyDir, 'pre-key-9.json'),
+      JSON.stringify({ private: Buffer.from([5]), public: Buffer.from([6]) }, BufferJSON.replacer),
+      'utf8',
+    );
+
+    const migrated = await useVaultWhatsAppAuthState(vault, legacyDir);
+    const keys = await migrated.state.keys.get('pre-key', ['9']);
+
+    expect(migrated.state.creds.registered).toBe(true);
+    expect(Buffer.from(keys['9'].private)).toEqual(Buffer.from([5]));
+    expect(vault.entries.has(WHATSAPP_AUTH_VAULT_KEY)).toBe(true);
+    expect(fs.existsSync(legacyDir)).toBe(false);
+  });
+
+  it('fails closed and preserves unreadable encrypted state', async () => {
+    const vault = new FakeAuthVault();
+    const legacyDir = path.join(dir, 'channels', 'whatsapp-auth');
+    vault.set(WHATSAPP_AUTH_VAULT_KEY, '{broken');
+
+    await expect(useVaultWhatsAppAuthState(vault, legacyDir)).rejects.toThrow(/unreadable/i);
+
+    expect(vault.entries.get(WHATSAPP_AUTH_VAULT_KEY)).toBe('{broken');
+  });
+
+  it('fails closed and preserves legacy files when migration cannot parse them', async () => {
+    const vault = new FakeAuthVault();
+    const legacyDir = path.join(dir, 'channels', 'whatsapp-auth');
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, 'creds.json'), '{broken', 'utf8');
+
+    await expect(useVaultWhatsAppAuthState(vault, legacyDir)).rejects.toThrow(/could not be migrated/i);
+
+    expect(fs.existsSync(path.join(legacyDir, 'creds.json'))).toBe(true);
+    expect(vault.entries.has(WHATSAPP_AUTH_VAULT_KEY)).toBe(false);
   });
 });
 
@@ -189,6 +293,11 @@ describe('WhatsAppAdapter disconnects', () => {
     const authDir = path.join(dir, 'channels', 'whatsapp-auth');
     fs.mkdirSync(authDir, { recursive: true });
     fs.writeFileSync(path.join(authDir, 'creds.json'), '{}', 'utf8');
+    ctx.vault.set(WHATSAPP_AUTH_VAULT_KEY, JSON.stringify({
+      version: 1,
+      creds: { registered: true },
+      keys: [],
+    }));
 
     ctx.sockets[0].emit('connection.update', { connection: 'open' });
     ctx.sockets[0].emit('connection.update', {
@@ -198,6 +307,7 @@ describe('WhatsAppAdapter disconnects', () => {
     await tick(50);
     expect(ctx.sockets.length).toBe(1); // no reconnect
     expect(fs.existsSync(path.join(authDir, 'creds.json'))).toBe(false);
+    expect(ctx.vault.entries.has(WHATSAPP_AUTH_VAULT_KEY)).toBe(false);
     expect(adapter.getStatus().lastError).toMatch(/re-pair/i);
   });
 

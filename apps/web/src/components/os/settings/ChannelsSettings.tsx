@@ -11,28 +11,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Loader2, MessageCircle, Play, RefreshCw, Square, Trash2 } from 'lucide-react';
 import QRCode from 'qrcode';
-import { adapter } from '@/lib/adapter';
+import {
+  adapter,
+  type ChannelPairings,
+  type ChannelPlatform,
+  type ChannelStatus,
+} from '@/lib/adapter';
+import type { Workspace } from '@/lib/types';
 
-type Platform = 'telegram' | 'discord' | 'slack' | 'whatsapp';
-
-interface ChannelStatus {
-  platform: Platform;
-  running: boolean;
-  connected: boolean;
-  lastError?: string;
-  qr?: string;
-  paired?: boolean;
-  config: { enabled: boolean; defaultWorkspace: string };
-  secrets: Record<string, string | null>;
-}
-
-interface PairedSender {
-  senderId: string;
-  senderName?: string;
-  pairedAt: number;
-}
-
-const PLATFORM_META: Record<Platform, {
+const PLATFORM_META: Record<ChannelPlatform, {
   label: string;
   secretFields: Array<{ key: string; label: string; placeholder: string }>;
   setupHint: string;
@@ -62,7 +49,9 @@ const PLATFORM_META: Record<Platform, {
   },
 };
 
-const serverUrl = () => adapter.getServerUrl();
+function actionError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 function StatusBadge({ s }: { s: ChannelStatus }) {
   const tone = s.connected
@@ -86,8 +75,8 @@ function WhatsAppQr({ qr }: { qr: string }) {
   }, [qr]);
   if (!dataUrl) return null;
   return (
-    <div className="flex flex-col items-center gap-2 p-3 rounded-xl bg-white w-fit">
-      <img src={dataUrl} alt="WhatsApp pairing QR code" width={220} height={220} />
+    <div className="flex max-w-full w-fit flex-col items-center gap-2 rounded-lg bg-white p-3">
+      <img className="h-auto max-w-full" src={dataUrl} alt="WhatsApp pairing QR code" width={220} height={220} />
     </div>
   );
 }
@@ -98,22 +87,22 @@ const ChannelsSettings = () => {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
-  const [workspaceDrafts, setWorkspaceDrafts] = useState<Partial<Record<Platform, string>>>({});
-  const [pairingCode, setPairingCode] = useState<{ platform: Platform; code: string; expiresAt: number } | null>(null);
-  const [paired, setPaired] = useState<Partial<Record<Platform, PairedSender[]>>>({});
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [pairingCode, setPairingCode] = useState<{ platform: ChannelPlatform; code: string; expiresAt: number } | null>(null);
+  const [paired, setPaired] = useState<ChannelPairings>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (clearError = true) => {
     try {
-      const [chRes, pairRes] = await Promise.all([
-        fetch(`${serverUrl()}/api/channels`),
-        fetch(`${serverUrl()}/api/channels/pairing`),
+      const [channelRows, pairedRows] = await Promise.all([
+        adapter.getChannels(),
+        adapter.getChannelPairings(),
       ]);
-      if (chRes.ok) setChannels(await chRes.json() as ChannelStatus[]);
-      if (pairRes.ok) setPaired(await pairRes.json() as Partial<Record<Platform, PairedSender[]>>);
-      setError(null);
-    } catch {
-      setError('Could not reach the Waggle service.');
+      setChannels(channelRows);
+      setPaired(pairedRows);
+      if (clearError) setError(null);
+    } catch (err) {
+      setError(actionError(err, 'Could not reach the Waggle service.'));
     } finally {
       setLoading(false);
     }
@@ -121,73 +110,79 @@ const ChannelsSettings = () => {
 
   // Poll while the tab is open — WhatsApp QR rotates and transports flap.
   useEffect(() => {
-    void refresh();
-    pollRef.current = setInterval(() => { void refresh(); }, 5000);
+    void refresh(true);
+    void adapter.getWorkspaces()
+      .then(setWorkspaces)
+      .catch(err => setError(actionError(err, 'Could not load workspaces.')));
+    pollRef.current = setInterval(() => { void refresh(false); }, 5000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [refresh]);
 
-  const saveConfig = async (platform: Platform, body: Record<string, unknown>) => {
+  const saveConfig = async (
+    platform: ChannelPlatform,
+    body: { enabled?: boolean; defaultWorkspace?: string; secrets?: Record<string, string> },
+  ): Promise<boolean> => {
     setBusy(platform);
     try {
-      const res = await fetch(`${serverUrl()}/api/channels/${platform}/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const detail = await res.json().catch(() => null) as { error?: string } | null;
-        setError(detail?.error ?? 'Saving channel settings failed.');
-        return;
-      }
+      await adapter.saveChannelConfig(platform, body);
       setError(null);
-      await refresh();
+      await refresh(false);
+      return true;
+    } catch (err) {
+      setError(actionError(err, 'Saving channel settings failed.'));
+      return false;
     } finally {
       setBusy(null);
     }
   };
 
-  const lifecycle = async (platform: Platform, action: 'start' | 'stop') => {
+  const lifecycle = async (platform: ChannelPlatform, running: boolean) => {
     setBusy(platform);
     try {
-      const res = await fetch(`${serverUrl()}/api/channels/${platform}/${action}`, { method: 'POST' });
-      if (!res.ok) {
-        const detail = await res.json().catch(() => null) as { error?: string } | null;
-        setError(detail?.error ?? `Could not ${action} ${PLATFORM_META[platform].label}.`);
-      } else {
-        setError(null);
-      }
-      await refresh();
+      await adapter.setChannelRunning(platform, running);
+      setError(null);
+      await refresh(false);
+    } catch (err) {
+      setError(actionError(
+        err,
+        `Could not ${running ? 'start' : 'stop'} ${PLATFORM_META[platform].label}.`,
+      ));
     } finally {
       setBusy(null);
     }
   };
 
-  const mintPairingCode = async (platform: Platform) => {
-    const res = await fetch(`${serverUrl()}/api/channels/pairing-code`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform }),
-    });
-    if (res.ok) {
-      const body = await res.json() as { code: string; expiresAt: number };
+  const mintPairingCode = async (platform: ChannelPlatform) => {
+    setBusy(platform);
+    try {
+      const body = await adapter.createChannelPairingCode(platform);
       setPairingCode({ platform, ...body });
+      setError(null);
+    } catch (err) {
+      setError(actionError(err, 'Could not generate a pairing code.'));
+    } finally {
+      setBusy(null);
     }
   };
 
-  const revokeSender = async (platform: Platform, senderId: string) => {
-    await fetch(`${serverUrl()}/api/channels/pairing`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ platform, senderId }),
-    });
-    await refresh();
+  const revokeSender = async (platform: ChannelPlatform, senderId: string) => {
+    setBusy(platform);
+    try {
+      await adapter.revokeChannelSender(platform, senderId);
+      setError(null);
+      await refresh(false);
+    } catch (err) {
+      setError(actionError(err, 'Could not revoke channel access.'));
+    } finally {
+      setBusy(null);
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
         <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading channels…
       </div>
     );
@@ -208,7 +203,7 @@ const ChannelsSettings = () => {
       </div>
 
       {error && (
-        <div className="p-2.5 rounded-xl border border-destructive/40 bg-destructive/5 text-[11px] text-destructive">
+        <div className="p-2.5 rounded-lg border border-destructive/40 bg-destructive/5 text-[11px] text-destructive" role="alert">
           {error}
         </div>
       )}
@@ -216,27 +211,32 @@ const ChannelsSettings = () => {
       {channels.map(ch => {
         const meta = PLATFORM_META[ch.platform];
         const isBusy = busy === ch.platform;
+        const missingSecrets = meta.secretFields.filter(field => !ch.secrets[field.key]);
+        const workspaceKnown = workspaces.some(workspace => workspace.id === ch.config.defaultWorkspace);
         return (
-          <div key={ch.platform} className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-3">
+          <section key={ch.platform} className="p-3 rounded-lg bg-secondary/30 border border-border/30 space-y-3" aria-labelledby={`channel-${ch.platform}-title`}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <p className="text-xs font-display font-medium text-foreground">{meta.label}</p>
+                <h4 id={`channel-${ch.platform}-title`} className="text-xs font-display font-medium text-foreground">{meta.label}</h4>
                 <StatusBadge s={ch} />
               </div>
               <div className="flex items-center gap-1.5">
                 {ch.running ? (
                   <button
-                    onClick={() => void lifecycle(ch.platform, 'stop')}
+                    type="button"
+                    onClick={() => void lifecycle(ch.platform, false)}
                     disabled={isBusy}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-muted/60 text-foreground hover:bg-muted disabled:opacity-50"
+                    className="flex min-h-8 items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-muted/60 text-foreground hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                   >
                     <Square className="w-3 h-3" /> Stop
                   </button>
                 ) : (
                   <button
-                    onClick={() => void lifecycle(ch.platform, 'start')}
-                    disabled={isBusy}
-                    className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-primary/20 text-honey hover:bg-primary/30 disabled:opacity-50"
+                    type="button"
+                    onClick={() => void lifecycle(ch.platform, true)}
+                    disabled={isBusy || missingSecrets.length > 0}
+                    title={missingSecrets.length > 0 ? `Save ${missingSecrets.map(field => field.label).join(' and ')} first` : undefined}
+                    className="flex min-h-8 items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-primary/20 text-honey hover:bg-primary/30 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                   >
                     <Play className="w-3 h-3" /> Start
                   </button>
@@ -258,6 +258,12 @@ const ChannelsSettings = () => {
               <p className="text-[11px] text-destructive">Last error: {ch.lastError}</p>
             )}
 
+            {!ch.running && missingSecrets.length > 0 && (
+              <p className="text-[11px] text-muted-foreground">
+                Save {missingSecrets.map(field => field.label.toLowerCase()).join(' and ')} to enable Start.
+              </p>
+            )}
+
             {/* WhatsApp pairing QR (Baileys) */}
             {ch.platform === 'whatsapp' && ch.running && !ch.connected && ch.qr && (
               <WhatsAppQr qr={ch.qr} />
@@ -265,28 +271,35 @@ const ChannelsSettings = () => {
 
             {/* Secrets → vault */}
             {meta.secretFields.map(field => (
-              <div key={field.key} className="flex items-center gap-2">
-                <div className="flex-1">
-                  <p className="text-[11px] text-muted-foreground mb-0.5">
+              <div key={field.key} className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <label htmlFor={`${ch.platform}-${field.key}`} className="block text-[11px] text-muted-foreground mb-0.5">
                     {field.label}{ch.secrets[field.key] ? ` — saved (${ch.secrets[field.key]})` : ''}
-                  </p>
+                  </label>
                   <input
+                    id={`${ch.platform}-${field.key}`}
+                    name={field.key}
                     type="password"
+                    aria-label={`${meta.label} ${field.label.toLowerCase()}`}
+                    autoComplete="off"
                     value={secretDrafts[field.key] ?? ''}
                     onChange={e => setSecretDrafts(d => ({ ...d, [field.key]: e.target.value }))}
                     placeholder={field.placeholder}
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/40 text-xs text-foreground placeholder:text-muted-foreground/50"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-background border border-border/40 text-xs text-foreground placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                   />
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     const value = secretDrafts[field.key]?.trim();
                     if (!value) return;
                     void saveConfig(ch.platform, { secrets: { [field.key]: value } })
-                      .then(() => setSecretDrafts(d => ({ ...d, [field.key]: '' })));
+                      .then(saved => {
+                        if (saved) setSecretDrafts(d => ({ ...d, [field.key]: '' }));
+                      });
                   }}
                   disabled={isBusy || !secretDrafts[field.key]?.trim()}
-                  className="mt-4 px-2.5 py-1.5 rounded-lg text-[11px] bg-primary/20 text-honey hover:bg-primary/30 disabled:opacity-50"
+                  className="min-h-8 w-full rounded-lg bg-primary/20 px-2.5 py-1.5 text-[11px] text-honey hover:bg-primary/30 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] sm:w-auto"
                 >
                   Save
                 </button>
@@ -294,38 +307,47 @@ const ChannelsSettings = () => {
             ))}
 
             {/* Non-secret config */}
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-[11px] text-foreground">
+            <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <label className="flex items-center gap-1.5 text-[11px] text-foreground sm:shrink-0">
                 <input
+                  aria-label={`${meta.label} start automatically`}
                   type="checkbox"
                   checked={ch.config.enabled}
                   onChange={e => void saveConfig(ch.platform, { enabled: e.target.checked })}
                   disabled={isBusy}
+                  className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                 />
                 Start automatically
               </label>
-              <div className="flex items-center gap-1.5 flex-1">
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap">Default workspace</span>
-                <input
-                  value={workspaceDrafts[ch.platform] ?? ch.config.defaultWorkspace}
-                  onChange={e => setWorkspaceDrafts(d => ({ ...d, [ch.platform]: e.target.value }))}
-                  onBlur={() => {
-                    const draft = workspaceDrafts[ch.platform]?.trim();
-                    if (draft && draft !== ch.config.defaultWorkspace) {
-                      void saveConfig(ch.platform, { defaultWorkspace: draft });
-                    }
-                  }}
-                  className="flex-1 px-2 py-1 rounded-lg bg-background border border-border/40 text-[11px] text-foreground"
-                />
+              <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1 sm:flex-row sm:items-center sm:gap-1.5">
+                <label htmlFor={`${ch.platform}-workspace`} className="text-[11px] text-muted-foreground whitespace-nowrap">Default workspace</label>
+                <select
+                  id={`${ch.platform}-workspace`}
+                  name={`${ch.platform}DefaultWorkspace`}
+                  aria-label={`${meta.label} default workspace`}
+                  value={ch.config.defaultWorkspace}
+                  onChange={e => void saveConfig(ch.platform, { defaultWorkspace: e.target.value })}
+                  disabled={isBusy || workspaces.length === 0}
+                  className="min-w-0 flex-1 px-2 py-1 rounded-lg bg-background border border-border/40 text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+                >
+                  {!workspaceKnown && (
+                    <option value={ch.config.defaultWorkspace}>{ch.config.defaultWorkspace} (current)</option>
+                  )}
+                  {workspaces.map(workspace => (
+                    <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
+                  ))}
+                </select>
               </div>
             </div>
 
             {/* Pairing */}
             <div className="pt-1 border-t border-border/30 space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
                 <button
+                  type="button"
                   onClick={() => void mintPairingCode(ch.platform)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] bg-muted/60 text-foreground hover:bg-muted"
+                  disabled={isBusy || !ch.running}
+                  className="flex min-h-8 w-full items-center justify-center gap-1 rounded-lg bg-muted/60 px-2 py-1 text-[11px] text-foreground hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] sm:w-auto"
                 >
                   <RefreshCw className="w-3 h-3" /> Generate pairing code
                 </button>
@@ -336,16 +358,21 @@ const ChannelsSettings = () => {
                   </span>
                 )}
               </div>
+              {!ch.running && (
+                <p className="text-[11px] text-muted-foreground">Start the channel before generating a pairing code.</p>
+              )}
               {(paired[ch.platform] ?? []).length > 0 && (
                 <div className="space-y-1">
                   {(paired[ch.platform] ?? []).map(s => (
-                    <div key={s.senderId} className="flex items-center justify-between text-[11px]">
-                      <span className="text-muted-foreground">
+                    <div key={s.senderId} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="min-w-0 break-all text-muted-foreground">
                         {s.senderName ? `${s.senderName} · ` : ''}{s.senderId}
                       </span>
                       <button
+                        type="button"
                         onClick={() => void revokeSender(ch.platform, s.senderId)}
-                        className="flex items-center gap-1 px-1.5 py-0.5 rounded text-destructive hover:bg-destructive/10"
+                        disabled={isBusy}
+                        className="flex min-h-8 items-center gap-1 px-1.5 py-0.5 rounded text-destructive hover:bg-destructive/10 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
                         title="Revoke access"
                       >
                         <Trash2 className="w-3 h-3" /> Revoke
@@ -355,7 +382,7 @@ const ChannelsSettings = () => {
                 </div>
               )}
             </div>
-          </div>
+          </section>
         );
       })}
     </div>

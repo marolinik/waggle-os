@@ -2233,6 +2233,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
       if (!transcript) return { content: NOTHING_TO_DO };
       const res = await runChannelChatTurn({
         port: server.localConfig.port,
+        sessionToken: server.agentState.wsSessionToken,
         message: buildReviewInstruction(sessionId, transcript),
         workspace: workspaceId,
         session: `evolve-${sessionId}`,
@@ -2441,12 +2442,21 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     const channelManager = new ChannelManager({
       dataDir: server.localConfig.dataDir,
       port: server.localConfig.port,
-      vault: { get: (key: string) => server.vault?.get(key) ?? null },
+      sessionToken: server.agentState.wsSessionToken,
+      vault: {
+        get: (key: string) => server.vault?.get(key) ?? null,
+        has: (key: string) => server.vault?.has(key) ?? false,
+        set: (key: string, value: string, metadata?: Record<string, unknown>) => {
+          if (!server.vault) throw new Error('Vault is unavailable');
+          server.vault.set(key, value, metadata);
+        },
+        delete: (key: string) => server.vault?.delete(key) ?? false,
+      },
       log: {
         info: (msg: string) => server.log.info(msg),
         warn: (msg: string) => server.log.warn(msg),
       },
-      listWorkspaceIds: () => wsManager.list().map(w => w.id),
+      listWorkspaces: () => wsManager.list().map(w => ({ id: w.id, name: w.name })),
       onAudit: (event) => emitAuditEvent(server, {
         workspaceId: 'default',
         eventType: event.type,

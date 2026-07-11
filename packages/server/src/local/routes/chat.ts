@@ -1160,22 +1160,33 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             return;
           }
 
-          // Self-evolution review turn: no interactive client is watching this
-          // headless loopback stream, so a live approval prompt would auto-deny
-          // after the timeout and the reviewer's proposal would vanish. Convert a
-          // gated proposable tool (create_skill) into a DURABLE held action that
-          // ApprovalsApp shows; deny any other gated tool. This runs before the
+          // Headless channel/review turn: no interactive client is watching this
+          // loopback stream, so a live approval prompt would auto-deny after the
+          // timeout. Convert a gated proposable tool into a DURABLE held action
+          // that ApprovalsApp shows; deny any other gated tool. This runs before the
           // grant-store shortcut on purpose \u2014 a saved "Always allow" grant must
           // NOT let a headless reviewer write a skill to disk. The trust boundary:
           // the reviewer can never persist a skill without explicit human approval.
           if (proposeHeldTurn) {
+            const heldSource = sessionId.startsWith('channel-')
+              ? `channel:${sessionId}`
+              : `session-reviewer:${sessionId}`;
             const decision = decideReviewTurnTool(server, {
               workspaceId: effectiveWorkspace || null,
-              source: `session-reviewer:${sessionId}`,
+              source: heldSource,
               tool: ctx.toolName,
               args,
               summary: describeToolUse(ctx.toolName, args),
             });
+            if (decision.enqueued && 'id' in decision.enqueued) {
+              sendEvent('approval_required', {
+                requestId: decision.enqueued.id,
+                toolName: ctx.toolName,
+                input: args,
+                sourceWorkspaceId: effectiveWorkspace || null,
+                held: true,
+              });
+            }
             sendEvent('step', { content: decision.step });
             return { cancel: true, reason: decision.reason };
           }

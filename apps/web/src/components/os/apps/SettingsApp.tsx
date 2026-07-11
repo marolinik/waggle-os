@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Cpu, Shield, Palette, Save, Loader2, Users, Database,
@@ -58,6 +58,7 @@ const SettingsApp = () => {
   // chain), the primary thing a user configures. 'models' is Essential-tier, so it
   // is always visible regardless of the dock disclosure level.
   const [activeTab, setActiveTab] = useState<SettingsTab>('models');
+  const activeTabRef = useRef<HTMLButtonElement>(null);
   const [defaultModel, setDefaultModel] = useState('');
   const [fallbackModel, setFallbackModel] = useState<string | null>(null);
   const [budgetModel, setBudgetModel] = useState<string | null>(null);
@@ -95,6 +96,13 @@ const SettingsApp = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userTier]);
 
+  useEffect(() => {
+    const activeTabElement = activeTabRef.current;
+    if (typeof activeTabElement?.scrollIntoView === 'function') {
+      activeTabElement.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, [activeTab]);
+
   // PR7a/D12: `?tab=` deep-link reader. Upgrade entry points route to
   // `/settings?tab=billing`; this also fixes the pre-existing `?tab=backup`
   // deep-link (routes.ts:52) that opened Models because there was no reader.
@@ -107,7 +115,7 @@ const SettingsApp = () => {
     const next = resolveActiveSettingsTab(userTier, tabParam, tabs);
     if (next) setActiveTab(next as SettingsTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
+  }, [searchParams, userTier]);
   const { toast } = useToast();
   const [showWizardReplayConfirm, setShowWizardReplayConfirm] = useState(false);
 
@@ -221,17 +229,18 @@ const SettingsApp = () => {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full min-w-0 flex-col sm:flex-row">
       {/* Tab sidebar — just the section tabs now; the "Show" disclosure control
           moved to the content header (R10: it reads as a section control above
           what it gates, not a rail-foot afterthought). */}
-      <div className="w-36 border-r border-border/50 shrink-0 flex flex-col">
-        <div className="flex-1 overflow-auto p-2 space-y-0.5" role="tablist" aria-label="Settings sections">
+      <div className="w-full shrink-0 border-b border-border/50 sm:w-36 sm:border-b-0 sm:border-r flex flex-col">
+        <div className="flex gap-0.5 overflow-x-auto p-2 sm:block sm:flex-1 sm:space-y-0.5" role="tablist" aria-label="Settings sections">
           {visibleTabs.map(tab => {
             const locked = LOCKED_TABS[tab.id];
             return (
               <button
                 key={tab.id}
+                ref={activeTab === tab.id ? activeTabRef : undefined}
                 onClick={() => setActiveTab(tab.id)}
                 role="tab"
                 aria-selected={activeTab === tab.id}
@@ -242,7 +251,7 @@ const SettingsApp = () => {
                 // 12px). The wash alone carries the active/brand cue; text-foreground on
                 // it is AA in both themes (~9:1 light / ~10:1 dark). font-medium keeps
                 // the selected tab visually distinct from a hovered (text-foreground) one.
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition-colors ${
+                className={`flex w-auto shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors sm:w-full ${
                   activeTab === tab.id ? 'bg-primary/20 text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
@@ -260,7 +269,7 @@ const SettingsApp = () => {
           scrollable panel. PR5 D6 / Wave P mechanics unchanged — one dial governs
           both the dock and this rail's depth via useOnboarding().tier. */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="flex items-center justify-between gap-2 px-4 pt-3 pb-2.5 border-b border-border/40 shrink-0">
+        <div className="flex shrink-0 flex-col items-start gap-2 border-b border-border/40 px-3 pt-3 pb-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-4">
           {/* Title anchors the Show control to a real header row so it reads as
               docked to the section it sits above — not a floating pill (Wave S). */}
           <h2 className="text-sm font-display font-semibold text-foreground">
@@ -302,7 +311,7 @@ const SettingsApp = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 p-4 overflow-auto" role="tabpanel">
+        <div className="flex-1 overflow-auto p-3 sm:p-4" role="tabpanel">
 
         {/* ═══ GENERAL ═══ */}
         {activeTab === 'general' && (
