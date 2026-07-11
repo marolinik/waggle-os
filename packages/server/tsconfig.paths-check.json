@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "rootDir": "../..",
+    "baseUrl": ".",
+    "paths": {
+      "@waggle/agent": ["../agent/src/index.ts"],
+      "@waggle/core": ["../core/src/index.ts"],
+      "@waggle/shared": ["../shared/src/index.ts"],
+      "@waggle/hive-mind-core": ["../hive-mind-core/src/index.ts"],
+      "@waggle/marketplace": ["../marketplace/src/index.ts"],
+      "@waggle/waggle-dance": ["../waggle-dance/src/index.ts"],
+      "@waggle/weaver": ["../weaver/src/index.ts"],
+      "@waggle/sdk": ["../sdk/src/index.ts"]
+    }
+  },
+  "references": []
+}
