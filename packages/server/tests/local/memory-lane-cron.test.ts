@@ -96,6 +96,17 @@ describe('runMemoryLaneExtraction', () => {
     expect(r2.skipped).toBe(true);
   });
 
+  it('excludes [Loop:] automation tick frames from extraction (#13)', async () => {
+    seedSourceFrames(8);
+    for (let i = 0; i < 3; i++) {
+      frames.createIFrame(gopId, `[Loop: nightly-digest] tick ${i}: processed 4 items.`, 'normal', 'agent_inferred');
+    }
+    const r = await runMemoryLaneExtraction(db, mockLLM);
+    expect(r.skipped).toBe(false);
+    // Only the 8 real conversation frames are fed to the LLM; loop ticks stay out.
+    expect(r.framesProcessed).toBe(8);
+  });
+
   it('processes genuinely new content on a later run', async () => {
     seedSourceFrames(8);
     await runMemoryLaneExtraction(db, mockLLM);

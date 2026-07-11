@@ -58,6 +58,29 @@ describe('runChannelChatTurn', () => {
     }));
   });
 
+  it('forwards origin:"automation" in the POST body when set (#13)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      'event: done\ndata: {"content":"reviewed","toolsUsed":[]}\n\n',
+    ])));
+    await runChannelChatTurn({
+      port: 3333, message: 'review', workspace: 'default', session: 'evolve-x',
+      origin: 'automation',
+    });
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+    expect(body.origin).toBe('automation');
+  });
+
+  it('omits origin for normal channel turns — IM messages are real user turns (#13)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      'event: done\ndata: {"content":"hi","toolsUsed":[]}\n\n',
+    ])));
+    await runChannelChatTurn({
+      port: 3333, message: 'hi', workspace: 'default', session: 'channel-telegram-1',
+    });
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+    expect('origin' in body).toBe(false);
+  });
+
   it('flags approval_required turns', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
       'event: approval_required\ndata: {"requestId":"r1","toolName":"bash"}\n\n',

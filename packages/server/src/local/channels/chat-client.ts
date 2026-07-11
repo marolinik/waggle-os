@@ -36,6 +36,13 @@ export interface ChatTurnRequest {
    * self-evolution reviews. See the `proposeHeld` field on POST /api/chat.
    */
   proposeHeld?: boolean;
+  /**
+   * Automation-origin marker (#13): set ONLY by headless/automated callers
+   * (e.g. the idle-watcher's review turns) so the chat route skips its
+   * post-response memory write-back. IM channel adapters must NOT set this —
+   * inbound IM messages are real user turns and must keep writing memory.
+   */
+  origin?: 'automation';
 }
 
 /** Hard ceiling so a wedged turn can't pin a poll loop forever. */
@@ -84,6 +91,7 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
         session: req.session,
         ...(req.persona ? { persona: req.persona } : {}),
         ...(req.proposeHeld ? { proposeHeld: true } : {}),
+        ...(req.origin ? { origin: req.origin } : {}),
       }),
       signal: controller.signal,
     });

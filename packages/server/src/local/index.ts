@@ -2240,6 +2240,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
         session: `evolve-${sessionId}`,
         persona: 'session-reviewer',
         proposeHeld: true,
+        origin: 'automation',
       });
       return { content: res.content, ...(res.error ? { error: res.error } : {}) };
     },

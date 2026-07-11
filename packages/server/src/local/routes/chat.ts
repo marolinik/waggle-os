@@ -547,6 +547,16 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        * therefore never write to disk without approval.
        */
       proposeHeld?: boolean;
+      /**
+       * Steal #13: automation-origin memory write-back gate. Set ONLY by
+       * headless/automated callers (idle-watcher review turns, scheduled
+       * loops) — an automated turn re-analyzes existing transcripts, so its
+       * post-response write-back (auto-save, skill distillation, KG
+       * extraction, correction detection) would pollute memory with
+       * re-detected "decisions" and false correction signals. IM channel
+       * adapters must NOT set this: inbound IM messages are real user turns.
+       */
+      origin?: 'automation';
     };
   }>('/api/chat', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
@@ -556,8 +566,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       message, workspace: _ws, workspaceId: _wsId, model, session,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
+      origin,
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
+
+    // #13: automated turns skip the post-response memory write-back seams
+    // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
+    // already sets it, so its review turns are gated even without `origin`.
+    // Execution traces + improvement-signal surfacing stay UNGATED.
+    const isAutomatedTurn = origin === 'automation' || !!proposeHeldTurn;
 
     // Phase B.5: resolve the effective autonomy level for this request.
     // Expired grants fall back to 'normal' — the client may not have
@@ -1792,7 +1809,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Post-response memory write-back ──────────────────────
         // If the agent didn't save memory itself, check if the exchange
         // contains save-worthy content and auto-save it.
-        if (!hasCustomRunner) {
+        // #13: skipped for automated turns — a headless re-analysis of an old
+        // transcript must not re-save its decision patterns as fresh memory.
+        if (!hasCustomRunner && !isAutomatedTurn) {
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
@@ -1829,7 +1848,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // end: a refusal / self-incapacity turn yields no plan. The signal
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
-        if (!hasCustomRunner) {
+        // #13: skipped for automated turns (no real workflow to distill).
+        if (!hasCustomRunner && !isAutomatedTurn) {
           const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
           if (distillPlan) {
             sendEvent('step', { content: distillPlan.directive });
@@ -1850,7 +1870,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Extract named entities from the agent response and add them to the
         // knowledge graph of the active workspace mind.
         // Non-blocking — KG enrichment never fails the response.
-        if (!hasCustomRunner && result.content && result.content.length > 100) {
+        // #13: skipped for automated turns — review-turn output re-mentions
+        // transcript entities; re-extracting them inflates the graph.
+        if (!hasCustomRunner && !isAutomatedTurn && result.content && result.content.length > 100) {
           try {
             const knowledge = sessionOrch.getKnowledge();
             const entities = extractEntities(result.content);
@@ -1882,7 +1904,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // ── Correction detection ──────────────────────────────────
         // Analyze user message for corrections and record improvement signals.
         // Non-blocking — detection failure shouldn't affect the response.
-        if (!hasCustomRunner) {
+        // #13: skipped for automated turns — a review instruction embedding a
+        // transcript's old "no, that's wrong" lines would re-fire as fresh
+        // correction signals against the agent.
+        if (!hasCustomRunner && !isAutomatedTurn) {
           try {
             const signalStore = sessionOrch.getImprovementSignals();
             analyzeAndRecordCorrection(signalStore, message);

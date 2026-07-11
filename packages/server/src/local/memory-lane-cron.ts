@@ -71,11 +71,14 @@ export async function runMemoryLaneExtraction(
   const raw = db.getDatabase();
 
   // New source material: everything after the watermark EXCEPT our own lane
-  // frames (no self-feeding) and temporary/deprecated frames.
+  // frames (no self-feeding), automation loop-tick frames (#13 — scheduler
+  // noise must not be LLM-amplified into lanes), and temporary/deprecated
+  // frames.
   const rows = raw.prepare(
     `SELECT id, content, created_at FROM memory_frames
      WHERE id > ?
        AND content NOT LIKE '[mind-%'
+       AND content NOT LIKE '[Loop:%'
        AND importance NOT IN ('temporary', 'deprecated')
      ORDER BY id ASC
      LIMIT ?`
