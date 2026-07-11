@@ -377,6 +377,14 @@ export class CronStore {
     ).run(scheduleId, scheduleName, opts.durationMs ?? null, opts.success ? 1 : 0, opts.resultSummary ?? null, opts.error ?? null);
   }
 
+  /** #17: count today's (UTC) executions for a schedule — ai_task daily cap. */
+  countExecutionsToday(scheduleId: number): number {
+    const row = this.db.getDatabase().prepare(
+      "SELECT COUNT(*) AS n FROM cron_execution_history WHERE schedule_id = ? AND executed_at >= date('now')",
+    ).get(scheduleId) as { n: number };
+    return row.n;
+  }
+
   /** Get execution history for a schedule (most recent first). */
   getExecutionHistory(scheduleId: number, limit = 20): CronExecutionRow[] {
     return this.db.getDatabase().prepare(

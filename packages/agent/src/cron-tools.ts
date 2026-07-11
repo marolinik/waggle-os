@@ -39,13 +39,49 @@ function isValidCronExpression(expr: string): boolean {
   return parts.every(part => cronFieldPattern.test(part));
 }
 
-export function createCronTools(): ToolDefinition[] {
+/**
+ * #17: heuristic minimum-interval guard for ai_task schedules. A full-agent
+ * turn per firing means real LLM spend — reject expressions that fire more
+ * often than roughly every 5 minutes. Heuristic on the minute field (the
+ * scheduler tick is 60s, so sub-minute precision is unreachable anyway).
+ */
+function firesTooOften(expr: string): boolean {
+  const trimmed = expr.trim();
+  if (/^@(yearly|annually|monthly|weekly|daily|midnight|hourly)$/.test(trimmed)) {
+    return false;
+  }
+  const parts = trimmed.split(/\s+/);
+  // 6-field (seconds) expressions: any non-fixed seconds field fires sub-minute.
+  if (parts.length === 6 && !/^\d+$/.test(parts[0])) {
+    return true;
+  }
+  const minuteField = parts.length === 6 ? parts[1] : parts[0];
+  if (minuteField === '*') return true; // every minute
+  const step = minuteField.match(/^\*\/(\d+)$/);
+  if (step && Number(step[1]) < 5) return true; // */1 … */4
+  if (minuteField.split(',').length > 12) return true; // >12 firings/hour
+  return false;
+}
+
+/**
+ * #17: origin of the chat turn that invoked the tool. Snapshotted by
+ * create_schedule so ai_task results can be delivered back to the
+ * originating IM channel — the delivery target is NEVER taken from
+ * free-form tool arguments (pairing-allowlist trust boundary).
+ */
+export interface TurnOrigin {
+  session: string;
+  workspace: string | null;
+  channel?: { platform: string; chatId: string };
+}
+
+export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null }): ToolDefinition[] {
   return [
     // 1. create_schedule — Create a new cron schedule
     {
       name: 'create_schedule',
       description:
-        'Create a new cron schedule. Supports standard 5-field cron expressions (minute hour day-of-month month day-of-week) and shorthands like @daily, @hourly.',
+        'Create a new cron schedule. Supports standard 5-field cron expressions (minute hour day-of-month month day-of-week) and shorthands like @daily, @hourly. Pass `prompt` to schedule a full agent task (ai_task): the agent re-runs with that prompt on schedule and the result is delivered back to where the schedule was created from.',
       parameters: {
         type: 'object',
         properties: {
@@ -56,7 +92,7 @@ export function createCronTools(): ToolDefinition[] {
           cron_expression: {
             type: 'string',
             description:
-              'Cron expression (e.g., "0 3 * * *" for daily at 3am, "*/15 * * * *" for every 15 minutes)',
+              'Cron expression (e.g., "0 3 * * *" for daily at 3am, "*/15 * * * *" for every 15 minutes). ai_task schedules (with `prompt`) may not fire more often than every 5 minutes.',
           },
           job_type: {
             type: 'string',
@@ -69,7 +105,22 @@ export function createCronTools(): ToolDefinition[] {
           },
           workspace_id: {
             type: 'string',
-            description: 'Workspace ID (required for agent_task type)',
+            description: 'Workspace ID (required for agent_task type; defaults to the current workspace when scheduling an ai_task)',
+          },
+          prompt: {
+            type: 'string',
+            description:
+              'ai_task mode (#17): the prompt the agent runs on each firing as a full agent turn (tools + memory, approval-gated writes HELD). Only valid for agent_task schedules.',
+          },
+          once: {
+            type: 'boolean',
+            description: 'ai_task only: disable the schedule after its first successful run (one-shot).',
+          },
+          deliver: {
+            type: 'string',
+            enum: ['origin', 'notification'],
+            description:
+              "ai_task only: 'origin' (default) delivers the result back to the originating IM channel when the schedule was created from one; 'notification' only emits a desktop notification.",
           },
         },
         required: ['name', 'cron_expression'],
@@ -79,7 +130,10 @@ export function createCronTools(): ToolDefinition[] {
         const cronExpr = args.cron_expression as string;
         const jobType = (args.job_type as string) || 'agent_task';
         const jobData = args.job_data as string | undefined;
-        const workspaceId = args.workspace_id as string | undefined;
+        let workspaceId = args.workspace_id as string | undefined;
+        const prompt = args.prompt as string | undefined;
+        const once = args.once as boolean | undefined;
+        const deliver = (args.deliver as string | undefined) ?? 'origin';
 
         // Validate cron expression format
         if (!isValidCronExpression(cronExpr)) {
@@ -93,6 +147,29 @@ export function createCronTools(): ToolDefinition[] {
             jobConfig = JSON.parse(jobData);
           } catch {
             return `Error: Invalid JSON in job_data: "${jobData}"`;
+          }
+        }
+
+        // #17 ai_task: an explicit `prompt` upgrades the schedule to a full
+        // agent turn per firing. Delivery target comes from the trusted
+        // turn-origin snapshot, never from tool args.
+        if (prompt !== undefined) {
+          if (jobType !== 'agent_task') {
+            return 'Error: `prompt` is only valid for agent_task schedules.';
+          }
+          if (firesTooOften(cronExpr)) {
+            return `Error: ai_task schedules may not fire more often than every 5 minutes (got "${cronExpr}"). Use a wider interval like "*/15 * * * *".`;
+          }
+          const origin = opts?.getTurnOrigin?.() ?? null;
+          jobConfig = {
+            ...(jobConfig ?? {}),
+            prompt,
+            mode: 'ai_task',
+            ...(once ? { once: true } : {}),
+            ...(deliver === 'origin' && origin?.channel ? { deliverTo: origin.channel } : {}),
+          };
+          if (!workspaceId && origin?.workspace) {
+            workspaceId = origin.workspace;
           }
         }
 

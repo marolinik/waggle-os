@@ -349,7 +349,7 @@ export {
 export { CommandRegistry, AGENT_LOOP_REROUTE_PREFIX, type CommandDefinition, type CommandContext } from './commands/command-registry.js';
 export { registerWorkflowCommands } from './commands/workflow-commands.js';
 export { registerMarketplaceCommands } from './commands/marketplace-commands.js';
-export { createCronTools } from './cron-tools.js';
+export { createCronTools, type TurnOrigin } from './cron-tools.js';
 export {
   createKvarkTools, parseSearchResults,
   type KvarkClientLike, type KvarkToolsDeps, type KvarkSearchResponseLike,

@@ -136,6 +136,113 @@ describe('Cron Tools', () => {
     });
   });
 
+  // ── create_schedule ai_task mode (#17) ────────────────────────────────
+
+  describe('create_schedule ai_task (#17)', () => {
+    const createdResponse = (over?: Record<string, unknown>) => new Response(JSON.stringify({
+      id: 7, name: 'Morning digest', cronExpr: '0 8 * * *', jobType: 'agent_task',
+      enabled: true, nextRunAt: '2026-03-19T08:00:00.000Z', ...over,
+    }), { status: 200 });
+
+    function toolsWithOrigin(origin: { session: string; workspace: string | null; channel?: { platform: string; chatId: string } } | null) {
+      return createCronTools({ getTurnOrigin: () => origin });
+    }
+
+    it('composes ai_task jobConfig with prompt + deliverTo from the origin snapshot', async () => {
+      fetchSpy.mockResolvedValueOnce(createdResponse());
+      const tool = toolsWithOrigin({
+        session: 'channel-telegram-42', workspace: 'ws-9',
+        channel: { platform: 'telegram', chatId: '-10042' },
+      }).find(t => t.name === 'create_schedule')!;
+
+      const result = await tool.execute({
+        name: 'Morning digest', cron_expression: '0 8 * * *',
+        prompt: 'Summarize yesterday', once: true,
+      });
+
+      expect(result).toContain('Schedule created successfully');
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.jobConfig).toMatchObject({
+        prompt: 'Summarize yesterday', mode: 'ai_task', once: true,
+        deliverTo: { platform: 'telegram', chatId: '-10042' },
+      });
+      // workspace defaults from the origin when not given explicitly
+      expect(body.workspaceId).toBe('ws-9');
+    });
+
+    it("deliver:'notification' omits deliverTo even with a channel origin", async () => {
+      fetchSpy.mockResolvedValueOnce(createdResponse());
+      const tool = toolsWithOrigin({
+        session: 'channel-slack-C1', workspace: 'ws-1',
+        channel: { platform: 'slack', chatId: 'C1' },
+      }).find(t => t.name === 'create_schedule')!;
+
+      await tool.execute({
+        name: 'Digest', cron_expression: '0 8 * * *',
+        prompt: 'Summarize', deliver: 'notification',
+      });
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.jobConfig.deliverTo).toBeUndefined();
+      expect(body.jobConfig.mode).toBe('ai_task');
+    });
+
+    it('no origin → no deliverTo, workspace stays undefined', async () => {
+      fetchSpy.mockResolvedValueOnce(createdResponse());
+      const tool = toolsWithOrigin(null).find(t => t.name === 'create_schedule')!;
+
+      await tool.execute({ name: 'Digest', cron_expression: '0 8 * * *', prompt: 'Summarize' });
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.jobConfig.deliverTo).toBeUndefined();
+      expect(body.workspaceId).toBeUndefined();
+    });
+
+    it('rejects prompt on non-agent_task schedules', async () => {
+      const tool = toolsWithOrigin(null).find(t => t.name === 'create_schedule')!;
+      const result = await tool.execute({
+        name: 'Bad', cron_expression: '0 8 * * *',
+        job_type: 'memory_consolidation', prompt: 'Summarize',
+      });
+      expect(result).toContain('only valid for agent_task');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('min-interval guard: rejects every-minute and */4 exprs, accepts */5 and @hourly', async () => {
+      const tool = toolsWithOrigin(null).find(t => t.name === 'create_schedule')!;
+
+      for (const expr of ['* * * * *', '*/4 * * * *', '* * * * * *', '1,2,3,4,5,6,7,8,9,10,11,12,13 * * * *']) {
+        const result = await tool.execute({ name: 'Fast', cron_expression: expr, prompt: 'x' });
+        expect(result, expr).toContain('may not fire more often than every 5 minutes');
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      for (const expr of ['*/5 * * * *', '@hourly', '0 8 * * *']) {
+        fetchSpy.mockResolvedValueOnce(createdResponse({ cronExpr: expr }));
+        const result = await tool.execute({ name: 'OK', cron_expression: expr, prompt: 'x' });
+        expect(result, expr).toContain('Schedule created successfully');
+      }
+    });
+
+    it('legacy create without prompt is byte-identical (no mode injected)', async () => {
+      fetchSpy.mockResolvedValueOnce(createdResponse());
+      const tool = toolsWithOrigin({
+        session: 's', workspace: 'ws-1',
+        channel: { platform: 'telegram', chatId: '1' },
+      }).find(t => t.name === 'create_schedule')!;
+
+      await tool.execute({
+        name: 'Legacy', cron_expression: '0 3 * * *',
+        job_type: 'agent_task', workspace_id: 'ws-2',
+        job_data: '{"prompt":"old style"}',
+      });
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.jobConfig).toEqual({ prompt: 'old style' });
+      expect(body.workspaceId).toBe('ws-2');
+    });
+  });
+
   // ── list_schedules ────────────────────────────────────────────────────
 
   describe('list_schedules', () => {

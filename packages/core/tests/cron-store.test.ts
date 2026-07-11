@@ -190,6 +190,23 @@ describe('CronStore', () => {
     expect(remaining[0].success).toBe(1);
   });
 
+  it('countExecutionsToday counts only today, only this schedule (#17 daily cap)', () => {
+    const created = store.create(makeInput());
+    const other = store.create(makeInput({ name: 'Other job' }));
+
+    store.recordExecution(created.id, created.name, { success: true });
+    store.recordExecution(created.id, created.name, { success: false });
+    store.recordExecution(other.id, other.name, { success: true });
+    // Yesterday's row must not count.
+    db.getDatabase().prepare(`
+      INSERT INTO cron_execution_history (schedule_id, schedule_name, executed_at, success)
+      VALUES (?, ?, datetime('now', '-1 day'), 1)
+    `).run(created.id, created.name);
+
+    expect(store.countExecutionsToday(created.id)).toBe(2);
+    expect(store.countExecutionsToday(other.id)).toBe(1);
+  });
+
   describe('pending_actions (L2 held-action queue)', () => {
     function held(over?: Partial<SavePendingActionInput>): SavePendingActionInput {
       return {

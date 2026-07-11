@@ -70,6 +70,18 @@ describe('runChannelChatTurn', () => {
     expect(body.origin).toBe('automation');
   });
 
+  it('forwards channel meta in the POST body when set (#17)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
+      'event: done\ndata: {"content":"hi","toolsUsed":[]}\n\n',
+    ])));
+    await runChannelChatTurn({
+      port: 3333, message: 'hi', workspace: 'default', session: 'channel-telegram--10042',
+      channel: { platform: 'telegram', chatId: '-10042' },
+    });
+    const body = JSON.parse(vi.mocked(fetch).mock.calls[0][1]!.body as string);
+    expect(body.channel).toEqual({ platform: 'telegram', chatId: '-10042' });
+  });
+
   it('omits origin for normal channel turns — IM messages are real user turns (#13)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(sseResponse([
       'event: done\ndata: {"content":"hi","toolsUsed":[]}\n\n',

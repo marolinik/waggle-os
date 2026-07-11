@@ -137,6 +137,7 @@ import { telegramRoutes, pushTelegramMessage } from './routes/telegram.js';
 import { ChannelManager } from './channels/manager.js';
 import { runChannelChatTurn } from './channels/chat-client.js';
 import { channelRoutes } from './channels/routes.js';
+import { isChannelPlatform } from './channels/types.js';
 import { IdleSessionWatcher, readRecentTranscript, buildReviewInstruction, NOTHING_TO_DO } from './idle-watcher.js';
 import { DreamJournal } from './dream-journal.js';
 import { dreamRoutes } from './routes/dreams.js';
@@ -283,6 +284,14 @@ export interface AgentState {
     blockedTools?: readonly string[];
     allowedToolNames?: ReadonlySet<string> | null;
   } | null;
+  /**
+   * #17: origin of the currently-executing chat turn. Same request-scoped
+   * lifecycle as spawnSecurityContext (set by the chat route, cleared in its
+   * finally). cron-tools' create_schedule snapshots it synchronously at
+   * tool-execute time so ai_task delivery targets come from a trusted source,
+   * never from free-form tool arguments. `null` outside an active run.
+   */
+  turnOrigin: import('@waggle/agent').TurnOrigin | null;
   /** Plugin runtime manager — lifecycle, tools, skills from plugins */
   pluginRuntimeManager: import('@waggle/sdk').PluginRuntimeManager;
   /** MCP server runtime — stdio servers, health, tools */
@@ -687,8 +696,13 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     },
   });
 
-  // Cron tools — let the agent manage cron schedules (via REST API)
-  const cronTools = createCronTools();
+  // Cron tools — let the agent manage cron schedules (via REST API).
+  // #17: getTurnOrigin lets create_schedule stamp ai_task delivery targets
+  // from the request-scoped origin snapshot (read synchronously at
+  // tool-execute time — see AgentState.turnOrigin).
+  const cronTools = createCronTools({
+    getTurnOrigin: () => server.agentState.turnOrigin,
+  });
 
   // Search tools — Tavily + Brave with vault-backed API keys
   const searchTools = createSearchTools(async (key: string) => {
@@ -1476,6 +1490,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
     workspaceWeaverStatus,
     subagentOrchestrator: null,
     spawnSecurityContext: null,
+    turnOrigin: null,
     pluginRuntimeManager,
     mcpRuntime,
     mcpToolRetriever,
@@ -1503,6 +1518,11 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Local scheduler — runs cron jobs in-process (Solo, no Redis/BullMQ)
   const persistCronHistory = makeRecordExecutionCallback(cronStore);
+  // #17: hard daily bound on ai_task firings per schedule — each firing is a
+  // full agent turn (real LLM spend), so a runaway cron must self-limit even
+  // past the create-time min-interval guard.
+  const AI_TASK_DAILY_CAP = 24;
+
   const scheduler = new LocalScheduler(cronStore, async (schedule) => {
     switch (schedule.job_type) {
       case 'memory_consolidation': {
@@ -1996,10 +2016,63 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             break;
           }
 
+          // #17 ai_task daily cap: every firing is a full agent turn (real
+          // LLM spend) — bound runaway schedules regardless of cron expr.
+          if (taskConfig.mode === 'ai_task'
+            && cronStore.countExecutionsToday(schedule.id) >= AI_TASK_DAILY_CAP) {
+            log.warn(`[cron] ai_task "${schedule.name}" skipped — daily cap (${AI_TASK_DAILY_CAP}) reached`);
+            break;
+          }
+          let aiTaskSucceeded = false;
+
           for (const target of targetWorkspaces) {
             try {
               // Activate workspace mind so agent has context
               activateWorkspaceMindWithWeaver(target.id);
+
+              if (taskConfig.mode === 'ai_task') {
+                // #17: full agent turn through the loopback chat route —
+                // tools, memory recall, governance, approval-gated writes
+                // HELD (proposeHeld). origin:'automation' (#13) keeps the
+                // scheduled turn out of memory write-back. Legacy rows
+                // without mode keep the toolless completion path below.
+                const turn = await runChannelChatTurn({
+                  port: fullConfig.port ?? 3333,
+                  message: `[Scheduled task "${schedule.name}" for workspace "${target.name}"]\n\n${taskPrompt}`,
+                  workspace: target.id,
+                  session: `schedule-${schedule.id}`,
+                  proposeHeld: true,
+                  origin: 'automation',
+                });
+                const output = turn.content || '';
+                if (!turn.error) aiTaskSucceeded = true;
+
+                // Delivery: origin channel first (stamped from the trusted
+                // turn-origin snapshot at create time), notification always.
+                const deliverTo = taskConfig.deliverTo as { platform?: string; chatId?: string } | undefined;
+                if (deliverTo?.platform && deliverTo?.chatId && output && isChannelPlatform(deliverTo.platform)) {
+                  const sent = await server.channelManager
+                    ?.sendTo(deliverTo.platform, deliverTo.chatId, `[${schedule.name}]\n${output}`)
+                    .catch((e: unknown) => {
+                      log.warn(`[cron] ai_task "${schedule.name}" channel delivery failed: ${e instanceof Error ? e.message : e}`);
+                      return false;
+                    });
+                  if (!sent) log.warn(`[cron] ai_task "${schedule.name}" delivery skipped — ${deliverTo.platform} adapter not running`);
+                }
+                const summary = output.length > 200 ? output.slice(0, 197) + '...' : output;
+                emitNotification(server, {
+                  title: `Scheduled task: ${schedule.name}`,
+                  body: turn.error ? `Error: ${turn.error}` : (summary || 'Task completed'),
+                  category: 'cron',
+                  actionUrl: `/workspaces/${target.id}`,
+                });
+                if (turn.error) {
+                  log.warn(`[cron] ai_task "${schedule.name}" failed for workspace "${target.name}": ${turn.error}`);
+                } else {
+                  log.info(`[cron] ai_task "${schedule.name}" completed for workspace "${target.name}" (${output.length} chars)`);
+                }
+                continue;
+              }
 
               // Use the built-in Anthropic proxy to process the prompt
               const proxyUrl = `http://127.0.0.1:${fullConfig.port ?? 3333}/v1/chat/completions`;
@@ -2040,6 +2113,13 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
             } catch (wsErr) {
               log.warn(`[cron] agent_task "${schedule.name}" failed for workspace "${target.name}": ${(wsErr as Error).message}`);
             }
+          }
+
+          // #17 once mode: one-shot ai_task disables itself after the first
+          // successful run (row kept for execution history).
+          if (taskConfig.mode === 'ai_task' && taskConfig.once === true && aiTaskSucceeded) {
+            cronStore.update(schedule.id, { enabled: false });
+            log.info(`[cron] ai_task "${schedule.name}" was one-shot — schedule disabled after successful run`);
           }
         } catch (err) {
           log.warn(`[cron] agent_task handler failed: ${(err as Error).message}`);

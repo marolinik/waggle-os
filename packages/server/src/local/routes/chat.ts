@@ -557,6 +557,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        * adapters must NOT set this: inbound IM messages are real user turns.
        */
       origin?: 'automation';
+      /**
+       * #17: originating IM channel of this turn (real platform + chatId).
+       * Set only by ChannelManager.handleInbound via the loopback client —
+       * published as the request-scoped turn origin so create_schedule can
+       * stamp ai_task delivery targets from a trusted snapshot.
+       */
+      channel?: { platform: string; chatId: string };
     };
   }>('/api/chat', async (request, reply) => {
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
@@ -566,7 +573,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       message, workspace: _ws, workspaceId: _wsId, model, session,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
-      origin,
+      origin, channel: channelMeta,
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
 
@@ -1348,6 +1355,15 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           }
         }
 
+        // #17: schedule-originated turns must not schedule further work — an
+        // ai_task turn re-invoking create_schedule could self-replicate, and
+        // loop-guard cannot see across turns. list/delete stay available.
+        if (sessionId.startsWith('schedule-')) {
+          effectiveTools = effectiveTools.filter(
+            t => t.name !== 'create_schedule' && t.name !== 'trigger_schedule',
+          );
+        }
+
         // Dynamic tool availability — run checkAvailability on each tool
         // SEC: capture the persona + availability filtered tool names BEFORE the
         // conversational-turn narrowing. This is the allowlist a spawned
@@ -1709,6 +1725,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
                 });
               }
             : undefined,
+        };
+
+        // SEC: publish the request-scoped security context so sub-agents /
+        // workflow workers spawned during this run inherit the SAME approval
+        // gate, governance denylist, and persona allowlist as the main loop.
+        // Without this, spawned agents ran the full tool pool with no
+        // confirmation gate (the sub-agent confirmation-bypass). Cleared in the
+        // outer finally so it never leaks into a later run.
+        server.agentState.spawnSecurityContext = hasCustomRunner ? null : {
+          hooks: hookRegistry,
+          blockedTools: governancePolicies?.blockedTools,
+          allowedToolNames: spawnAllowedToolNames,
+        };
+
+        // #17: publish the request-scoped turn origin — create_schedule reads
+        // it synchronously at tool-execute time to stamp ai_task delivery
+        // targets (channel meta only ever arrives from the loopback client's
+        // ChannelManager path). Same lifecycle as spawnSecurityContext above;
+        // cleared in the outer finally.
+        server.agentState.turnOrigin = {
+          session: sessionId,
+          workspace: effectiveWorkspace ?? null,
+          ...(channelMeta?.platform && channelMeta?.chatId
+            ? { channel: { platform: channelMeta.platform, chatId: channelMeta.chatId } }
+            : {}),
         };
 
         // ── Run agent with credential pool + fallback chain ──
@@ -2136,6 +2177,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
+      // SEC: drop the request-scoped spawn security context. It must not leak
+      // into a later run, which could otherwise apply a stale workspace's
+      // governance / persona restrictions to a freshly spawned sub-agent.
+      server.agentState.spawnSecurityContext = null;
+      // #17: same for the turn origin — a stale origin would stamp a later
+      // turn's schedules with the wrong delivery channel.
+      server.agentState.turnOrigin = null;
       // Review Critical #2: defensive cleanup for the pre:tool hook. The happy path
       // already unregisters and sets to undefined; this guarantees we never leak the
       // hook into the shared hookRegistry on any exception path.

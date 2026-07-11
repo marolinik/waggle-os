@@ -292,6 +292,26 @@ describe('lifecycle', () => {
     expect(manager.getStatuses().find(s => s.platform === 'telegram')?.running).toBe(false);
   });
 
+  it('passes REAL channel meta to the chat turn — delivery target for ai_task (#17)', async () => {
+    const manager = makeManager();
+    await pairAndStart(manager);
+    await manager.handleInbound(msg({ chatId: '-100 42', text: 'schedule this daily' }));
+    expect(chatTurn).toHaveBeenCalledWith(expect.objectContaining({
+      channel: { platform: 'telegram', chatId: '-100 42' }, // un-normalized
+      session: sessionIdFor({ platform: 'telegram', chatId: '-100 42' }),
+    }));
+    // and never as an automation turn — inbound IM is a real user turn (#13)
+    expect(chatTurn.mock.calls[0][0].origin).toBeUndefined();
+  });
+
+  it('sendTo delivers via the running adapter, returns false when absent (#17)', async () => {
+    const manager = makeManager();
+    await manager.start('telegram');
+    expect(await manager.sendTo('telegram', 'chat-9', 'result text')).toBe(true);
+    expect(adapter.sent).toEqual([{ chatId: 'chat-9', text: 'result text' }]);
+    expect(await manager.sendTo('discord', 'c', 'x')).toBe(false);
+  });
+
   it('startEnabled starts only platforms whose config says enabled', async () => {
     const manager = makeManager();
     manager.pairing.setConfig('telegram', { enabled: true, defaultWorkspace: 'default' });

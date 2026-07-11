@@ -43,6 +43,13 @@ export interface ChatTurnRequest {
    * inbound IM messages are real user turns and must keep writing memory.
    */
   origin?: 'automation';
+  /**
+   * #17: originating IM channel of this turn (REAL platform + chatId — the
+   * session id normalizes chatId irreversibly). The chat route publishes it
+   * as the request-scoped turn origin so create_schedule can stamp ai_task
+   * delivery targets. Set only by ChannelManager.handleInbound.
+   */
+  channel?: { platform: string; chatId: string };
 }
 
 /** Hard ceiling so a wedged turn can't pin a poll loop forever. */
@@ -92,6 +99,7 @@ export async function runChannelChatTurn(req: ChatTurnRequest): Promise<ChatTurn
         ...(req.persona ? { persona: req.persona } : {}),
         ...(req.proposeHeld ? { proposeHeld: true } : {}),
         ...(req.origin ? { origin: req.origin } : {}),
+        ...(req.channel ? { channel: req.channel } : {}),
       }),
       signal: controller.signal,
     });

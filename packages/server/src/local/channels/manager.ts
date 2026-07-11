@@ -248,7 +248,10 @@ export class ChannelManager {
       return;
     }
 
-    // 4. Agent turn via loopback chat.
+    // 4. Agent turn via loopback chat. channel meta (#17) carries the REAL
+    // platform/chatId (sessionIdFor normalizes chatId irreversibly) so a
+    // create_schedule call inside this turn can deliver ai_task results back
+    // to this chat.
     const result = await this.chatTurn({
       port: this.opts.port,
       sessionToken: this.opts.sessionToken,
@@ -256,6 +259,7 @@ export class ChannelManager {
       workspace: this.resolveWorkspace(msg),
       session: sessionIdFor(msg),
       proposeHeld: true,
+      channel: { platform: msg.platform, chatId: msg.chatId },
     });
 
     if (result.approvalRequired && !result.content) {
@@ -269,6 +273,18 @@ export class ChannelManager {
     if (result.content) {
       await reply(result.content + (result.approvalRequired ? `\n\n${APPROVAL_NEEDED_REPLY}` : ''));
     }
+  }
+
+  /**
+   * #17: outbound delivery for scheduler ai_task results. Returns false when
+   * the platform adapter is not running (result then falls back to the
+   * desktop notification only). Adapters chunk long text internally.
+   */
+  async sendTo(platform: ChannelPlatform, chatId: string, text: string): Promise<boolean> {
+    const adapter = this.adapters.get(platform);
+    if (!adapter) return false;
+    await adapter.send(chatId, text);
+    return true;
   }
 
   private handleWorkspaceCommand(msg: ChannelMessage, text: string): string {
