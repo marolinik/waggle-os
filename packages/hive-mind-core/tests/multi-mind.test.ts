@@ -204,6 +204,14 @@ describe('MultiMind', () => {
       const results = mm.searchAll('error "handling"');
       expect(results).toHaveLength(1);
     });
+
+    it('finds Cyrillic and diacritic content (S1 Unicode sanitizer)', () => {
+      addMemory(mm.personal, 'gop-1', 'Београд је главни град Србије');
+      addMemory(mm.workspace!, 'gop-2', 'Čitanje časopisa o žurkama');
+
+      expect(mm.searchAll('Београд')).toHaveLength(1);
+      expect(mm.search('časopisa', 'workspace')).toHaveLength(1);
+    });
   });
 
   describe('switchWorkspace', () => {

@@ -84,6 +84,53 @@ describe('Hybrid Search (FTS5 + sqlite-vec + RRF + Relevance)', () => {
     });
   });
 
+  describe('Unicode keyword search (S1)', () => {
+    async function seedUnicodeFrames() {
+      const session = sessions.create();
+      const gopId = session.gop_id;
+      const cyrillic = frames.createIFrame(gopId, 'Београд конференција о вештачкој интелигенцији');
+      const diacritic = frames.createIFrame(gopId, 'Sastanak sa Đorđem u Čačku povodom žurke');
+      const cjk = frames.createIFrame(gopId, '我们讨论了北京旅行的计划');
+      const english = frames.createIFrame(gopId, 'Quarterly planning meeting notes');
+      return { cyrillic, diacritic, cjk, english };
+    }
+
+    it('matches Cyrillic frames via the keyword lane', async () => {
+      const { cyrillic } = await seedUnicodeFrames();
+      const results = await search.keywordSearch('Београд', 10);
+      expect(results).toContain(cyrillic.id);
+    });
+
+    it('matches diacritic (č/ž) query terms', async () => {
+      const { diacritic } = await seedUnicodeFrames();
+      const results = await search.keywordSearch('Čačku žurke', 10);
+      expect(results).toContain(diacritic.id);
+    });
+
+    it('routes pure-CJK queries to the LIKE fallback and matches', async () => {
+      const { cjk } = await seedUnicodeFrames();
+      // buildFtsOrQuery drops CJK tokens (unicode61 cannot segment them), so the
+      // MATCH string is empty — keywordSearch must fall back to LIKE substring
+      // matching instead of returning [].
+      const results = await search.keywordSearch('北京旅行', 10);
+      expect(results).toContain(cjk.id);
+    });
+
+    it('still returns [] for stop-word-only English queries (regression lock)', async () => {
+      await seedUnicodeFrames();
+      const results = await search.keywordSearch('the a an of to', 10);
+      expect(results).toHaveLength(0);
+    });
+
+    it('English keyword results are unchanged by the Unicode sanitizer', async () => {
+      // Byte-identical MATCH strings for ASCII input are locked in
+      // fts-sanitize.test.ts; this asserts the end-to-end lane still hits.
+      const { english } = await seedUnicodeFrames();
+      const results = await search.keywordSearch('planning meeting', 10);
+      expect(results).toContain(english.id);
+    });
+  });
+
   describe('Vector search via sqlite-vec', () => {
     it('finds semantically similar frames', async () => {
       await seedFrames();
