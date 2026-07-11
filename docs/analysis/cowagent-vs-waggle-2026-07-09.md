@@ -99,7 +99,9 @@ mechanics onto our core** — their moat (WeChat ecosystem + 45k stars) is the o
 13. **Scheduler/cron-pair stripping before long-term memory flush** (`summarizer.py:770`) — keeps
     automated noise out of long-term memory; directly relevant to WaggleDance signals.
 14. **Retrieval-time temporal decay** — exp half-life 30d multiplier at fusion time (`manager.py:472`).
-    Complementary to our write-time dating; trivial add.
+    ~~Complementary to our write-time dating; trivial add.~~ **ALREADY SHIPPED (verified 2026-07-11
+    Tier 3 recon): `packages/hive-mind-core/src/mind/scoring.ts:52-63` has exact 30d-half-life
+    exponential decay, write-time anchored, default ON via 'balanced' profile. Do not re-recon.**
 15. **Skill auto-enable by requirement satisfaction** — skills gate on `requires.env/bins` presence and
     surface "setup needed" hints (`agent/skills/config.py`). Nice marketplace UX.
 16. **Trigram FTS5 cascade for CJK keyword search** (`storage.py:952`) — only if we target non-Latin markets.
