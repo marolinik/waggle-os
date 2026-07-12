@@ -232,6 +232,38 @@ describe('Local Server Mode', () => {
       }
     });
 
+    it('preserves imported frame provenance in search results', async () => {
+      const marker = `browserprovenance${Date.now()}`;
+      const createRes = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/memory/frames?extract=false',
+        payload: {
+          content: `Browser Companion provenance marker ${marker}`,
+          source: 'import',
+          importance: 'normal',
+        },
+      });
+      expect(createRes.statusCode).toBe(200);
+
+      const framesRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/memory/frames?limit=20',
+      });
+      const framesBody = JSON.parse(framesRes.body);
+      const frame = framesBody.results.find((item: { content?: string }) => item.content?.includes(marker));
+      expect(frame?.source).toBe('import');
+
+      const searchRes = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/memory/search?q=${encodeURIComponent(marker)}`,
+      });
+      expect(searchRes.statusCode).toBe(200);
+      const searchBody = JSON.parse(searchRes.body);
+      const result = searchBody.results.find((item: { content?: string }) => item.content?.includes(marker));
+      expect(result?.source).toBe('import');
+      expect(result?.source_mind).toBe('personal');
+    });
+
     it('PATCH /api/memory/frames/:id/access atomically increments access count', async () => {
       // Find an existing personal-mind frame id
       const listRes = await injectWithAuth(server, {

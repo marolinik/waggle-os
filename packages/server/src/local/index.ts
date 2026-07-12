@@ -192,7 +192,7 @@ export interface LocalConfig {
   tier?: string;
   /** True only when startService owns the LiteLLM child lifecycle. */
   manageLiteLLM?: boolean;
-  /** Stable child-process port, retained while requests use a fallback proxy. */
+  /** Stable child-process port, retained even while requests use a fallback proxy. */
   managedLiteLLMPort?: number;
 }
 
@@ -475,23 +475,23 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Migrate plaintext keys from config.json to vault on first run
   try {
     const waggleConfig = new WaggleConfig(fullConfig.dataDir);
-      const configProviders = waggleConfig.getProviders();
-      if (Object.keys(configProviders).length > 0) {
-        const migrated = vault.migrateFromConfig({ providers: configProviders });
-        let scrubbed = 0;
-        for (const [name, provider] of Object.entries(configProviders)) {
-          if (!provider.apiKey) continue;
-          waggleConfig.setProvider(name, { ...provider, apiKey: '' });
-          scrubbed++;
-        }
-        if (scrubbed > 0) waggleConfig.save();
-        if (migrated > 0) {
-          log.info(` Migrated ${migrated} API key(s) to encrypted vault`);
-        }
-        if (scrubbed > 0) {
-          log.info(` Scrubbed ${scrubbed} plaintext provider key(s) from config`);
-        }
+    const configProviders = waggleConfig.getProviders();
+    if (Object.keys(configProviders).length > 0) {
+      const migrated = vault.migrateFromConfig({ providers: configProviders });
+      let scrubbed = 0;
+      for (const [name, provider] of Object.entries(configProviders)) {
+        if (!provider.apiKey) continue;
+        waggleConfig.setProvider(name, { ...provider, apiKey: '' });
+        scrubbed++;
       }
+      if (scrubbed > 0) waggleConfig.save();
+      if (migrated > 0) {
+        log.info(` Migrated ${migrated} API key(s) to encrypted vault`);
+      }
+      if (scrubbed > 0) {
+        log.info(` Scrubbed ${scrubbed} plaintext provider key(s) from config`);
+      }
+    }
   } catch {
     // Migration failure should never block startup
   }
@@ -560,6 +560,7 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // Build embedding config from WaggleConfig + Vault keys
   const waggleConfig = new WaggleConfig(fullConfig.dataDir || undefined);
+  fullConfig.cli = { allowlist: waggleConfig.getCliAllowlist() };
   const embeddingConfig: EmbeddingProviderConfig = waggleConfig.getEmbeddingConfig();
 
   // Inject API keys from encrypted Vault (never from config.json)
@@ -702,7 +703,10 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
 
   // CLI tools — governed CLI program execution
   const cliAllowlist = fullConfig.cli?.allowlist ?? [];
-  const cliTools = createCliTools({ allowlist: cliAllowlist });
+  const cliTools = createCliTools({
+    allowlist: cliAllowlist,
+    getAllowlist: () => fullConfig.cli?.allowlist ?? [],
+  });
 
   // Dynamic connector tools (initial — regenerated per workspace in buildToolsForWorkspace)
   const defaultConnectorTools = connectorRegistry.generateTools();
@@ -2309,9 +2313,20 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(websocket);
 
   // Security middleware — headers + rate limiting + bearer auth (local server only)
+  const rateLimiterMaxRequests = Number.parseInt(process.env.WAGGLE_RATE_LIMIT_MAX_REQUESTS ?? '', 10);
+  const rateLimiterWindowMs = Number.parseInt(process.env.WAGGLE_RATE_LIMIT_WINDOW_MS ?? '', 10);
+  const rateLimiterConfig = {
+    ...(Number.isFinite(rateLimiterMaxRequests) && rateLimiterMaxRequests > 0
+      ? { maxRequests: rateLimiterMaxRequests }
+      : {}),
+    ...(Number.isFinite(rateLimiterWindowMs) && rateLimiterWindowMs > 0
+      ? { windowMs: rateLimiterWindowMs }
+      : {}),
+  };
   await server.register(securityMiddleware, {
     sessionToken: server.agentState.wsSessionToken,
     authenticateRunToken: (token) => agentRunRegistry.authenticateCredential(token) !== undefined,
+    rateLimiter: Object.keys(rateLimiterConfig).length > 0 ? rateLimiterConfig : undefined,
   });
 
   // D1: session-token bootstrap. Auth-exempt (you cannot require the token to fetch
