@@ -42,14 +42,10 @@
     },
     "trayIcon": {
       "iconPath": "icons/icon.png",
-      "tooltip": "Waggle — AI Agent Swarm"
+      "tooltip": "Waggle - AI Agent Swarm"
     }
   },
   "plugins": {
-    "dialog": {
-      "open": true,
-      "save": true
-    },
     "shell": {
       "open": true
     }

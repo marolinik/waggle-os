@@ -18,7 +18,7 @@ fn generate_tray_icon() -> (Vec<u8>, u32, u32) {
             let dist = (cx * cx + cy * cy).sqrt();
             if dist < 14.0 {
                 // Orange: #E8922A
-                rgba[idx] = 0xE8;     // R
+                rgba[idx] = 0xE8; // R
                 rgba[idx + 1] = 0x92; // G
                 rgba[idx + 2] = 0x2A; // B
                 rgba[idx + 3] = 0xFF; // A
@@ -28,15 +28,20 @@ fn generate_tray_icon() -> (Vec<u8>, u32, u32) {
     (rgba, size, size)
 }
 
+fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let show = MenuItemBuilder::with_id("show", "Open Waggle").build(app)?;
-    let pause = MenuItemBuilder::with_id("pause", "Pause Agents").build(app)?;
     let settings = MenuItemBuilder::with_id("settings", "Settings").build(app)?;
-    let about = MenuItemBuilder::with_id("about", "About Waggle").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit Waggle").build(app)?;
 
     let menu = MenuBuilder::new(app)
-        .items(&[&show, &pause, &settings, &about, &quit])
+        .items(&[&show, &settings, &quit])
         .build()?;
 
     let (rgba, w, h) = generate_tray_icon();
@@ -48,34 +53,20 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("Waggle Agent Service")
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            "pause" => {
-                // Emit event to frontend
-                let _ = app.emit("waggle://pause-agents", ());
+                show_main_window(app);
             }
             "settings" => {
+                show_main_window(app);
                 let _ = app.emit("waggle://navigate", "/settings");
             }
-            "about" => {
-                let _ = app.emit("waggle://navigate", "/about");
-            }
             "quit" => {
-                // Emit quit event — React handles cleanup then exits via Tauri API
-                let _ = app.emit("waggle://quit", ());
+                app.exit(0);
             }
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let tauri::tray::TrayIconEvent::Click { .. } = event {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                show_main_window(tray.app_handle());
             }
         })
         .build(app)?;
