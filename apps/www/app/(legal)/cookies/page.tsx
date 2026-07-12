@@ -12,12 +12,8 @@ export default function CookiesPage() {
   return (
     <article>
       <h1 style={h1Style}>Cookie Policy</h1>
-      <p style={pendingNoteStyle}>
-        Day-0 placeholder text. Final version pending Egzakta Group legal
-        counsel review.
-      </p>
       <p style={metaLineStyle}>
-        <strong>Effective date:</strong> [Day-0 launch date] · <strong>Last updated:</strong> [Day-0 launch date]
+        <strong>Effective date:</strong> July 8, 2026 · <strong>Last updated:</strong> July 8, 2026
       </p>
       <p style={paragraphStyle}>
         This Cookie Policy explains how Waggle OS uses cookies and similar
@@ -114,17 +110,6 @@ const h3Style: CSSProperties = {
   marginTop: 16,
   marginBottom: 8,
   color: 'var(--hive-100, #d8cfba)',
-};
-
-const pendingNoteStyle: CSSProperties = {
-  fontSize: 13,
-  fontStyle: 'italic',
-  color: 'var(--honey-400, #f6c45a)',
-  background: 'rgba(233, 165, 44, 0.06)',
-  border: '1px solid var(--honey-500, #e9a52c)',
-  borderRadius: 8,
-  padding: '12px 16px',
-  marginBottom: 24,
 };
 
 const metaLineStyle: CSSProperties = {

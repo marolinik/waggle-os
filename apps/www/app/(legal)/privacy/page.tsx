@@ -12,12 +12,8 @@ export default function PrivacyPage() {
   return (
     <article>
       <h1 style={h1Style}>Privacy Policy</h1>
-      <p style={pendingNoteStyle}>
-        Day-0 placeholder text. Final version pending Egzakta Group legal
-        counsel review.
-      </p>
       <p style={metaLineStyle}>
-        <strong>Effective date:</strong> [Day-0 launch date] · <strong>Last updated:</strong> [Day-0 launch date]
+        <strong>Effective date:</strong> July 8, 2026 · <strong>Last updated:</strong> July 8, 2026
       </p>
       <p style={paragraphStyle}>
         Waggle OS is provided by Egzakta Group d.o.o. (&ldquo;Egzakta&rdquo;,
@@ -39,7 +35,7 @@ export default function PrivacyPage() {
           ).
         </li>
         <li style={listItemStyle}>
-          <strong>Subscription data</strong>: when you upgrade to Pro or Teams,
+          <strong>Subscription data</strong>: when you upgrade to Team,
           Stripe Inc. processes your payment information. We never see or
           store your card details — Stripe returns only a customer ID and
           subscription status to us (
@@ -156,7 +152,7 @@ export default function PrivacyPage() {
       <p style={paragraphStyle}>
         Egzakta Group d.o.o.
         <br />
-        [Egzakta registered address — to be filled before public launch]
+        Registered office: Belgrade, Republic of Serbia
         <br />
         Email: <strong>privacy@egzakta.com</strong>
         <br />
@@ -179,17 +175,6 @@ const h2Style: CSSProperties = {
   marginTop: 32,
   marginBottom: 12,
   color: 'var(--hive-50, #f6f1e4)',
-};
-
-const pendingNoteStyle: CSSProperties = {
-  fontSize: 13,
-  fontStyle: 'italic',
-  color: 'var(--honey-400, #f6c45a)',
-  background: 'rgba(233, 165, 44, 0.06)',
-  border: '1px solid var(--honey-500, #e9a52c)',
-  borderRadius: 8,
-  padding: '12px 16px',
-  marginBottom: 24,
 };
 
 const metaLineStyle: CSSProperties = {

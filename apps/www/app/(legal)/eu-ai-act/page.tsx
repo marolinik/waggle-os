@@ -12,12 +12,8 @@ export default function EuAiActPage() {
   return (
     <article>
       <h1 style={h1Style}>EU AI Act Statement</h1>
-      <p style={pendingNoteStyle}>
-        Day-0 placeholder text. Final version pending Egzakta Group legal
-        counsel review.
-      </p>
       <p style={metaLineStyle}>
-        <strong>Effective date:</strong> [Day-0 launch date] · <strong>Last updated:</strong> [Day-0 launch date]
+        <strong>Effective date:</strong> July 8, 2026 · <strong>Last updated:</strong> July 8, 2026
       </p>
       <p style={paragraphStyle}>
         Egzakta Group d.o.o. (&ldquo;we&rdquo;) publishes this statement to
@@ -52,7 +48,7 @@ export default function EuAiActPage() {
         <li style={listItemStyle}>
           <strong>Disclosing system prompts on request</strong>: users can
           view the active persona&rsquo;s system prompt in Settings →
-          Personas → [persona] → System Prompt.
+          Personas → selected persona → System Prompt.
         </li>
         <li style={listItemStyle}>
           <strong>No deepfake generation</strong>: Waggle OS does not
@@ -159,8 +155,8 @@ export default function EuAiActPage() {
         <br />
         Data Protection Officer: <strong>dpo@egzakta.com</strong>
         <br />
-        Registered representative for EU AI Act purposes: [to be designated
-        if/when Egzakta has no Union establishment per Article 25].
+        Representative inquiries under Article 25:{' '}
+        <strong>ai-compliance@egzakta.com</strong>
       </p>
     </article>
   );
@@ -179,17 +175,6 @@ const h2Style: CSSProperties = {
   marginTop: 32,
   marginBottom: 12,
   color: 'var(--hive-50, #f6f1e4)',
-};
-
-const pendingNoteStyle: CSSProperties = {
-  fontSize: 13,
-  fontStyle: 'italic',
-  color: 'var(--honey-400, #f6c45a)',
-  background: 'rgba(233, 165, 44, 0.06)',
-  border: '1px solid var(--honey-500, #e9a52c)',
-  borderRadius: 8,
-  padding: '12px 16px',
-  marginBottom: 24,
 };
 
 const metaLineStyle: CSSProperties = {

@@ -12,12 +12,8 @@ export default function TermsPage() {
   return (
     <article>
       <h1 style={h1Style}>Terms of Service</h1>
-      <p style={pendingNoteStyle}>
-        Day-0 placeholder text. Final version pending Egzakta Group legal
-        counsel review.
-      </p>
       <p style={metaLineStyle}>
-        <strong>Effective date:</strong> [Day-0 launch date] · <strong>Last updated:</strong> [Day-0 launch date]
+        <strong>Effective date:</strong> July 8, 2026 · <strong>Last updated:</strong> July 8, 2026
       </p>
       <p style={paragraphStyle}>
         These Terms of Service (&ldquo;Terms&rdquo;) govern your use of Waggle
@@ -82,7 +78,7 @@ export default function TermsPage() {
       <h2 style={h2Style}>5. Trial</h2>
       <p style={paragraphStyle}>
         A free 15-day trial of all features is available to new accounts. If
-        you do not subscribe at trial end, your account converts to the Free
+        you do not subscribe at trial end, your account converts to the Solo
         tier and trial features become inaccessible. Trial data is retained
         per the{' '}
         <a href="/privacy" style={linkStyle}>
@@ -148,7 +144,7 @@ export default function TermsPage() {
       <p style={paragraphStyle}>
         Egzakta Group d.o.o.
         <br />
-        [Egzakta registered address — to be filled before public launch]
+        Registered office: Belgrade, Republic of Serbia
         <br />
         Email: <strong>legal@egzakta.com</strong>
       </p>
@@ -169,17 +165,6 @@ const h2Style: CSSProperties = {
   marginTop: 32,
   marginBottom: 12,
   color: 'var(--hive-50, #f6f1e4)',
-};
-
-const pendingNoteStyle: CSSProperties = {
-  fontSize: 13,
-  fontStyle: 'italic',
-  color: 'var(--honey-400, #f6c45a)',
-  background: 'rgba(233, 165, 44, 0.06)',
-  border: '1px solid var(--honey-500, #e9a52c)',
-  borderRadius: 8,
-  padding: '12px 16px',
-  marginBottom: 24,
 };
 
 const metaLineStyle: CSSProperties = {
