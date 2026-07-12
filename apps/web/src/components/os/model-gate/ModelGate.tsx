@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, AlertTriangle, Loader2, KeyRound, Cpu, ExternalLink } from 'lucide-react';
+import { Check, AlertTriangle, Loader2, KeyRound, Cpu, ExternalLink, RefreshCw } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useProviders, type Provider } from '@/hooks/useProviders';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,8 @@ interface ModelGateProps {
   onModelReady?: () => void;
   /** Styling only — 'onboarding' is full-bleed; 'settings' is an embedded card. */
   variant?: 'onboarding' | 'settings';
+  /** Let a parent-owned ready state replace this component's duplicate banner. */
+  suppressReadinessBanner?: boolean;
 }
 
 interface LocalStatus {
@@ -45,12 +47,30 @@ interface LocalStatus {
 type ValidateState =
   | { status: 'idle' }
   | { status: 'testing' }
-  | { status: 'saved'; verified: boolean }
+  | {
+      status: 'saved';
+      verified: boolean;
+      defaultModel?: string;
+      defaultModelSaveFailed?: boolean;
+      routerWarning?: string;
+    }
   | { status: 'error'; message: string };
 
-export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps) {
-  const { providers, activeProviders, loading: providersLoading, refresh: refreshProviders } = useProviders();
+export function ModelGate({
+  onModelReady,
+  variant = 'settings',
+  suppressReadinessBanner = false,
+}: ModelGateProps) {
+  const {
+    providers,
+    activeProviders,
+    loading: providersLoading,
+    error: providersError,
+    refresh: refreshProviders,
+  } = useProviders();
   const [tab, setTab] = useState<'cloud' | 'local'>('cloud');
+  const [retryingProviders, setRetryingProviders] = useState(false);
+  const [retryingRouter, setRetryingRouter] = useState(false);
 
   // Cloud key entry
   const [selected, setSelected] = useState<string | null>(null);
@@ -94,7 +114,8 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   // Same readiness predicate as useHasWorkingModel — computed inline from data we hold.
   const cloudReady = activeProviders.length > 0;
   const localReady = (local?.totalLocalModels ?? 0) > 0;
-  const ready = cloudReady || localReady;
+  const routerBlocked = validate.status === 'saved' && Boolean(validate.routerWarning);
+  const ready = (cloudReady && !routerBlocked) || localReady;
 
   // MODEL-GATE: on mount, first live-probe the workspace's ACTUAL default model
   // (not just a provider key). Only when no default model is configured do we
@@ -104,8 +125,12 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
   useEffect(() => {
     if (providersLoading) return;
     let cancelled = false;
-    setProbe({ status: 'probing' });
     const ids = activeProviders.map((p) => p.id);
+    if (ids.length === 0) {
+      setProbe({ status: 'idle' });
+      return;
+    }
+    setProbe({ status: 'probing' });
 
     const run = (async (): Promise<void> => {
       // 1) Probe the actual default model.
@@ -133,7 +158,6 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
       }
 
       // 2) No default model → F3 per-provider stored-key fallback.
-      if (ids.length === 0) { setProbe({ status: 'idle' }); return; }
       const outcome = await Promise.allSettled(ids.map((id) => adapter.probeProvider(id)));
       if (cancelled) return;
       // outcome[i] ↔ ids[i] ↔ activeProviders[i], so the display name lines up.
@@ -188,12 +212,27 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     () => providers.filter((p) => p.requiresKey && p.id !== 'ollama'),
     [providers],
   );
+  const catalogNeedsRefresh = useMemo(
+    () => providers.some((p) => p.hasKey && (p.modelsSource === 'stale-provider-api' || p.modelsSource === 'unavailable')),
+    [providers],
+  );
   const selectedProvider = keyProviders.find((p) => p.id === selected) ?? null;
 
   const handleSelect = (id: string) => {
     setSelected(id);
     setKeyValue('');
     setValidate({ status: 'idle' });
+    // Keep the next action in view on compact onboarding/settings layouts.
+    // The provider grid can be taller than the viewport, so selecting a tile
+    // should land the user directly on the key field rather than leaving them
+    // to discover it below the fold.
+    window.setTimeout(() => {
+      const el = document.getElementById('model-gate-key');
+      if (el instanceof HTMLInputElement) {
+        el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+        el.focus();
+      }
+    }, 60);
   };
 
   // "Fix it now" (failed banner): jump straight to the offending provider's key
@@ -211,6 +250,15 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     }, 60);
   };
 
+  const handleRetryProviders = async () => {
+    setRetryingProviders(true);
+    try {
+      await refreshProviders();
+    } finally {
+      setRetryingProviders(false);
+    }
+  };
+
   const handleValidateAndSave = async () => {
     const key = keyValue.trim();
     if (!selectedProvider || !key) return;
@@ -221,16 +269,70 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
         setValidate({ status: 'error', message: res.error || 'That key was rejected.' });
         return;
       }
-      await adapter.setProviderKey(selectedProvider.id, key);
-      setValidate({ status: 'saved', verified: res.verified === true });
+      const shouldSelectFirstCloudModel = activeProviders.length === 0 && (res.verified === true || !localReady);
+      const saved = await adapter.setProviderKey(selectedProvider.id, key);
+      const refreshed = await refreshProviders();
+      const firstCloudModel = shouldSelectFirstCloudModel
+        ? refreshed?.providers.find((p) => p.id === selectedProvider.id)?.models[0]?.id
+        : undefined;
+      let defaultModelSaveFailed = false;
+      if (firstCloudModel) {
+        try {
+          await adapter.saveSettings({ defaultModel: firstCloudModel });
+        } catch {
+          // The key is already safely stored; keep that success distinct from
+          // a secondary default-model preference write that can be retried in Settings.
+          defaultModelSaveFailed = true;
+        }
+      }
+      setValidate({
+        status: 'saved',
+        verified: res.verified === true,
+        defaultModel: firstCloudModel,
+        defaultModelSaveFailed,
+        ...((saved.router && !saved.router.ready) ? {
+          routerWarning: saved.router.error ?? 'The model router did not become ready.',
+        } : {}),
+      });
       // F3: a freshly verified key upgrades the banner immediately, without
       // waiting out the 60s probe cache.
-      if (res.verified === true) setProbe({ status: 'verified', verifiedProvider: selectedProvider.name });
+      if (saved.router?.ready === false && !localReady) {
+        setProbe({ status: 'idle' });
+      } else if (res.verified === true) {
+        setProbe({ status: 'verified', verifiedProvider: selectedProvider.name });
+      }
       setKeyValue('');
-      await refreshProviders();
-      onModelReady?.();
+      if (saved.router?.ready !== false || localReady) onModelReady?.();
     } catch {
       setValidate({ status: 'error', message: 'Could not save the key — check your connection and try again.' });
+    }
+  };
+
+  const handleRetryRouter = async () => {
+    if (validate.status !== 'saved') return;
+    setRetryingRouter(true);
+    try {
+      const result = await adapter.restartModelRouter();
+      if (!result.running) {
+        setValidate((current) => current.status === 'saved'
+          ? { ...current, routerWarning: result.error ?? 'The model router did not become ready.' }
+          : current);
+        return;
+      }
+      await refreshProviders();
+      setValidate((current) => current.status === 'saved'
+        ? { ...current, routerWarning: undefined }
+        : current);
+      if (validate.verified) {
+        setProbe({ status: 'verified', verifiedProvider: selectedProvider?.name });
+      }
+      onModelReady?.();
+    } catch {
+      setValidate((current) => current.status === 'saved'
+        ? { ...current, routerWarning: 'Could not restart the model router.' }
+        : current);
+    } finally {
+      setRetryingRouter(false);
     }
   };
 
@@ -266,6 +368,11 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
     const failing = probe.status === 'failed' && probe.failedProvider === p.id;
     const isSelected = selected === p.id;
     const stateWord = failing ? 'not responding' : p.hasKey ? 'Key in Vault' : 'No key yet';
+    const catalogWord = p.hasKey && p.modelsSource === 'unavailable'
+      ? 'Catalog unavailable'
+      : p.hasKey && p.modelsSource === 'stale-provider-api'
+        ? 'Last known catalog'
+        : null;
     // R9: amber is reserved for the SELECTED tile and red for the erroring one —
     // keyed tiles rest NEUTRAL (surface + soft line) so a dozen of them stop
     // reading as honey wallpaper. The keyed signal is the honey Check + "Key in
@@ -314,6 +421,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
           </div>
           <span className="text-[11px] text-[var(--text-muted)]">
             {p.models.length > 0 ? `${p.models.length} model${p.models.length === 1 ? '' : 's'} · ` : ''}
+            {catalogWord ? `${catalogWord} · ` : ''}
             {stateWord}
           </span>
         </div>
@@ -329,14 +437,14 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
           (Lane B): single-truth. While resolving, paint NOTHING until the 300ms
           grace elapses, then a neutral "Checking your models…"; once settled,
           render EXACTLY ONE verdict below — no intermediate verdict may paint. */}
-      {resolving ? (
+      {!suppressReadinessBanner && (resolving ? (
         showChecking ? (
           <div role="status" className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
             <span aria-hidden className="shrink-0"><BeeLoader size={22} /></span>
             <span>Checking your models…</span>
           </div>
         ) : null
-      ) : probe.status === 'verified' ? (
+      ) : probe.status === 'verified' && (!routerBlocked || localReady) ? (
         <div role="status" className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2.5 text-sm text-foreground">
           <Check className="size-4 shrink-0 text-honey" aria-hidden />
           <span>
@@ -387,7 +495,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
             </>
           )}
         </div>
-      )}
+      ))}
 
       {/* Tabs */}
       {/* Content-sized 2-segment control (not a full-width band): inline-flex so
@@ -422,6 +530,30 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
           <p className="text-xs text-muted-foreground">
             Bring your own key — it’s stored encrypted in your Vault and never leaves your machine.
           </p>
+          {(providersError || catalogNeedsRefresh) && (
+            <div
+              role={providersError ? 'alert' : 'status'}
+              className="flex items-center gap-2 rounded-lg border border-[var(--risk)]/30 bg-[var(--risk-wash)] px-3 py-2.5 text-sm text-foreground"
+            >
+              <AlertTriangle className="size-4 shrink-0 text-[var(--risk)]" aria-hidden />
+              <span className="min-w-0 flex-1">
+                {providersError && keyProviders.length > 0
+                  ? 'Provider status could not be refreshed. Your existing choices are still available.'
+                  : providersError
+                    ? 'Providers could not be loaded. Check that the local service is running, then retry.'
+                    : 'A provider model catalog could not be refreshed. Last-known models remain available.'}
+              </span>
+              <button
+                type="button"
+                onClick={() => { void handleRetryProviders(); }}
+                disabled={retryingProviders}
+                className="shrink-0 rounded-md border border-[var(--risk)]/40 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-[var(--risk)]/10 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <RefreshCw className={`mr-1 inline size-3.5 ${retryingProviders ? 'animate-spin' : ''}`} aria-hidden />
+                {retryingProviders ? 'Refreshing…' : providersError ? 'Retry' : 'Refresh catalogs'}
+              </button>
+            </div>
+          )}
           {providersLoading && keyProviders.length === 0 ? (
             <span className="text-sm text-muted-foreground">Loading providers…</span>
           ) : keyedProviders.length > 0 ? (
@@ -457,6 +589,7 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
               </label>
               <Input
                 id="model-gate-key"
+                name="modelProviderKey"
                 type="password"
                 autoComplete="off"
                 value={keyValue}
@@ -494,13 +627,36 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
                   {validate.status === 'testing' ? 'Validating…' : 'Validate & save'}
                 </button>
               </div>
-              {validate.status === 'saved' && (
+              {validate.status === 'saved' && !validate.routerWarning && (
                 <p role="status" className="flex items-center gap-1.5 text-sm text-honey">
                   <Check className="size-4" aria-hidden />
-                  {validate.verified
-                    ? 'Verified and saved.'
-                    : 'Saved — the key looks valid (not live-verified).'}
+                  {validate.defaultModelSaveFailed
+                    ? `Saved — ${selectedProvider.name} is ready. Choose a model in Settings.`
+                    : validate.defaultModel
+                    ? validate.verified
+                      ? `Verified and saved. ${selectedProvider.name} is now your primary model.`
+                      : `Saved — ${selectedProvider.name} is now your primary model.`
+                    : validate.verified
+                      ? 'Verified and saved.'
+                      : localReady
+                        ? 'Saved — the key looks valid. Your local model stays primary until this key is verified.'
+                        : 'Saved — the key looks valid (not live-verified).'}
                 </p>
+              )}
+              {validate.status === 'saved' && validate.routerWarning && (
+                <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-destructive">
+                  <AlertTriangle className="size-4 shrink-0" aria-hidden />
+                  <span>Key saved, but models are not ready. {validate.routerWarning}</span>
+                  <button
+                    type="button"
+                    onClick={handleRetryRouter}
+                    disabled={retryingRouter}
+                    className="inline-flex items-center gap-1 rounded-md border border-current px-2 py-1 font-medium disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <RefreshCw className={`size-3.5 ${retryingRouter ? 'animate-spin' : ''}`} aria-hidden />
+                    {retryingRouter ? 'Retrying…' : 'Retry router'}
+                  </button>
+                </div>
               )}
               {validate.status === 'error' && (
                 <p role="alert" className="flex items-center gap-1.5 text-sm text-destructive">
@@ -526,6 +682,8 @@ export function ModelGate({ onModelReady, variant = 'settings' }: ModelGateProps
             </label>
             <Input
               id="model-gate-pull"
+              name="modelPullName"
+              autoComplete="off"
               value={pullName}
               onChange={(e) => setPullName(e.target.value)}
               placeholder="e.g. llama3.2"

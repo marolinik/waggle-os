@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
     getLocalInferenceStatus: vi.fn(),
     testApiKey: vi.fn(),
     setProviderKey: vi.fn(),
+    restartModelRouter: vi.fn(),
+    saveSettings: vi.fn(),
     pullLocalModel: vi.fn(),
     probeProvider: vi.fn(),
     probeModel: vi.fn(),
@@ -21,7 +23,11 @@ vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
 import { ModelGate } from './ModelGate';
 
-const providersResp = (...defs: { id: string; hasKey: boolean }[]) => ({
+const providersResp = (...defs: {
+  id: string;
+  hasKey: boolean;
+  models?: Array<{ id: string; name: string; cost?: string; speed?: string }>;
+}[]) => ({
   providers: defs.map((d) => ({
     id: d.id,
     name: d.id.charAt(0).toUpperCase() + d.id.slice(1),
@@ -29,7 +35,12 @@ const providersResp = (...defs: { id: string; hasKey: boolean }[]) => ({
     badge: null,
     keyUrl: 'https://example.com/keys',
     requiresKey: d.id !== 'ollama',
-    models: [],
+    models: (d.models ?? []).map((m) => ({
+      id: m.id,
+      name: m.name,
+      cost: m.cost ?? '$',
+      speed: m.speed ?? 'fast',
+    })),
   })),
   search: [],
   activeSearch: 'duckduckgo',
@@ -43,7 +54,14 @@ beforeEach(() => {
   );
   mocks.adapter.getLocalInferenceStatus.mockResolvedValue(noLocal);
   mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: true });
-  mocks.adapter.setProviderKey.mockResolvedValue(undefined);
+  mocks.adapter.setProviderKey.mockResolvedValue({ router: { managed: true, ready: true } });
+  mocks.adapter.restartModelRouter.mockResolvedValue({
+    running: true,
+    port: 4000,
+    models: [],
+    unavailableProviders: [],
+  });
+  mocks.adapter.saveSettings.mockResolvedValue(undefined);
   mocks.adapter.pullLocalModel.mockResolvedValue({ ok: true });
   // F3: default probe = network-degrade neutral (valid, not verified) so the
   // key-presence tests keep their "You have a working model" wording.
@@ -68,9 +86,51 @@ describe('ModelGate', () => {
     expect(screen.queryByRole('button', { name: /^ollama$/i })).not.toBeInTheDocument();
   });
 
+  it('a11y: model setup fields expose stable form metadata', async () => {
+    render(<ModelGate />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /anthropic/i }));
+    const key = await screen.findByLabelText(/api key for anthropic/i);
+    expect(key).toHaveAttribute('name', 'modelProviderKey');
+    expect(key).toHaveAttribute('autocomplete', 'off');
+
+    fireEvent.click(screen.getByRole('tab', { name: /local model/i }));
+    const pull = await screen.findByLabelText(/pull a model/i);
+    expect(pull).toHaveAttribute('name', 'modelPullName');
+    expect(pull).toHaveAttribute('autocomplete', 'off');
+  });
+
+  it('focuses the key field after a provider is selected', async () => {
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    render(<ModelGate />);
+
+    fireEvent.click(await screen.findByRole('button', { name: /anthropic/i }));
+    const key = await screen.findByLabelText(/api key for anthropic/i);
+
+    await waitFor(() => expect(document.activeElement).toBe(key));
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center', behavior: 'smooth' });
+  });
+
   it('shows "no working model yet" when nothing is keyed or local', async () => {
     render(<ModelGate />);
     expect(await screen.findByText(/no working model yet/i)).toBeInTheDocument();
+  });
+
+  it('shows a retry path when the provider catalog fails on first run', async () => {
+    mocks.adapter.getProviders.mockRejectedValueOnce(new Error('sidecar offline'));
+    render(<ModelGate />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/providers could not be loaded/i);
+    expect(screen.queryByRole('button', { name: /anthropic/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^retry$/i }));
+
+    await waitFor(() => expect(mocks.adapter.getProviders).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('button', { name: /anthropic/i })).toBeInTheDocument();
   });
 
   it('a keyed provider settles on ONE honest verdict — never the empty "no working model yet" state', async () => {
@@ -96,6 +156,94 @@ describe('ModelGate', () => {
     // F3: the save confirmation AND the banner now both read "verified" — assert
     // the specific saved-state line to disambiguate.
     expect(await screen.findByText(/verified and saved/i)).toBeInTheDocument();
+  });
+
+  it('saving the first cloud key also selects that provider default model', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(
+      providersResp({
+        id: 'openai',
+        hasKey: false,
+        models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      }),
+    );
+    render(<ModelGate />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    await waitFor(() => expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'gpt-4o' }));
+  });
+
+  it('saving the first cloud key also selects its model when a local model is available', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(
+      providersResp({
+        id: 'openai',
+        hasKey: false,
+        models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      }),
+    );
+    mocks.adapter.getLocalInferenceStatus.mockResolvedValue({
+      servers: [{ id: 'ollama' }],
+      ollamaInstalled: true,
+      totalLocalModels: 1,
+    });
+    render(<ModelGate />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    await waitFor(() => expect(mocks.adapter.saveSettings).toHaveBeenCalledWith({ defaultModel: 'gpt-4o' }));
+  });
+
+  it('keeps a known local model primary when the new cloud key is only format-validated', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(
+      providersResp({
+        id: 'openai',
+        hasKey: false,
+        models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+      }),
+    );
+    mocks.adapter.getLocalInferenceStatus.mockResolvedValue({
+      servers: [{ id: 'ollama' }],
+      ollamaInstalled: true,
+      totalLocalModels: 1,
+    });
+    mocks.adapter.testApiKey.mockResolvedValue({ valid: true, verified: false });
+    render(<ModelGate />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalledWith(
+      'openai',
+      'sk-xxxxxxxxxxxxxxxxxxxxxxxx',
+    ));
+    expect(mocks.adapter.setProviderKey).not.toHaveBeenCalledWith(
+      'openai',
+      'sk-xxxxxxxxxxxxxxxxxxxxxxxx',
+      undefined,
+      'gpt-4o',
+    );
+    expect(await screen.findByText(/local model stays primary/i)).toBeInTheDocument();
+  });
+
+  it('saving an additional cloud key does not silently switch the workspace default model', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(
+      providersResp(
+        {
+          id: 'anthropic',
+          hasKey: true,
+          models: [{ id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6' }],
+        },
+        {
+          id: 'openai',
+          hasKey: false,
+          models: [{ id: 'gpt-4o', name: 'GPT-4o' }],
+        },
+      ),
+    );
+    render(<ModelGate />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    await waitFor(() => expect(mocks.adapter.setProviderKey).toHaveBeenCalledWith('openai', 'sk-xxxxxxxxxxxxxxxxxxxxxxxx'));
   });
 
   it('a format-only valid key (not live-verified) saves but does NOT claim "verified"', async () => {
@@ -143,10 +291,44 @@ describe('ModelGate', () => {
     expect(await screen.findByLabelText(/api key for anthropic/i)).toBeInTheDocument();
   });
 
-  it('does not probe when nothing is keyed', async () => {
+  it('does not probe the default model or provider keys when nothing is keyed', async () => {
+    mocks.adapter.probeModel.mockResolvedValue({
+      model: 'claude-sonnet-4-6',
+      configured: true,
+      verified: false,
+      rejected: true,
+    });
     render(<ModelGate />);
     expect(await screen.findByText(/no working model yet/i)).toBeInTheDocument();
+    expect(mocks.adapter.probeModel).not.toHaveBeenCalled();
     expect(mocks.adapter.probeProvider).not.toHaveBeenCalled();
+  });
+
+  it('keeps router failure distinct from key-save success and offers an inline retry', async () => {
+    const onModelReady = vi.fn();
+    mocks.adapter.setProviderKey.mockResolvedValue({
+      router: {
+        managed: true,
+        ready: false,
+        port: 4000,
+        models: [],
+        unavailableProviders: ['openai'],
+        error: 'Provider catalog is temporarily unavailable.',
+      },
+    });
+    render(<ModelGate onModelReady={onModelReady} />);
+    await selectProviderAndType(/openai/i, 'sk-xxxxxxxxxxxxxxxxxxxxxxxx');
+    fireEvent.click(screen.getByRole('button', { name: /validate & save/i }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/key saved, but models are not ready/i);
+    expect(onModelReady).not.toHaveBeenCalled();
+    expect(screen.queryByText(/you.re ready to go/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /retry router/i }));
+    await waitFor(() => expect(mocks.adapter.restartModelRouter).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onModelReady).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/models are not ready/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/you.re ready to go/i)).toBeInTheDocument();
   });
 
   it('a network-degraded probe (valid, not verified) settles on the honest neutral, never an over-claim', async () => {
@@ -163,6 +345,7 @@ describe('ModelGate', () => {
 
   // ── MODEL-GATE: probe the workspace's actual default model ──
   it('probes the default model on mount and names it when verified', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providersResp({ id: 'anthropic', hasKey: true }));
     mocks.adapter.probeModel.mockResolvedValue({ model: 'claude-sonnet-4-6', configured: true, verified: true });
     render(<ModelGate />);
     expect(await screen.findByText(/model verified \(claude-sonnet-4-6\)/i)).toBeInTheDocument();
