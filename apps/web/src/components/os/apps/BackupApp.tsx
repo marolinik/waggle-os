@@ -2,6 +2,7 @@ import { useState, useEffect, type ChangeEvent } from 'react';
 import { Archive, Download, Upload, Loader2, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 
 interface BackupMeta {
   timestamp: string;
@@ -32,6 +33,7 @@ const BackupApp = () => {
   const [creating, setCreating] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [pendingRestoreFile, setPendingRestoreFile] = useState<File | null>(null);
 
   const loadMetadata = () => {
     setLoading(true);
@@ -71,13 +73,7 @@ const BackupApp = () => {
     setCreating(false);
   };
 
-  const handleRestore = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    // Reset the input so re-selecting the same file fires onChange again.
-    e.target.value = '';
-    if (!file) return;
-    if (!window.confirm('Restoring will overwrite current data with this backup. Continue?')) return;
-
+  const restoreBackup = async (file: File) => {
     setRestoring(true);
     setLastResult(null);
     try {
@@ -109,6 +105,34 @@ const BackupApp = () => {
     setRestoring(false);
   };
 
+  const handleRestore = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset the input so re-selecting the same file fires onChange again.
+    e.target.value = '';
+    if (!file) return;
+    setLastResult(null);
+    setPendingRestoreFile(file);
+  };
+
+  const restoreApproval: ApprovalRequest | null = pendingRestoreFile
+    ? {
+      action: `Restore backup: ${pendingRestoreFile.name}`,
+      riskLevel: 'critical',
+      scope: [
+        'Overwrite current data with the selected backup.',
+        'Current workspaces, sessions, and memory may be replaced.',
+        'A restart is required after restore succeeds.',
+      ],
+    }
+    : null;
+
+  const confirmRestore = async () => {
+    if (!pendingRestoreFile) return;
+    const file = pendingRestoreFile;
+    await restoreBackup(file);
+    setPendingRestoreFile(null);
+  };
+
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -132,7 +156,7 @@ const BackupApp = () => {
             <label className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors font-display cursor-pointer ${creating || restoring ? 'opacity-50 pointer-events-none' : ''}`}>
               {restoring ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
               {restoring ? 'Restoring...' : 'Restore'}
-              <input type="file" accept=".waggle-backup" className="hidden" disabled={creating || restoring} onChange={handleRestore} />
+              <input type="file" accept=".waggle-backup" aria-label="Restore backup file" className="sr-only" disabled={creating || restoring} onChange={handleRestore} />
             </label>
           </div>
         </div>
@@ -179,13 +203,22 @@ const BackupApp = () => {
                 </div>
                 <label className={`text-[11px] text-honey hover:text-honey/80 font-display cursor-pointer ${creating || restoring ? 'opacity-50 pointer-events-none' : ''}`}>
                   Restore
-                  <input type="file" accept=".waggle-backup" className="hidden" disabled={creating || restoring} onChange={handleRestore} />
+                  <input type="file" accept=".waggle-backup" aria-label={`Restore backup file from ${new Date(b.timestamp).toLocaleString(DATE_LOCALE)}`} className="sr-only" disabled={creating || restoring} onChange={handleRestore} />
                 </label>
               </div>
             ))}
           </div>
         )}
       </div>
+      <ApprovalModal
+        request={restoreApproval}
+        approveLabel={restoring ? 'Restoring...' : 'Restore backup'}
+        busy={restoring}
+        onApprove={() => { void confirmRestore(); }}
+        onCancel={() => {
+          if (!restoring) setPendingRestoreFile(null);
+        }}
+      />
     </div>
   );
 };

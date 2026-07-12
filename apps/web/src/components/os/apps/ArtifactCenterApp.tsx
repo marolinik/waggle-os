@@ -10,7 +10,9 @@ import type { Artifact, ArtifactKind, ArtifactStatus, RelatedSearchResult } from
 import { DetailDrawer } from '@/components/ui/detail-drawer';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { Input } from '@/components/ui/input';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { cn } from '@/lib/utils';
+import { createSurfaceCache, surfaceCacheKey } from '@/lib/surface-cache';
 
 /**
  * Artifact Center (UX-Refactor Phase 2C, S05). The outcome layer: produced
@@ -47,6 +49,14 @@ const KIND_TINT: Record<ArtifactKind, { bg: string; fg: string }> = {
 };
 const KINDS = Object.keys(KIND_META) as ArtifactKind[];
 
+/** Keyed warm cache for the artifact list; filters and workspace scope matter. */
+const artifactRouteCache = createSurfaceCache<Artifact[]>();
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only cache reset
+export function resetArtifactRouteCache(): void {
+  artifactRouteCache.resetForTests();
+}
+
 const STATUS_FILTERS: { value: '' | ArtifactStatus; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'draft', label: 'Draft' },
@@ -68,17 +78,21 @@ interface ArtifactCenterAppProps {
 }
 
 export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: ArtifactCenterAppProps) {
-  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const navigate = useNavigate();
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<'' | ArtifactKind>('');
   const [status, setStatus] = useState<'' | ArtifactStatus>('');
+  const listCacheKey = surfaceCacheKey(['artifacts', activeWorkspaceId, q.trim(), kind, status]);
+  const cachedArtifacts = artifactRouteCache.read(listCacheKey);
+  const [artifacts, setArtifacts] = useState<Artifact[]>(cachedArtifacts ?? []);
+  const [loading, setLoading] = useState(() => !artifactRouteCache.hasResolved(listCacheKey));
 
   const [selected, setSelected] = useState<Artifact | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Artifact | null>(null);
+  const [deletingArtifact, setDeletingArtifact] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
   const [draftKind, setDraftKind] = useState<ArtifactKind>('document');
   const [related, setRelated] = useState<RelatedSearchResult | null>(null);
@@ -91,7 +105,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
   const [newKind, setNewKind] = useState<ArtifactKind>('document');
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!artifactRouteCache.hasResolved(listCacheKey)) setLoading(true);
     setError(null);
     try {
       const res = await adapter.listArtifacts({
@@ -101,12 +115,14 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
         limit: 200,
       });
       setArtifacts(res);
+      artifactRouteCache.write(listCacheKey, res);
     } catch (e) {
+      if (!artifactRouteCache.hasResolved(listCacheKey)) setArtifacts([]);
       setError(e instanceof Error ? e.message : 'Failed to load artifacts');
     } finally {
       setLoading(false);
     }
-  }, [q, kind, status]);
+  }, [listCacheKey, q, kind, status]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 250 : 0); // debounce text search only
@@ -161,9 +177,31 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
   // Restore the pre-archive status the server stashed in prevStatus (A8 faithful
   // reversibility), falling back to 'draft' only when none was recorded (F3).
   const unarchive = (a: Artifact) => void mutate(() => adapter.patchArtifact(a.id, { status: a.prevStatus ?? 'draft' }, a.workspaceId), true);
-  const remove = (a: Artifact) => {
-    if (!window.confirm(`Delete this artifact permanently?\n\n"${a.title}"\n\nThis removes the record (the backing file, if any, is left in place). To keep it but hide it, use Archive instead.`)) return;
-    void mutate(() => adapter.deleteArtifact(a.id, a.workspaceId), true);
+  const deleteRequest: ApprovalRequest | null = deleteTarget ? {
+    action: `Delete artifact permanently: ${deleteTarget.title}`,
+    scope: [
+      'This removes the artifact record from Waggle.',
+      'The backing file, if any, is left in place.',
+      'Use Archive instead if you only want to hide it from active views.',
+    ],
+    riskLevel: 'medium',
+  } : null;
+  const remove = (a: Artifact) => setDeleteTarget(a);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletingArtifact(true);
+    setBusy(true);
+    try {
+      await adapter.deleteArtifact(deleteTarget.id, deleteTarget.workspaceId);
+      setSelected(null);
+      setDeleteTarget(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      setDeletingArtifact(false);
+      setBusy(false);
+    }
   };
 
   const relatedCount = related
@@ -175,9 +213,12 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
       {/* Filter + create bar */}
       <div className="border-b border-border/50 p-2.5 space-y-2 bg-background/60">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1">
+          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg border border-[var(--line)] px-2 py-1 flex-1 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
             <Search className="w-3.5 h-3.5 text-muted-foreground" />
             <Input
+              aria-label="Search artifacts"
+              name="artifactSearch"
+              autoComplete="off"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search artifacts..."
@@ -225,6 +266,9 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
         {activeWorkspaceId && (
           <div className="flex items-center gap-1.5">
             <Input
+              aria-label="New artifact title"
+              name="artifactTitle"
+              autoComplete="off"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') create(); }}
@@ -232,9 +276,11 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               className="flex-1 text-xs h-7"
             />
             <select
+              name="artifactKind"
+              autoComplete="off"
               value={newKind}
               onChange={(e) => setNewKind(e.target.value as ArtifactKind)}
-              className="text-[11px] rounded-md border border-border bg-muted/40 px-2 py-1 text-muted-foreground"
+              className="text-[11px] rounded-md border border-border bg-muted/40 px-2 py-1 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               aria-label="New artifact kind"
             >
               {KINDS.map((k) => <option key={k} value={k}>{KIND_META[k].label}</option>)}
@@ -308,7 +354,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
                 <li key={a.id}>
                   <button
                     onClick={() => openDetail(a)}
-                    className="group w-full h-full flex flex-col gap-2 rounded-xl border border-border/60 bg-card/40 p-3 text-left hover:border-primary/40 hover:-translate-y-0.5 transition-all"
+                    className="group w-full h-full flex flex-col gap-2 rounded-xl border border-border/60 bg-card/40 p-3 text-left hover:border-primary/40 hover:-translate-y-0.5 transition-[border-color,transform]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span
@@ -374,6 +420,8 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               <label htmlFor="ac-draft-title" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Title</label>
               <Input
                 id="ac-draft-title"
+                name="artifactDraftTitle"
+                autoComplete="off"
                 value={draftTitle}
                 onChange={(e) => setDraftTitle(e.target.value)}
                 className="mt-1 text-sm h-8"
@@ -384,9 +432,11 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
               <label htmlFor="ac-draft-kind" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Kind</label>
               <select
                 id="ac-draft-kind"
+                name="artifactDraftKind"
+                autoComplete="off"
                 value={draftKind}
                 onChange={(e) => setDraftKind(e.target.value as ArtifactKind)}
-                className="mt-1 block w-full text-xs rounded-md border border-border bg-muted/40 px-2 py-1"
+                className="mt-1 block w-full text-xs rounded-md border border-border bg-muted/40 px-2 py-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {KINDS.map((k) => <option key={k} value={k}>{KIND_META[k].label}</option>)}
               </select>
@@ -435,6 +485,15 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
           </>
         )}
       </DetailDrawer>
+      <ApprovalModal
+        request={deleteRequest}
+        approveLabel={deletingArtifact ? 'Deleting...' : 'Delete artifact'}
+        busy={deletingArtifact}
+        onApprove={() => { void confirmDelete(); }}
+        onCancel={() => {
+          if (!deletingArtifact) setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }
@@ -442,7 +501,7 @@ export default function ArtifactCenterApp({ activeWorkspaceId, workspaceName }: 
 function RelatedGroup({ label, items }: { label: string; items: { id: string; text: string }[] }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">{label}</p>
+      <p className="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">{label}</p>
       <ul className="mt-0.5 space-y-0.5">
         {items.map((it) => (
           <li key={it.id} className="text-[11px] text-foreground/80 truncate">• {it.text}</li>

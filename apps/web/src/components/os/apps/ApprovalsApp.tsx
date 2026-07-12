@@ -18,7 +18,9 @@ import { Shield, ShieldCheck, Clock, X as XIcon, AlertTriangle, CheckCircle2, Re
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { RiskBadge, riskToneForTool } from './power/power-primitives';
+import { createSurfaceCache } from '@/lib/surface-cache';
 
 interface PendingApproval {
   requestId: string;
@@ -39,6 +41,20 @@ interface Grant {
   description: string;
   grantedAt: string;
   expiresAt: string | null;
+}
+
+interface ApprovalsCachePayload {
+  pending: PendingApproval[];
+  grants: Grant[];
+}
+
+/** Preserve the trust inbox while polling/revalidating after a route return. */
+const approvalsRouteCache = createSurfaceCache<ApprovalsCachePayload>();
+const APPROVALS_CACHE_KEY = 'inbox';
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only cache reset
+export function resetApprovalsRouteCache(): void {
+  approvalsRouteCache.resetForTests();
 }
 
 function formatRelative(iso: string | number): string {
@@ -124,13 +140,16 @@ const ApprovalsError = ({ message, onRetry, retrying }: { message: string; onRet
 const ApprovalsApp = () => {
   const { toast } = useToast();
   const [tab, setTab] = useState<'pending' | 'grants'>('pending');
-  const [pending, setPending] = useState<PendingApproval[]>([]);
-  const [grants, setGrants] = useState<Grant[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = approvalsRouteCache.read(APPROVALS_CACHE_KEY);
+  const [pending, setPending] = useState<PendingApproval[]>(cached?.pending ?? []);
+  const [grants, setGrants] = useState<Grant[]>(cached?.grants ?? []);
+  const [loading, setLoading] = useState(() => !approvalsRouteCache.hasResolved(APPROVALS_CACHE_KEY));
   const [error, setError] = useState<string | null>(null);
+  const [clearAllRequested, setClearAllRequested] = useState(false);
+  const [clearingGrants, setClearingGrants] = useState(false);
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (!approvalsRouteCache.hasResolved(APPROVALS_CACHE_KEY)) setLoading(true);
     // allSettled (not Promise.all + per-source .catch): a fetch FAILURE must
     // surface as an error on this trust surface, never be coerced into an empty
     // inbox. Partial success still renders (a grants failure doesn't hide pending).
@@ -138,8 +157,14 @@ const ApprovalsApp = () => {
       adapter.getPendingApprovals(),
       adapter.getApprovalGrants(),
     ]);
-    if (pendingRes.status === 'fulfilled') setPending(pendingRes.value.pending ?? []);
-    if (grantsRes.status === 'fulfilled') setGrants(grantsRes.value.grants ?? []);
+    const previous = approvalsRouteCache.read(APPROVALS_CACHE_KEY);
+    const nextPending = pendingRes.status === 'fulfilled' ? pendingRes.value.pending ?? [] : previous?.pending ?? [];
+    const nextGrants = grantsRes.status === 'fulfilled' ? grantsRes.value.grants ?? [] : previous?.grants ?? [];
+    setPending(nextPending);
+    setGrants(nextGrants);
+    if (pendingRes.status === 'fulfilled' && grantsRes.status === 'fulfilled') {
+      approvalsRouteCache.write(APPROVALS_CACHE_KEY, { pending: nextPending, grants: nextGrants });
+    }
     const failure = pendingRes.status === 'rejected' ? pendingRes.reason
       : grantsRes.status === 'rejected' ? grantsRes.reason : null;
     setError(failure ? (failure instanceof Error ? failure.message : 'Failed to load approvals') : null);
@@ -184,14 +209,28 @@ const ApprovalsApp = () => {
     }
   };
 
+  const clearAllRequest: ApprovalRequest | null = clearAllRequested ? {
+    action: 'Revoke all saved approval grants?',
+    scope: [
+      `${grants.length} saved grant${grants.length === 1 ? '' : 's'} will be revoked.`,
+      'Agents will ask again before using those tools or targets.',
+      'Existing audit history stays intact; this only removes the saved allow decisions.',
+    ],
+    riskLevel: 'medium',
+  } : null;
+
   const clearAllGrants = async () => {
-    if (!confirm('Revoke ALL saved approval grants? This cannot be undone.')) return;
+    if (grants.length === 0) return;
+    setClearingGrants(true);
     try {
       await adapter.clearApprovalGrants();
       setGrants([]);
+      setClearAllRequested(false);
       toast({ title: 'All grants revoked', description: `${grants.length} grants cleared.` });
     } catch {
       toast({ title: 'Failed to clear grants', variant: 'destructive' });
+    } finally {
+      setClearingGrants(false);
     }
   };
 
@@ -226,6 +265,8 @@ const ApprovalsApp = () => {
           </button>
           <HintTooltip content="Refresh">
             <button
+              type="button"
+              aria-label="Refresh approvals"
               onClick={refresh}
               disabled={loading}
               className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
@@ -357,7 +398,7 @@ const ApprovalsApp = () => {
                 {grants.length} active grant{grants.length === 1 ? '' : 's'}
               </p>
               <button
-                onClick={clearAllGrants}
+                onClick={() => setClearAllRequested(true)}
                 className="text-[11px] text-destructive hover:text-destructive/80 transition-colors"
               >
                 Revoke all
@@ -380,6 +421,8 @@ const ApprovalsApp = () => {
               </div>
               <HintTooltip content="Revoke this grant">
                 <button
+                  type="button"
+                  aria-label={`Revoke grant ${grant.description}`}
                   onClick={() => revokeGrant(grant)}
                   className="p-1 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
                 >
@@ -390,6 +433,15 @@ const ApprovalsApp = () => {
           ))}
         </div>
       )}
+      <ApprovalModal
+        request={clearAllRequest}
+        approveLabel={clearingGrants ? 'Revoking...' : 'Revoke all grants'}
+        busy={clearingGrants}
+        onApprove={clearAllGrants}
+        onCancel={() => {
+          if (!clearingGrants) setClearAllRequested(false);
+        }}
+      />
     </div>
   );
 };
