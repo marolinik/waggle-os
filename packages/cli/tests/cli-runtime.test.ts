@@ -24,8 +24,8 @@ function run(
   command: string,
   args: string[],
   home: string,
-): ReturnType<typeof spawnSync> {
-  return runInCwd(command, args, ROOT, home);
+): Promise<AsyncRunResult> {
+  return runInCwdAsync(command, args, ROOT, home);
 }
 
 function runInCwd(
@@ -33,17 +33,8 @@ function runInCwd(
   args: string[],
   cwd: string,
   home: string,
-): ReturnType<typeof spawnSync> {
-  return spawnSync(command, args, {
-    cwd,
-    env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
-    },
-    encoding: 'utf8',
-    shell: process.platform === 'win32' && command.endsWith('.cmd'),
-  });
+): Promise<AsyncRunResult> {
+  return runInCwdAsync(command, args, cwd, home);
 }
 
 function spawnInCwd(
@@ -240,13 +231,13 @@ const CLI_PACKAGE_CLOSURE = [
 ] as const;
 
 describe('@waggle/cli runtime UX', () => {
-  it('runs built help without loading the REPL dependency graph', () => {
+  it('runs built help without loading the REPL dependency graph', async () => {
     const home = makeHome();
     try {
-      const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/cli'], home);
+      const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/cli'], home);
       expect(build.status).toBe(0);
 
-      const result = run(process.execPath, [path.join(CLI_DIR, 'dist', 'index.js'), '--help'], home);
+      const result = await run(process.execPath, [path.join(CLI_DIR, 'dist', 'index.js'), '--help'], home);
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('Waggle CLI');
@@ -261,10 +252,10 @@ describe('@waggle/cli runtime UX', () => {
   it('packs a tarball with a runnable bin help command', async () => {
     const home = makeHome();
     try {
-      const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/cli'], home);
+      const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/cli'], home);
       expect(build.status).toBe(0);
 
-      const pack = run(
+      const pack = await run(
         bin('npm'),
         ['pack', '--workspace', '@waggle/cli', '--pack-destination', home, '--json'],
         home,
@@ -279,7 +270,7 @@ describe('@waggle/cli runtime UX', () => {
       const pkg = JSON.parse(
         fs.readFileSync(path.join(extractDir, 'package', 'package.json'), 'utf8'),
       );
-      const result = run(
+      const result = await run(
         process.execPath,
         [path.join(extractDir, 'package', 'bin', 'waggle.js'), '--help'],
         home,
@@ -296,7 +287,7 @@ describe('@waggle/cli runtime UX', () => {
     }
   });
 
-  it('installs the local package closure and runs npx help', () => {
+  it('installs the local package closure and runs npx help', async () => {
     const home = makeHome();
     try {
       const packsDir = path.join(home, 'packs');
@@ -306,10 +297,10 @@ describe('@waggle/cli runtime UX', () => {
 
       const dependencies: Record<string, string> = {};
       for (const workspace of CLI_PACKAGE_CLOSURE) {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', workspace, '--pack-destination', packsDir, '--json'],
           home,
@@ -326,7 +317,7 @@ describe('@waggle/cli runtime UX', () => {
         JSON.stringify({ private: true, type: 'module', dependencies }, null, 2),
       );
 
-      const install = runInCwd(
+      const install = await runInCwd(
         bin('npm'),
         ['install', '--no-audit', '--no-fund', '--ignore-scripts', '--prefer-offline'],
         projectDir,
@@ -334,7 +325,7 @@ describe('@waggle/cli runtime UX', () => {
       );
       expect(install.status).toBe(0);
 
-      const result = runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
+      const result = await runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('Waggle CLI');
@@ -357,10 +348,10 @@ describe('@waggle/cli runtime UX', () => {
 
       const dependencies: Record<string, string> = {};
       for (const workspace of CLI_PACKAGE_CLOSURE) {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', workspace, '--pack-destination', packsDir, '--json'],
           home,
@@ -463,10 +454,10 @@ describe('@waggle/cli runtime UX', () => {
 
       const dependencies: Record<string, string> = {};
       for (const workspace of CLI_PACKAGE_CLOSURE) {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', workspace], home);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', workspace, '--pack-destination', packsDir, '--json'],
           home,
