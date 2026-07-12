@@ -18,8 +18,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: {} }));
 vi.mock('@/lib/personas', () => ({
   PERSONAS: [
-    { id: 'general-purpose', name: 'General Purpose', avatar: '' },
-    { id: 'researcher', name: 'Researcher', avatar: '' },
+    { id: 'general-purpose', name: 'General Purpose', avatar: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' },
+    { id: 'researcher', name: 'Researcher', avatar: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=' },
   ],
 }));
 
