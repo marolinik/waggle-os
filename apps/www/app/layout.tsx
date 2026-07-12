@@ -190,7 +190,11 @@ const JSON_LD = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`scroll-smooth ${hanken.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      className={`scroll-smooth ${hanken.variable} ${jetbrainsMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/* Progressive enhancement flag: scroll-reveal styles only apply
             when JS runs (html.js gate in globals.css), so no-JS visitors

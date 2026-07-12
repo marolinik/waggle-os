@@ -205,6 +205,10 @@
       },
       "popular_badge": "Most popular",
       "loading": "Loading…",
+      "notices": {
+        "cancelled": "Checkout was cancelled. Your plan was not changed.",
+        "retry": "Try Team checkout again"
+      },
       "tiers": {
         "solo": {
           "name": "Solo",

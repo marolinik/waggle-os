@@ -17,10 +17,12 @@ export default clerkMiddleware();
 
 export const config = {
   matcher: [
-    // Skip Next.js internals and static files unless explicitly hit via a
-    // path containing search params.
-    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-    // Always run for API routes (Stripe + Clerk webhooks, /api/stripe/checkout).
+    // Keep public acquisition, legal, documentation, and download pages
+    // independent of Clerk session refreshes. Auth is required only where the
+    // route reads identity or owns an authenticated flow.
+    '/account(.*)',
+    '/sign-in(.*)',
+    '/sign-up(.*)',
     '/(api|trpc)(.*)',
   ],
 };
