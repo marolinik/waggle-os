@@ -1,6 +1,6 @@
 /**
  * AddCustomMcpForm — the S08 Custom tab (UX-Refactor Phase 4B). Registers an
- * arbitrary stdio MCP server via POST /api/mcps (PRO+ gated server-side, B5):
+ * arbitrary stdio MCP server via POST /api/mcps (tier-gated server-side, B5):
  * `{ name, command, args[], env{}, workspaceId? }`. 400 (validation /
  * injection-scan) and 409 (duplicate) render inline; the tier 403 routes
  * through the global UpgradeModal handler.
@@ -27,6 +27,8 @@ export function parseEnvLines(text: string): Record<string, string> {
 interface AddCustomMcpFormProps {
   onAdded: (id: string) => void;
 }
+
+const CONTROL_FOCUS_CLASS = 'focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
 
 const AddCustomMcpForm = ({ onAdded }: AddCustomMcpFormProps) => {
   const [name, setName] = useState('');
@@ -76,8 +78,8 @@ const AddCustomMcpForm = ({ onAdded }: AddCustomMcpFormProps) => {
       <div>
         <h3 className="text-sm font-display font-semibold text-foreground">Add a custom MCP server</h3>
         <p className="text-[11px] text-muted-foreground">
-          Registers a local stdio server (command + args). Pro plan required — the server is
-          persisted and restarts with Waggle.
+          Registers a local stdio server (command + args). Teams governance can manage shared use;
+          Solo can run local servers on this device.
         </p>
       </div>
 
@@ -87,26 +89,58 @@ const AddCustomMcpForm = ({ onAdded }: AddCustomMcpFormProps) => {
 
       <label className="block space-y-1">
         <span className="text-[11px] text-muted-foreground">Name</span>
-        <Input value={name} onChange={e => setName(e.target.value)} placeholder="my-mcp-server" className="bg-muted/50 text-xs h-auto py-1.5" />
+        <Input
+          name="mcpServerName"
+          autoComplete="off"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="my-mcp-server"
+          className={`bg-muted/50 text-xs h-auto py-1.5 ${CONTROL_FOCUS_CLASS}`}
+        />
       </label>
       <label className="block space-y-1">
         <span className="text-[11px] text-muted-foreground">Command</span>
-        <Input value={command} onChange={e => setCommand(e.target.value)} placeholder="npx" className="bg-muted/50 text-xs h-auto py-1.5 font-mono" />
+        <Input
+          name="mcpServerCommand"
+          autoComplete="off"
+          value={command}
+          onChange={e => setCommand(e.target.value)}
+          placeholder="npx"
+          className={`bg-muted/50 text-xs h-auto py-1.5 font-mono ${CONTROL_FOCUS_CLASS}`}
+        />
       </label>
       <label className="block space-y-1">
         <span className="text-[11px] text-muted-foreground">Arguments (one per line)</span>
-        <Textarea value={argsText} onChange={e => setArgsText(e.target.value)} placeholder={'-y\n@modelcontextprotocol/server-filesystem'} rows={3} className="bg-muted/50 text-xs font-mono" />
+        <Textarea
+          name="mcpServerArgs"
+          autoComplete="off"
+          value={argsText}
+          onChange={e => setArgsText(e.target.value)}
+          placeholder={'-y\n@modelcontextprotocol/server-filesystem'}
+          rows={3}
+          className={`bg-muted/50 text-xs font-mono ${CONTROL_FOCUS_CLASS}`}
+        />
       </label>
       <label className="block space-y-1">
         <span className="text-[11px] text-muted-foreground">Environment (KEY=VALUE, one per line)</span>
-        <Textarea value={envText} onChange={e => setEnvText(e.target.value)} placeholder="API_KEY=..." rows={2} className="bg-muted/50 text-xs font-mono" />
+        <Textarea
+          name="mcpServerEnv"
+          autoComplete="off"
+          value={envText}
+          onChange={e => setEnvText(e.target.value)}
+          placeholder="API_KEY=..."
+          rows={2}
+          className={`bg-muted/50 text-xs font-mono ${CONTROL_FOCUS_CLASS}`}
+        />
       </label>
       <label className="block space-y-1">
         <span className="text-[11px] text-muted-foreground">Workspace scope (optional — C19 single workspace)</span>
         <select
+          name="mcpWorkspaceScope"
+          autoComplete="off"
           value={workspaceId}
           onChange={e => setWorkspaceId(e.target.value)}
-          className="w-full text-xs bg-muted/50 border border-border/40 rounded-md px-2 py-1.5 text-foreground"
+          className={`w-full text-xs bg-muted/50 border border-border/40 rounded-md px-2 py-1.5 text-foreground focus-visible:outline-none ${CONTROL_FOCUS_CLASS}`}
         >
           <option value="">Personal — all workspaces</option>
           {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -118,7 +152,7 @@ const AddCustomMcpForm = ({ onAdded }: AddCustomMcpFormProps) => {
         onClick={() => void handleSubmit()}
         disabled={!name.trim() || !command.trim() || busy}
         data-testid="add-custom-mcp-submit"
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors font-display"
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors font-display focus-visible:outline-none ${CONTROL_FOCUS_CLASS}`}
       >
         {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Add server
       </button>

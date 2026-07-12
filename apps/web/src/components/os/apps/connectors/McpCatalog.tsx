@@ -143,7 +143,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
                 onClick={() =>
                   setSelectedCategory(selectedCategory === cat.name ? null : cat.name)
                 }
-                className={`${bg} relative h-full transition-all hover:brightness-125`}
+                className={`${bg} relative h-full transition-[filter] hover:brightness-125`}
                 style={{ width: `${pct}%` }}
                 aria-label={`${cat.name}: ${cat.count} servers (${pct.toFixed(0)}%)`}
               />
@@ -184,6 +184,9 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
       <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/30 px-3 py-1.5 transition-colors focus-within:border-primary/40">
         <Search className="h-3.5 w-3.5 text-muted-foreground" />
         <Input
+          aria-label="Search MCP catalog"
+          name="mcpCatalogSearch"
+          autoComplete="off"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`Search ${stats.total} connectors… (postgres, slack, stripe, anything)`}
@@ -204,7 +207,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
       <div className="flex flex-wrap gap-1.5">
         <button
           onClick={() => setSelectedCategory(null)}
-          className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all ${
+          className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-[background-color,color,box-shadow] ${
             !selectedCategory
               ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
               : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -218,7 +221,7 @@ const McpCatalog = ({ personaId, installedIds, installableIds, installingId, onI
             onClick={() =>
               setSelectedCategory(selectedCategory === cat.name ? null : cat.name)
             }
-            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all ${
+            className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-[background-color,color,box-shadow] ${
               selectedCategory === cat.name
                 ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
                 : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'

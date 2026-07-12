@@ -22,6 +22,7 @@ import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
+import { cn } from '@/lib/utils';
 import BrandTile from './BrandTile';
 import { getBrandIdentity } from './brand-identity';
 import InstallAuditPanel from '../extend/InstallAuditPanel';
@@ -36,6 +37,8 @@ export function connectorStatusBadge(status: string, syncing: boolean): { tone: 
     default: return { tone: 'neutral', label: 'Not connected' };
   }
 }
+
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
 
 export interface ConnectorSetupHint {
   url?: string;
@@ -109,9 +112,9 @@ const ConnectorCard = ({
   };
 
   return (
-    <div className="group rounded-xl border border-border/30 overflow-hidden transition-all hover:border-primary/30 hover:bg-secondary/10">
+    <div className="group rounded-xl border border-border/30 overflow-hidden transition-colors hover:border-primary/30 hover:bg-secondary/10">
       <button onClick={handleExpand} aria-expanded={expanded}
-        className="w-full flex items-center justify-between gap-3 p-2.5 transition-colors">
+        className={cn('w-full flex items-center justify-between gap-3 p-2.5 transition-colors', CONTROL_FOCUS_CLASS)}>
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <BrandTile identity={identity} size={36} connected={isConnected} />
           <div className="text-left min-w-0 flex-1">
@@ -163,7 +166,7 @@ const ConnectorCard = ({
               ))}
               {hint.url && (
                 <a href={hint.url} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[11px] text-honey hover:text-honey/80">
+                  className={cn('inline-flex items-center gap-1 rounded-sm text-[11px] text-honey hover:text-honey/80', CONTROL_FOCUS_CLASS)}>
                   <ExternalLink className="w-3 h-3" /> Open {conn.name}
                 </a>
               )}
@@ -188,23 +191,23 @@ const ConnectorCard = ({
               <div className="ml-auto flex items-center gap-1">
                 <HintTooltip content="Re-checks the connection and stamps the last-sync time. Does not re-pull data (C16).">
                   <button onClick={() => void handleSync()} disabled={syncing}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 disabled:opacity-50 transition-colors">
+                    className={cn('flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-honey hover:bg-primary/10 disabled:opacity-50 transition-colors', CONTROL_FOCUS_CLASS)}>
                     {syncing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />} Sync now
                   </button>
                 </HintTooltip>
                 <button onClick={() => setShowHistory(h => !h)}
-                  className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors">
+                  className={cn('flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors', CONTROL_FOCUS_CLASS)}>
                   <History className="w-3 h-3" /> History
                 </button>
                 <HintTooltip content="Removes the stored credential but keeps OAuth tokens — reconnect restores access.">
                   <button onClick={onDisconnect}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors">
+                    className={cn('flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors', CONTROL_FOCUS_CLASS)}>
                     <Trash2 className="w-3 h-3" /> Disconnect
                   </button>
                 </HintTooltip>
                 <HintTooltip content="The strong path: purges every stored credential AND provider OAuth tokens, with an audit entry.">
                   <button onClick={onRevoke}
-                    className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-destructive hover:bg-destructive/10 transition-colors">
+                    className={cn('flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-destructive hover:bg-destructive/10 transition-colors', CONTROL_FOCUS_CLASS)}>
                     <ShieldOff className="w-3 h-3" /> Revoke
                   </button>
                 </HintTooltip>
@@ -216,23 +219,25 @@ const ConnectorCard = ({
                   and AT exposure is inconsistent) — every credential input
                   needs an explicit aria-label. */}
               {needsEmail && (
-                <Input value={emailInput} onChange={e => onEmailChange(e.target.value)} placeholder="Your Atlassian email"
+                <Input type="email" name="connectorEmail" autoComplete="email" inputMode="email" spellCheck={false}
+                  value={emailInput} onChange={e => onEmailChange(e.target.value)} placeholder="Your Atlassian email"
                   aria-label="Atlassian account email"
                   className="w-full bg-muted/50 text-xs h-auto py-1" />
               )}
               <div className="flex gap-2">
-                <Input type="password" value={tokenInput} onChange={e => onTokenChange(e.target.value)}
+                <Input type="password" name="connectorToken" autoComplete="off" spellCheck={false}
+                  value={tokenInput} onChange={e => onTokenChange(e.target.value)}
                   placeholder={hint?.placeholder ?? 'Paste token or API key'}
                   aria-label={`${conn.name} API token`}
                   className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 <button onClick={onConnect} disabled={!tokenInput.trim() || connecting}
-                  className="flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
+                  className={cn('flex items-center gap-1 px-3 py-1 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors', CONTROL_FOCUS_CLASS)}>
                   {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plug className="w-3 h-3" />} Connect
                 </button>
               </div>
               <div className="flex justify-end">
                 <button onClick={() => setShowHistory(h => !h)}
-                  className="flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors">
+                  className={cn('flex items-center gap-1 px-2 py-1 text-[11px] rounded-lg text-muted-foreground hover:bg-muted/40 transition-colors', CONTROL_FOCUS_CLASS)}>
                   <History className="w-3 h-3" /> History
                 </button>
               </div>

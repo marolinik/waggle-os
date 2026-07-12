@@ -60,7 +60,7 @@ const McpServerCard = ({ server, installed, installing, onInstall }: McpServerCa
                   </span>
                 )}
               </div>
-              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+              <p className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-[var(--text-tertiary)]">
                 {server.category} · {server.author}
               </p>
             </div>
