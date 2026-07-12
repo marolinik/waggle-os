@@ -15,13 +15,40 @@ const toast = $('toast');
 
 let cachedSelection = '';
 let cachedPageMeta = null;
+let toastTimer = null;
 
-function showToast(msg, kind = '') {
+function showToast(msg, kind = '', options = {}) {
+  if (toastTimer) clearTimeout(toastTimer);
   toast.textContent = msg;
   toast.className = kind;
-  if (kind === 'ok' || kind === 'err') {
-    setTimeout(() => { if (toast.textContent === msg) { toast.textContent = ''; toast.className = ''; } }, 3500);
+  if (!options.sticky && (kind === 'ok' || kind === 'err')) {
+    toastTimer = setTimeout(() => {
+      if (toast.textContent === msg) {
+        toast.textContent = '';
+        toast.className = '';
+      }
+    }, 3500);
   }
+}
+
+function isSetupError(msg) {
+  return /allowlisted|paired|pairing/i.test(msg);
+}
+
+function formatMemoryDestination(reply) {
+  const workspaceName = typeof reply?.activeWorkspaceName === 'string'
+    ? reply.activeWorkspaceName.trim()
+    : '';
+  const workspaceId = typeof reply?.activeWorkspaceId === 'string'
+    ? reply.activeWorkspaceId.trim()
+    : typeof reply?.activeWorkspace === 'string'
+      ? reply.activeWorkspace.trim()
+      : '';
+  if (workspaceName) return workspaceName;
+  if (workspaceId && workspaceId !== 'local-default' && workspaceId !== 'default-workspace') {
+    return `Workspace id: ${workspaceId}`;
+  }
+  return 'Personal memory';
 }
 
 async function refreshHealth() {
@@ -32,15 +59,16 @@ async function refreshHealth() {
       statusText.textContent = 'Connected';
       // textContent (not innerHTML) — workspace names are user-controlled
       // and could otherwise be XSS sinks in the extension context.
-      workspaceNameEl.textContent = reply.activeWorkspace || 'personal memory';
+      workspaceNameEl.textContent = formatMemoryDestination(reply);
     } else {
       throw new Error(reply?.error || 'No response');
     }
   } catch (err) {
     dot.className = 'dot disconnected';
     statusText.textContent = 'Not connected';
-    workspaceNameEl.textContent = '—';
-    showToast('Start Waggle desktop on this machine, then re-open this popup.', 'err');
+    workspaceNameEl.textContent = 'Unavailable';
+    const msg = err?.message || 'Start Waggle desktop on this machine, then re-open this popup.';
+    showToast(msg, 'err', { sticky: true });
   }
 }
 
@@ -56,6 +84,7 @@ async function readActiveTab() {
     // Content script unavailable (e.g. on chrome:// pages) — disable buttons gracefully.
     btnSelection.disabled = true;
     btnPage.disabled = true;
+    showToast('Waggle cannot read this browser page. Open a normal webpage, then try again.', 'err', { sticky: true });
   }
 }
 
@@ -78,7 +107,8 @@ async function save(kind) {
   if (reply?.saved) {
     showToast(reply.duplicate ? 'Already in memory.' : 'Saved to Waggle memory ✓', 'ok');
   } else {
-    showToast(reply?.error || 'Save failed.', 'err');
+    const msg = reply?.error || 'Save failed.';
+    showToast(msg, 'err', { sticky: isSetupError(msg) });
   }
 }
 

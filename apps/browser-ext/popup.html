@@ -44,12 +44,28 @@
       background: #1a1a1f; color: var(--fg); border: 1px solid var(--border);
       border-radius: 8px; font: inherit; cursor: pointer; text-align: left;
       display: flex; align-items: center; gap: 8px;
-      transition: background 120ms, border-color 120ms;
+      transition: background 120ms, border-color 120ms, outline-color 120ms;
     }
     button:hover:not(:disabled) { background: #25252b; border-color: var(--primary); }
-    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+      border-color: var(--primary);
+    }
+    button:disabled {
+      background: #101014;
+      color: var(--muted);
+      border-color: #1f1f26;
+      opacity: 1;
+      cursor: not-allowed;
+    }
     button.primary { background: var(--primary); color: var(--bg); border-color: var(--primary); font-weight: 600; }
     button.primary:hover:not(:disabled) { background: var(--primary-hover); border-color: var(--primary-hover); }
+    button.primary:disabled {
+      background: #15120a;
+      color: #9a8253;
+      border-color: #3a2a0a;
+    }
     .icon { font-size: 14px; line-height: 1; }
     #toast {
       margin-top: 8px; padding: 6px 8px; border-radius: 6px; font-size: 11px;
@@ -69,7 +85,7 @@
     <span class="status"><span class="dot" id="dot"></span><span id="status-text">…</span></span>
   </header>
 
-  <div class="workspace">Saving to: <strong id="workspace-name">—</strong></div>
+  <div class="workspace">Memory destination: <strong id="workspace-name">—</strong></div>
 
   <button class="primary" id="save-selection" disabled>
     <span class="icon">💾</span><span>Save selection to memory</span>
@@ -81,7 +97,7 @@
     <span class="icon">🐝</span><span>Open Waggle desktop</span>
   </button>
 
-  <div id="toast"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <footer>v0.1.0 · Requires Waggle running on 127.0.0.1:3333</footer>
 

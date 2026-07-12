@@ -7,24 +7,66 @@
 
 const SIDECAR = 'http://127.0.0.1:3333';
 
-async function getAuthHeaders() {
-  // Future: support per-user bearer token paired from the desktop.
-  // For MVP we rely on the sidecar's localhost-only binding for trust.
+async function readJson(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
+
+function authErrorMessage(status, body) {
+  const code = body?.code;
+  if (code === 'EXTENSION_NOT_ALLOWLISTED') {
+    return 'Browser Companion is not allowlisted. Add this extension ID to Waggle, restart Waggle, then try again.';
+  }
+  if (status === 401 && code === 'INVALID_TOKEN') {
+    return 'Browser Companion pairing expired. Reopen Waggle desktop, then try again.';
+  }
+  if (status === 401 && (code === 'MISSING_TOKEN' || !code)) {
+    return 'Browser Companion is not paired. Start Waggle desktop, then try again.';
+  }
+  return body?.error || `HTTP ${status}`;
+}
+
+async function requestSessionToken() {
+  const r = await fetch(`${SIDECAR}/api/browser-ext/session-token`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'X-Waggle-Extension-Id': chrome.runtime.id,
+    },
+  });
+  const data = await readJson(r);
+  if (!r.ok || !data?.token) {
+    return { ok: false, error: authErrorMessage(r.status, data) };
+  }
+  await chrome.storage.local.set({ sessionToken: data.token });
+  return { ok: true, token: data.token };
+}
+
+async function getAuthHeaders(options = {}) {
   try {
     const { sessionToken } = await chrome.storage.local.get(['sessionToken']);
-    return sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {};
-  } catch {
-    return {};
+    if (sessionToken) return { headers: { Authorization: `Bearer ${sessionToken}` } };
+    if (!options.pair) return { headers: {} };
+    const paired = await requestSessionToken();
+    if (!paired.ok) return { headers: {}, error: paired.error };
+    return { headers: { Authorization: `Bearer ${paired.token}` } };
+  } catch (err) {
+    return { headers: {}, error: String(err) };
   }
 }
 
 async function health() {
   try {
+    const auth = await getAuthHeaders({ pair: true });
+    if (auth.error) return { ok: false, error: auth.error };
     const r = await fetch(`${SIDECAR}/api/browser-ext/health`, {
       method: 'GET',
-      headers: { Accept: 'application/json', ...(await getAuthHeaders()) },
+      headers: { Accept: 'application/json', ...auth.headers },
     });
-    if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
+    if (!r.ok) return { ok: false, error: authErrorMessage(r.status, await readJson(r)) };
     return await r.json();
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -33,16 +75,29 @@ async function health() {
 
 async function saveMemory(payload) {
   try {
-    const r = await fetch(`${SIDECAR}/api/memory/frames`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-      body: JSON.stringify({
-        content: payload.content,
-        source: payload.source || 'import',
-        importance: payload.importance || 'normal',
-      }),
+    const body = JSON.stringify({
+      content: payload.content,
+      source: payload.source || 'import',
+      importance: payload.importance || 'normal',
     });
-    if (!r.ok) return { saved: false, error: `HTTP ${r.status}` };
+    const auth = await getAuthHeaders({ pair: true });
+    if (auth.error) return { saved: false, error: auth.error };
+    let r = await fetch(`${SIDECAR}/api/memory/frames`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...auth.headers },
+      body,
+    });
+    if (r.status === 401) {
+      const paired = await requestSessionToken();
+      if (paired.ok) {
+        r = await fetch(`${SIDECAR}/api/memory/frames`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${paired.token}` },
+          body,
+        });
+      }
+    }
+    if (!r.ok) return { saved: false, error: authErrorMessage(r.status, await readJson(r)) };
     const data = await r.json();
     return {
       saved: data?.saved ?? true,
