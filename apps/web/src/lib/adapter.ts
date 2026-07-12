@@ -123,6 +123,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health', '/api/auth/session-token']);
  * every non-exempt request in the app). The race guarantees settlement.
  */
 const CONNECT_DEADLINE_MS = 15000;
+const MODEL_ROUTER_REQUEST_TIMEOUT_MS = 45000;
 
 /**
  * P1b D3 — settle a promise within `ms` or reject with TimeoutError. Used to
@@ -1347,7 +1348,11 @@ class LocalAdapter {
   }
 
   async setModel(model: string): Promise<void> {
-    await this.fetch('/api/agent/model', { method: 'PUT', body: JSON.stringify({ model }) });
+    await this.fetch(
+      '/api/agent/model',
+      { method: 'PUT', body: JSON.stringify({ model }) },
+      MODEL_ROUTER_REQUEST_TIMEOUT_MS,
+    );
   }
 
   async getModel(): Promise<string> {
@@ -2233,7 +2238,7 @@ class LocalAdapter {
     const res = await this.fetch('/api/settings/probe-model', {
       method: 'POST',
       body: JSON.stringify(model ? { model } : {}),
-    });
+    }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
     return res.json();
   }
 
@@ -2243,11 +2248,44 @@ class LocalAdapter {
    * server's key-validation cache). This is the canonical key→vault path; do NOT use the
    * generic POST /api/vault for provider keys (it skips the cache invalidation).
    */
-  async setProviderKey(providerId: string, apiKey: string, models?: string[]): Promise<void> {
-    await this.fetch('/api/settings', {
+  async setProviderKey(
+    providerId: string,
+    apiKey: string,
+    models?: string[],
+    defaultModel?: string,
+  ): Promise<{
+    router?: {
+      managed: boolean;
+      ready: boolean;
+      port: number;
+      models: string[];
+      unavailableProviders: string[];
+      error?: string;
+    };
+  }> {
+    const res = await this.fetch('/api/settings', {
       method: 'PUT',
-      body: JSON.stringify({ providers: { [providerId]: { apiKey, ...(models ? { models } : {}) } } }),
-    });
+      body: JSON.stringify({
+        ...(defaultModel ? { defaultModel } : {}),
+        providers: { [providerId]: { apiKey, ...(models ? { models } : {}) } },
+      }),
+    }, MODEL_ROUTER_REQUEST_TIMEOUT_MS);
+    return res.json();
+  }
+
+  async restartModelRouter(): Promise<{
+    running: boolean;
+    port: number;
+    models: string[];
+    unavailableProviders: string[];
+    error?: string;
+  }> {
+    const res = await this.fetch(
+      '/api/litellm/restart',
+      { method: 'POST' },
+      MODEL_ROUTER_REQUEST_TIMEOUT_MS,
+    );
+    return res.json();
   }
 
   async getModels(): Promise<string[]> {
@@ -2260,6 +2298,9 @@ class LocalAdapter {
       id: string; name: string; hasKey: boolean; badge: string | null;
       keyUrl: string | null; requiresKey: boolean;
       models: Array<{ id: string; name: string; cost: string; speed: string }>;
+      modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'local-runtime';
+      modelsUpdatedAt?: string;
+      modelsError?: string;
     }>;
     search: Array<{ id: string; name: string; hasKey: boolean; priority: number }>;
     activeSearch: string;
