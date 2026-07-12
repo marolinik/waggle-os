@@ -311,6 +311,115 @@ export function resetFirstLaunch(): Promise<void> {
   return invoke<void>('reset_first_launch');
 }
 
+// Desktop shell events
+
+export type DesktopNavigationPath = '/settings';
+
+const DESKTOP_NAVIGATION_PATHS = new Set<DesktopNavigationPath>(['/settings']);
+
+export function isDesktopNavigationPath(path: unknown): path is DesktopNavigationPath {
+  return typeof path === 'string' && DESKTOP_NAVIGATION_PATHS.has(path as DesktopNavigationPath);
+}
+
+export function listenDesktopNavigation(
+  onNavigate: (path: DesktopNavigationPath) => void,
+): Promise<UnlistenFn> {
+  return listen<unknown>('waggle://navigate', (event) => {
+    if (isDesktopNavigationPath(event.payload)) {
+      onNavigate(event.payload);
+    }
+  });
+}
+
+export type DesktopShellEventName =
+  | 'waggle://service-status'
+  | 'waggle://service-restart-needed'
+  | 'waggle://update-available';
+
+export interface DesktopShellNotice {
+  title: string;
+  description: string;
+  variant?: 'destructive';
+}
+
+const DESKTOP_SHELL_EVENTS: DesktopShellEventName[] = [
+  'waggle://service-status',
+  'waggle://service-restart-needed',
+  'waggle://update-available',
+];
+
+function recordPayload(payload: unknown): Record<string, unknown> | null {
+  return typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : null;
+}
+
+function stringPayloadField(payload: unknown, field: string): string | null {
+  const value = recordPayload(payload)?.[field];
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
+
+export function describeDesktopShellNotice(
+  eventName: string,
+  payload?: unknown,
+): DesktopShellNotice | null {
+  if (eventName === 'waggle://service-status') {
+    const status = stringPayloadField(payload, 'status');
+    if (status === 'restarting') {
+      return {
+        title: 'Local service reconnecting',
+        description: 'Waggle is restarting the local service. Work resumes automatically when it reconnects.',
+      };
+    }
+    if (status === 'failed') {
+      return {
+        title: 'Local service stopped',
+        description: 'Waggle could not restart the local service. Restart the desktop app to recover.',
+        variant: 'destructive',
+      };
+    }
+    return null;
+  }
+
+  if (eventName === 'waggle://service-restart-needed') {
+    return {
+      title: 'Local service restart needed',
+      description: 'Waggle detected an unhealthy local service and is restarting it now.',
+    };
+  }
+
+  if (eventName === 'waggle://update-available') {
+    const version = stringPayloadField(payload, 'version');
+    return {
+      title: 'Update available',
+      description: version
+        ? `Waggle ${version} is available. Use your configured release channel to update.`
+        : 'A Waggle update is available. Use your configured release channel to update.',
+    };
+  }
+
+  return null;
+}
+
+export async function listenDesktopShellEvents(
+  onNotice: (notice: DesktopShellNotice) => void,
+): Promise<UnlistenFn> {
+  const unlisteners = await Promise.all(
+    DESKTOP_SHELL_EVENTS.map((eventName) =>
+      listen<unknown>(eventName, (event) => {
+        const notice = describeDesktopShellNotice(eventName, event.payload);
+        if (notice) {
+          onNotice(notice);
+        }
+      }),
+    ),
+  );
+
+  return () => {
+    for (const unlisten of unlisteners) {
+      unlisten();
+    }
+  };
+}
+
 // ─── Runtime detection ─────────────────────────────────────────────────────
 
 /**

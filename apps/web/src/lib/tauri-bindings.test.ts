@@ -13,8 +13,13 @@ vi.mock('@tauri-apps/api/event', () => ({
 }));
 
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import {
   isTauri,
+  describeDesktopShellNotice,
+  isDesktopNavigationPath,
+  listenDesktopShellEvents,
+  listenDesktopNavigation,
   recallMemory,
   saveMemory,
   searchEntities,
@@ -29,6 +34,7 @@ import {
 } from './tauri-bindings';
 
 const mockedInvoke = vi.mocked(invoke);
+const mockedListen = vi.mocked(listen);
 
 describe('isTauri() runtime detection', () => {
   afterEach(() => {
@@ -42,6 +48,89 @@ describe('isTauri() runtime detection', () => {
   it('returns true when __TAURI_INTERNALS__ is present on window', () => {
     (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
     expect(isTauri()).toBe(true);
+  });
+});
+
+describe('desktop shell event bindings', () => {
+  beforeEach(() => {
+    mockedListen.mockReset();
+  });
+
+  it('accepts only shipped desktop navigation destinations', () => {
+    expect(isDesktopNavigationPath('/settings')).toBe(true);
+    expect(isDesktopNavigationPath('/about')).toBe(false);
+    expect(isDesktopNavigationPath('https://waggle-os.ai')).toBe(false);
+    expect(isDesktopNavigationPath(undefined)).toBe(false);
+  });
+
+  it('listens to desktop navigation events and filters unsupported payloads', async () => {
+    let handler: ((event: { payload: unknown }) => void) | undefined;
+    const unlisten = vi.fn();
+    mockedListen.mockImplementationOnce(async (eventName, eventHandler) => {
+      expect(eventName).toBe('waggle://navigate');
+      handler = eventHandler as (event: { payload: unknown }) => void;
+      return unlisten;
+    });
+
+    const onNavigate = vi.fn();
+    const result = await listenDesktopNavigation(onNavigate);
+    expect(result).toBe(unlisten);
+
+    handler?.({ payload: '/about' });
+    expect(onNavigate).not.toHaveBeenCalled();
+
+    handler?.({ payload: '/settings' });
+    expect(onNavigate).toHaveBeenCalledWith('/settings');
+  });
+
+  it('maps desktop service and update events to user-visible notices', () => {
+    expect(describeDesktopShellNotice('waggle://service-status', { status: 'restarting' })).toEqual({
+      title: 'Local service reconnecting',
+      description: 'Waggle is restarting the local service. Work resumes automatically when it reconnects.',
+    });
+    expect(describeDesktopShellNotice('waggle://service-status', { status: 'failed' })).toEqual({
+      title: 'Local service stopped',
+      description: 'Waggle could not restart the local service. Restart the desktop app to recover.',
+      variant: 'destructive',
+    });
+    expect(describeDesktopShellNotice('waggle://service-restart-needed')).toEqual({
+      title: 'Local service restart needed',
+      description: 'Waggle detected an unhealthy local service and is restarting it now.',
+    });
+    expect(describeDesktopShellNotice('waggle://update-available', { version: '1.2.3' })).toEqual({
+      title: 'Update available',
+      description: 'Waggle 1.2.3 is available. Use your configured release channel to update.',
+    });
+    expect(describeDesktopShellNotice('waggle://service-status', { status: 'healthy' })).toBeNull();
+  });
+
+  it('listens to desktop service/update events and disposes every listener', async () => {
+    const handlers = new Map<string, (event: { payload: unknown }) => void>();
+    const unlisteners = [vi.fn(), vi.fn(), vi.fn()];
+    mockedListen.mockImplementation(async (eventName, eventHandler) => {
+      handlers.set(String(eventName), eventHandler as (event: { payload: unknown }) => void);
+      return unlisteners[handlers.size - 1];
+    });
+
+    const onNotice = vi.fn();
+    const dispose = await listenDesktopShellEvents(onNotice);
+
+    expect([...handlers.keys()]).toEqual([
+      'waggle://service-status',
+      'waggle://service-restart-needed',
+      'waggle://update-available',
+    ]);
+
+    handlers.get('waggle://service-status')?.({ payload: { status: 'failed' } });
+    expect(onNotice).toHaveBeenCalledWith(expect.objectContaining({ title: 'Local service stopped' }));
+
+    handlers.get('waggle://service-status')?.({ payload: { status: 'healthy' } });
+    expect(onNotice).toHaveBeenCalledTimes(1);
+
+    dispose();
+    for (const unlisten of unlisteners) {
+      expect(unlisten).toHaveBeenCalled();
+    }
   });
 });
 
