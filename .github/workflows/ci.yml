@@ -63,13 +63,42 @@ jobs:
   # NOT block merges — by design. These specs are broad product/audit journeys
   # (full-product-audit, power-user-stress, competitive-benchmarks, …) that are
   # historically flake-prone, so gating merges on them would produce false reds.
-  # The real regression net is the blocking `test` job above (package + web
-  # typecheck, lint, and the full unit suites incl. apps/web). No required e2e
-  # "smoke" step is wired here on purpose: the repo has no curated stable smoke
-  # subset (`test:fast` is the near-complete suite minus two known-flaky specs,
-  # not a small smoke), so promoting any of it to a required check would import
-  # exactly the flakiness this job is quarantined for. Revisit if a tagged
-  # @smoke subset is added.
+  # The blocking `e2e-smoke` job above covers the stable launch, settings,
+  # memory, workspace, and mobile regression slice. This broad job stays
+  # advisory so exploratory audit coverage can report flakes without blocking
+  # merges.
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - run: npm install
+      - name: Build packages
+        run: npm run build:packages
+      - name: Build frontend
+        run: npm run build
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run blocking Playwright smoke journeys
+        run: npm run test:e2e:smoke
+        env:
+          WAGGLE_ECHO_MODE: "1"
+          NODE_ENV: test
+          WAGGLE_TRUST_LOCALHOST: "1"
+
   e2e:
     runs-on: ubuntu-latest
     needs: test

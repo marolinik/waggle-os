@@ -4,9 +4,10 @@
 # Or: render blueprint apply
 #
 # This creates:
-# - waggle-server: Node.js web service (serves frontend + API)
-# - waggle-postgres: Managed PostgreSQL database
-# - waggle-redis: Managed Redis instance
+# - waggle-server: Node.js web service (serves frontend + local sidecar API)
+#
+# Render is the hosted local-sidecar demo path. The Postgres/Redis-backed team
+# server is deployed through Dockerfile/docker-compose.production.yml instead.
 
 services:
   - type: web
@@ -33,15 +34,6 @@ services:
         value: ./dist
       - key: WAGGLE_DATA_DIR
         value: /data
-      - key: DATABASE_URL
-        fromDatabase:
-          name: waggle-postgres
-          property: connectionString
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: waggle-redis
-          property: connectionString
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: CLERK_SECRET_KEY
@@ -72,12 +64,3 @@ services:
       mountPath: /data
       sizeGB: 10
     autoDeploy: true
-
-databases:
-  - name: waggle-postgres
-    plan: starter
-    databaseName: waggle
-    user: waggle
-
-  - name: waggle-redis
-    plan: starter

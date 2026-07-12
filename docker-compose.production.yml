@@ -12,6 +12,11 @@
 #                          production if unset. e.g. https://app.example.com
 #   WAGGLE_LICENSE_KEY   — Waggle license key (optional for V1)
 #
+# Required production secrets:
+#   POSTGRES_PASSWORD    - Postgres password
+#   MINIO_ROOT_USER      - MinIO access key
+#   MINIO_ROOT_PASSWORD  - MinIO secret key
+#
 # Optional:
 #   OPENAI_API_KEY       — If using OpenAI models
 #   WAGGLE_MAX_USERS     — Max team members (default: unlimited)
@@ -28,7 +33,7 @@ services:
     ports:
       - '3333:3333'
     environment:
-      - DATABASE_URL=postgres://waggle:${POSTGRES_PASSWORD:-waggle_prod}@postgres:5432/waggle
+      - DATABASE_URL=postgres://waggle:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/waggle
       - REDIS_URL=redis://redis:6379
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -46,8 +51,8 @@ services:
       # Set it to your deployed frontend origin(s), comma-separated, exact-match.
       - CORS_ORIGIN=${CORS_ORIGIN:?set CORS_ORIGIN to your frontend origin, e.g. https://app.example.com}
       - MINIO_ENDPOINT=minio:9000
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-waggle}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-waggle_s3_prod}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
       - MINIO_BUCKET=waggle-files
     volumes:
       - waggle-data:/data
@@ -70,7 +75,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: waggle
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-waggle_prod}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: waggle
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -99,8 +104,8 @@ services:
       - '9000:9000'
       - '9001:9001'
     environment:
-      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-waggle}
-      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-waggle_s3_prod}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:?set MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}
     volumes:
       - minio-data:/data
     healthcheck:

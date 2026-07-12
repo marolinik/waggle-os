@@ -25,6 +25,7 @@ export default tseslint.config(
       "**/target/**",
       "**/.vite/**",
       "**/resources/**", // bundled sidecar (service.js) + native assets
+      ".claude/**", // local agent worktrees/scratch; gitignored and not product source
       ".scratch/**",
       ".planning/**",
       ".mind/**",
