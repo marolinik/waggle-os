@@ -14,7 +14,7 @@
  */
 
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 export interface McpStartOptions {
   /** Extra env vars merged over process.env before launching the child. */
@@ -32,9 +32,8 @@ export interface McpStartOptions {
  * install, etc.) rather than silently failing.
  */
 export function resolveMcpServerEntry(): string {
-  const require = createRequire(import.meta.url);
   try {
-    return require.resolve('@waggle/hive-mind-mcp-server');
+    return fileURLToPath(import.meta.resolve('@waggle/hive-mind-mcp-server'));
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(

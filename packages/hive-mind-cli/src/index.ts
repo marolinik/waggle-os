@@ -25,6 +25,19 @@
 import { parseArgs } from 'node:util';
 import { dispatch, type DispatchArgs } from './dispatch.js';
 
+const HELP_FLAGS = new Set(['--help', '-h']);
+
+function requestedHelpTarget(argv: string[]): string | null | undefined {
+  const [first, second] = argv;
+  if (!first || HELP_FLAGS.has(first)) return null;
+  if (!argv.some((arg) => HELP_FLAGS.has(arg))) return undefined;
+  if ((first === 'mcp' && (second === 'start' || second === 'call')) ||
+      (first === 'dance' && (second === 'send' || second === 'receive'))) {
+    return `${first} ${second}`;
+  }
+  return first;
+}
+
 function parseRootArgs(argv: string[]): DispatchArgs | null {
   // Split "subcommand" out before parseArgs so the subcommand name does
   // not collide with `--` flags. Two-word subcommands `mcp start` and
@@ -83,14 +96,15 @@ function parseRootArgs(argv: string[]): DispatchArgs | null {
       'subtype': { type: 'string' },
       'message': { type: 'string' },
       'reference-id': { type: 'string' },
+      'help': { type: 'boolean', short: 'h' },
     },
   });
 
   return { subcommand, values, positionals };
 }
 
-function printHelp(): void {
-  const help = [
+function rootHelp(): string {
+  return [
     'Usage: hive-mind-cli <subcommand> [options]',
     '',
     'Subcommands:',
@@ -120,13 +134,182 @@ function printHelp(): void {
     '  WAGGLE_DANCE_URL              Loopback sidecar URL (injected per run)',
     '  WAGGLE_RUN_TOKEN              Narrow Room credential (injected per run)',
   ].join('\n');
-  console.log(help);
+}
+
+const SUBCOMMAND_HELP: Record<string, string[]> = {
+  init: [
+    'Usage: hive-mind-cli init [options]',
+    '',
+    'Scaffold the data directory and personal mind database.',
+    '',
+    'Options:',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  status: [
+    'Usage: hive-mind-cli status [options]',
+    '',
+    'Show frame/entity counts and recent memory activity.',
+    '',
+    'Options:',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'recall-context': [
+    'Usage: hive-mind-cli recall-context "<query>" [options]',
+    '',
+    'Search the personal mind and print recalled context.',
+    '',
+    'Options:',
+    '  --query TEXT                 Query text, instead of positional input',
+    '  --limit N                    Maximum hits to return',
+    '  --scope personal|all         Search scope',
+    '  --profile NAME               Search ranking profile',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'save-session': [
+    'Usage: hive-mind-cli save-session [--file PATH] [options]',
+    '',
+    'Persist stdin or a file as a memory frame.',
+    '',
+    'Options:',
+    '  --file PATH                  Read session text from a file',
+    '  --session-label TEXT         Attach a human label to the saved session',
+    '  --importance LEVEL           Memory importance',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'harvest-local': [
+    'Usage: hive-mind-cli harvest-local --source SOURCE --path PATH [options]',
+    '',
+    'Import local AI tool exports.',
+    '',
+    'Options:',
+    '  --source SOURCE              chatgpt|claude|claude-code|gemini|universal',
+    '  --path PATH                  Export file or directory',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  cognify: [
+    'Usage: hive-mind-cli cognify [options]',
+    '',
+    'Extract entities and relations from recent frames.',
+    '',
+    'Options:',
+    '  --since N                    Start after frame id N',
+    '  --limit N                    Maximum frames to scan',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'compile-wiki': [
+    'Usage: hive-mind-cli compile-wiki [options]',
+    '',
+    'Build or refresh the personal wiki.',
+    '',
+    'Options:',
+    '  --mode incremental|full      Compile mode',
+    '  --concept TEXT               Compile a specific concept; repeatable',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  maintenance: [
+    'Usage: hive-mind-cli maintenance [operations] [options]',
+    '',
+    'Run batch maintenance operations for cron-style upkeep.',
+    '',
+    'Operations:',
+    '  --compact                    Compact temporary/deprecated frames',
+    '  --wipe-imports               Delete imported frames',
+    '  --reconcile                  Reconcile FTS/vector indexes',
+    '  --cognify                    Extract entities',
+    '  --wiki                       Compile wiki pages',
+    '',
+    'Options:',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'mcp start': [
+    'Usage: hive-mind-cli mcp start [options]',
+    '',
+    'Run the hive-mind MCP server in the foreground.',
+    '',
+    'Options:',
+    '  -h, --help                   Show this help',
+  ],
+  'mcp call': [
+    'Usage: hive-mind-cli mcp call <tool> [options]',
+    '',
+    'Invoke one MCP tool and print the result.',
+    '',
+    'Options:',
+    '  --args JSON                  Tool arguments as JSON',
+    '  --timeout-ms N               Request timeout',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'dance send': [
+    'Usage: hive-mind-cli dance send --message TEXT [options]',
+    '',
+    'Send a scoped message to the active Waggle Room.',
+    '',
+    'Options:',
+    '  --type TYPE                  broadcast|request|response',
+    '  --subtype SUBTYPE            WaggleDance protocol subtype',
+    '  --message TEXT               Message body (or pass positional text)',
+    '  --reference-id ID            Correlate a response with a request',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  'dance receive': [
+    'Usage: hive-mind-cli dance receive [options]',
+    '',
+    'Read messages from the active Waggle Room.',
+    '',
+    'Options:',
+    '  --since ISO                  Return messages after an ISO timestamp',
+    '  --subtype SUBTYPE            Filter by protocol subtype',
+    '  --limit N                    Maximum messages (1-500)',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+  doctor: [
+    'Usage: hive-mind-cli doctor [options]',
+    '',
+    'Run a local self-diagnostic smoke test.',
+    '',
+    'Options:',
+    '  --data-dir PATH              Override HIVE_MIND_DATA_DIR',
+    '  --json                       Emit JSON rather than human text',
+    '  -h, --help                   Show this help',
+  ],
+};
+
+function printHelp(subcommand?: string | null): void {
+  const lines = subcommand ? SUBCOMMAND_HELP[subcommand] : null;
+  console.log(lines ? lines.join('\n') : rootHelp());
 }
 
 async function main(): Promise<void> {
-  const args = parseRootArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  const helpTarget = requestedHelpTarget(rawArgs);
+  if (helpTarget !== undefined) {
+    printHelp(helpTarget);
+    process.exit(0);
+    return;
+  }
+
+  const args = parseRootArgs(rawArgs);
   if (!args) {
-    printHelp();
+    printHelp(null);
     process.exit(args === null ? 0 : 1);
     return;
   }
