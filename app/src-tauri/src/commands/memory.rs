@@ -113,7 +113,9 @@ pub async fn search_entities(
 pub async fn get_identity(state: State<'_, ServiceState>) -> Result<Value, String> {
     let url = sidecar_url(state.port, "/api/identity");
     match http_get(&url).await {
-        Ok(resp) if resp.status().as_u16() == 404 => Ok(identity_placeholder("sidecar route 404 (unexpected post-A1.1)")),
+        Ok(resp) if resp.status().as_u16() == 404 => Ok(identity_placeholder(
+            "sidecar route 404 (unexpected post-A1.1)",
+        )),
         Ok(resp) => parse_json(resp).await,
         Err(_) => Ok(identity_placeholder("sidecar unreachable")),
     }

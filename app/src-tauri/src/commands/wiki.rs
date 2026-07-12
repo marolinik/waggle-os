@@ -34,11 +34,11 @@ pub async fn get_wiki_pages(state: State<'_, ServiceState>) -> Result<Value, Str
 /// Fetch a single wiki page's metadata (title, type, source frame ids, etc.)
 /// without the full markdown body. Use get_wiki_page_content for the body.
 #[tauri::command]
-pub async fn get_wiki_page(
-    state: State<'_, ServiceState>,
-    slug: String,
-) -> Result<Value, String> {
-    let url = sidecar_url(state.port, &format!("/api/wiki/pages/{}", urlencoding::encode(&slug)));
+pub async fn get_wiki_page(state: State<'_, ServiceState>, slug: String) -> Result<Value, String> {
+    let url = sidecar_url(
+        state.port,
+        &format!("/api/wiki/pages/{}", urlencoding::encode(&slug)),
+    );
     let resp = http_get(&url).await?;
     parse_json(resp).await
 }
