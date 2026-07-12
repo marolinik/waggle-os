@@ -138,6 +138,9 @@ test.describe('H-02 P35 · Spawn-agent models empty-state', () => {
     await gotoDesktop(page);
     await clickSpawnAgent(page);
     await expect(page.getByTestId('spawn-models-list')).toBeVisible();
-    await expect(page.getByTestId('spawn-models-list')).toContainText('claude-sonnet-4-6');
+    const claude = page.getByTestId('spawn-models-list')
+      .getByRole('button', { name: 'Claude Sonnet 4.6' });
+    await expect(claude).toBeVisible();
+    await expect(claude).toHaveAttribute('title', 'claude-sonnet-4-6');
   });
 });
