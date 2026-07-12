@@ -17,6 +17,7 @@ const ROUTES = [
   '/settings?tab=team',
   '/settings?tab=backup',
   '/settings?tab=billing',
+  '/settings?tab=channels',
   '/settings?tab=advanced',
   '/settings/profile',
   '/settings/vault',
