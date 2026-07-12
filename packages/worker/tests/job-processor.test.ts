@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import type { Job } from 'bullmq';
 import { createWorker } from '../src/index.js';
 import { JobService } from '../../server/src/services/job-service.js';
 import { createDb } from '../../server/src/db/connection.js';
 import { users, teams, teamMembers, agentJobs } from '../../server/src/db/schema.js';
 import { eq, sql } from 'drizzle-orm';
+import type { JobData } from '../src/job-processor.js';
 
 const REDIS_URL = 'redis://localhost:6381';
 const DATABASE_URL = 'postgres://waggle:waggle_dev@localhost:5434/waggle';
@@ -109,5 +111,29 @@ describe('BullMQ Worker', () => {
     const failed = await waitForJobStatus(jobService, job.id, 'failed');
     expect(failed?.status).toBe('failed');
     expect((failed?.output as Record<string, unknown>)?.error).toContain('Intentional failure');
+  }, 15_000);
+
+  it('executes cron wrapper jobs through the registered target handler', async () => {
+    workerInstance.processor.register('chat', async (job) => ({
+      response: String(job.data.input.message),
+    }));
+
+    const result = await workerInstance.processor.process({
+      data: {
+        jobId: 'cron-wrapper-1',
+        teamId: testTeamId,
+        userId: testUserId,
+        jobType: 'cron',
+        input: {
+          jobType: 'chat',
+          jobConfig: { message: 'scheduled brief' },
+        },
+      },
+    } as unknown as Job<JobData>, db);
+
+    expect(result).toEqual({
+      response: 'scheduled brief',
+      cron: { delegatedJobType: 'chat' },
+    });
   }, 15_000);
 });

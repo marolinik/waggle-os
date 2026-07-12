@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/worker/tests",
     "start": "node dist/index.js"
   },
   "dependencies": {

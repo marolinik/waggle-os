@@ -7,6 +7,7 @@ import Redis from 'ioredis';
 import { chatHandler } from './handlers/chat-handler.js';
 import { taskHandler } from './handlers/task-handler.js';
 import { groupHandler } from './handlers/group-handler.js';
+import { createCronHandler } from './handlers/cron-handler.js';
 import { createWaggleHandler } from './handlers/waggle-handler.js';
 import { JobService } from '../../server/src/services/job-service.js';
 
@@ -39,8 +40,7 @@ export function createWorker(redisUrl = REDIS_URL, databaseUrl?: string, queueNa
     },
   }));
   processor.register('group', groupHandler);
-  // TODO(pre-launch): Replace with real cron execution handler
-  processor.register('cron', async (job) => ({ result: 'cron handler placeholder', input: job.data.input }));
+  processor.register('cron', createCronHandler((job, handlerDb) => processor.process(job, handlerDb)));
 
   const url = new URL(redisUrl);
   const worker = new Worker<JobData>(queueName, async (job) => {
