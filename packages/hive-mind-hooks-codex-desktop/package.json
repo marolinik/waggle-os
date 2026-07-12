@@ -18,7 +18,7 @@
     "build": "tsc --build",
     "build:clean": "tsc --build --clean",
     "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
-    "test": "vitest run",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/hive-mind-hooks-codex-desktop/tests",
     "test:watch": "vitest"
   },
   "engines": {
