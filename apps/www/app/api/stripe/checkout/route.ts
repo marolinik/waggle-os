@@ -18,8 +18,8 @@ import Stripe from 'stripe';
  *   - Signed-out: 303 to /sign-in with redirect_url back to this endpoint.
  *
  * POST { tier, billingPeriod }
- *   - Backward-compat shim for the existing Pricing.tsx button. §5.4 will
- *     migrate Pricing.tsx to the GET-based flow and this handler can go away.
+ *   - Backward-compat shim for older clients. Pricing.tsx now uses the
+ *     canonical GET flow.
  *   - Returns JSON { url } on success or { message } on error.
  *   - Signed-out: 401 JSON { message }.
  */
@@ -173,7 +173,7 @@ async function runCheckout(
     customer: customerId,
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${origin}/account?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/pricing?checkout=cancelled`,
+    cancel_url: `${origin}/?checkout=cancelled#pricing`,
     metadata: { clerkUserId: userId, tier, billing },
     subscription_data: {
       metadata: { clerkUserId: userId, tier, billing },

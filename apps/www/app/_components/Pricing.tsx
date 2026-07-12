@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import DownloadCTA from './DownloadCTA';
 import { emit, events } from '../_lib/event-taxonomy';
@@ -62,46 +62,26 @@ const KVARK_URL = 'https://www.kvark.ai';
 export default function Pricing() {
   const t = useTranslations('landing.pricing');
   const [billing, setBilling] = useState<BillingPeriod>('monthly');
-  const [loading, setLoading] = useState<TierId | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [checkoutCancelled, setCheckoutCancelled] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setCheckoutCancelled(params.get('checkout') === 'cancelled');
+  }, []);
 
   const handleBillingChange = useCallback((mode: BillingPeriod) => {
     setBilling(mode);
     emit({ name: events.pricingBillingToggle, properties: { mode } });
   }, []);
 
-  const handleStripeCheckout = useCallback(
-    async (tier: TierId) => {
-      setLoading(tier);
-      setError(null);
+  const handleStripeCtaClick = useCallback(
+    (tier: TierId) => {
       emit({
         name: events.ctaClick,
         properties: { section: 'pricing', tier, billing },
       });
-      try {
-        const res = await fetch(STRIPE_ENDPOINT, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tier, billingPeriod: billing }),
-        });
-        if (res.ok) {
-          const data = (await res.json()) as { url?: string };
-          // Same-tab redirect: window.open is popup-blockable after an
-          // async fetch, which silently killed paid conversions.
-          if (data.url) window.location.assign(data.url);
-        } else {
-          const err = (await res.json().catch(() => ({}))) as {
-            message?: string;
-          };
-          setError(err.message ?? t('errors.checkout_default'));
-        }
-      } catch {
-        setError(t('errors.network'));
-      } finally {
-        setLoading(null);
-      }
     },
-    [billing, t],
+    [billing],
   );
 
   return (
@@ -149,6 +129,19 @@ export default function Pricing() {
           </button>
         </div>
 
+        {checkoutCancelled ? (
+          <div role="status" className={styles.checkoutNotice}>
+            <span>{t('notices.cancelled')}</span>
+            <a
+              href={`${STRIPE_ENDPOINT}?tier=teams&billing=${billing}`}
+              onClick={() => handleStripeCtaClick('TEAMS')}
+              className={styles.noticeLink}
+            >
+              {t('notices.retry')}
+            </a>
+          </div>
+        ) : null}
+
         <div className={styles.grid}>
           {TIER_DEFS.map((tier) => {
             const priceKey =
@@ -194,20 +187,17 @@ export default function Pricing() {
                     style={{ width: '100%' }}
                   />
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleStripeCheckout(tier.id)}
-                    disabled={loading === tier.id}
+                  <a
+                    href={`${STRIPE_ENDPOINT}?tier=${tier.id.toLowerCase()}&billing=${billing}`}
+                    onClick={() => handleStripeCtaClick(tier.id)}
                     className={[
                       'btn',
                       tier.highlighted ? 'btn-primary' : 'btn-ghost',
                       styles.tierCta,
                     ].join(' ')}
                   >
-                    {loading === tier.id
-                      ? t('loading')
-                      : t(`tiers.${tier.nsKey}.cta`)}
-                  </button>
+                    {t(`tiers.${tier.nsKey}.cta`)}
+                  </a>
                 )}
               </div>
             );
@@ -236,11 +226,6 @@ export default function Pricing() {
           </div>
         </div>
 
-        {error ? (
-          <p role="alert" style={{ textAlign: 'center', color: 'var(--risk)', fontSize: 13, marginBottom: 24 }}>
-            {error}
-          </p>
-        ) : null}
       </div>
     </section>
   );
