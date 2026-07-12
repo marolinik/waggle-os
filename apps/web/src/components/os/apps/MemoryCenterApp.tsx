@@ -118,7 +118,7 @@ const MemoryCenterApp = ({
           row as a right-aligned scope control, so the surface reads as two tiers,
           not three. Every destination is preserved; only the chrome collapses. */}
       <div className="flex flex-wrap items-center gap-y-1 border-b border-border/50 bg-background/60">
-        <div role="tablist" aria-label="Memory views" className="flex items-center">
+        <div role="tablist" aria-label="Memory views" className="flex min-w-0 flex-wrap items-center">
         {PRIMARY_TABS.map((tab, i) => {
           const Icon = tab.icon;
           const active = view === tab.id;

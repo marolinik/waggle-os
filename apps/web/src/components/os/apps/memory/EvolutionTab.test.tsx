@@ -88,6 +88,25 @@ const STATUS = {
 };
 
 function routeFetch(url: string): Response {
+  if (url.includes('/api/evolution/targets')) {
+    return {
+      ok: true,
+      json: async () => ({
+        personas: [{ id: 'general-purpose', name: 'General Purpose' }],
+        sections: ['Section A'],
+        defaultSchema: { kind: 'baseline' },
+      }),
+    } as unknown as Response;
+  }
+  if (url.includes('/api/evolution/baseline')) {
+    return {
+      ok: true,
+      json: async () => ({
+        baseline: 'section baseline text',
+        schemaBaseline: { kind: 'baseline' },
+      }),
+    } as unknown as Response;
+  }
   if (url.includes('/api/evolution/status')) {
     return { ok: true, json: async () => STATUS } as unknown as Response;
   }
@@ -169,10 +188,56 @@ describe('EvolutionTab — skill-card / version-ladder (D12)', () => {
     expect(card).toBeTruthy();
   });
 
+  it('a11y: proposal review note exposes stable form metadata and a visible focus style', async () => {
+    renderTab();
+    fireEvent.click(await screen.findByRole('button', { name: /v1 awaiting review/i }));
+    const note = await screen.findByLabelText(/note \(optional\)/i);
+    expect(note).toHaveAttribute('name', 'evolutionReviewNote');
+    expect(note).toHaveAttribute('autocomplete', 'off');
+    expect(note.className).toContain('focus-visible:ring-2');
+  });
+
   it('still surfaces the pending-review banner and New Run affordance', async () => {
     renderTab();
     expect(await screen.findByText(/1 proposal awaiting review/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /new evolution run/i })).toBeInTheDocument();
+  });
+
+  it('a11y: new run modal close icon has a name and visible focus style', async () => {
+    renderTab();
+    fireEvent.click(await screen.findByRole('button', { name: /new evolution run/i }));
+    const close = await screen.findByRole('button', { name: /close new evolution run/i });
+    expect(close.className).toContain('focus-visible:ring-2');
+  });
+
+  it('a11y: new run modal controls expose stable form metadata and visible focus styles', async () => {
+    renderTab();
+    fireEvent.click(await screen.findByRole('button', { name: /new evolution run/i }));
+
+    const kind = await screen.findByLabelText(/target kind/i);
+    expect(kind).toHaveAttribute('id', 'evolution-run-target-kind');
+    expect(kind).toHaveAttribute('name', 'evolutionTargetKind');
+    expect(kind).toHaveAttribute('autocomplete', 'off');
+    expect(kind.className).toContain('focus-visible:ring-2');
+
+    const name = screen.getByLabelText(/target name/i);
+    expect(name).toHaveAttribute('id', 'evolution-run-target-name');
+    expect(name).toHaveAttribute('name', 'evolutionTargetName');
+    expect(name).toHaveAttribute('autocomplete', 'off');
+    expect(name.className).toContain('focus-visible:ring-2');
+
+    const baseline = await screen.findByLabelText(/^baseline/i);
+    expect(baseline).toHaveAttribute('id', 'evolution-run-baseline');
+    expect(baseline).toHaveAttribute('name', 'evolutionBaseline');
+    expect(baseline).toHaveAttribute('autocomplete', 'off');
+    expect(baseline.className).toContain('focus-visible:ring-2');
+
+    fireEvent.click(screen.getByRole('button', { name: /advanced \(schema baseline\)/i }));
+    const schema = await screen.findByLabelText(/schema baseline json/i);
+    expect(schema).toHaveAttribute('id', 'evolution-run-schema');
+    expect(schema).toHaveAttribute('name', 'evolutionSchemaBaseline');
+    expect(schema).toHaveAttribute('autocomplete', 'off');
+    expect(schema.className).toContain('focus-visible:ring-2');
   });
 
   it('shows the empty state when there are no runs', async () => {

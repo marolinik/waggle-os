@@ -147,9 +147,15 @@ const TimelineApp = ({ workspaceId, workspaceName }: TimelineAppProps) => {
 
           {eventTypes.length > 1 && (
             <div className="ml-auto flex items-center gap-1">
-              <Filter className="w-3 h-3 text-muted-foreground" />
-              <select value={typeFilter ?? ''} onChange={e => setTypeFilter(e.target.value || null)}
-                className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer">
+              <Filter className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
+              <select
+                value={typeFilter ?? ''}
+                onChange={e => setTypeFilter(e.target.value || null)}
+                aria-label="Filter timeline by event type"
+                name="timeline-event-type"
+                autoComplete="off"
+                className="text-[11px] bg-transparent text-muted-foreground border-none outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-md"
+              >
                 <option value="">All types</option>
                 {eventTypes.map(t => (
                   <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>

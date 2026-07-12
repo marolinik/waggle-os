@@ -731,15 +731,18 @@ function RunDetailView({
       {/* Action bar */}
       {canAct && (
         <div className="pt-3 border-t border-border/30">
-          <label className="block text-[11px] text-muted-foreground mb-1 font-display">
+          <label htmlFor="evolution-review-note" className="block text-[11px] text-muted-foreground mb-1 font-display">
             Note (optional)
           </label>
           <textarea
+            id="evolution-review-note"
+            name="evolutionReviewNote"
+            autoComplete="off"
             value={noteText}
             onChange={e => onNoteChange(e.target.value)}
             rows={2}
             placeholder="Why are you accepting / rejecting this?"
-            className="w-full bg-muted/30 border border-border/40 rounded-md px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full bg-muted/30 border border-border/40 rounded-md px-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             disabled={actionInFlight}
           />
           {error && (
@@ -1149,8 +1152,10 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
             <h3 className="text-sm font-display font-semibold text-foreground">New Evolution Run</h3>
           </div>
           <button
+            type="button"
+            aria-label="Close new evolution run"
             onClick={onClose}
-            className="p-1 rounded text-muted-foreground hover:text-foreground"
+            className="p-1 rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <XIcon className="w-4 h-4" />
           </button>
@@ -1168,25 +1173,31 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
             <>
               {/* Target pickers */}
               <div className="grid grid-cols-2 gap-2">
-                <label className="flex flex-col">
+                <label htmlFor="evolution-run-target-kind" className="flex flex-col">
                   <span className="text-[11px] text-muted-foreground font-display mb-1">Target Kind</span>
                   <select
+                    id="evolution-run-target-kind"
+                    name="evolutionTargetKind"
+                    autoComplete="off"
                     value={kind}
                     onChange={e => onChangeKind(e.target.value as RunTargetKind)}
                     disabled={submitting}
-                    className="bg-muted/30 border border-border/40 rounded px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="bg-muted/30 border border-border/40 rounded px-2 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     <option value="behavioral-spec-section">behavioral-spec-section</option>
                     <option value="persona-system-prompt">persona-system-prompt</option>
                   </select>
                 </label>
-                <label className="flex flex-col">
+                <label htmlFor="evolution-run-target-name" className="flex flex-col">
                   <span className="text-[11px] text-muted-foreground font-display mb-1">Target Name</span>
                   <select
+                    id="evolution-run-target-name"
+                    name="evolutionTargetName"
+                    autoComplete="off"
                     value={name}
                     onChange={e => setName(e.target.value)}
                     disabled={submitting}
-                    className="bg-muted/30 border border-border/40 rounded px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    className="bg-muted/30 border border-border/40 rounded px-2 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     {kind === 'persona-system-prompt'
                       ? targets.personas.map(p => (
@@ -1202,19 +1213,22 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
               {/* Baseline */}
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-muted-foreground font-display">
+                  <label htmlFor="evolution-run-baseline" className="text-[11px] text-muted-foreground font-display">
                     Baseline {loadingBaseline && <Loader2 className="w-2.5 h-2.5 animate-spin inline ml-1" />}
-                  </span>
+                  </label>
                   <span className="text-[10px] text-muted-foreground/60 font-mono">
                     {baseline.length} chars
                   </span>
                 </div>
                 <textarea
+                  id="evolution-run-baseline"
+                  name="evolutionBaseline"
+                  autoComplete="off"
                   value={baseline}
                   onChange={e => setBaseline(e.target.value)}
                   disabled={submitting || loadingBaseline}
                   rows={10}
-                  className="w-full bg-muted/20 border border-border/40 rounded px-2 py-1.5 text-[11px] text-foreground font-mono placeholder:text-muted-foreground/60 focus:outline-none focus:ring-1 focus:ring-primary"
+                  className="w-full bg-muted/20 border border-border/40 rounded px-2 py-1.5 text-[11px] text-foreground font-mono placeholder:text-muted-foreground/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   placeholder="(loading baseline…)"
                 />
               </div>
@@ -1229,13 +1243,21 @@ function NewRunModal({ onClose, onSuccess }: NewRunModalProps) {
                   Advanced (schema baseline)
                 </button>
                 {showAdvanced && (
-                  <textarea
-                    value={schemaJson}
-                    onChange={e => setSchemaJson(e.target.value)}
-                    disabled={submitting || loadingBaseline}
-                    rows={8}
-                    className="mt-1 w-full bg-muted/20 border border-border/40 rounded px-2 py-1.5 text-[11px] text-foreground font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
+                  <div className="mt-1">
+                    <label htmlFor="evolution-run-schema" className="text-[11px] text-muted-foreground font-display">
+                      Schema baseline JSON
+                    </label>
+                    <textarea
+                      id="evolution-run-schema"
+                      name="evolutionSchemaBaseline"
+                      autoComplete="off"
+                      value={schemaJson}
+                      onChange={e => setSchemaJson(e.target.value)}
+                      disabled={submitting || loadingBaseline}
+                      rows={8}
+                      className="mt-1 w-full bg-muted/20 border border-border/40 rounded px-2 py-1.5 text-[11px] text-foreground font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                    />
+                  </div>
                 )}
               </div>
 

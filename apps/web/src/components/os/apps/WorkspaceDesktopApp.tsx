@@ -509,7 +509,7 @@ const WorkspaceDesktopApp = ({
   // be grabbed by a test polling for the loaded one.
   const renderTabBar = (withTestHooks: boolean) => (
     <nav
-      className="shrink-0 flex items-center gap-1 border-b border-[var(--line-soft)] px-3 overflow-x-auto"
+      className="shrink-0 flex flex-wrap items-center gap-x-1 gap-y-0 border-b border-[var(--line-soft)] px-2 overflow-x-visible sm:flex-nowrap sm:px-3 sm:overflow-x-auto"
       role="tablist"
       {...(withTestHooks ? { 'data-testid': 'ws-tab-bar' } : {})}
     >
@@ -531,7 +531,7 @@ const WorkspaceDesktopApp = ({
             aria-selected={isActive}
             aria-controls="ws-tabpanel"
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2.5 text-[13px] transition-colors ${
+            className={`flex items-center gap-1.5 whitespace-nowrap border-b-2 px-2 py-2.5 text-[13px] transition-colors sm:px-3 ${
               isActive
                 ? 'border-[var(--honey)] text-[var(--text)]'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text)]'
@@ -592,7 +592,11 @@ const WorkspaceDesktopApp = ({
             omitted so this transient node never shadows the stable loaded bar. */}
         {renderTabBar(false)}
         {/* Content — thread-shaped placeholders (WorkspaceBriefing idiom). */}
-        <div className="flex-1 min-h-0 overflow-hidden p-6 animate-pulse motion-reduce:animate-none" aria-hidden="true">
+        <div
+          id="ws-tabpanel"
+          className="flex-1 min-h-0 overflow-hidden p-6 animate-pulse motion-reduce:animate-none"
+          aria-hidden="true"
+        >
           <div className="mx-auto w-full max-w-[680px] space-y-4 py-2">
             <div className="flex gap-2">
               <div className="w-9 h-9 shrink-0 rounded-full bg-[var(--surface-2)]" />
@@ -757,7 +761,7 @@ const WorkspaceDesktopApp = ({
 
       {/* Body: main canvas + right context panel */}
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        <main
+        <section
           id="ws-tabpanel"
           className="flex-1 min-w-0 overflow-auto"
           role="tabpanel"
@@ -960,7 +964,7 @@ const WorkspaceDesktopApp = ({
               )}
             </div>
           )}
-        </main>
+        </section>
       </div>
     </div>
   );
