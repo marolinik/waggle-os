@@ -47,7 +47,7 @@ vi.mock('@/components/os/apps/connectors/mcp-registry', () => ({
   ],
 }));
 
-import MCPHubApp from '@/components/os/apps/MCPHubApp';
+import MCPHubApp, { resetMcpRouteCache } from '@/components/os/apps/MCPHubApp';
 import { mcpStateBadge } from '@/components/os/apps/mcp/mcp-hub-types';
 import { ServiceProvider } from '@/providers/ServiceProvider';
 
@@ -71,6 +71,7 @@ const renderApp = () => render(
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetMcpRouteCache();
   mocks.adapter.connect.mockResolvedValue(undefined);
   mocks.adapter.getMcps.mockResolvedValue(MCPS);
   // The A4 install-affordance gate: only catalog ids whose name resolves in
@@ -87,6 +88,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('MCPHubApp — MCP Hub (S08)', () => {
+  it('repaints installed MCP state on return and refreshes silently', async () => {
+    const first = renderApp();
+    expect(await screen.findByText('Filesystem')).toBeInTheDocument();
+    const baseline = mocks.adapter.getMcps.mock.calls.length;
+    first.unmount();
+
+    renderApp();
+    expect(screen.getByText('Filesystem')).toBeInTheDocument();
+    expect(screen.queryByText(/Loading MCP/i)).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.adapter.getMcps.mock.calls.length).toBeGreaterThan(baseline));
+  });
+
   it('renders installed instances with the runtime state badge, scope chip and honest logs affordance', async () => {
     renderApp();
     expect(await screen.findByText('Filesystem')).toBeInTheDocument();
@@ -134,6 +147,34 @@ describe('MCPHubApp — MCP Hub (S08)', () => {
     } finally {
       window.removeEventListener('waggle:tier-insufficient', listener);
     }
+  });
+
+  it('scopes MCP catalog filters and distribution transitions to explicit properties', { timeout: CATALOG_TIMEOUT }, async () => {
+    renderApp();
+    await screen.findByText('Filesystem');
+    fireEvent.click(screen.getByRole('tab', { name: 'Catalog' }));
+    await screen.findByText('PostgreSQL');
+
+    const distributionSegment = screen.getByRole('button', { name: /Files: 1 servers/i });
+    expect(distributionSegment.className).not.toContain('transition-all');
+    expect(distributionSegment.className).toContain('transition-[filter]');
+
+    const allChip = screen.getByRole('button', { name: /^All/i });
+    const databaseChip = screen.getByRole('button', { name: /^Database\s+.\s+1$/i });
+    expect(allChip?.className).not.toContain('transition-all');
+    expect(allChip?.className).toContain('transition-[background-color,color,box-shadow]');
+    expect(databaseChip?.className).not.toContain('transition-all');
+    expect(databaseChip?.className).toContain('transition-[background-color,color,box-shadow]');
+  });
+
+  it('a11y: catalog search exposes stable form metadata', { timeout: CATALOG_TIMEOUT }, async () => {
+    renderApp();
+    await screen.findByText('Filesystem');
+    fireEvent.click(screen.getByRole('tab', { name: 'Catalog' }));
+
+    const search = await screen.findByRole('textbox', { name: /search mcp catalog/i });
+    expect(search).toHaveAttribute('name', 'mcpCatalogSearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
   });
 
   it('a SecurityGate-blocked install renders the risk ApprovalModal; approve retries with forceInsecure', { timeout: CATALOG_TIMEOUT }, async () => {
@@ -216,6 +257,11 @@ describe('MCPHubApp — MCP Hub (S08)', () => {
 
     const dialog = await screen.findByTestId('mcp-scope-dialog');
     expect(dialog).toBeInTheDocument();
+    const workspaceSelect = screen.getByLabelText('Target workspace');
+    expect(workspaceSelect).toHaveAttribute('name', 'mcpScopeWorkspaceId');
+    expect(workspaceSelect).toHaveAttribute('autocomplete', 'off');
+    expect(workspaceSelect.className).toContain('focus-visible:ring-2');
+    expect(workspaceSelect.className).toContain('focus-visible:ring-[var(--focus-ring)]');
     // Pinned to ws-1 today → switch to personal and save.
     fireEvent.click(screen.getByRole('radio', { name: /Personal — all workspaces/ }));
     fireEvent.click(screen.getByTestId('mcp-scope-save'));
@@ -281,6 +327,41 @@ describe('MCPHubApp — MCP Hub (S08)', () => {
     await waitFor(() => expect(mocks.adapter.addCustomMcp).toHaveBeenCalledWith({
       name: 'my-server', command: 'npx', args: ['-y', 'my-pkg'],
     }));
+  });
+
+  it('a11y: the custom-add form exposes stable metadata and focus rings', async () => {
+    renderApp();
+    await screen.findByText('Filesystem');
+    fireEvent.click(screen.getByRole('tab', { name: 'Custom' }));
+    await screen.findByTestId('add-custom-mcp-form');
+
+    const name = screen.getByLabelText('Name');
+    expect(name).toHaveAttribute('name', 'mcpServerName');
+    expect(name).toHaveAttribute('autocomplete', 'off');
+    expect(name.className).toContain('focus-visible:ring-2');
+    expect(name.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+
+    const command = screen.getByLabelText('Command');
+    expect(command).toHaveAttribute('name', 'mcpServerCommand');
+    expect(command).toHaveAttribute('autocomplete', 'off');
+
+    const args = screen.getByLabelText('Arguments (one per line)');
+    expect(args).toHaveAttribute('name', 'mcpServerArgs');
+    expect(args).toHaveAttribute('autocomplete', 'off');
+
+    const env = screen.getByLabelText('Environment (KEY=VALUE, one per line)');
+    expect(env).toHaveAttribute('name', 'mcpServerEnv');
+    expect(env).toHaveAttribute('autocomplete', 'off');
+
+    const scope = screen.getByLabelText(/Workspace scope/);
+    expect(scope).toHaveAttribute('name', 'mcpWorkspaceScope');
+    expect(scope).toHaveAttribute('autocomplete', 'off');
+    expect(scope.className).toContain('focus-visible:ring-2');
+    expect(scope.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+
+    const submit = screen.getByTestId('add-custom-mcp-submit');
+    expect(submit.className).toContain('focus-visible:ring-2');
+    expect(submit.className).toContain('focus-visible:ring-[var(--focus-ring)]');
   });
 
   it('C20: the Remote Registry tab is an honest stdio-only pointer, not a fake catalog', async () => {

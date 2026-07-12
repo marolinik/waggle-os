@@ -115,6 +115,9 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     expect(rail).not.toHaveTextContent('Agents');
     expect(rail).not.toHaveTextContent('Models');
     expect(rail).not.toHaveTextContent('Templates');
+    const allFacet = within(rail).getByRole('button', { name: /^All$/i });
+    expect(allFacet.className).not.toContain('transition-all');
+    expect(allFacet.className).toContain('transition-[background-color,color,box-shadow]');
   });
 
   it('the install count bar reflects the store (a connected connector counts) (D1)', async () => {
@@ -155,7 +158,12 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connectors' }));
 
     fireEvent.click(await screen.findByTestId('extension-install-connector:slack'));
-    const input = await screen.findByTestId('connector-token-input');
+    const input = await screen.findByLabelText(/slack api token/i);
+    expect(input).toHaveAttribute('type', 'password');
+    expect(input).toHaveAttribute('name', 'marketplaceConnectorToken');
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input).toHaveAttribute('spellcheck', 'false');
+    expect(input).toHaveClass('focus-visible:ring-ring');
     fireEvent.change(input, { target: { value: 'xoxb-123' } });
     fireEvent.click(screen.getByTestId('connector-token-submit'));
     await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('slack', { token: 'xoxb-123' }));
@@ -315,7 +323,12 @@ describe('MarketplaceApp — Warm-Hive Marketplace (PR4 Variation A)', () => {
     await waitFor(() => expect(mocks.adapter.getExtendAudit).toHaveBeenCalledWith({ limit: 30 }));
     expect(await screen.findByText('Installed from registry')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Type'), { target: { value: 'mcp' } });
+    const typeFilter = screen.getByRole('combobox', { name: 'Type' });
+    expect(typeFilter).toHaveAttribute('name', 'extendAuditTypeFilter');
+    expect(typeFilter).toHaveAttribute('autocomplete', 'off');
+    expect(typeFilter).toHaveClass('focus-visible:ring-ring');
+
+    fireEvent.change(typeFilter, { target: { value: 'mcp' } });
     await waitFor(() => expect(mocks.adapter.getExtendAudit).toHaveBeenCalledWith({ type: 'mcp', limit: 30 }));
   });
 });

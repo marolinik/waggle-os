@@ -25,7 +25,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
-import ConnectorsApp, { buildRevokeRequest, shouldResetCredentialInputs } from '@/components/os/apps/ConnectorsApp';
+import ConnectorsApp, { buildRevokeRequest, resetConnectorsRouteCache, shouldResetCredentialInputs } from '@/components/os/apps/ConnectorsApp';
 import { ServiceProvider } from '@/providers/ServiceProvider';
 
 const CONNECTORS = [
@@ -47,12 +47,19 @@ const CONNECTORS = [
   },
 ];
 
+const JIRA_CONNECTOR = {
+  id: 'jira', name: 'Jira', description: 'Project tracking', service: 'jira',
+  authType: 'bearer', status: 'disconnected', capabilities: ['read', 'write'],
+  substrate: 'waggle', tools: [], category: 'productivity',
+};
+
 const renderApp = () => render(
   <ServiceProvider><TooltipProvider><ConnectorsApp /></TooltipProvider></ServiceProvider>,
 );
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetConnectorsRouteCache();
   mocks.adapter.connect.mockResolvedValue(undefined);
   mocks.adapter.getConnectors.mockResolvedValue(CONNECTORS);
   mocks.adapter.getConnectorHealth.mockResolvedValue({
@@ -63,6 +70,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('ConnectorsApp — Connector Hub (S07)', () => {
+  it('repaints the last roster on return and refreshes silently', async () => {
+    const first = renderApp();
+    expect(await screen.findByText('GitHub')).toBeInTheDocument();
+    const baseline = mocks.adapter.getConnectors.mock.calls.length;
+    first.unmount();
+
+    renderApp();
+    expect(screen.getByText('GitHub')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.adapter.getConnectors.mock.calls.length).toBeGreaterThan(baseline));
+  });
+
   it('renders connectors grouped by the shared category with status badges + lastSyncAt', async () => {
     renderApp();
     expect(await screen.findByText('GitHub')).toBeInTheDocument();
@@ -74,6 +93,20 @@ describe('ConnectorsApp — Connector Hub (S07)', () => {
     expect(screen.getByText('Not connected')).toBeInTheDocument();
     // C16 stamp surfaces on the row.
     expect(screen.getByText(/Last sync/)).toBeInTheDocument();
+  });
+
+  it('scopes connector row and brand tile transitions to explicit properties', async () => {
+    renderApp();
+    const githubLabel = await screen.findByText('GitHub');
+    const rowButton = githubLabel.closest('button');
+    expect(rowButton).not.toBeNull();
+    const row = rowButton?.parentElement;
+    expect(row?.className).not.toContain('transition-all');
+    expect(row?.className).toContain('transition-colors');
+
+    const brandTile = rowButton?.querySelector('div[aria-hidden="true"]');
+    expect(brandTile?.className).not.toContain('transition-all');
+    expect(brandTile?.className).toContain('transition-shadow');
   });
 
   it('the Connected tab filters out disconnected connectors', async () => {
@@ -163,6 +196,29 @@ describe('ConnectorsApp — Connector Hub (S07)', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
     await waitFor(() => expect(mocks.adapter.getExtendAudit).toHaveBeenCalledWith({ type: 'connector', limit: 25 }));
     expect(await screen.findByText('Connector connected')).toBeInTheDocument();
+  });
+
+  it('a11y: Jira setup fields expose stable credential metadata', async () => {
+    mocks.adapter.getConnectors.mockResolvedValue([...CONNECTORS, JIRA_CONNECTOR]);
+    renderApp();
+
+    fireEvent.click(await screen.findByText('Jira'));
+
+    const email = await screen.findByRole('textbox', { name: /atlassian account email/i });
+    expect(email).toHaveAttribute('type', 'email');
+    expect(email).toHaveAttribute('name', 'connectorEmail');
+    expect(email).toHaveAttribute('autocomplete', 'email');
+    expect(email).toHaveAttribute('spellcheck', 'false');
+    expect(email.className).toContain('focus-visible:ring-2');
+
+    const token = screen.getByLabelText(/jira api token/i);
+    expect(token).toHaveAttribute('type', 'password');
+    expect(token).toHaveAttribute('name', 'connectorToken');
+    expect(token).toHaveAttribute('autocomplete', 'off');
+    expect(token).toHaveAttribute('spellcheck', 'false');
+    expect(token.className).toContain('focus-visible:ring-2');
+
+    expect(screen.getByRole('button', { name: /^connect$/i }).className).toContain('focus-visible:ring-2');
   });
 });
 
