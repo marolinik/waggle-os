@@ -124,7 +124,7 @@ describe('paired conversation', () => {
     expect(chatTurn).toHaveBeenCalledWith(expect.objectContaining({
       message: 'what is on my plate today?',
       workspace: 'default',
-      session: 'channel-telegram-chat-1',
+      session: 'channel-v2-telegram-Y2hhdC0x',
       port: 3333,
       sessionToken: 'test-session-token',
       proposeHeld: true,
@@ -265,12 +265,15 @@ describe('rate limiting', () => {
 });
 
 describe('sessionIdFor', () => {
-  it('normalizes chat ids into the safe-segment charset', () => {
-    // '-' is legal in assertSafeSegment's charset, so negative ids pass through.
+  it('encodes chat ids into unique safe path segments without punctuation collisions', () => {
+    const first = sessionIdFor({ platform: 'slack', chatId: 'C01:AB' });
+    const second = sessionIdFor({ platform: 'slack', chatId: 'C01/AB' });
+
+    expect(first).toMatch(/^channel-v2-slack-[a-zA-Z0-9_-]+$/);
+    expect(second).toMatch(/^channel-v2-slack-[a-zA-Z0-9_-]+$/);
+    expect(first).not.toBe(second);
     expect(sessionIdFor({ platform: 'telegram', chatId: '-100123' }))
-      .toBe('channel-telegram--100123');
-    expect(sessionIdFor({ platform: 'slack', chatId: 'C01:AB' }))
-      .toBe('channel-slack-C01_AB');
+      .toBe('channel-v2-telegram-LTEwMDEyMw');
   });
 });
 

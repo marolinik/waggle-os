@@ -13,6 +13,7 @@
  * allowlist/overrides/config live in PairingStore (channels.json).
  */
 
+import { Buffer } from 'node:buffer';
 import { PairingStore } from './pairing.js';
 import { runChannelChatTurn } from './chat-client.js';
 import { TelegramAdapter } from './telegram-adapter.js';
@@ -341,11 +342,10 @@ export class ChannelManager {
 }
 
 /**
- * Stable persisted-session id per IM conversation. chatIds can be negative
- * (Telegram groups) or contain platform punctuation — normalize to the
- * charset assertSafeSegment allows so chat-persistence path joins stay safe.
+ * Stable persisted-session id per IM conversation. Base64url keeps the full
+ * transport id unique while staying inside assertSafeSegment's safe charset.
  */
 export function sessionIdFor(msg: Pick<ChannelMessage, 'platform' | 'chatId'>): string {
-  const safeChat = msg.chatId.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return `channel-${msg.platform}-${safeChat}`;
+  const encodedChat = Buffer.from(msg.chatId, 'utf8').toString('base64url') || 'empty';
+  return `channel-v2-${msg.platform}-${encodedChat}`;
 }
