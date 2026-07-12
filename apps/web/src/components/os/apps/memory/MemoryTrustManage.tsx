@@ -589,7 +589,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
   // (review M).
   const forget = (m: Memory, closeDrawer = false) =>
     void mutate(() => adapter.deleteMemoryById(m.id, wsParam, mind), `Forgotten M-${m.id} — removed from recall`, closeDrawer);
-  const confirm = (m: Memory, closeDrawer = false) =>
+  const confirmMemory = (m: Memory, closeDrawer = false) =>
     void mutate(() => adapter.confirmMemory(m.id, wsParam, mind), `Confirmed M-${m.id} — marked reviewed`, closeDrawer);
   const saveCorrection = () => {
     if (!selected) return;
@@ -642,11 +642,13 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
         <div className="flex min-w-[200px] flex-1 items-center gap-2 rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2.5">
           <Search className="h-4 w-4 shrink-0 text-[var(--text-dim)]" strokeWidth={1.9} />
           <input
+            name="memoryTrustSearch"
+            autoComplete="off"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             aria-label="Search memories"
             placeholder="Search what Waggle knows… or ask it to forget something"
-            className="w-full bg-transparent text-[14px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none"
+            className="w-full bg-transparent text-[14px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
           />
         </div>
         {FILTERS.map((f) => {
@@ -718,7 +720,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
               enterDelayMs={reduceMotion ? undefined : Math.min(i, 10) * 40}
               onOpen={() => openDetail(m)}
               onForget={() => forget(m)}
-              onConfirm={() => confirm(m)}
+              onConfirm={() => confirmMemory(m)}
             />
           ))}
         </ul>
@@ -749,7 +751,7 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
             )}
             {selected.status === 'unreviewed' && (
               <button
-                onClick={() => confirm(selected, true)}
+                onClick={() => confirmMemory(selected, true)}
                 disabled={busy}
                 className="inline-flex items-center gap-1 rounded-lg border border-[var(--line-soft)] px-2.5 py-1 text-xs hover:bg-[var(--surface-2)]"
               >
@@ -774,10 +776,12 @@ export default function MemoryTrustManage({ mind, workspaceId, onToast, onWhy, o
               </label>
               <textarea
                 id="trust-correct"
+                name="memoryTrustCorrection"
+                autoComplete="off"
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 rows={6}
-                className="mt-1 block w-full resize-y rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-sm leading-relaxed text-[var(--text)]"
+                className="mt-1 block w-full resize-y rounded-md border border-[var(--line)] bg-[var(--bg)] px-2 py-1.5 text-sm leading-relaxed text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg)]"
               />
               {/* Read-only markdown preview. Safe: renderChatMarkdown escapes
                   &/</> BEFORE formatting (the established escaper MemoryCenterTab

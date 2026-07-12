@@ -40,7 +40,9 @@ interface MemoryCardProps {
 
 export function MemoryCard({ memory, onClick, selected, onSelect, className, duplicateCount }: MemoryCardProps) {
   const status = statusMeta(memory.status);
+  const isProvisional = memory.importance === 'temporary';
   const showTitle = memory.title && memory.title !== memory.content;
+  const selectionLabel = memory.title || memory.content.slice(0, 80) || memory.id;
 
   return (
     <div
@@ -63,10 +65,12 @@ export function MemoryCard({ memory, onClick, selected, onSelect, className, dup
         <input
           type="checkbox"
           checked={!!selected}
+          name="selectedMemoryIds"
+          value={memory.id}
           onClick={(e) => e.stopPropagation()}
           onChange={(e) => onSelect(e.target.checked)}
           className="absolute right-2.5 top-2.5 h-3.5 w-3.5 accent-primary"
-          aria-label="Select memory"
+          aria-label={`Select memory ${selectionLabel}`}
         />
       )}
 
@@ -77,7 +81,7 @@ export function MemoryCard({ memory, onClick, selected, onSelect, className, dup
 
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span className="inline-flex items-center rounded-md border border-border bg-muted/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-          {memoryKindLabel(memory.kind)}
+          {isProvisional ? 'Provisional' : memoryKindLabel(memory.kind)}
         </span>
         <ConfidenceBadge value={memory.confidence} compact />
         {status && <StatusBadge tone={status.tone} label={status.label} />}

@@ -96,9 +96,12 @@ const TimelineTab = ({
       {/* Timeline sidebar — chronological frame list with search + filters. */}
       <div className="w-56 border-r border-border/50 flex flex-col shrink-0">
         <div className="p-2 border-b border-border/30">
-          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
-            <Search className="w-3 h-3 text-muted-foreground" />
+          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 focus-within:ring-2 focus-within:ring-[var(--focus-ring)] focus-within:ring-offset-2 focus-within:ring-offset-background">
+            <Search className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
             <Input
+              aria-label="Search timeline memories"
+              name="timelineMemorySearch"
+              autoComplete="off"
               value={searchQuery}
               onChange={e => onSearchChange(e.target.value)}
               placeholder="Search memories..."
@@ -114,10 +117,13 @@ const TimelineTab = ({
             <div className="flex gap-1">
               <HintTooltip content="Filter timeline">
                 <button
+                  type="button"
+                  aria-label={showFilters ? 'Hide timeline filters' : 'Show timeline filters'}
+                  aria-expanded={showFilters}
                   onClick={() => setShowFilters(!showFilters)}
-                  className={`p-1 rounded transition-colors ${showFilters ? 'text-honey' : 'text-muted-foreground hover:text-foreground'}`}
+                  className={`p-1 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background ${showFilters ? 'text-honey' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  <Filter className="w-3 h-3" />
+                  <Filter className="w-3 h-3" aria-hidden="true" />
                 </button>
               </HintTooltip>
             </div>
@@ -141,12 +147,14 @@ const TimelineTab = ({
                 </div>
               </div>
               <div>
-                <p className="text-[11px] text-muted-foreground mb-1">Min Importance: {minImportance}</p>
+                <label htmlFor="timeline-min-importance" className="text-[11px] text-muted-foreground mb-1 block">Min Importance: {minImportance}</label>
                 <input
+                  id="timeline-min-importance"
+                  name="timelineMinImportance"
                   type="range"
                   min={0} max={5} value={minImportance}
                   onChange={e => onMinImportanceChange?.(Number(e.target.value))}
-                  className="w-full h-1 rounded-full appearance-none bg-muted accent-primary"
+                  className="w-full h-1 rounded-full appearance-none bg-muted accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 />
               </div>
             </div>

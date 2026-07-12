@@ -51,6 +51,8 @@ const SOURCE_ICONS: Record<string, string> = {
   'unknown': 'Other',
 };
 
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
+
 function formatRelative(iso: string | null): string {
   if (!iso) return 'never';
   const then = new Date(iso).getTime();
@@ -319,7 +321,8 @@ const HarvestTab = () => {
         </div>
         <button
           onClick={fetchSources}
-          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          aria-label="Refresh harvest sources"
+          className={`p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors ${CONTROL_FOCUS_CLASS}`}
         >
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
@@ -345,14 +348,14 @@ const HarvestTab = () => {
             <button
               onClick={handleResumeRun}
               disabled={importing}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-amber-950 text-xs font-display hover:bg-amber-400 transition-colors disabled:opacity-50"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-500 text-amber-950 text-xs font-display hover:bg-amber-400 transition-colors disabled:opacity-50 ${CONTROL_FOCUS_CLASS}`}
             >
               <RotateCcw className="w-3 h-3" /> Resume
             </button>
             <button
               onClick={handleDiscardRun}
               disabled={importing}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors disabled:opacity-50"
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors disabled:opacity-50 ${CONTROL_FOCUS_CLASS}`}
             >
               <XCircle className="w-3 h-3" /> Discard
             </button>
@@ -396,7 +399,8 @@ const HarvestTab = () => {
             <button
               onClick={handleClaudeCodeHarvest}
               disabled={importing}
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
+              aria-label={claudeCodeSource ? 'Re-harvest Claude Code history' : 'Harvest Claude Code history'}
+              className={`px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0 ${CONTROL_FOCUS_CLASS}`}
             >
               {importing ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
@@ -438,7 +442,7 @@ const HarvestTab = () => {
           </div>
           <div className="h-1 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full bg-primary transition-[width] duration-[var(--mo-base)]"
+              className="h-full bg-primary transition-[width] duration-mo-base"
               style={{
                 width: `${Math.min(100, (progress.current / Math.max(1, progress.total)) * 100)}%`,
               }}
@@ -463,7 +467,7 @@ const HarvestTab = () => {
           </div>
           <button
             onClick={handleReviewIdentity}
-            className="px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs font-display hover:bg-accent/90 transition-colors shrink-0"
+            className={`px-3 py-1.5 rounded-lg bg-accent text-accent-foreground text-xs font-display hover:bg-accent/90 transition-colors shrink-0 ${CONTROL_FOCUS_CLASS}`}
           >
             Open Profile →
           </button>
@@ -531,7 +535,8 @@ const HarvestTab = () => {
                           setError(err instanceof Error ? err.message : 'Failed to update auto-sync');
                         }
                       }}
-                      className={`p-1 rounded transition-colors ${s.autoSync ? 'text-honey hover:text-honey/70' : 'text-muted-foreground hover:text-foreground'}`}
+                      aria-label={`${s.autoSync ? 'Pause' : 'Enable'} ${s.displayName} auto-sync`}
+                      className={`p-1 rounded transition-colors ${CONTROL_FOCUS_CLASS} ${s.autoSync ? 'text-honey hover:text-honey/70' : 'text-muted-foreground hover:text-foreground'}`}
                     >
                       {s.autoSync ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
                     </button>
@@ -547,7 +552,8 @@ const HarvestTab = () => {
                           setError(err instanceof Error ? err.message : 'Failed to remove source');
                         }
                       }}
-                      className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label={`Remove ${s.displayName} harvest source`}
+                      className={`p-1 rounded text-muted-foreground hover:text-destructive transition-colors ${CONTROL_FOCUS_CLASS}`}
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -569,7 +575,8 @@ const HarvestTab = () => {
             <button
               key={key}
               onClick={() => setSelectedSource(key)}
-              className={`px-2 py-1 rounded-lg text-[11px] transition-colors ${
+              aria-pressed={selectedSource === key}
+              className={`px-2 py-1 rounded-lg text-[11px] transition-colors ${CONTROL_FOCUS_CLASS} ${
                 selectedSource === key
                   ? 'bg-primary/20 text-honey border border-primary/30'
                   : 'bg-secondary/30 text-muted-foreground hover:text-foreground border border-border/30'
@@ -584,7 +591,8 @@ const HarvestTab = () => {
         <div className="flex gap-2 mb-3">
           <button
             onClick={() => setPasteMode(false)}
-            className={`flex-1 p-3 rounded-xl border text-center transition-colors ${
+            aria-pressed={!pasteMode}
+            className={`flex-1 p-3 rounded-xl border text-center transition-colors ${CONTROL_FOCUS_CLASS} ${
               !pasteMode ? 'bg-primary/10 border-primary/30 text-honey' : 'bg-secondary/30 border-border/30 text-muted-foreground'
             }`}
           >
@@ -593,7 +601,8 @@ const HarvestTab = () => {
           </button>
           <button
             onClick={() => setPasteMode(true)}
-            className={`flex-1 p-3 rounded-xl border text-center transition-colors ${
+            aria-pressed={pasteMode}
+            className={`flex-1 p-3 rounded-xl border text-center transition-colors ${CONTROL_FOCUS_CLASS} ${
               pasteMode ? 'bg-primary/10 border-primary/30 text-honey' : 'bg-secondary/30 border-border/30 text-muted-foreground'
             }`}
           >
@@ -611,6 +620,8 @@ const HarvestTab = () => {
               onChange={handleFileUpload}
               className="hidden"
               id="harvest-upload"
+              aria-label="Harvest export file"
+              name="harvestFile"
             />
             <label htmlFor="harvest-upload" className="cursor-pointer">
               <Upload className="w-6 h-6 text-muted-foreground/40 mx-auto mb-2" />
@@ -624,15 +635,18 @@ const HarvestTab = () => {
         {pasteMode && (
           <div className="space-y-2">
             <textarea
+              aria-label="Paste harvest content"
+              name="harvestPasteContent"
+              autoComplete="off"
               value={pasteContent}
               onChange={e => setPasteContent(e.target.value)}
               placeholder="Paste conversation text, JSON export, or any content from your AI tools..."
-              className="w-full h-32 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-xs text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="w-full h-32 bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-xs text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
             />
             <button
               onClick={handlePasteSubmit}
               disabled={!pasteContent.trim()}
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50"
+              className={`px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50 ${CONTROL_FOCUS_CLASS}`}
             >
               Preview Import
             </button>
@@ -667,7 +681,7 @@ const HarvestTab = () => {
               <button
                 onClick={handleCommit}
                 disabled={importing || pendingData === null}
-                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className={`px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display hover:bg-primary/90 transition-colors disabled:opacity-50 ${CONTROL_FOCUS_CLASS}`}
               >
                 {importing ? <Loader2 className="w-3 h-3 animate-spin inline mr-1" /> : null}
                 Import {preview.itemCount} Items
@@ -675,7 +689,7 @@ const HarvestTab = () => {
               <button
                 onClick={handleCancelPreview}
                 disabled={importing}
-                className="px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors disabled:opacity-50"
+                className={`px-3 py-1.5 rounded-lg bg-secondary text-foreground text-xs hover:bg-secondary/70 transition-colors disabled:opacity-50 ${CONTROL_FOCUS_CLASS}`}
               >
                 Cancel
               </button>

@@ -87,6 +87,8 @@ interface KnowledgeGraphViewerProps {
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.2;
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
+const ICON_BUTTON_CLASS = `p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors ${CONTROL_FOCUS_CLASS}`;
 
 type NodeLimit = 50 | 100 | 200 | 500 | 'all';
 const LIMIT_OPTIONS: NodeLimit[] = [50, 100, 200, 500, 'all'];
@@ -412,7 +414,7 @@ const KnowledgeGraphViewer = ({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="mt-3 px-3 py-1 rounded-md bg-primary/20 text-honey text-[11px] hover:bg-primary/30 transition-colors"
+            className={`mt-3 px-3 py-1 rounded-md bg-primary/20 text-honey text-[11px] hover:bg-primary/30 transition-colors ${CONTROL_FOCUS_CLASS}`}
           >
             Retry
           </button>
@@ -463,8 +465,10 @@ const KnowledgeGraphViewer = ({
             <select
               value={scope ?? 'current'}
               onChange={e => onScopeChange(e.target.value as KGScope)}
-              className="bg-transparent text-[11px] text-foreground border-0 p-0 focus:ring-0 cursor-pointer"
+              className={`bg-transparent text-[11px] text-foreground border-0 p-0 cursor-pointer rounded-sm ${CONTROL_FOCUS_CLASS}`}
               aria-label="Knowledge graph scope"
+              name="knowledgeGraphScope"
+              autoComplete="off"
             >
               <option value="current">Current workspace</option>
               <option value="personal">Personal only</option>
@@ -510,7 +514,9 @@ const KnowledgeGraphViewer = ({
               >
                 <button
                   onClick={() => setNodeLimit(opt)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+                  aria-label={opt === 'all' ? 'Show all graph nodes' : `Show top ${opt} graph nodes`}
+                  aria-pressed={nodeLimit === opt}
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${CONTROL_FOCUS_CLASS} ${
                     nodeLimit === opt
                       ? 'bg-primary/20 text-honey'
                       : 'text-muted-foreground hover:text-foreground'
@@ -523,9 +529,12 @@ const KnowledgeGraphViewer = ({
           </div>
 
           {/* Search */}
-          <div className="flex items-center gap-1 bg-muted/50 rounded-md px-1.5 py-0.5">
+          <div className="flex items-center gap-1 bg-muted/50 rounded-md px-1.5 py-0.5 focus-within:ring-2 focus-within:ring-[var(--focus-ring)] focus-within:ring-offset-1 focus-within:ring-offset-background">
             <Search className="w-3 h-3 text-muted-foreground" />
             <Input
+              aria-label="Filter graph nodes"
+              name="knowledgeGraphSearch"
+              autoComplete="off"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Filter nodes..."
@@ -538,9 +547,12 @@ const KnowledgeGraphViewer = ({
             <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-md bg-muted/30">
               <Globe className="w-3 h-3 text-muted-foreground" />
               <select
+                aria-label="Knowledge graph scope"
+                name="knowledgeGraphScope"
+                autoComplete="off"
                 value={scope ?? 'current'}
                 onChange={e => onScopeChange(e.target.value as KGScope)}
-                className="bg-transparent text-[11px] text-foreground border-0 p-0 focus:ring-0 cursor-pointer"
+                className={`bg-transparent text-[11px] text-foreground border-0 p-0 cursor-pointer rounded-sm ${CONTROL_FOCUS_CLASS}`}
               >
                 <option value="current">Current workspace</option>
                 <option value="personal">Personal only</option>
@@ -552,25 +564,25 @@ const KnowledgeGraphViewer = ({
           {/* Zoom controls */}
           <div className="flex items-center gap-0.5 ml-2">
             <HintTooltip content="Zoom out">
-              <button onClick={zoomOut} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={zoomOut} className={ICON_BUTTON_CLASS} aria-label="Zoom out graph">
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
             </HintTooltip>
             <span className="text-[11px] text-muted-foreground w-10 text-center">{Math.round(zoom * 100)}%</span>
             <HintTooltip content="Zoom in">
-              <button onClick={zoomIn} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={zoomIn} className={ICON_BUTTON_CLASS} aria-label="Zoom in graph">
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
             </HintTooltip>
             <HintTooltip content="Reset view">
-              <button onClick={resetView} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={resetView} className={ICON_BUTTON_CLASS} aria-label="Reset graph view">
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
             </HintTooltip>
             <HintTooltip content="Export as SVG">
               <button
                 onClick={exportSvg}
-                className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                className={ICON_BUTTON_CLASS}
                 aria-label="Export graph as SVG"
                 data-testid="kg-export-svg"
               >
@@ -580,7 +592,7 @@ const KnowledgeGraphViewer = ({
             <HintTooltip content="Export as PNG (2× retina)">
               <button
                 onClick={exportPng}
-                className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                className={ICON_BUTTON_CLASS}
                 aria-label="Export graph as PNG"
                 data-testid="kg-export-png"
               >
@@ -588,7 +600,11 @@ const KnowledgeGraphViewer = ({
               </button>
             </HintTooltip>
             <HintTooltip content="Toggle fullscreen">
-              <button onClick={toggleFullscreen} className="p-1 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors">
+              <button
+                onClick={toggleFullscreen}
+                className={ICON_BUTTON_CLASS}
+                aria-label={fullscreen ? 'Exit fullscreen graph' : 'Enter fullscreen graph'}
+              >
                 {fullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
               </button>
             </HintTooltip>
@@ -732,7 +748,7 @@ const KnowledgeGraphViewer = ({
               <HintTooltip content="Reset all type filters">
                 <button
                   onClick={resetHiddenTypes}
-                  className="text-[11px] text-honey hover:text-honey/80 transition-colors"
+                  className={`text-[11px] text-honey hover:text-honey/80 transition-colors rounded-sm ${CONTROL_FOCUS_CLASS}`}
                 >
                   Reset
                 </button>
@@ -749,7 +765,8 @@ const KnowledgeGraphViewer = ({
                 >
                   <button
                     onClick={() => toggleHideType(type)}
-                    className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition-colors ${
+                    aria-pressed={hidden}
+                    className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded transition-colors ${CONTROL_FOCUS_CLASS} ${
                       hidden
                         ? 'opacity-40 hover:opacity-70'
                         : 'hover:bg-muted/60'
