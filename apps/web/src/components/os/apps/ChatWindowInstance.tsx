@@ -7,45 +7,6 @@ import { formatModelLabel } from '@/lib/model-label';
 import ChatApp from './ChatApp';
 import type { TeamMember } from './ChatApp';
 
-// Fallback models shown when backend is offline — latest flagships from top providers.
-// IMPORTANT: the first entry is used as the default selected model when the sidecar
-// /api/agent/model fetch fails (e.g. boot race). Keep this in sync with the sidecar's
-// real default (claude-sonnet-4-6) so users don't see a misleading Opus label on
-// first render. Bug #1.
-const FALLBACK_MODELS = [
-  // Anthropic (sonnet first — matches sidecar default)
-  'anthropic/claude-sonnet-4.6',
-  'anthropic/claude-opus-4.6',
-  'anthropic/claude-haiku-4.6',
-  // OpenAI
-  'openai/gpt-5.4',
-  'openai/gpt-5.4-mini',
-  'openai/o3-pro',
-  'openai/o4-mini',
-  // Google
-  'google/gemini-3.1-pro',
-  'google/gemini-3.1-flash',
-  'google/gemini-2.5-pro',
-  // Meta
-  'meta/llama-4-maverick',
-  'meta/llama-4-scout',
-  // Mistral
-  'mistral/mistral-large-3',
-  'mistral/codestral-2',
-  // DeepSeek
-  'deepseek/deepseek-r2',
-  'deepseek/deepseek-v4',
-  // Alibaba
-  'alibaba/qwen-3-235b',
-  'alibaba/qwen-3-72b',
-  // Zhipu
-  'zhipu/glm-5',
-  // Baidu
-  'baidu/ernie-5.0',
-  // xAI
-  'xai/grok-3',
-];
-
 type AutonomyLevel = 'normal' | 'trusted' | 'yolo';
 
 interface ChatWindowInstanceProps {
@@ -144,9 +105,9 @@ const ChatWindowInstance = ({
     let modelsLanded = false;
     let currentLanded = false;
 
-    // Try fetching models from the backend (litellm models filtered by vault keys).
-    // Retries every 2s for up to 20s so the sidecar boot race (bug #1) doesn't
-    // leave the dropdown stuck on the fallback list.
+    // The sidecar merges LiteLLM, provider API catalogs, and local runtime models.
+    // Keep an empty list on outage rather than presenting model IDs that may no
+    // longer exist at the provider.
     const fetchModels = async () => {
       try {
         const models = await adapter.getModels();
@@ -155,11 +116,11 @@ const ChatWindowInstance = ({
           setAvailableModels(models);
           modelsLanded = true;
         } else {
-          setAvailableModels(FALLBACK_MODELS);
+          setAvailableModels([]);
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch models failed:', err);
-        if (!cancelled) setAvailableModels(FALLBACK_MODELS);
+        if (!cancelled) setAvailableModels([]);
       }
     };
 
@@ -181,12 +142,9 @@ const ChatWindowInstance = ({
         if (fromSettings) {
           setCurrentModel(fromSettings);
           currentLanded = true;
-        } else {
-          setCurrentModel(FALLBACK_MODELS[0]);
         }
       } catch (err) {
         console.error('[ChatWindowInstance] fetch current model failed:', err);
-        if (!cancelled) setCurrentModel(FALLBACK_MODELS[0]);
       }
     };
 
@@ -219,8 +177,11 @@ const ChatWindowInstance = ({
     };
     fetchTeam();
     const teamInterval = setInterval(fetchTeam, 10000);
+    const refreshModelsOnFocus = () => { void fetchModels(); };
+    window.addEventListener('focus', refreshModelsOnFocus);
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', refreshModelsOnFocus);
       clearInterval(teamInterval);
       clearInterval(retryInterval);
     };

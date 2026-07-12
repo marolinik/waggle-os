@@ -16,6 +16,9 @@ export interface Provider {
   keyUrl: string | null;
   requiresKey: boolean;
   models: ProviderModel[];
+  modelsSource?: 'provider-api' | 'stale-provider-api' | 'unavailable' | 'requires-key' | 'local-runtime';
+  modelsUpdatedAt?: string;
+  modelsError?: string;
 }
 
 export interface SearchProvider {
@@ -43,15 +46,29 @@ export const useProviders = () => {
       setSearch(data.search);
       setActiveSearch(data.activeSearch);
       setError(null);
+      return data;
     } catch (err) {
       console.error('[useProviders] fetch failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to load');
+      return null;
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void refresh();
+    };
+    const refreshOnFocus = () => { void refresh(); };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshOnFocus);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshOnFocus);
+    };
+  }, [refresh]);
 
   /** All models across all providers, flat list */
   const allModels = providers.flatMap(p =>
@@ -63,8 +80,8 @@ export const useProviders = () => {
     }))
   );
 
-  /** Providers that have a key configured */
-  const activeProviders = providers.filter(p => p.hasKey);
+  /** Cloud providers that have a key configured. Keyless local runtimes are handled separately. */
+  const activeProviders = providers.filter(p => p.hasKey && p.requiresKey);
 
   /** Models from providers with keys (available for use) */
   const availableModels = allModels.filter(m => m.hasKey);
