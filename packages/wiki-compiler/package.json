@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "description": "Wiki Compiler — LLM-powered knowledge synthesis engine. Compiles memory frames + KG into interlinked wiki pages.",
   "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/wiki-compiler/tests"
   },
   "dependencies": {
     "@waggle/core": "*",

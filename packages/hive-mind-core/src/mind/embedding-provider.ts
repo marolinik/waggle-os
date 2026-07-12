@@ -425,9 +425,13 @@ export async function createEmbeddingProvider(config?: EmbeddingProviderConfig):
         '─────────────────────────────────────────────────────────────',
         '',
       ].join('\n');
-      // stderr so it survives stdout-piped JSON consumers and CI tee.
-      try { process.stderr.write(msg); } catch { /* fall through to log */ }
-      log.warn('Embedding provider degraded to mock — semantic search quality is noise. See stderr banner for fix instructions.');
+      // Keep production and CLI runs loud, but let deterministic test lanes
+      // suppress this expected fallback banner without changing provider state.
+      if (process.env.WAGGLE_SUPPRESS_EMBEDDING_WARNING !== '1') {
+        // stderr so it survives stdout-piped JSON consumers and CI tee.
+        try { process.stderr.write(msg); } catch { /* fall through to log */ }
+        log.warn('Embedding provider degraded to mock — semantic search quality is noise. See stderr banner for fix instructions.');
+      }
     }
   }
 

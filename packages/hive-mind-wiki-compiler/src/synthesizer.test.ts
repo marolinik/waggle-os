@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveSynthesizer } from './synthesizer.js';
 
+// The resolver contract only needs to know that the optional SDK can load.
+// Mock the package here so Vitest's CJS/ESM interop does not decide the result
+// of a provider-selection unit test; the real package import is covered by the
+// installed-package/runtime smoke.
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class MockAnthropic {},
+}));
+
 describe('resolveSynthesizer', () => {
   const envBackup: Record<string, string | undefined> = {};
   const envKeys = ['ANTHROPIC_API_KEY', 'OLLAMA_URL', 'OLLAMA_MODEL'];
@@ -27,11 +35,10 @@ describe('resolveSynthesizer', () => {
     expect(typeof resolver.synthesize).toBe('function');
   });
 
-  it('picks anthropic when ANTHROPIC_API_KEY is present and SDK is importable', async () => {
+  it('picks anthropic when ANTHROPIC_API_KEY is present and SDK is available', async () => {
     process.env.ANTHROPIC_API_KEY = 'sk-test-ignored-for-resolution-check';
     const resolver = await resolveSynthesizer();
-    // The SDK is a devDep so the import resolves in this repo — resolver should
-    // select anthropic without ever contacting the API.
+    // The resolver should select anthropic without contacting the API.
     expect(resolver.provider).toBe('anthropic');
     expect(resolver.model).toBe('claude-haiku-4-5-20251001');
   });

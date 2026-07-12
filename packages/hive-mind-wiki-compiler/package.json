@@ -13,7 +13,8 @@
   },
   "scripts": {
     "build": "tsc --build",
-    "clean": "tsc --build --clean"
+    "clean": "tsc --build --clean",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/hive-mind-wiki-compiler/src"
   },
   "dependencies": {
     "@waggle/hive-mind-core": "*"

@@ -12,9 +12,10 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/hive-mind-core/tests"
   },
   "dependencies": {
+    "@waggle/shared": "*",
     "@huggingface/transformers": "^3.8.1",
     "better-sqlite3": "^12.6.2",
     "cron-parser": "^4.9.0",
