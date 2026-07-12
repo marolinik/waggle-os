@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render as rtlRender, screen, fireEvent, cleanup } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import type { ComponentProps } from 'react';
 
 // jsdom lacks ResizeObserver (ChatApp's agent strip observes its own width).
 class ResizeObserverStub {
@@ -50,7 +51,9 @@ const assistantMsg: ChatMessage = {
   timestamp: new Date().toISOString(),
 };
 
-const render = (props: Partial<typeof baseProps> & { messages: ChatMessage[] }) =>
+type ChatAppRenderProps = Partial<ComponentProps<typeof ChatApp>> & { messages: ChatMessage[] };
+
+const render = (props: ChatAppRenderProps) =>
   rtlRender(
     <TooltipProvider>
       <ChatApp {...baseProps} {...props} />
@@ -60,6 +63,27 @@ const render = (props: Partial<typeof baseProps> & { messages: ChatMessage[] }) 
 afterEach(() => cleanup());
 
 describe('Wave U Lane F fix 1 — message action row presence', () => {
+  it('keeps the empty-state mascot intrinsically sized before image decode', () => {
+    render({ messages: [] });
+    const emptyState = screen.getByText("Pick a workspace and Waggle's ready").closest('div');
+    const mascot = emptyState?.querySelector('img[aria-hidden="true"]');
+    expect(mascot).toHaveAttribute('width', '56');
+    expect(mascot).toHaveAttribute('height', '56');
+  });
+
+  it('scopes the chat history sidebar animation to width only', () => {
+    render({
+      messages: [assistantMsg],
+      sessions: [{ id: 's1', title: 'Earlier research', messageCount: 3 }],
+      activeSessionId: 's1',
+      onSelectSession: noop,
+      onNewSession: noop,
+    });
+    const sidebar = screen.getByTestId('chat-session-sidebar');
+    expect(sidebar.className).not.toContain('transition-all');
+    expect(sidebar.className).toContain('transition-[width]');
+  });
+
   it('rests at opacity-75 on a --surface-2 toolbar pill (keeps the reveal + focus-within parity)', () => {
     render({ messages: [assistantMsg] });
     const row = screen.getByTestId('chat-action-row');
@@ -71,7 +95,7 @@ describe('Wave U Lane F fix 1 — message action row presence', () => {
     expect(row.className).toContain('group-focus-within/turn:opacity-100');
     // R3 motion sweep: the raw 150ms reveal now resolves to the --mo-fast token
     // (still 150ms) — the reveal timing is unchanged, only the source moved.
-    expect(row.className).toContain('duration-[var(--mo-fast)]');
+    expect(row.className).toContain('duration-mo-fast');
     expect(row.className).toContain('motion-reduce:translate-y-0');
   });
 

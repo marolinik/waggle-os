@@ -164,4 +164,16 @@ describe('PR7a · PaymentSuccessApp', () => {
     expect(screen.getByText('Team.')).toBeInTheDocument();
     expect(screen.queryByText(/Nothing to confirm/i)).not.toBeInTheDocument();
   });
+
+  it('renders legacy PRO checkout state as explicitly legacy', async () => {
+    mocks.adapter.getTier.mockResolvedValue({ tier: 'PRO', capabilities: {}, usage: {} });
+    const { default: PaymentSuccessApp } = await import('@/components/os/apps/PaymentSuccessApp');
+    render(
+      <MemoryRouter initialEntries={['/payment-success']}>
+        <PaymentSuccessApp />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText('Legacy Pro.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Start using Legacy Pro/i })).toBeInTheDocument();
+  });
 });

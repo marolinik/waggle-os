@@ -22,6 +22,12 @@ const providers = (...withKey: boolean[]) => ({
   activeSearch: 'duckduckgo',
 });
 
+const providerRows = (...rows: Array<{ id: string; hasKey: boolean; requiresKey: boolean }>) => ({
+  providers: rows.map((row) => ({ ...row, name: row.id, badge: null, keyUrl: null, models: [] })),
+  search: [],
+  activeSearch: 'duckduckgo',
+});
+
 beforeEach(() => {
   mocks.adapter.getProviders.mockResolvedValue(providers());
   mocks.adapter.getLocalInferenceStatus.mockResolvedValue({ servers: [], ollamaInstalled: false, totalLocalModels: 0 });
@@ -44,6 +50,15 @@ describe('useHasWorkingModel', () => {
   });
 
   it('a detected local model (no cloud key) → localReady → working', async () => {
+    mocks.adapter.getLocalInferenceStatus.mockResolvedValue({ servers: [], ollamaInstalled: true, totalLocalModels: 2 });
+    const { result } = renderHook(() => useHasWorkingModel());
+    await waitFor(() => expect(result.current.hasWorkingModel).toBe(true));
+    expect(result.current.cloudReady).toBe(false);
+    expect(result.current.localReady).toBe(true);
+  });
+
+  it('does not count keyless local providers as cloud keys', async () => {
+    mocks.adapter.getProviders.mockResolvedValue(providerRows({ id: 'ollama', hasKey: true, requiresKey: false }));
     mocks.adapter.getLocalInferenceStatus.mockResolvedValue({ servers: [], ollamaInstalled: true, totalLocalModels: 2 });
     const { result } = renderHook(() => useHasWorkingModel());
     await waitFor(() => expect(result.current.hasWorkingModel).toBe(true));

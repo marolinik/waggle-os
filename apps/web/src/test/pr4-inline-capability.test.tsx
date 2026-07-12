@@ -68,7 +68,9 @@ describe('CapabilityRequestCard (PR4 Variation B)', () => {
     expect(screen.getByTestId('capability-request-install')).toHaveTextContent('Connect');
     fireEvent.click(screen.getByTestId('capability-request-install'));
 
-    const input = await screen.findByTestId('capability-connector-token-input');
+    const input = await screen.findByLabelText(/slack api token/i);
+    expect(input).toHaveAttribute('name', 'capabilityConnectorToken');
+    expect(input).toHaveAttribute('autocomplete', 'off');
     fireEvent.change(input, { target: { value: 'xoxb-9' } });
     fireEvent.click(screen.getByTestId('capability-connector-token-submit'));
     await waitFor(() => expect(mocks.adapter.connectConnector).toHaveBeenCalledWith('slack', { token: 'xoxb-9' }));
