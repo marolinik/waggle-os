@@ -81,6 +81,36 @@ describe('AutomationBuilder — S20', () => {
     expect(screen.getByTestId('automation-builder-next')).not.toBeDisabled();
   });
 
+  it('a11y: builder fields expose stable form metadata', () => {
+    render(<AutomationBuilder onSubmit={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText('Automation name')).toHaveAttribute('name', 'automationName');
+    expect(screen.getByLabelText('Automation name')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Trigger')).toHaveAttribute('name', 'automationTrigger');
+    expect(screen.getByLabelText('When it runs')).toHaveAttribute('name', 'automationPreset');
+    expect(screen.getByLabelText('Workspace scope')).toHaveAttribute('name', 'automationWorkspace');
+
+    fireEvent.change(screen.getByLabelText('When it runs'), { target: { value: 'custom' } });
+    expect(screen.getByLabelText('Custom cron expression')).toHaveAttribute('name', 'automationCustomCron');
+    expect(screen.getByLabelText('Custom cron expression')).toHaveAttribute('autocomplete', 'off');
+    fireEvent.change(screen.getByLabelText('Custom cron expression'), { target: { value: '0 8 * * *' } });
+
+    fireEvent.change(screen.getByLabelText('Automation name'), { target: { value: 'Morning brief' } });
+    fireEvent.click(screen.getByTestId('automation-builder-next'));
+
+    expect(screen.getByLabelText('What it does')).toHaveAttribute('name', 'automationJobType');
+    expect(screen.getByLabelText('Where the result goes')).toHaveAttribute('name', 'automationOutputChannel');
+
+    fireEvent.change(screen.getByLabelText('What it does'), { target: { value: 'agent_task' } });
+    expect(screen.getByLabelText('Agent task prompt')).toHaveAttribute('name', 'automationPrompt');
+    expect(screen.getByLabelText('Agent task prompt')).toHaveAttribute('autocomplete', 'off');
+    fireEvent.change(screen.getByLabelText('Agent task prompt'), { target: { value: 'Summarise the inbox' } });
+    fireEvent.click(screen.getByTestId('automation-builder-next'));
+
+    expect(screen.getByLabelText(/^Condition/)).toHaveAttribute('name', 'automationCondition');
+    expect(screen.getByLabelText(/^Condition/)).toHaveAttribute('autocomplete', 'off');
+  });
+
   it('create happy path sends the EXACT adapter payload (with workspace scope + telegram channel)', async () => {
     mocks.adapter.listAutomations.mockResolvedValue([]);
     mocks.adapter.createAutomation.mockResolvedValue(makeAutomation());

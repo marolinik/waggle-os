@@ -96,6 +96,27 @@ describe('AgentBuilder — S18', () => {
     expect(next).not.toBeDisabled();
   });
 
+  it('a11y: builder fields expose stable form metadata', () => {
+    render(<AgentBuilder onCreate={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText('Name')).toHaveAttribute('name', 'agentName');
+    expect(screen.getByLabelText('Name')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Goal')).toHaveAttribute('name', 'agentGoal');
+    expect(screen.getByLabelText('Goal')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText(/^Description/)).toHaveAttribute('name', 'agentDescription');
+    expect(screen.getByLabelText(/^Description/)).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText(/^Persona/)).toHaveAttribute('name', 'agentPersona');
+    expect(screen.getByLabelText('Type')).toHaveAttribute('name', 'agentType');
+
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Scout' } });
+    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Research the market' } });
+    fireEvent.click(screen.getByTestId('agent-builder-next'));
+
+    expect(screen.getByLabelText('Model id')).toHaveAttribute('name', 'agentModel');
+    expect(screen.getByLabelText('Model id')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Autonomy level')).toHaveAttribute('name', 'agentAutonomyLevel');
+  });
+
   // Headroom for parallel-suite load — this walk renders every wizard step
   // and is the suite's known load-flake (passes in isolation).
   it('happy path declares scope/memory/skills, reviews EVERY field, sends the exact payload and offers Run', { timeout: 20_000 }, async () => {

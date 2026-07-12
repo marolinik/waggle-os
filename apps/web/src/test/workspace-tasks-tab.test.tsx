@@ -54,16 +54,20 @@ describe('TasksTab', () => {
   it('adds a task through the input', async () => {
     mocks.adapter.createWorkspaceTask.mockResolvedValue(task('t2', 'Call the client'));
     render(<TasksTab workspaceId="w1" state={null} />);
-    await screen.findByTestId('ws-task-input');
+    const input = await screen.findByRole('textbox', { name: /add workspace task/i }) as HTMLInputElement;
+    expect(input).toHaveAttribute('name', 'workspace-task-title');
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input.className).toContain('focus-visible:ring-2');
+    expect(input.className).toContain('focus-visible:ring-[var(--focus-ring)]');
 
-    fireEvent.change(screen.getByTestId('ws-task-input'), { target: { value: 'Call the client' } });
+    fireEvent.change(input, { target: { value: 'Call the client' } });
     fireEvent.click(screen.getByTestId('ws-task-add'));
 
     await waitFor(() => {
       expect(mocks.adapter.createWorkspaceTask).toHaveBeenCalledWith('w1', 'Call the client');
       expect(screen.getByText('Call the client')).toBeTruthy();
     });
-    expect((screen.getByTestId('ws-task-input') as HTMLInputElement).value).toBe('');
+    expect(input.value).toBe('');
   });
 
   it('cycles status open → in_progress via PATCH', async () => {
@@ -82,7 +86,10 @@ describe('TasksTab', () => {
     mocks.adapter.deleteWorkspaceTask.mockResolvedValue(undefined);
     render(<TasksTab workspaceId="w1" state={null} />);
 
-    fireEvent.click(await screen.findByLabelText('Delete task "Old task"'));
+    const deleteButton = await screen.findByLabelText('Delete task "Old task"');
+    expect(deleteButton.className).not.toContain('transition-all');
+    expect(deleteButton.className).toContain('transition-[opacity,color]');
+    fireEvent.click(deleteButton);
     await waitFor(() => {
       expect(mocks.adapter.deleteWorkspaceTask).toHaveBeenCalledWith('w1', 't1');
       expect(screen.queryByText('Old task')).toBeNull();

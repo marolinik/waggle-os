@@ -72,6 +72,26 @@ describe('SkillBuilder — S19', () => {
     expect(next).not.toBeDisabled();
   });
 
+  it('a11y: builder fields expose stable form metadata', () => {
+    renderBuilder();
+
+    expect(screen.getByLabelText(/^Name/)).toHaveAttribute('name', 'skillName');
+    expect(screen.getByLabelText(/^Name/)).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Description')).toHaveAttribute('name', 'skillDescription');
+    expect(screen.getByLabelText('Description')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText('Category')).toHaveAttribute('name', 'skillCategory');
+
+    fillIdentity();
+    fireEvent.click(screen.getByTestId('skill-builder-next'));
+
+    expect(screen.getByLabelText('Step 1')).toHaveAttribute('name', 'skillStep');
+    expect(screen.getByLabelText('Step 1')).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText(/^Inputs/)).toHaveAttribute('name', 'skillInputs');
+    expect(screen.getByLabelText(/^Inputs/)).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByLabelText(/^Outputs/)).toHaveAttribute('name', 'skillOutputs');
+    expect(screen.getByLabelText(/^Outputs/)).toHaveAttribute('autocomplete', 'off');
+  });
+
   it('gates Content on at least one step; reordering steps reorders the payload', async () => {
     const props = renderBuilder();
     fillIdentity();
@@ -230,7 +250,10 @@ describe('SkillBuilder — S19', () => {
     // Builder closes, catalogs reload, the editor drawer opens on the new skill.
     await waitFor(() => expect(screen.queryByTestId('skill-builder')).not.toBeInTheDocument());
     expect(mocks.adapter.getSkills.mock.calls.length).toBeGreaterThanOrEqual(2);
-    expect(await screen.findByLabelText('Skill markdown content')).toBeInTheDocument();
+    const editor = await screen.findByLabelText('Skill markdown content');
+    expect(editor).toHaveAttribute('name', 'skillMarkdownContent');
+    expect(editor).toHaveAttribute('autocomplete', 'off');
+    expect(editor).toHaveAttribute('spellcheck', 'false');
   });
 
   it('a11y: mounts as a focus-trapped dialog with aria-current step, Escape cancels', () => {

@@ -49,6 +49,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('CapabilitiesApp — Skills Hub', () => {
+  it('a11y: search control exposes stable form metadata', async () => {
+    renderApp();
+    await screen.findByText('deep-research');
+
+    const search = screen.getByRole('textbox', { name: 'Search skills' });
+    expect(search).toHaveAttribute('name', 'skillSearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+  });
+
   it('renders the My Skills per-skill table from the adapter', async () => {
     renderApp();
     expect(await screen.findByText('deep-research')).toBeInTheDocument();
