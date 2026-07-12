@@ -96,9 +96,9 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '1' }), mem({ id: '2', title: 'Second' })]);
     mocks.adapter.mergeMemories.mockResolvedValue(mem({ id: '3' }));
     await renderTab({ mind: 'workspace', workspaceId: 'w1', consumeDeepLinks: false });
-    await waitFor(() => expect(screen.getAllByLabelText('Select memory')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByRole('checkbox', { name: /^Select memory/ })).toHaveLength(2));
 
-    for (const box of screen.getAllByLabelText('Select memory')) fireEvent.click(box);
+    for (const box of screen.getAllByRole('checkbox', { name: /^Select memory/ })) fireEvent.click(box);
     fireEvent.click(screen.getByText(/Merge 2 memories/));
 
     await waitFor(() => {
@@ -156,8 +156,8 @@ describe('MemoryCenterTab two-mind parameterization (P3/D2)', () => {
     const { rerender } = render(
       <MemoryCenterTab mind="workspace" workspaceId="w1" consumeDeepLinks={false} />,
     );
-    await waitFor(() => expect(screen.getAllByLabelText('Select memory')).toHaveLength(2));
-    for (const box of screen.getAllByLabelText('Select memory')) fireEvent.click(box);
+    await waitFor(() => expect(screen.getAllByRole('checkbox', { name: /^Select memory/ })).toHaveLength(2));
+    for (const box of screen.getAllByRole('checkbox', { name: /^Select memory/ })) fireEvent.click(box);
     expect(screen.getByText(/Merge 2 memories/)).toBeTruthy();
 
     rerender(<MemoryCenterTab mind="personal" consumeDeepLinks={false} />);

@@ -25,6 +25,7 @@ describe('PlatformApp', () => {
     expect(within(tablist).getByRole('tab', { name: /desktop \(now\)/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('heading', { name: /a real desktop app\./i })).toBeInTheDocument();
     expect(screen.getByText('~12 MB')).toBeInTheDocument();
+    expect(screen.getByText('Platform & roadmap')).toHaveClass('text-[var(--text-muted)]');
   });
 
   it('switches to the Boot showcase tab', () => {

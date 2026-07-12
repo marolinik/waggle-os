@@ -43,6 +43,9 @@ describe('SurfaceToggle', () => {
     render(<SurfaceToggle checked={false} onChange={onChange} label="Enable weekly digest" />);
     const sw = screen.getByRole('switch', { name: /enable weekly digest/i });
     expect(sw).toHaveAttribute('aria-checked', 'false');
+    const knob = sw.querySelector('span');
+    expect(knob?.className).not.toContain('transition-all');
+    expect(knob?.className).toContain('transition-[left,background-color]');
     fireEvent.click(sw);
     expect(onChange).toHaveBeenCalledWith(true);
   });

@@ -99,6 +99,10 @@ describe('warm primitives — render smoke', () => {
     let sent = '';
     render(<AskBar onSubmit={(t) => (sent = t)} />);
     const input = screen.getByLabelText('Ask Waggle') as HTMLInputElement;
+    expect(input).toHaveAttribute('name', 'ask-waggle');
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input.className).toContain('focus-visible:ring-2');
+    expect(input.className).toContain('focus-visible:ring-[var(--focus-ring)]');
     fireEvent.change(input, { target: { value: '  draft the board update  ' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(sent).toBe('draft the board update');
