@@ -344,7 +344,7 @@ const SettingsApp = () => {
           moved to the content header (R10: it reads as a section control above
           what it gates, not a rail-foot afterthought). */}
       <div className="w-full shrink-0 border-b border-border/50 sm:w-36 sm:border-b-0 sm:border-r flex flex-col">
-        <div className="flex gap-0.5 overflow-x-auto p-2 sm:block sm:flex-1 sm:space-y-0.5" role="tablist" aria-label="Settings sections">
+        <div className="grid grid-cols-3 gap-1 p-2 sm:block sm:flex-1 sm:space-y-0.5" role="tablist" aria-label="Settings sections">
           {visibleTabs.map(tab => {
             const locked = LOCKED_TABS[tab.id];
             return (
@@ -361,13 +361,13 @@ const SettingsApp = () => {
                 // 12px). The wash alone carries the active/brand cue; text-foreground on
                 // it is AA in both themes (~9:1 light / ~10:1 dark). font-medium keeps
                 // the selected tab visually distinct from a hovered (text-foreground) one.
-                className={`flex w-auto shrink-0 items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors sm:w-full ${
+                className={`flex min-w-0 items-center gap-1 rounded-lg px-1.5 py-1.5 text-[11px] transition-colors sm:w-full sm:gap-2 sm:px-2 sm:text-xs ${
                   activeTab === tab.id ? 'bg-primary/20 text-foreground font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
                 }`}
               >
-                <tab.icon className="w-3.5 h-3.5" />
-                {tab.label}
-                {locked && <Lock className="w-3 h-3 ml-auto text-muted-foreground/50" />}
+                <tab.icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="min-w-0 truncate">{tab.label}</span>
+                {locked && <Lock className="ml-auto h-3 w-3 shrink-0 text-muted-foreground/50" />}
               </button>
             );
           })}
