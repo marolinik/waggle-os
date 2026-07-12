@@ -25,7 +25,7 @@
   },
   "optionalDependencies": {
     "mcp-guardian": "^2.4.0",
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.6.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

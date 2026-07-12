@@ -18,7 +18,7 @@
     "cron-parser": "^4.9.0"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1019.0",
+    "@aws-sdk/client-s3": "^3.1085.0",
     "@types/better-sqlite3": "^7.6.13"
   },
   "license": "MIT"
