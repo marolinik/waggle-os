@@ -20,6 +20,8 @@ describe('FirstTaskStep', () => {
     render(<FirstTaskStep {...base} onMessageChange={onMessageChange} />);
     const ta = screen.getByLabelText(/first task/i);
     expect(ta).toHaveValue('Do a thing');
+    expect(ta).toHaveAttribute('name', 'onboardingFirstTask');
+    expect(ta).toHaveAttribute('autocomplete', 'off');
     fireEvent.change(ta, { target: { value: 'New task' } });
     expect(onMessageChange).toHaveBeenCalledWith('New task');
   });
@@ -27,7 +29,9 @@ describe('FirstTaskStep', () => {
   it('picks a suggested prompt', () => {
     const onPickSuggestion = vi.fn();
     render(<FirstTaskStep {...base} onPickSuggestion={onPickSuggestion} />);
-    fireEvent.click(screen.getByRole('button', { name: /suggestion a/i }));
+    const suggestion = screen.getByRole('button', { name: /suggestion a/i });
+    expect(suggestion).toHaveClass('text-foreground/80');
+    fireEvent.click(suggestion);
     expect(onPickSuggestion).toHaveBeenCalledWith('Suggestion A');
   });
 

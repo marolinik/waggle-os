@@ -36,6 +36,9 @@ const SOURCE_TILES: ReadonlyArray<{
   { id: 'unknown',    name: 'Other',      desc: 'Cursor, Codex, any text/JSON', hint: 'Any .txt, .md or .json conversation file works.', glyph: '·', accent: 'text-muted-foreground bg-muted/30 ring-border/40' },
 ];
 
+const LARGE_AUTO_IMPORT_THRESHOLD = 1000;
+const formatImportCount = (count: number): string => new Intl.NumberFormat('en-US').format(count);
+
 const ImportStep = ({
   importSource,
   importItems,
@@ -46,7 +49,12 @@ const ImportStep = ({
   claudeCodeDetected,
   onClaudeCodeHarvest,
   onContinue,
-}: ImportStepProps) => (
+}: ImportStepProps) => {
+  const detectedItemCount = claudeCodeDetected?.itemCount ?? 0;
+  const detectedItemCountLabel = formatImportCount(detectedItemCount);
+  const largeDetectedHistory = detectedItemCount >= LARGE_AUTO_IMPORT_THRESHOLD;
+
+  return (
   <motion.div key="step-memory-import" {...fadeSlide}>
     <div className="text-center mb-6">
       <Brain className="w-10 h-10 text-honey mx-auto mb-3" />
@@ -60,26 +68,52 @@ const ImportStep = ({
 
     {/* Claude Code auto-detect banner — only when the sidecar found local files. */}
     {!importDone && claudeCodeDetected?.found && (
-      <div className="mb-5 p-3 rounded-xl bg-primary/10 border border-primary/30">
-        <div className="flex items-center justify-between gap-3">
+      <div className={`mb-5 p-3 rounded-xl border ${largeDetectedHistory ? 'bg-honey/10 border-honey/30' : 'bg-primary/10 border-primary/30'}`}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Zap className="w-4 h-4 text-honey shrink-0" />
             <div className="min-w-0">
               <p className="text-xs font-display font-medium text-foreground">Claude Code detected</p>
               <p className="text-[11px] text-muted-foreground truncate" title={claudeCodeDetected.path}>
-                Found {claudeCodeDetected.itemCount} items from Claude Code
+                Found {detectedItemCountLabel} items from Claude Code
               </p>
+              {largeDetectedHistory && (
+                <p className="text-[11px] text-muted-foreground/80 mt-1 max-w-md">
+                  That is a lot of memory to absorb at setup. Review it after your workspace is ready,
+                  or import now if you are ready to curate Needs review.
+                </p>
+              )}
             </div>
           </div>
           {onClaudeCodeHarvest && (
-            <button
-              onClick={onClaudeCodeHarvest}
-              disabled={importing}
-              aria-busy={importing}
-              className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
-            >
-              {importing ? <Loader2 aria-label="Importing" className="w-3 h-3 animate-spin" /> : 'Import my history'}
-            </button>
+            largeDetectedHistory ? (
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center shrink-0">
+                <button
+                  onClick={onContinue}
+                  disabled={importing}
+                  className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  Review after setup
+                </button>
+                <button
+                  onClick={onClaudeCodeHarvest}
+                  disabled={importing}
+                  aria-busy={importing}
+                  className="px-3 py-1.5 rounded-lg border border-border/70 bg-background/40 text-xs font-display font-semibold text-foreground hover:bg-muted/60 transition-colors disabled:opacity-50"
+                >
+                  {importing ? <Loader2 aria-label="Importing" className="w-3 h-3 animate-spin" /> : `Import ${detectedItemCountLabel} now`}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onClaudeCodeHarvest}
+                disabled={importing}
+                aria-busy={importing}
+                className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-display font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
+              >
+                {importing ? <Loader2 aria-label="Importing" className="w-3 h-3 animate-spin" /> : 'Import my history'}
+              </button>
+            )
           )}
         </div>
       </div>
@@ -188,6 +222,7 @@ const ImportStep = ({
       </button>
     </div>
   </motion.div>
-);
+  );
+};
 
 export default ImportStep;

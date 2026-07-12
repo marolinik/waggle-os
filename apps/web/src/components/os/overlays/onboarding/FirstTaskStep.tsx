@@ -21,6 +21,8 @@ const FirstTaskStep = ({ message, onMessageChange, suggestions, onPickSuggestion
     {createError && <p className="text-xs text-muted-foreground mb-3 text-center">{createError}</p>}
 
     <textarea
+      name="onboardingFirstTask"
+      autoComplete="off"
       value={message}
       onChange={(e) => onMessageChange(e.target.value)}
       rows={3}
@@ -36,7 +38,7 @@ const FirstTaskStep = ({ message, onMessageChange, suggestions, onPickSuggestion
             key={s}
             type="button"
             onClick={() => onPickSuggestion(s)}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-left text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="rounded-full border border-border bg-card px-3 py-1.5 text-left text-xs text-foreground/80 hover:text-foreground hover:border-primary/40 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             {s}
           </button>
