@@ -148,7 +148,7 @@ function HoverTierCard() {
     >
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-[var(--honey)] opacity-0 transition-opacity duration-[var(--mo-fast)] group-hover:opacity-100 group-focus-visible:opacity-100"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-[var(--honey)] opacity-0 transition-opacity duration-mo-fast group-hover:opacity-100 group-focus-visible:opacity-100"
       />
       <span className="font-display text-[14px] font-semibold text-[var(--text)]">Sample card</span>
       <span className="text-[12px] text-[var(--text-muted)]">Hover, keyboard-focus, and press me — same tier.</span>

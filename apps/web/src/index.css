@@ -430,6 +430,18 @@
     font-family: var(--sans);
   }
 
+  .duration-mo-fast {
+    transition-duration: var(--mo-fast);
+  }
+
+  .duration-mo-base {
+    transition-duration: var(--mo-base);
+  }
+
+  .ease-mo {
+    transition-timing-function: var(--mo-ease);
+  }
+
   /* ── Desktop wallpaper overlay ──────────────────────────────────────────
      2026-07-06: both wallpapers regenerated with the lattice edge-weighted
      and the CENTER calm (judges: texture must never compete with content),
