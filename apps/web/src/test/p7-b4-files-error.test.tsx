@@ -10,12 +10,15 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 const mocks = vi.hoisted(() => ({ adapter: { listFiles: vi.fn() } }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
-import FilesApp from '@/components/os/apps/FilesApp';
+import FilesApp, { resetFilesRouteCache } from '@/components/os/apps/FilesApp';
 
 const render = () =>
   rtlRender(<TooltipProvider><FilesApp workspaceId="ws1" /></TooltipProvider>);
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  resetFilesRouteCache();
+  vi.clearAllMocks();
+});
 afterEach(cleanup);
 
 describe('P7/B4 — Files cold-load error vs offline', () => {

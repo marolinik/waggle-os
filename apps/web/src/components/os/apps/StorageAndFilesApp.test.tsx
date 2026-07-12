@@ -8,7 +8,7 @@
  * file store carries no creator field.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { FileEntry, Workspace } from '@/lib/types';
 
@@ -17,14 +17,18 @@ const mocks = vi.hoisted(() => ({
     listFiles: vi.fn(),
     getDocumentVersions: vi.fn(),
     downloadFile: vi.fn(),
+    uploadFile: vi.fn(),
   },
+  toast: vi.fn(),
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
+vi.mock('@/hooks/use-toast', () => ({ useToast: () => ({ toast: mocks.toast }) }));
 
 // Deep-link stash is read on FilesApp mount — keep it inert.
 vi.mock('@/lib/app-deeplink', () => ({ consumeDeepLink: () => null }));
 
 import StorageAndFilesApp from './StorageAndFilesApp';
+import { resetFilesRouteCache } from './FilesApp';
 
 const ROOT_FILES: FileEntry[] = [
   { name: 'research', path: '/research', type: 'directory', modifiedAt: '2026-06-10T00:00:00Z' },
@@ -42,9 +46,12 @@ const WS: Workspace = {
 };
 
 beforeEach(() => {
+  resetFilesRouteCache();
+  Object.defineProperty(window, 'scrollTo', { value: vi.fn(), writable: true });
   mocks.adapter.listFiles.mockResolvedValue(ROOT_FILES);
   mocks.adapter.getDocumentVersions.mockResolvedValue([]);
   mocks.adapter.downloadFile.mockResolvedValue(new Blob(['']));
+  mocks.adapter.uploadFile.mockResolvedValue({ name: 'uploaded.md', path: '/uploaded.md', type: 'file', size: 4 });
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
@@ -80,6 +87,12 @@ describe('StorageAndFilesApp', () => {
     expect(screen.getAllByText('142 memories').length).toBeGreaterThan(0);
   });
 
+  it('makes the storage overview scroll region keyboard reachable', async () => {
+    renderApp();
+    const overview = await screen.findByRole('region', { name: /workspace storage overview/i });
+    expect(overview).toHaveAttribute('tabindex', '0');
+  });
+
   it('the active storage-type card matches the workspace storageType (local), not a hardcoded one', async () => {
     renderApp();
     await screen.findByText('teardown.md');
@@ -101,6 +114,124 @@ describe('StorageAndFilesApp', () => {
     for (const cell of sourceCells) {
       expect(cell).toHaveTextContent('—');
     }
+  });
+
+  it('makes the files browser scroll region keyboard reachable', async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+
+    const fileBrowser = await screen.findByRole('region', { name: /files in competitive intelligence/i });
+    expect(fileBrowser).toHaveAttribute('tabindex', '0');
+  });
+
+  it('names file toolbar icon controls and the temporary filter field', async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+
+    expect(screen.getByRole('button', { name: /go to parent folder/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /refresh files/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /create folder/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /upload files/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show list view/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /show grid view/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /show file search/i }));
+    const filter = screen.getByRole('textbox', { name: /filter files/i });
+    expect(filter).toHaveAttribute('name', 'fileFilter');
+    expect(filter).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByRole('button', { name: /clear file search/i })).toBeInTheDocument();
+  });
+
+  it('names transient new-folder and rename fields', async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /create folder/i }));
+    const newFolderName = screen.getByRole('textbox', { name: /new folder name/i });
+    expect(newFolderName).toHaveAttribute('name', 'newFolderName');
+    expect(newFolderName).toHaveAttribute('autocomplete', 'off');
+    expect(newFolderName).toHaveClass('focus-visible:ring-ring');
+
+    fireEvent.click(screen.getByText('teardown.md'), { ctrlKey: true });
+    fireEvent.keyDown(window, { key: 'F2' });
+    const rename = await screen.findByRole('textbox', { name: /rename teardown\.md/i });
+    expect(rename).toHaveAttribute('name', 'fileRename');
+    expect(rename).toHaveAttribute('autocomplete', 'off');
+    expect(rename).toHaveClass('focus-visible:ring-ring');
+  });
+
+  it('names the move dialog icon close control', async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+
+    fireEvent.click(screen.getByText('teardown.md'), { ctrlKey: true });
+    fireEvent.click(screen.getByText('mem0-teardown.pdf'), { ctrlKey: true });
+    await screen.findByText('2 selected');
+    fireEvent.click(screen.getByRole('button', { name: /^move$/i }));
+
+    const close = await screen.findByRole('button', { name: /close move dialog/i });
+    expect(close.className).toContain('focus-visible:ring-2');
+  });
+
+  it('names the file properties icon close control', async () => {
+    renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+
+    const fileRow = screen.getByText('teardown.md').closest('tr');
+    expect(fileRow).not.toBeNull();
+    fireEvent.contextMenu(fileRow!, { clientX: 24, clientY: 24 });
+    fireEvent.click(await screen.findByRole('button', { name: /^properties$/i }));
+
+    const close = await screen.findByRole('button', { name: /close file properties/i });
+    expect(close.className).toContain('focus-visible:ring-2');
+  });
+
+  it('surfaces failed uploads without adding a false-success file row', async () => {
+    mocks.adapter.uploadFile.mockRejectedValueOnce(new Error('disk full'));
+    const { container } = renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+
+    const fileInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="file"]'));
+    const uploadInput = fileInputs.at(-1);
+    expect(uploadInput).toBeDefined();
+
+    fireEvent.change(uploadInput!, {
+      target: {
+        files: [new File(['draft'], 'failed-upload.md', { type: 'text/markdown' })],
+      },
+    });
+
+    await waitFor(() => {
+      expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Upload failed',
+        variant: 'destructive',
+      }));
+    });
+    expect(screen.queryByText('failed-upload.md')).not.toBeInTheDocument();
+  });
+
+  it('adds successful uploads using the adapter-returned file entry', async () => {
+    const { container } = renderApp();
+    fireEvent.click(screen.getByTestId('storage-view-b'));
+    await screen.findByRole('columnheader', { name: /source/i });
+
+    const fileInputs = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="file"]'));
+    const uploadInput = fileInputs.at(-1);
+    expect(uploadInput).toBeDefined();
+
+    fireEvent.change(uploadInput!, {
+      target: {
+        files: [new File(['local'], 'local-draft.md', { type: 'text/markdown' })],
+      },
+    });
+
+    expect(await screen.findByText('uploaded.md')).toBeInTheDocument();
+    expect(screen.queryByText('local-draft.md')).not.toBeInTheDocument();
   });
 
   it('does not fabricate a memory count when the workspace lacks one', async () => {

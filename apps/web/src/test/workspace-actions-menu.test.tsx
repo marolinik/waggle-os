@@ -82,6 +82,28 @@ describe('WorkspaceActionsMenu', () => {
     });
   });
 
+  it('labels destructive dialog inputs and gives them visible focus rings', async () => {
+    render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
+
+    openMenu();
+    fireEvent.click(screen.getByText('Rename'));
+    const renameInput = screen.getByRole('textbox', { name: /workspace name/i });
+    expect(renameInput).toHaveAttribute('name', 'workspace-name');
+    expect(renameInput).toHaveAttribute('autocomplete', 'off');
+    expect(renameInput.className).toContain('focus-visible:ring-2');
+    expect(renameInput.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+    fireEvent.click(screen.getByText('Cancel'));
+
+    openMenu();
+    fireEvent.click(screen.getByText(/Delete/));
+    const deleteInput = screen.getByRole('textbox', { name: /type alpha to confirm/i });
+    expect(deleteInput).toHaveAttribute('name', 'workspace-delete-confirmation');
+    expect(deleteInput).toHaveAttribute('autocomplete', 'off');
+    expect(deleteInput.className).toContain('focus-visible:ring-2');
+    expect(deleteInput.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+    await waitFor(() => expect(screen.getByText(/12 memories/)).toBeTruthy());
+  });
+
   it('gates delete on typing the exact workspace name', async () => {
     const onChanged = vi.fn();
     render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} onChanged={onChanged} />);
@@ -157,7 +179,7 @@ describe('WorkspaceActionsMenu', () => {
   // Enter/Space activate it per the platform), the menu's arrow-key roving
   // highlight walks down to Delete with a VISIBLE --focus-ring, and Enter on it
   // opens the delete flow. No pointer touches this path.
-  it('reaches Delete by keyboard alone — focus kebab → open → ArrowDown to Delete (visible ring) → Enter opens the delete dialog', () => {
+  it('reaches Delete by keyboard alone — focus kebab → open → ArrowDown to Delete (visible ring) → Enter opens the delete dialog', async () => {
     render(<WorkspaceActionsMenu workspace={{ id: 'w1', name: 'Alpha' }} />);
     const kebab = screen.getByTestId('workspace-actions-trigger');
     // The action is Tab-reachable: it is a real focusable <button>.
@@ -183,6 +205,7 @@ describe('WorkspaceActionsMenu', () => {
     // Enter on the highlighted Delete opens the confirm-by-name flow.
     fireEvent.keyDown(document, { key: 'Enter' });
     expect(screen.getByTestId('workspace-delete-confirm-input')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/12 memories/)).toBeTruthy());
   });
 
   it('does NOT fire onChanged when the mutation fails', async () => {

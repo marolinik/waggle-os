@@ -16,12 +16,13 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
-import FilesApp from '@/components/os/apps/FilesApp';
+import FilesApp, { resetFilesRouteCache } from '@/components/os/apps/FilesApp';
 
 const render = () =>
   rtlRender(<TooltipProvider><FilesApp workspaceId="ws1" /></TooltipProvider>);
 
 beforeEach(() => {
+  resetFilesRouteCache();
   vi.clearAllMocks();
   mocks.adapter.listFiles.mockResolvedValue([
     { name: 'q3-summary.md', path: '/reports/q3-summary.md', type: 'file', size: 12, modified: Date.now() },
