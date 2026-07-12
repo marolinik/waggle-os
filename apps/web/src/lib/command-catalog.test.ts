@@ -11,4 +11,12 @@ describe('command catalog watch-agent (#4)', () => {
     expect(watch!.to).toBe('/launcher?watch=1');
     expect(watch!.group).toBe('do');
   });
+
+  it('labels the pinned group without legacy Pro copy', () => {
+    const groups = buildCommandCatalog({ chatHref: '/chat', isPro: true, billingRank: 3 });
+    const pinned = groups.find((g) => g.key === 'pinned');
+    expect(pinned).toBeTruthy();
+    expect(pinned!.heading).toBe('Pinned');
+    expect(pinned!.heading).not.toMatch(/pro/i);
+  });
 });

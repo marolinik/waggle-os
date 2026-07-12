@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node --disable-warning=DEP0040 ../../node_modules/vitest/vitest.mjs run",
     "test:watch": "vitest"
   },
   "dependencies": {

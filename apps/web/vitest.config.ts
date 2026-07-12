@@ -2,6 +2,13 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
+// React/Vite tests load a Next.js dependency chain that still imports Node's
+// deprecated built-in `punycode`; propagate the narrow suppression to Vitest
+// workers so expected upstream noise does not hide real test failures.
+if (!process.env.NODE_OPTIONS?.includes('--disable-warning=DEP0040')) {
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --disable-warning=DEP0040`.trim();
+}
+
 export default defineConfig({
   plugins: [react()],
   test: {

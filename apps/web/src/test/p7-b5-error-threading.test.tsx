@@ -4,15 +4,44 @@
  * The SettingsApp missing-.catch defect is structurally verified separately.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render as rtlRender, screen, cleanup } from '@testing-library/react';
+import { render as rtlRender, screen, cleanup, fireEvent } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
+const mocks = vi.hoisted(() => ({
+  useWaggleDance: vi.fn(),
+}));
+
 vi.mock('@/lib/adapter', () => ({ adapter: {}, default: vi.fn() }));
+vi.mock('@/hooks/useWaggleDance', () => ({ useWaggleDance: mocks.useWaggleDance }));
 
 const render = (ui: ReactElement) => rtlRender(<TooltipProvider>{ui}</TooltipProvider>);
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe('P7/B5 — WaggleDanceApp action names', () => {
+  it('names the refresh action', async () => {
+    const refresh = vi.fn();
+    mocks.useWaggleDance.mockReturnValue({
+      signals: [],
+      allSignals: [],
+      loading: false,
+      error: null,
+      filter: 'all',
+      setFilter: vi.fn(),
+      refresh,
+      acknowledge: vi.fn(),
+    });
+
+    const { default: WaggleDanceApp } = await import('@/components/os/apps/WaggleDanceApp');
+    render(<WaggleDanceApp />);
+
+    expect(screen.getByRole('button', { name: /refresh waggle dance/i })).toBeInTheDocument();
+  });
+});
 
 describe('P7/B5 — EventsApp error state', () => {
   it('renders an error (not "No events yet") when error is set', async () => {
@@ -49,5 +78,23 @@ describe('P7/B5 — TimelineTab error state', () => {
     render(<TimelineTab {...base} error={null} />);
     expect(screen.getByText('No memories found')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('a11y: sidebar search and importance filter expose stable controls', async () => {
+    const { default: TimelineTab } = await import('@/components/os/apps/memory/TimelineTab');
+    const onMinImportanceChange = vi.fn();
+    render(<TimelineTab {...base} error={null} minImportance={2} onMinImportanceChange={onMinImportanceChange} />);
+
+    const search = screen.getByLabelText('Search timeline memories');
+    expect(search).toHaveAttribute('name', 'timelineMemorySearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+    expect(search.closest('div')?.className).toContain('focus-within:ring-2');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show timeline filters' }));
+    const minImportance = screen.getByLabelText(/min importance/i);
+    expect(minImportance).toHaveAttribute('name', 'timelineMinImportance');
+    expect(minImportance).toHaveAttribute('min', '0');
+    expect(minImportance).toHaveAttribute('max', '5');
+    expect(minImportance.className).toContain('focus-visible:ring-2');
   });
 });
