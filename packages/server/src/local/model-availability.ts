@@ -1,4 +1,7 @@
 import type { FastifyInstance } from 'fastify';
+import { ensureManagedLiteLLMModel } from './litellm-runtime-config.js';
+import { getProviderApiKey } from './provider-env.js';
+import { discoverProviderModels } from './provider-model-catalog.js';
 
 interface OllamaRoutingModel {
   id: string;
@@ -45,7 +48,21 @@ function providerForModel(model: string): string | null {
 function providerIsReady(server: FastifyInstance, provider: string | null): boolean {
   if (!provider) return false;
   if (provider === 'ollama') return true;
-  return Boolean(server.vault?.get(provider));
+  return Boolean(getProviderApiKey(provider, server.vault));
+}
+
+function canonicalModelId(model: string, provider: string | null): string {
+  if (!provider || model.includes('/')) return model;
+  return `${provider}/${model}`;
+}
+
+async function modelIsRoutable(
+  server: FastifyInstance,
+  model: string,
+  provider: string | null,
+): Promise<boolean> {
+  if (!providerIsReady(server, provider)) return false;
+  return provider === 'ollama' || ensureManagedLiteLLMModel(server, model);
 }
 
 function isEmbeddingModel(modelId: string): boolean {
@@ -83,27 +100,55 @@ export async function listOllamaChatModelIds(): Promise<string[]> {
     .map((m) => m.id);
 }
 
+/**
+ * Strict preflight for an explicitly selected model. Unlike
+ * resolveUsableModel(), this never falls back to the current model or another
+ * local model. A non-null result is provider-backed and executable now.
+ */
+export async function resolveExplicitRoutableModel(
+  server: FastifyInstance,
+  selectedModel: string,
+): Promise<string | null> {
+  const trimmed = selectedModel.trim();
+  if (!trimmed || isEmbeddingModel(trimmed)) return null;
+  const provider = providerForModel(trimmed);
+  if (!provider) return null;
+  const canonical = canonicalModelId(trimmed, provider);
+  if (provider === 'ollama') {
+    const localModels = await listOllamaChatModelIds();
+    return localModels.includes(canonical) ? canonical : null;
+  }
+  const apiKey = getProviderApiKey(provider, server.vault);
+  if (!apiKey) return null;
+  const entry = server.vault?.get(provider);
+  const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
+  const catalog = await discoverProviderModels(provider, apiKey, baseUrl);
+  if (!catalog.models.some((model) => model.id === canonical)) return null;
+  return await ensureManagedLiteLLMModel(server, canonical) ? canonical : null;
+}
+
 export async function resolveUsableModel(
   server: FastifyInstance,
   preferredModel: string,
 ): Promise<string> {
   const trimmed = preferredModel.trim();
-  if (providerIsReady(server, providerForModel(trimmed))) {
-    return trimmed;
+  const preferredProvider = providerForModel(trimmed);
+  const canonicalPreferred = canonicalModelId(trimmed, preferredProvider);
+  if (await modelIsRoutable(server, canonicalPreferred, preferredProvider)) {
+    return canonicalPreferred;
   }
 
   const currentModel = (server as FastifyInstance & { agentState?: { currentModel?: string } })
     .agentState?.currentModel?.trim();
-  if (
-    currentModel &&
-    currentModel !== trimmed &&
-    !isEmbeddingModel(currentModel) &&
-    providerIsReady(server, providerForModel(currentModel))
-  ) {
-    return currentModel;
+  if (currentModel && currentModel !== trimmed && !isEmbeddingModel(currentModel)) {
+    const currentProvider = providerForModel(currentModel);
+    const canonicalCurrent = canonicalModelId(currentModel, currentProvider);
+    if (await modelIsRoutable(server, canonicalCurrent, currentProvider)) {
+      return canonicalCurrent;
+    }
   }
 
   const localModels = (await fetchOllamaRoutingModels()).filter((m) => !isEmbeddingModel(m.id));
   return localModels[0]?.id
-    ?? trimmed;
+    ?? canonicalPreferred;
 }
