@@ -3,7 +3,7 @@ import net from 'node:net';
 import path from 'node:path';
 import os from 'node:os';
 import type { FastifyInstance } from 'fastify';
-import { needsMigration, migrateToMultiMind, MindDB } from '@waggle/core';
+import { needsMigration, migrateToMultiMind, MindDB, VaultStore } from '@waggle/core';
 import { buildLocalServer } from './index.js';
 import type { LlmHealthStatus } from './index.js';
 import { startLiteLLM, stopLiteLLM, type LiteLLMStatus } from './lifecycle.js';
@@ -16,6 +16,11 @@ import {
   performWipe,
   writeWipeReceipt,
 } from './data-erase-helpers.js';
+import {
+  hydrateProviderEnvFromVault,
+  migrateLegacyProviderKeysToVault,
+} from './provider-env.js';
+import { prepareLiteLLMRuntimeConfig } from './litellm-runtime-config.js';
 
 const log = createLogger('service');
 
@@ -192,13 +197,20 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     mind.close();
   }
 
-  // 4. Start LiteLLM (unless skipped)
+  // 4. Hydrate provider credentials before the LiteLLM child snapshots env,
+  // then generate its concrete model catalog from provider APIs.
   emit({ phase: 'litellm', message: skipLiteLLM ? 'Skipping LiteLLM proxy...' : 'Starting LiteLLM proxy...', progress: 0.5 });
   let litellm: LiteLLMStatus;
   if (skipLiteLLM) {
     litellm = { status: 'error', port: litellmPort, error: 'Skipped' };
   } else {
-    litellm = await startLiteLLM(litellmPort);
+    const startupVault = new VaultStore(dataDir);
+    migrateLegacyProviderKeysToVault(dataDir, startupVault);
+    hydrateProviderEnvFromVault(startupVault);
+    const runtimeConfig = await prepareLiteLLMRuntimeConfig(dataDir, startupVault);
+    litellm = runtimeConfig.configPath
+      ? await startLiteLLM(litellmPort, runtimeConfig.configPath)
+      : { status: 'error', port: litellmPort, error: 'No provider models available' };
   }
 
   // 5. Check port availability before building server
@@ -216,6 +228,8 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     dataDir,
     port,
     litellmUrl: `http://localhost:${litellmPort}`,
+    manageLiteLLM: !skipLiteLLM,
+    managedLiteLLMPort: litellmPort,
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)

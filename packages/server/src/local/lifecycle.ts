@@ -70,7 +70,7 @@ export async function getLiteLLMStatus(port?: number): Promise<LiteLLMStatus> {
  * Otherwise spawns `python -m litellm --port {port}` and polls health.
  * Prefers the bundled Python from app resources; falls back to system PATH.
  */
-export async function startLiteLLM(port?: number): Promise<LiteLLMStatus> {
+export async function startLiteLLM(port?: number, configPath?: string): Promise<LiteLLMStatus> {
   const p = port ?? DEFAULT_PORT;
 
   // Already running?
@@ -83,7 +83,10 @@ export async function startLiteLLM(port?: number): Promise<LiteLLMStatus> {
 
   // Spawn LiteLLM
   try {
-    litellmProcess = spawn(pythonBin, ['-m', 'litellm', '--port', String(p)], {
+    const args = ['-m', 'litellm'];
+    if (configPath) args.push('--config', configPath);
+    args.push('--port', String(p));
+    litellmProcess = spawn(pythonBin, args, {
       stdio: 'ignore',
       detached: false,
       env: {

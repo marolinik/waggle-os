@@ -179,6 +179,7 @@ import { maxWorkspaceSessionsForTier } from './tier-session-cap.js';
 import { EventEmitter } from 'node:events';
 import { LocalJobStore } from './job-store.js';
 import { AgentRunRegistry } from './agent-run-registry.js';
+import { hydrateProviderEnvFromVault } from './provider-env.js';
 
 export interface LocalConfig {
   port: number;
@@ -189,6 +190,10 @@ export interface LocalConfig {
   cli?: { allowlist?: string[] };
   /** Active subscription tier, when known (drives session/feature caps). */
   tier?: string;
+  /** True only when startService owns the LiteLLM child lifecycle. */
+  manageLiteLLM?: boolean;
+  /** Stable child-process port, retained while requests use a fallback proxy. */
+  managedLiteLLMPort?: number;
 }
 
 /** Pending approval request — resolved when user approves or denies. */
@@ -446,35 +451,8 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const vault = new VaultStore(fullConfig.dataDir);
   server.decorate('vault', vault);
 
-  // Hydrate process.env from vault so the LiteLLM sidecar config
-  // (os.environ/OPENAI_API_KEY, etc.) resolves without needing a .env file.
-  // Vault is the canonical secret store; env is populated on boot as a
-  // convenience layer for downstream libraries that read process.env directly.
-  const VAULT_TO_ENV: Record<string, string[]> = {
-    anthropic: ['ANTHROPIC_API_KEY'],
-    openai: ['OPENAI_API_KEY'],
-    google: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
-    xai: ['XAI_API_KEY'],
-    deepseek: ['DEEPSEEK_API_KEY'],
-    mistral: ['MISTRAL_API_KEY'],
-    alibaba: ['DASHSCOPE_API_KEY'],
-    minimax: ['MINIMAX_API_KEY'],
-    zhipu: ['ZHIPU_API_KEY'],
-    moonshot: ['MOONSHOT_API_KEY'],
-    perplexity: ['PERPLEXITY_API_KEY'],
-    openrouter: ['OPENROUTER_API_KEY'],
-  };
-  let hydrated = 0;
-  for (const [vaultName, envNames] of Object.entries(VAULT_TO_ENV)) {
-    const entry = vault.get(vaultName);
-    if (!entry?.value) continue;
-    for (const envName of envNames) {
-      if (!process.env[envName]) {
-        process.env[envName] = entry.value;
-        hydrated++;
-      }
-    }
-  }
+  // Vault is canonical; env is the compatibility layer for provider SDKs.
+  let hydrated = hydrateProviderEnvFromVault(vault);
   // Pass-through secrets whose vault name already matches the env var name
   for (const passthrough of ['TAVILY_API_KEY', 'BRAVE_API_KEY']) {
     const entry = vault.get(passthrough);
@@ -497,13 +475,23 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   // Migrate plaintext keys from config.json to vault on first run
   try {
     const waggleConfig = new WaggleConfig(fullConfig.dataDir);
-    const configProviders = waggleConfig.getProviders();
-    if (Object.keys(configProviders).length > 0) {
-      const migrated = vault.migrateFromConfig({ providers: configProviders });
-      if (migrated > 0) {
-        log.info(` Migrated ${migrated} API key(s) to encrypted vault`);
+      const configProviders = waggleConfig.getProviders();
+      if (Object.keys(configProviders).length > 0) {
+        const migrated = vault.migrateFromConfig({ providers: configProviders });
+        let scrubbed = 0;
+        for (const [name, provider] of Object.entries(configProviders)) {
+          if (!provider.apiKey) continue;
+          waggleConfig.setProvider(name, { ...provider, apiKey: '' });
+          scrubbed++;
+        }
+        if (scrubbed > 0) waggleConfig.save();
+        if (migrated > 0) {
+          log.info(` Migrated ${migrated} API key(s) to encrypted vault`);
+        }
+        if (scrubbed > 0) {
+          log.info(` Scrubbed ${scrubbed} plaintext provider key(s) from config`);
+        }
       }
-    }
   } catch {
     // Migration failure should never block startup
   }
