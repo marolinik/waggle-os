@@ -21,6 +21,7 @@ interface WorkspaceParams { workspaceId: string }
 interface PathQuery { path?: string }
 interface PathBody { path: string }
 interface MoveBody { from: string; to: string }
+interface CopyBody extends MoveBody { sourceWorkspaceId?: string }
 
 /** Safely read `.message` off an unknown caught value. */
 function errMessage(err: unknown): string {
@@ -88,6 +89,14 @@ function safeIndex(indexer: FileIndexer | null, op: () => void): void {
 export async function fileRoutes(server: FastifyInstance) {
   const prefix = '/api/workspaces/:workspaceId/files';
 
+  server.addContentTypeParser(
+    /^multipart\/form-data(?:;.*)?$/i,
+    { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_SIZE },
+    (_request, body, done) => {
+      done(null, body);
+    },
+  );
+
   // ── List directory ───────────────────────────────────────────
   server.get<{ Params: WorkspaceParams; Querystring: PathQuery }>(
     `${prefix}/list`,
@@ -133,7 +142,9 @@ export async function fileRoutes(server: FastifyInstance) {
           try {
             // Enforce the size limit WHILE reading so an oversized upload can
             // never buffer into memory before the guard runs.
-            rawBody = await getRawBody(request, MAX_UPLOAD_SIZE);
+            rawBody = Buffer.isBuffer(request.body)
+              ? request.body
+              : await getRawBody(request, MAX_UPLOAD_SIZE);
           } catch (err: unknown) {
             if (errCode(err) === MAX_BODY_BYTES_EXCEEDED) {
               return reply.status(413).send({ error: `File exceeds ${MAX_UPLOAD_SIZE / 1024 / 1024}MB limit` });
@@ -297,26 +308,44 @@ export async function fileRoutes(server: FastifyInstance) {
   );
 
   // ── Copy ─────────────────────────────────────────────────────
-  server.post<{ Params: WorkspaceParams; Body: MoveBody }>(
+  server.post<{ Params: WorkspaceParams; Body: CopyBody }>(
     `${prefix}/copy`,
     async (request, reply) => {
       const { workspaceId } = request.params;
-      const { from, to } = request.body ?? {};
+      const { from, to, sourceWorkspaceId } = request.body ?? {};
 
       if (!from || !to) {
         return reply.status(400).send({ error: 'from and to are required' });
       }
 
       try {
-        const { provider } = resolveWorkspace(server, workspaceId);
-        const entry = await provider.copy(from, to);
+        const { provider: targetProvider } = resolveWorkspace(server, workspaceId);
+        const isCrossWorkspace = Boolean(sourceWorkspaceId && sourceWorkspaceId !== workspaceId);
+        let entry: Awaited<ReturnType<typeof targetProvider.copy>>;
+        if (isCrossWorkspace) {
+          // Cross-provider copy intentionally accepts files only. Directory
+          // trees have different semantics across local, virtual, and S3
+          // storage, so the UI must not imply a portable recursive operation.
+          const { provider: sourceProvider } = resolveWorkspace(server, sourceWorkspaceId!);
+          const parentPath = from.slice(0, from.lastIndexOf('/')) || '/';
+          const sourceName = from.slice(from.lastIndexOf('/') + 1);
+          const sourceEntry = (await sourceProvider.list(parentPath)).find(candidate =>
+            candidate.path === from || candidate.name === sourceName,
+          );
+          if (!sourceEntry) throw new Error(`Source not found: ${from}`);
+          if (sourceEntry.type !== 'file') throw new Error('Cross-workspace copy supports files only');
+          const data = await sourceProvider.read(from);
+          entry = await targetProvider.write(to, data, lookup(to));
+        } else {
+          entry = await targetProvider.copy(from, to);
+        }
         // Re-read the copied file and index it independently (the copy may be
         // read-only, paged across a provider, etc. — don't assume we already
         // have the bytes in memory).
         const indexer = resolveIndexer(server, workspaceId);
-        if (indexer && FileIndexer.shouldIndex(to)) {
+        if (indexer && entry.type === 'file' && FileIndexer.shouldIndex(to)) {
           try {
-            const data = await provider.read(to);
+            const data = await targetProvider.read(to);
             safeIndex(indexer, () => indexer.indexFile(to, data, lookup(to)));
           } catch {
             // Provider might not support read after copy — skip silently.
@@ -325,7 +354,7 @@ export async function fileRoutes(server: FastifyInstance) {
         return entry;
       } catch (err: unknown) {
         const message = errMessage(err);
-        if (message.includes('Invalid path') || message.includes('not found')) {
+        if (message.includes('Invalid path') || message.includes('not found') || message.includes('files only')) {
           return reply.status(400).send({ error: message });
         }
         return reply.status(500).send({ error: message || 'Copy failed' });

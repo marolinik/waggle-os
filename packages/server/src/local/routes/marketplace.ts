@@ -21,6 +21,7 @@ import { emitNotification } from './notifications.js';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { removeMcpServerEntry } from '../mcp-config.js';
 import { enqueueHeldAction } from '../held-action-executor.js';
+import { isMarketplaceBackgroundSyncDisabled } from '../marketplace-background-sync.js';
 
 /**
  * SSRF-guarded outbound fetch injected into every marketplace component that
@@ -806,6 +807,18 @@ export async function marketplaceRoutes(fastify: FastifyInstance) {
     if (!db) return;
 
     const body = (request.body ?? {}) as { sources?: string[] };
+
+    if (isMarketplaceBackgroundSyncDisabled(process.env)) {
+      return {
+        skipped: true,
+        reason: 'Marketplace sync is disabled by environment.',
+        sourcesChecked: 0,
+        packagesAdded: 0,
+        packagesUpdated: 0,
+        errors: [],
+        details: [],
+      };
+    }
 
     const vaultLookup = fastify.vault ? (key: string) => fastify.vault!.get(key)?.value ?? null : undefined;
     const sync = new MarketplaceSync(db, vaultLookup, guardedFetch);

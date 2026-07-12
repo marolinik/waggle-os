@@ -11,6 +11,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import type { Orchestrator } from '@waggle/agent';
+import { WaggleConfig } from '@waggle/core';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
 
 export const commandRoutes: FastifyPluginAsync = async (server) => {
@@ -74,6 +75,29 @@ export const commandRoutes: FastifyPluginAsync = async (server) => {
 
       listSkills: (): string[] => {
         return server.agentState.skills.map(s => s.name);
+      },
+
+      getCliAllowlist: (): string[] => server.localConfig.cli?.allowlist ?? [],
+
+      updateCliAllowlist: (action: 'allow' | 'deny', name: string) => {
+        const current = server.localConfig.cli?.allowlist ?? [];
+        const key = name.toLowerCase();
+        const alreadyPresent = current.some(entry => entry.toLowerCase() === key);
+        const next = action === 'allow'
+          ? alreadyPresent ? current : [...current, name]
+          : current.filter(entry => entry.toLowerCase() !== key);
+
+        if (next.length !== current.length) {
+          const config = new WaggleConfig(server.localConfig.dataDir);
+          config.setCliAllowlist(next);
+          config.save();
+          server.localConfig.cli = { allowlist: config.getCliAllowlist() };
+        }
+
+        return {
+          changed: next.length !== current.length,
+          allowlist: server.localConfig.cli?.allowlist ?? [],
+        };
       },
 
       // runWorkflow and spawnAgent are intentionally omitted —

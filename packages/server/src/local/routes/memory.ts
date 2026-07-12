@@ -122,6 +122,18 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
     return results.slice(0, limit);
   }
 
+  function recoverSearchProvenance(mind: unknown, frameId: unknown): string | undefined {
+    if (mind !== 'personal' && mind !== 'workspace') return undefined;
+    const id = typeof frameId === 'number' ? frameId : Number(frameId);
+    if (!Number.isFinite(id)) return undefined;
+    try {
+      const frame = server.multiMind.getFrameStore(mind)?.getById(id);
+      return frame?.source;
+    } catch {
+      return undefined;
+    }
+  }
+
   // GET /api/memory/search?q=query&scope=all|global&workspace=wsId&since=ISO&until=ISO
   server.get<{
     Querystring: { q?: string; scope?: string; limit?: string; workspace?: string; workspaceId?: string; since?: string; until?: string };
@@ -181,7 +193,7 @@ export const memoryRoutes: FastifyPluginAsync = async (server) => {
         // The HybridSearch result includes the full frame — check for _original_source
         // or fall back to the frame object's nested source field.
         const frameObj = (r as { frame?: { source?: string } }).frame;
-        const dbSource = frameObj?.source;
+        const dbSource = frameObj?.source ?? recoverSearchProvenance(obj.source, obj.id);
         if (dbSource && dbSource !== 'personal' && dbSource !== 'workspace') {
           obj._provenance_source = dbSource;
         }

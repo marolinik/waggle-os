@@ -94,7 +94,13 @@ export function normalizeToMemory(frame: MemoryFrame, mind: string, workspaceId?
   const content = frame.content ?? '';
   const importance: Memory['importance'] = frame.importance ?? 'normal';
   const status: MemoryStatus =
-    asStatus(meta.status) ?? (importance === 'deprecated' ? 'deprecated' : 'active');
+    asStatus(meta.status) ?? (
+      importance === 'deprecated'
+        ? 'deprecated'
+        : importance === 'temporary' && frame.source === 'agent_inferred'
+          ? 'unreviewed'
+          : 'active'
+    );
   const scope: Scope = asScope(meta.scope) ?? (mind === 'workspace' ? 'workspace' : 'personal');
   const title =
     typeof meta.title === 'string' && meta.title.trim() ? meta.title : deriveTitle(content);
