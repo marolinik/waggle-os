@@ -6,6 +6,7 @@
  */
 
 import type { FastifyPluginAsync } from 'fastify';
+import Stripe from 'stripe';
 import { type Tier, TIER_CAPABILITIES } from '@waggle/shared';
 
 export { checkoutRoutes } from './checkout.js';
@@ -15,29 +16,21 @@ export { syncRoutes } from './sync.js';
 
 // ── Stripe SDK singleton ─────────────────────────────────────────────
 
-let stripeInstance: import('stripe').default | null = null;
-let stripeInitAttempted = false;
+let stripeInstance: Stripe | null = null;
+let stripeSecretKey: string | null = null;
 
 /**
  * Get the Stripe SDK instance (lazy-initialized).
  * Returns null if STRIPE_SECRET_KEY is not set.
  */
-export function getStripe(): import('stripe').default | null {
-  if (stripeInitAttempted) return stripeInstance;
-  stripeInitAttempted = true;
+export function getStripe(): Stripe | null {
+  const secretKey = process.env['STRIPE_SECRET_KEY'] ?? null;
+  if (secretKey === stripeSecretKey) return stripeInstance;
 
-  const secretKey = process.env['STRIPE_SECRET_KEY'];
-  if (!secretKey) return null;
-
-  try {
-    // Dynamic import to avoid requiring stripe as a hard dependency
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const Stripe = require('stripe').default ?? require('stripe');
-    stripeInstance = new Stripe(secretKey, { apiVersion: '2025-03-31.basil' });
-  } catch {
-    // stripe package not installed — graceful degradation
-    stripeInstance = null;
-  }
+  stripeSecretKey = secretKey;
+  stripeInstance = secretKey
+    ? new Stripe(secretKey, { apiVersion: '2026-03-25.dahlia' })
+    : null;
 
   return stripeInstance;
 }

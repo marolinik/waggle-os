@@ -30,4 +30,13 @@ describe('GET /api/stripe/status', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ configured: false });
   });
+
+  it('reports configured:true when the Stripe SDK has a secret key', async () => {
+    process.env['STRIPE_SECRET_KEY'] = 'sk_test_status_probe';
+
+    const res = await server.inject({ method: 'GET', url: '/api/stripe/status' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ configured: true });
+  });
 });

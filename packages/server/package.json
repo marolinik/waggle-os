@@ -38,7 +38,8 @@
     "ioredis": "^5.4.0",
     "mammoth": "^1.11.0",
     "pdf-parse": "^2.4.5",
-    "postgres": "^3.4.0"
+    "postgres": "^3.4.0",
+    "stripe": "^21.0.1"
   },
   "devDependencies": {
     "@types/archiver": "^7.0.0",
