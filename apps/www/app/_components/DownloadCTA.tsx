@@ -13,7 +13,7 @@ interface DownloadCTAProps {
   readonly style?: CSSProperties;
 }
 
-const RELEASES_URL = 'https://github.com/marolinik/waggle-os/releases/latest';
+const DOWNLOAD_URL = '/download';
 
 /**
  * OS-aware download CTA. Renders a generic "Download" label at SSR + first
@@ -60,9 +60,7 @@ export default function DownloadCTA({
 
   return (
     <a
-      href={RELEASES_URL}
-      target="_blank"
-      rel="noopener noreferrer"
+      href={DOWNLOAD_URL}
       className={className}
       onClick={handleClick}
       style={style}

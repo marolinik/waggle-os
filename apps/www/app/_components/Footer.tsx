@@ -16,8 +16,7 @@ interface FooterLink {
 const PRODUCT_LINKS: readonly FooterLink[] = [
   {
     key: 'download',
-    href: 'https://github.com/marolinik/waggle-os/releases/latest',
-    external: true,
+    href: '/download',
   },
   { key: 'pricing', href: '/#pricing' },
   { key: 'how_it_works', href: '/#how-it-works' },
