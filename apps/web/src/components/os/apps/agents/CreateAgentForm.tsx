@@ -14,6 +14,8 @@ interface CreateAgentFormProps {
   editMode?: boolean;
 }
 
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
+
 const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, editMode }: CreateAgentFormProps) => {
   const [name, setName] = useState(initialData?.name ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
@@ -63,6 +65,9 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
         </div>
         <div className="flex gap-2">
           <Input
+            aria-label="Describe agent to generate"
+            name="agentGeneratePrompt"
+            autoComplete="off"
             value={aiPrompt}
             onChange={e => setAiPrompt(e.target.value)}
             placeholder="e.g. A code reviewer that checks for security issues..."
@@ -72,7 +77,7 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
           <button
             onClick={handleAiGenerate}
             disabled={aiLoading || !aiPrompt.trim()}
-            className="px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+            className={`px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 ${CONTROL_FOCUS_CLASS}`}
           >
             {aiLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
             Generate
@@ -82,17 +87,20 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
 
       {/* Form Fields */}
       <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
-        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Icon</label>
-        <Input value={icon} onChange={e => setIcon(e.target.value)} className="w-12 text-center text-lg bg-secondary/30" />
+        <label htmlFor="agent-template-icon" className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Icon</label>
+        <Input id="agent-template-icon" name="agentIcon" autoComplete="off" value={icon} onChange={e => setIcon(e.target.value)} className="w-12 text-center text-lg bg-secondary/30" />
 
-        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Name</label>
-        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Agent name" className="text-xs bg-secondary/30" />
+        <label htmlFor="agent-template-name" className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Name</label>
+        <Input id="agent-template-name" name="agentTemplateName" autoComplete="off" value={name} onChange={e => setName(e.target.value)} placeholder="Agent name" className="text-xs bg-secondary/30" />
 
-        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Description</label>
-        <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="What does this agent do?" className="text-xs bg-secondary/30" />
+        <label htmlFor="agent-template-description" className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Description</label>
+        <Input id="agent-template-description" name="agentTemplateDescription" autoComplete="off" value={description} onChange={e => setDescription(e.target.value)} placeholder="What does this agent do?" className="text-xs bg-secondary/30" />
 
-        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider self-start pt-2">System Prompt</label>
+        <label htmlFor="agent-template-system-prompt" className="text-[11px] text-muted-foreground font-display uppercase tracking-wider self-start pt-2">System Prompt</label>
         <textarea
+          id="agent-template-system-prompt"
+          name="agentTemplateSystemPrompt"
+          autoComplete="off"
           value={systemPrompt}
           onChange={e => setSystemPrompt(e.target.value)}
           placeholder="Instructions for this agent..."
@@ -110,6 +118,9 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
           <div className="relative">
             <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
             <Input
+              aria-label="Filter tools"
+              name="agentTemplateToolFilter"
+              autoComplete="off"
               value={toolSearch}
               onChange={e => setToolSearch(e.target.value)}
               placeholder="Filter tools..."
@@ -125,7 +136,7 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
               <button
                 key={tool.name}
                 onClick={() => toggleTool(tool.name)}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[11px] transition-colors ${
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[11px] transition-colors ${CONTROL_FOCUS_CLASS} ${
                   selectedTools.includes(tool.name)
                     ? 'bg-primary/15 text-foreground'
                     : 'hover:bg-secondary/40 text-muted-foreground'
@@ -146,13 +157,13 @@ const CreateAgentForm = ({ allTools, onSave, onCancel, onGenerate, initialData, 
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-2 border-t border-border/20">
-        <button onClick={onCancel} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/40 text-muted-foreground hover:bg-secondary/60">
+        <button onClick={onCancel} className={`px-3 py-1.5 text-xs rounded-lg bg-secondary/40 text-muted-foreground hover:bg-secondary/60 ${CONTROL_FOCUS_CLASS}`}>
           Cancel
         </button>
         <button
           onClick={() => onSave({ name, description, icon, tools: selectedTools, systemPrompt })}
           disabled={!name.trim() || !systemPrompt.trim()}
-          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+          className={`px-4 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 ${CONTROL_FOCUS_CLASS}`}
         >
           {editMode ? <Save className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
           {editMode ? 'Save Changes' : 'Create Agent'}

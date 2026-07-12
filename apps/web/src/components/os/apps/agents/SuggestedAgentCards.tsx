@@ -47,7 +47,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
   if (personas.length === 0) return null;
   return (
     <div className="mt-5" data-testid="suggested-agents">
-      <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider mb-1">
+      <p className="text-[11px] font-display font-semibold text-[var(--honey-text)] uppercase tracking-wider mb-1">
         Suggested agents
       </p>
       <p className="text-[13px] text-muted-foreground mb-3">
@@ -69,7 +69,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
                   ("pixel-identical frames"). */}
               <span
                 aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 h-[2px] opacity-0 transition-opacity duration-[var(--mo-fast)] group-hover:opacity-100 group-focus-visible:opacity-100"
+                className="pointer-events-none absolute inset-x-0 top-0 h-[2px] opacity-0 transition-opacity duration-mo-fast group-hover:opacity-100 group-focus-visible:opacity-100"
                 style={{ background: 'color-mix(in srgb, var(--honey) 70%, transparent)' }}
               />
               <span className="mb-2.5 flex items-center gap-3">
@@ -78,7 +78,9 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
                 <img
                   src={getPersonaAvatar(p.id)}
                   alt=""
-                  className="h-12 w-12 shrink-0 rounded-full object-cover transition-transform duration-[var(--mo-base)] ease-[var(--mo-ease)] motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:-rotate-3"
+                  width={48}
+                  height={48}
+                  className="h-12 w-12 shrink-0 rounded-full object-cover transition-transform duration-mo-base ease-mo motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:-rotate-3"
                 />
                 <span className="text-[13.5px] font-display font-semibold text-foreground">{p.name}</span>
               </span>
@@ -116,7 +118,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
             {/* Wave T Lane F item 1: same honey top hairline as the bee cards. */}
             <span
               aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 h-[2px] opacity-0 transition-opacity duration-[var(--mo-fast)] group-hover:opacity-100 group-focus-visible:opacity-100"
+              className="pointer-events-none absolute inset-x-0 top-0 h-[2px] opacity-0 transition-opacity duration-mo-fast group-hover:opacity-100 group-focus-visible:opacity-100"
               style={{ background: 'color-mix(in srgb, var(--honey) 70%, transparent)' }}
             />
             <span className="flex shrink-0 -space-x-2.5" aria-hidden>
@@ -125,6 +127,8 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
                   key={p.id}
                   src={getPersonaAvatar(p.id)}
                   alt=""
+                  width={32}
+                  height={32}
                   className="h-8 w-8 rounded-full border-2 border-card object-cover"
                 />
               ))}
@@ -141,7 +145,7 @@ const SuggestedAgentCards = ({ personas, onPick, allPersonas, onBrowseAll }: Sug
                 (not hover-only), brightening + nudging on hover AND focus-visible
                 (keyboard parity), so the "browse all" affordance is legible when
                 idle. */}
-            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-honey/60 transition-all duration-[var(--mo-fast)] group-hover:translate-x-0.5 group-hover:text-honey group-focus-visible:translate-x-0.5 group-focus-visible:text-honey" aria-hidden />
+            <ArrowRight className="h-3.5 w-3.5 shrink-0 text-honey/60 transition-[color,transform] duration-mo-fast group-hover:translate-x-0.5 group-hover:text-honey group-focus-visible:translate-x-0.5 group-focus-visible:text-honey" aria-hidden />
           </button>
         </div>
       )}

@@ -14,6 +14,8 @@ interface CreateGroupFormProps {
   editMode?: boolean;
 }
 
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
+
 const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: CreateGroupFormProps) => {
   const [name, setName] = useState(initialData?.name ?? '');
   const [description, setDescription] = useState(initialData?.description ?? '');
@@ -64,10 +66,10 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
       className="flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-thin"
     >
       <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
-        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Name</label>
-        <Input value={name} onChange={e => setName(e.target.value)} placeholder="Team name" className="text-xs bg-secondary/30" />
-        <label className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Description</label>
-        <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="What does this team do?" className="text-xs bg-secondary/30" />
+        <label htmlFor="agent-group-name" className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Name</label>
+        <Input id="agent-group-name" name="agentGroupName" autoComplete="off" value={name} onChange={e => setName(e.target.value)} placeholder="Team name" className="text-xs bg-secondary/30" />
+        <label htmlFor="agent-group-description" className="text-[11px] text-muted-foreground font-display uppercase tracking-wider">Description</label>
+        <Input id="agent-group-description" name="agentGroupDescription" autoComplete="off" value={description} onChange={e => setDescription(e.target.value)} placeholder="What does this team do?" className="text-xs bg-secondary/30" />
       </div>
 
       {/* Strategy */}
@@ -77,8 +79,9 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
           {Object.entries(STRATEGY_CONFIG).map(([key, cfg]) => (
             <button
               key={key}
+              aria-pressed={strategy === key}
               onClick={() => setStrategy(key as typeof strategy)}
-              className={`flex-1 p-2 rounded-lg text-center text-[11px] border transition-all ${
+              className={`flex-1 p-2 rounded-lg text-center text-[11px] border transition-colors ${CONTROL_FOCUS_CLASS} ${
                 strategy === key
                   ? 'border-primary/50 bg-primary/10 text-foreground'
                   : 'border-border/30 bg-secondary/20 text-muted-foreground hover:bg-secondary/40'
@@ -113,25 +116,25 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
                   <span className="text-[11px] font-medium text-foreground flex-1 truncate">{agent?.name ?? m.agentId}</span>
                   <div className="flex items-center gap-0.5">
                     <HintTooltip content="Move up">
-                      <button onClick={() => moveMember(idx, idx - 1)} disabled={idx === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity">
+                      <button onClick={() => moveMember(idx, idx - 1)} disabled={idx === 0} className={`p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity ${CONTROL_FOCUS_CLASS}`}>
                         <ChevronUp className="w-3 h-3" />
                       </button>
                     </HintTooltip>
                     <HintTooltip content="Move down">
-                      <button onClick={() => moveMember(idx, idx + 1)} disabled={idx === members.length - 1} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity">
+                      <button onClick={() => moveMember(idx, idx + 1)} disabled={idx === members.length - 1} className={`p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-20 transition-opacity ${CONTROL_FOCUS_CLASS}`}>
                         <ChevronDown className="w-3 h-3" />
                       </button>
                     </HintTooltip>
                   </div>
                   <button
                     onClick={() => toggleRole(m.agentId)}
-                    className={`text-[11px] px-1.5 py-0.5 rounded-full transition-colors ${
+                    className={`text-[11px] px-1.5 py-0.5 rounded-full transition-colors ${CONTROL_FOCUS_CLASS} ${
                       m.roleInGroup === 'lead' ? 'bg-amber-500/20 text-amber-400' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary/70'
                     }`}
                   >
                     {m.roleInGroup === 'lead' ? '★ Lead' : 'Worker'}
                   </button>
-                  <button onClick={() => removeMember(m.agentId)} className="p-0.5 text-muted-foreground hover:text-destructive">
+                  <button onClick={() => removeMember(m.agentId)} className={`p-0.5 text-muted-foreground hover:text-destructive ${CONTROL_FOCUS_CLASS}`}>
                     <X className="w-3 h-3" />
                   </button>
                 </div>
@@ -146,7 +149,7 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
               <button
                 key={a.id}
                 onClick={() => addMember(a.id)}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[11px] hover:bg-secondary/40 text-muted-foreground transition-colors"
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-[11px] hover:bg-secondary/40 text-muted-foreground transition-colors ${CONTROL_FOCUS_CLASS}`}
               >
                 <Plus className="w-3 h-3 shrink-0" />
                 <span className="truncate">{a.name}</span>
@@ -159,11 +162,11 @@ const CreateGroupForm = ({ agents, onSave, onCancel, initialData, editMode }: Cr
 
       {/* Actions */}
       <div className="flex justify-end gap-2 pt-2 border-t border-border/20 mt-auto">
-        <button onClick={onCancel} className="px-3 py-1.5 text-xs rounded-lg bg-secondary/40 text-muted-foreground hover:bg-secondary/60">Cancel</button>
+        <button onClick={onCancel} className={`px-3 py-1.5 text-xs rounded-lg bg-secondary/40 text-muted-foreground hover:bg-secondary/60 ${CONTROL_FOCUS_CLASS}`}>Cancel</button>
         <button
           onClick={() => onSave({ name, description, strategy, members })}
           disabled={!name.trim() || members.length < 2}
-          className="px-4 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+          className={`px-4 py-1.5 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 ${CONTROL_FOCUS_CLASS}`}
         >
           <Users className="w-3 h-3" /> {editMode ? 'Save Changes' : 'Create Group'}
         </button>

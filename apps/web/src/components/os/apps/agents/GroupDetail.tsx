@@ -26,6 +26,8 @@ const STATUS_LABEL: Record<MemberExecStatus, string> = {
   failed: 'Failed',
 };
 
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
+
 interface GroupDetailProps {
   group: AgentGroup;
   agents: BackendPersona[];
@@ -126,10 +128,10 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
         <div className="flex items-center gap-2 mb-1">
           <Users className="w-5 h-5 text-honey" />
           <h3 className="text-sm font-display font-bold text-foreground flex-1">{group.name}</h3>
-          <button onClick={onDuplicate} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
+          <button onClick={onDuplicate} className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors ${CONTROL_FOCUS_CLASS}`}>
             <Copy className="w-3 h-3" /> Duplicate
           </button>
-          <button onClick={onEdit} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors">
+          <button onClick={onEdit} className={`flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-medium rounded-lg bg-secondary/50 hover:bg-secondary/70 text-foreground transition-colors ${CONTROL_FOCUS_CLASS}`}>
             <Pencil className="w-3 h-3" /> Edit
           </button>
         </div>
@@ -217,6 +219,9 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
         <h4 className="text-[11px] font-display uppercase tracking-wider text-muted-foreground mb-2">Run a Task</h4>
         <div className="flex gap-2">
           <Input
+            aria-label="Group task"
+            name="agentGroupTask"
+            autoComplete="off"
             value={task}
             onChange={e => setTask(e.target.value)}
             placeholder="Describe the task for this group..."
@@ -227,7 +232,7 @@ const GroupDetail = ({ group, agents, onRun, onEdit, onDuplicate }: GroupDetailP
           <button
             onClick={handleRun}
             disabled={!task.trim() || execState?.status === 'running' || execState?.status === 'queued'}
-            className="px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1"
+            className={`px-3 py-2 text-xs font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 flex items-center gap-1 ${CONTROL_FOCUS_CLASS}`}
           >
             {execState?.status === 'running' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
             {execState?.status === 'running' ? 'Running' : 'Run'}

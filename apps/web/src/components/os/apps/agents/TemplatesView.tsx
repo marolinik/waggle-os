@@ -260,6 +260,9 @@ const TemplatesView = ({ onUseTemplate, activeWorkspaceId }: TemplatesViewProps)
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
+              aria-label={tab === 'agents' ? 'Search persona templates' : 'Search group templates'}
+              name={tab === 'agents' ? 'agentTemplateSearch' : 'agentGroupTemplateSearch'}
+              autoComplete="off"
               placeholder={tab === 'agents' ? 'Search personas...' : 'Search groups...'}
               className="w-full text-xs bg-secondary/30 pl-8 pr-3"
             />
