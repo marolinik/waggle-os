@@ -27,6 +27,8 @@ export function validatePluginManifest(manifest: Record<string, unknown>): Manif
   // Required string fields
   if (typeof manifest.name !== 'string' || manifest.name.trim() === '') {
     errors.push('name is required and must be a non-empty string');
+  } else if (!/^[A-Za-z0-9_][A-Za-z0-9._-]*$/.test(manifest.name)) {
+    errors.push('name must be a filesystem-safe plugin id (letters, numbers, dots, hyphens, and underscores only)');
   }
 
   if (typeof manifest.version !== 'string' || manifest.version.trim() === '') {

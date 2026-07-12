@@ -55,6 +55,18 @@ describe('validatePluginManifest', () => {
     expect(result.errors.some((e) => e.includes('description'))).toBe(true);
   });
 
+  it('rejects path traversal and separator characters in plugin names', () => {
+    for (const name of ['../escape', 'nested/plugin', 'C:\\escape', '..']) {
+      const result = validatePluginManifest({
+        name,
+        version: '1.0.0',
+        description: 'Unsafe name',
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.some((e) => e.includes('filesystem-safe'))).toBe(true);
+    }
+  });
+
   it('validates manifest with mcpServers', () => {
     const result = validatePluginManifest({
       name: 'mcp-plugin',
