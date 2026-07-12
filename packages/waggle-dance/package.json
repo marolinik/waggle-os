@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "scripts": { "build": "tsc" },
+  "scripts": {
+    "build": "tsc",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/waggle-dance/tests"
+  },
   "dependencies": {
     "@waggle/shared": "*"
   }

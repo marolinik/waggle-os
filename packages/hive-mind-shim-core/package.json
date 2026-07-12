@@ -15,7 +15,7 @@
     "build": "tsc --build",
     "build:clean": "tsc --build --clean",
     "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
-    "test": "vitest run",
+    "test": "npm run build --workspace @waggle/hive-mind-cli && node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/hive-mind-shim-core/tests",
     "test:watch": "vitest"
   },
   "engines": {
