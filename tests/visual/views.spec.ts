@@ -106,7 +106,13 @@ async function stabilizeVisuals(page: Page) {
       [data-testid="statusbar-tokens"],
       [data-testid="statusbar-cost"],
       [data-testid="import-reminder-banner"],
-      [data-testid="import-reminder-banner-cc"] {
+      [data-testid="import-reminder-banner-cc"],
+      [data-testid="home-cockpit-facts"],
+      [data-testid="home-cockpit-start-here"] h2,
+      [data-testid="home-cockpit-start-here"] h2 ~ p,
+      [data-testid^="home-cockpit-ws-"] .truncate,
+      [data-testid^="home-cockpit-ws-"] p,
+      [data-testid^="home-cockpit-continue-"] {
         visibility: hidden !important;
       }
     `,
