@@ -37,6 +37,10 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: '#6b7280',
 };
 
+function isAuthError(error: unknown) {
+  return getErrorMessage(error).startsWith('API error: 401');
+}
+
 export function Dashboard({ token, teamSlug }: DashboardProps) {
   const [team, setTeam] = useState<TeamResponse | null>(null);
   const [tasks, setTasks] = useState<TaskResponse[]>([]);
@@ -66,7 +70,11 @@ export function Dashboard({ token, teamSlug }: DashboardProps) {
         }
 
         if (teamData.status === 'rejected' && taskData.status === 'rejected') {
-          setError('Could not connect to team server. Is it running?');
+          setError(
+            isAuthError(teamData.reason) || isAuthError(taskData.reason)
+              ? 'Authentication failed. Check the admin auth token.'
+              : 'Could not connect to team server. Is it running?',
+          );
         }
       } catch (err) {
         if (!cancelled) setError(getErrorMessage(err, 'Failed to load dashboard data'));
@@ -98,7 +106,7 @@ export function Dashboard({ token, teamSlug }: DashboardProps) {
       </h1>
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: '8px 12px',
           background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -169,8 +177,10 @@ export function Dashboard({ token, teamSlug }: DashboardProps) {
         {recentTasks.length === 0 ? (
           <p style={{ color: '#9ca3af' }}>No tasks yet.</p>
         ) : (
+          <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Recent tasks table" tabIndex={0}>
           <table style={{
             width: '100%',
+            minWidth: 520,
             borderCollapse: 'collapse',
             background: '#12141a',
             border: '1px solid #2a2d36',
@@ -210,6 +220,7 @@ export function Dashboard({ token, teamSlug }: DashboardProps) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

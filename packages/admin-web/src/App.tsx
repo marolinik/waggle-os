@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Dashboard } from './pages/Dashboard.js';
 import { Jobs } from './pages/Jobs.js';
 import { Audit } from './pages/Audit.js';
@@ -19,34 +19,49 @@ const NAV_ITEMS: { key: Page; label: string }[] = [
   { key: 'settings', label: 'Team Settings' },
 ];
 
+function pageFromHash(hash: string): Page {
+  const value = hash.replace(/^#/, '');
+  return NAV_ITEMS.some((item) => item.key === value) ? (value as Page) : 'dashboard';
+}
+
 export function App() {
-  const [page, setPage] = useState<Page>('dashboard');
+  const [page, setPage] = useState<Page>(() => pageFromHash(window.location.hash));
   const [token, setToken] = useState('');
   const [teamSlug, setTeamSlug] = useState('');
 
+  useEffect(() => {
+    const syncFromHash = () => setPage(pageFromHash(window.location.hash));
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
+  const navigateTo = (nextPage: Page) => {
+    setPage(nextPage);
+    window.location.hash = nextPage;
+  };
+
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div className="admin-shell" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
       <nav
+        className="admin-sidebar"
+        aria-label="Admin sections"
         style={{
-          width: 220,
-          padding: 16,
           background: '#0d0e12',
           color: '#f0f2f7',
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
           borderRight: '1px solid #2a2d36',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+        <div className="admin-brand" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 20, lineHeight: 1 }}>&#x2B21;</span>
           <h2 style={{ fontSize: 16, margin: 0, letterSpacing: 1, color: '#f0f2f7', fontWeight: 600 }}>Waggle Admin</h2>
         </div>
-        <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1 }}>
+        <ul className="admin-nav-list">
           {NAV_ITEMS.map((item) => (
             <li key={item.key} style={{ marginBottom: 2 }}>
               <button
-                onClick={() => setPage(item.key)}
+                type="button"
+                onClick={() => navigateTo(item.key)}
+                aria-current={page === item.key ? 'page' : undefined}
                 style={{
                   background: page === item.key ? 'rgba(229, 160, 0, 0.08)' : 'transparent',
                   color: page === item.key ? '#f0f2f7' : '#9ca3af',
@@ -69,52 +84,53 @@ export function App() {
         </ul>
 
         {/* Connection config at bottom of sidebar */}
-        <div style={{ borderTop: '1px solid #2a2d36', paddingTop: 12, marginTop: 12 }}>
-          <label style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+        <div className="admin-connection" style={{ borderTop: '1px solid #2a2d36' }}>
+          <label
+            htmlFor="admin-team-slug"
+            className="admin-field-label"
+          >
             Team Slug
           </label>
           <input
+            id="admin-team-slug"
+            name="teamSlug"
             type="text"
+            autoComplete="organization"
             value={teamSlug}
             onChange={(e) => setTeamSlug(e.target.value)}
             placeholder="my-team"
+            className="admin-field"
             style={{
-              width: '100%',
-              padding: '6px 8px',
               background: '#12141a',
               border: '1px solid #2a2d36',
-              borderRadius: 4,
               color: '#f0f2f7',
-              fontSize: 12,
-              marginTop: 4,
-              marginBottom: 8,
-              boxSizing: 'border-box',
             }}
           />
-          <label style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+          <label
+            htmlFor="admin-auth-token"
+            className="admin-field-label"
+          >
             Auth Token
           </label>
           <input
+            id="admin-auth-token"
+            name="authToken"
             type="password"
+            autoComplete="off"
             value={token}
             onChange={(e) => setToken(e.target.value)}
             placeholder="Bearer token"
+            className="admin-field"
             style={{
-              width: '100%',
-              padding: '6px 8px',
               background: '#12141a',
               border: '1px solid #2a2d36',
-              borderRadius: 4,
               color: '#f0f2f7',
-              fontSize: 12,
-              marginTop: 4,
-              boxSizing: 'border-box',
             }}
           />
         </div>
       </nav>
-      <main style={{ flex: 1, padding: 24, background: '#08090c', overflowY: 'auto' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <main className="admin-main">
+        <div className="admin-content">
           {!token || !teamSlug ? (
             <div style={{ color: '#9ca3af', marginTop: 40, textAlign: 'center' }}>
               <h2 style={{ color: '#f0f2f7' }}>Connect to a Team</h2>

@@ -60,6 +60,35 @@ const tableStyle: React.CSSProperties = {
 
 /* ─── Sub-components ─── */
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isAnalyticsResponse(value: unknown): value is AnalyticsResponse {
+  if (!isRecord(value)) return false;
+
+  const activeUsers = value.activeUsers;
+  const tokenUsage = value.tokenUsage;
+  const performanceTrends = value.performanceTrends;
+
+  return (
+    isRecord(activeUsers)
+    && typeof activeUsers.daily === 'number'
+    && typeof activeUsers.weekly === 'number'
+    && typeof activeUsers.monthly === 'number'
+    && isRecord(tokenUsage)
+    && typeof tokenUsage.total === 'number'
+    && Array.isArray(tokenUsage.byUser)
+    && Array.isArray(value.topTools)
+    && Array.isArray(value.topCommands)
+    && Array.isArray(value.capabilityGaps)
+    && isRecord(performanceTrends)
+    && typeof performanceTrends.correctionRate === 'number'
+    && typeof performanceTrends.correctionTrend === 'number'
+    && typeof performanceTrends.avgResponseTime === 'number'
+  );
+}
+
 function ActiveUsersCard({ data }: { data: AnalyticsResponse['activeUsers'] }) {
   return (
     <div style={cardStyle}>
@@ -98,7 +127,8 @@ function TokenUsageCard({ data }: { data: AnalyticsResponse['tokenUsage'] }) {
       {data.byUser.length === 0 ? (
         <p style={{ color: '#9ca3af', fontSize: 13 }}>No usage data yet.</p>
       ) : (
-        <table style={tableStyle}>
+        <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Token usage table" tabIndex={0}>
+        <table style={{ ...tableStyle, minWidth: 480 }}>
           <thead>
             <tr>
               <th style={thStyle}>User</th>
@@ -120,6 +150,7 @@ function TokenUsageCard({ data }: { data: AnalyticsResponse['tokenUsage'] }) {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -216,7 +247,8 @@ function CapabilityGapsCard({ data }: { data: AnalyticsResponse['capabilityGaps'
       {data.length === 0 ? (
         <p style={{ color: '#9ca3af', fontSize: 13 }}>No capability gaps detected.</p>
       ) : (
-        <table style={tableStyle}>
+        <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Capability gaps table" tabIndex={0}>
+        <table style={{ ...tableStyle, minWidth: 560 }}>
           <thead>
             <tr>
               <th style={thStyle}>Tool</th>
@@ -247,6 +279,7 @@ function CapabilityGapsCard({ data }: { data: AnalyticsResponse['capabilityGaps'
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );
@@ -297,10 +330,17 @@ export function Analytics({ token, teamSlug }: AnalyticsProps) {
       try {
         setLoading(true);
         setError(null);
+        setData(null);
         const result = await api.getAnalytics(token, teamSlug);
+        if (!isAnalyticsResponse(result)) {
+          throw new Error('Analytics data is incomplete. Refresh or check the team server version.');
+        }
         if (!cancelled) setData(result);
       } catch (err) {
-        if (!cancelled) setError(getErrorMessage(err, 'Failed to load analytics'));
+        if (!cancelled) {
+          setData(null);
+          setError(getErrorMessage(err, 'Failed to load analytics'));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -323,7 +363,7 @@ export function Analytics({ token, teamSlug }: AnalyticsProps) {
       <h1 style={{ marginTop: 0, color: '#f0f2f7' }}>Usage Analytics</h1>
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: '8px 12px',
           background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)',

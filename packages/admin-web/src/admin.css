@@ -1,0 +1,140 @@
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: #08090c;
+}
+
+.admin-shell {
+  display: flex;
+  min-height: 100vh;
+  background: #08090c;
+  color: #f0f2f7;
+}
+
+.admin-sidebar {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 220px;
+  padding: 16px;
+}
+
+.admin-brand {
+  margin-bottom: 24px;
+}
+
+.admin-nav-list {
+  flex: 1;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-connection {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.admin-field-label {
+  display: block;
+  color: #9ca3af;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.admin-field {
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.admin-field:last-child {
+  margin-bottom: 0;
+}
+
+.admin-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 24px;
+  background: #08090c;
+}
+
+.admin-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.admin-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-radius: 8px;
+}
+
+.admin-table-scroll:focus-visible {
+  outline: 2px solid #e5a000;
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .admin-shell {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    width: 100%;
+    padding: 12px;
+    border-right: 0 !important;
+    border-bottom: 1px solid #2a2d36;
+  }
+
+  .admin-brand {
+    margin-bottom: 8px;
+  }
+
+  .admin-nav-list {
+    display: grid;
+    flex: 0;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: 4px;
+  }
+
+  .admin-nav-list li {
+    margin-bottom: 0 !important;
+  }
+
+  .admin-connection {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .admin-main {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 16px;
+    overflow-x: hidden;
+  }
+
+  .admin-content {
+    max-width: none;
+  }
+
+  .admin-table-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+}
