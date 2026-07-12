@@ -76,10 +76,12 @@ const McpScopeDialog = ({ serverId, currentWorkspaceId, busy, onSubmit, onClose 
           </label>
           {mode === 'workspace' && (
             <select
+              name="mcpScopeWorkspaceId"
+              autoComplete="off"
               value={workspaceId}
               onChange={(e) => setWorkspaceId(e.target.value)}
               aria-label="Target workspace"
-              className="w-full text-xs bg-muted/50 border border-border/40 rounded-md px-2 py-1.5 text-foreground"
+              className="w-full text-xs bg-muted/50 border border-border/40 rounded-md px-2 py-1.5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               <option value="">Select a workspace…</option>
               {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}

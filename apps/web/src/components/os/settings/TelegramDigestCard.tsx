@@ -132,11 +132,14 @@ const TelegramDigestCard = () => {
 
       <div className="space-y-2">
         <div>
-          <label className="text-[10px] font-display text-muted-foreground block mb-1">
+          <label htmlFor="telegram-bot-token" className="text-[10px] font-display text-muted-foreground block mb-1">
             Bot token {status?.hasToken && <span className="text-status-healthy">(saved)</span>}
           </label>
           <div className="relative">
             <Input
+              id="telegram-bot-token"
+              name="telegramBotToken"
+              autoComplete="off"
               type={showToken ? 'text' : 'password'}
               value={token}
               onChange={e => setToken(e.target.value)}
@@ -156,10 +159,13 @@ const TelegramDigestCard = () => {
         </div>
 
         <div>
-          <label className="text-[10px] font-display text-muted-foreground block mb-1">
+          <label htmlFor="telegram-chat-id" className="text-[10px] font-display text-muted-foreground block mb-1">
             Chat ID {status?.hasChatId && <span className="text-status-healthy">(saved)</span>}
           </label>
           <Input
+            id="telegram-chat-id"
+            name="telegramChatId"
+            autoComplete="off"
             type="text"
             value={chatId}
             onChange={e => setChatId(e.target.value)}

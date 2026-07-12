@@ -309,6 +309,10 @@ const ExtensionCard = ({ ext, onRemove, onOpenIn }: ExtensionCardProps) => {
               type="password"
               value={token}
               onChange={e => setToken(e.target.value)}
+              aria-label={`${displayExtensionName(ext.name)} API token`}
+              name="marketplaceConnectorToken"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="Paste API token — stored in your vault"
               data-testid="connector-token-input"
               className="flex-1 h-7 text-[11px]"

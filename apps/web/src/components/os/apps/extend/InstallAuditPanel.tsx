@@ -115,9 +115,11 @@ const InstallAuditPanel = ({ type, capability, limit = 20, showFilter = false }:
           <label htmlFor="audit-type-filter" className="text-[11px] text-muted-foreground">Type</label>
           <select
             id="audit-type-filter"
+            name="extendAuditTypeFilter"
+            autoComplete="off"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value as ExtendAuditType | 'all')}
-            className="text-[11px] bg-muted/50 border border-border/40 rounded-md px-1.5 py-0.5 text-foreground"
+            className="text-[11px] bg-muted/50 border border-border/40 rounded-md px-1.5 py-0.5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             {AUDIT_TYPE_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>

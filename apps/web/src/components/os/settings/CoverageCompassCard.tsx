@@ -28,7 +28,7 @@ interface CompetingTool {
 const TOOLS: CompetingTool[] = [
   { name: 'ChatGPT / Claude.ai', category: 'general AI chat', coverage: 'covered', via: 'Chat app + persona switcher' },
   { name: 'Mem.ai / Heyday', category: 'personal memory', coverage: 'covered', via: 'FrameStore + Knowledge Graph + Harvest' },
-  { name: 'Browser AI extensions', category: 'save-to-memory from web', coverage: 'covered', via: 'Waggle Companion (apps/browser-ext)' },
+  { name: 'Browser AI extensions', category: 'save-to-memory from web', coverage: 'partial', via: 'Companion popup + capture flow; native toolbar/context menu pending' },
   { name: 'Notion AI', category: 'notes + AI in notes', coverage: 'covered', via: 'Memory app + Wiki compiler' },
   { name: 'Granola / Otter.ai', category: 'meeting transcripts', coverage: 'partial', via: 'Voice app + transcript ingest (no native recording yet)' },
   { name: 'Gamma / Beautiful.ai', category: 'AI-generated decks', coverage: 'partial', via: 'pptx / presentation-design skills (no native deck editor)' },
