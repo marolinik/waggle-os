@@ -38,6 +38,7 @@ export function BeeLoader({ size = 44, label = 'Loading…', className }: BeeLoa
     <span
       role="status"
       aria-live="polite"
+      aria-busy="true"
       data-testid="bee-loader"
       className={cn('inline-flex items-center justify-center', className)}
     >

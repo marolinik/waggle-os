@@ -100,7 +100,10 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
     d.toLocaleDateString(DATE_LOCALE, { weekday: "short", month: "short", day: "numeric" });
 
   return (
-    <div className="waggle-statusbar fixed top-0 left-0 right-0 z-50 h-8 glass-strong flex items-center justify-between px-4 select-none">
+    <header
+      aria-label="Application status"
+      className="waggle-statusbar fixed top-0 left-0 right-0 z-50 h-8 glass-strong flex items-center justify-between px-4 select-none"
+    >
       <div className="flex items-center gap-3 min-w-0">
         {/* R11 Lane D: the full logo (mark + WAGGLE wordmark) crammed into 16px
             read as a muddy dark tile in light. Clip to just the bee mark — a 200%
@@ -108,7 +111,13 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
             so it reads as an orange mark on the asset's own bg in both themes,
             never a dark square. A faint ring keeps the cream tile crisp on ivory. */}
         <span className="w-4 h-4 rounded-[4px] overflow-hidden shrink-0 inline-flex ring-1 ring-border/40">
-          <img src={waggleLogo} alt="Waggle" className="w-[200%] h-[200%] max-w-none object-cover -translate-x-1/4 -translate-y-[14%]" />
+          <img
+            src={waggleLogo}
+            alt="Waggle"
+            width={32}
+            height={32}
+            className="w-[200%] h-[200%] max-w-none object-cover -translate-x-1/4 -translate-y-[14%]"
+          />
         </span>
         <span className="text-xs font-display font-semibold text-foreground whitespace-nowrap shrink-0">Waggle AI</span>
         {/* L-02: hide workspace + model below md (~768px) so the logo
@@ -249,7 +258,7 @@ const StatusBar = ({ workspaceName, focusedWindowLabel, model, tokensUsed, costU
         <span className="text-xs text-muted-foreground hidden lg:inline">{formatDate(time)}</span>
         <span className="text-xs text-foreground font-medium">{formatTime(time)}</span>
       </div>
-    </div>
+    </header>
   );
 };
 

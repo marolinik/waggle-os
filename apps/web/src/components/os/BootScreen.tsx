@@ -132,6 +132,8 @@ const BootScreen = ({ onComplete, ready = true, warm = false }: { onComplete: ()
           <img
             src={waggleLogo}
             alt="Waggle AI"
+            width={80}
+            height={80}
             className="w-20 h-20 rounded-3xl shadow-2xl"
           />
         </motion.div>
