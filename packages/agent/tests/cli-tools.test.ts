@@ -131,4 +131,17 @@ describe('cli_execute', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('not in the CLI allowlist');
   });
+
+  it('reads an updated allowlist without recreating the tools', async () => {
+    let allowlist: string[] = [];
+    const tools = createCliTools({ allowlist, getAllowlist: () => allowlist });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    const denied = JSON.parse(await execute.execute({ program: 'node', args: ['--version'] }));
+    expect(denied.success).toBe(false);
+
+    allowlist = ['node'];
+    const allowed = JSON.parse(await execute.execute({ program: 'node', args: ['--version'] }));
+    expect(allowed.success).toBe(true);
+  });
 });

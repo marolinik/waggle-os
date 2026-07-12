@@ -506,9 +506,9 @@ export class Orchestrator {
         // Dedup MUST be by frame id, not content prefix — two frames sharing a 100-char prefix
         // ("Decision: use Postgres" vs "Decision: use Postgres (revised)") otherwise collapse.
         const wsRaw = this.workspaceLayers.db.getDatabase();
-        type CatchUpRow = { id: number; content: string; frame_type: string; importance: string; created_at: string };
+        type CatchUpRow = { id: number; content: string; frame_type: string; importance: string; source: string; created_at: string };
         const importantFrames = wsRaw.prepare(
-          `SELECT id, content, frame_type, importance, created_at
+          `SELECT id, content, frame_type, importance, source, created_at
            FROM memory_frames
            WHERE importance IN ('critical', 'important')
               OR content LIKE 'Decision%'
@@ -536,7 +536,7 @@ export class Orchestrator {
 
         workspaceResults = combined.slice(0, limit).map(f => ({
           score: 1,
-          frame: { content: f.content, importance: f.importance, created_at: f.created_at },
+          frame: { content: f.content, importance: f.importance, source: f.source, created_at: f.created_at },
         }));
         personalResults = await this.search.search(query, { limit: 2, profile });
       } else {

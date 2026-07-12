@@ -71,6 +71,15 @@ describe('CostTracker', () => {
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0][0]).toContain(unknownOpus);
     });
+
+    it('treats unlisted Ollama models as local and free without a cloud-pricing warning', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const tracker = new CostTracker();
+      tracker.addUsage('ollama/minimax-m2.7:cloud', 1000, 1000);
+
+      expect(tracker.getStats().estimatedCost).toBe(0);
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 
   describe('getDailyTotal', () => {

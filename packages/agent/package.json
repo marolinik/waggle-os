@@ -3,18 +3,27 @@
   "version": "0.1.0",
   "description": "Waggle agent — Orchestrator and Tools",
   "type": "module",
-  "main": "src/orchestrator.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run"
   },
   "dependencies": {
     "@waggle/core": "*",
+    "@waggle/marketplace": "*",
     "@waggle/shared": "*",
     "docx": "^9.6.1",
+    "exceljs": "^4.4.0",
     "glob": "^13.0.6",
     "pdfmake": "^0.3.7",
     "pptxgenjs": "^4.0.1"

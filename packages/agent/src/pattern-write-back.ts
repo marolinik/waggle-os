@@ -120,6 +120,16 @@ const INLINE_DECISION_PATTERNS: readonly RegExp[] = [
   /\b(?:conclusion|concluded|summary|in summary)\b/i,
 ];
 
+// Assistant examples are instructional output, not evidence about the user.
+// Suppress structured write-back for these responses; false positives are more
+// damaging here than losing a temporary summary of an example-heavy answer.
+const ILLUSTRATIVE_EXAMPLE_PATTERNS: readonly RegExp[] = [
+  /\bfor example\s*:/i,
+  /\be\.g\.\s*:/i,
+  /\bexamples?\s*:/i,
+  /\bhere (?:are|'s) (?:some|a few|an?) examples?\b/i,
+];
+
 type SaveTarget = 'workspace' | 'personal';
 
 /**
@@ -311,6 +321,7 @@ export async function runPatternWriteBack(
   // ── Structured extraction from substantial assistant output ──
   if (assistantMsg.length > 200) {
     const lines = assistantMsg.split('\n').filter(l => l.trim().length > 5);
+    const hasIllustrativeExamples = ILLUSTRATIVE_EXAMPLE_PATTERNS.some((p) => p.test(assistantMsg));
     let savedStructured = false;
 
     // Inline decisions (different patterns than the explicit decision block above)
@@ -348,7 +359,7 @@ export async function runPatternWriteBack(
         .map(l => l.replace(/^[-*\d.]+\s+/, '').trim())
         .filter(l => l.length > 15 && l.length < 300);
 
-      if (bullets.length >= 2 && saved.length < 5) {
+      if (bullets.length >= 2 && saved.length < 5 && !hasIllustrativeExamples) {
         const keyPoints = bullets.slice(0, 3).join('; ');
         const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
         const prefix = heading ? `${heading}: ` : 'Key points: ';
@@ -361,7 +372,7 @@ export async function runPatternWriteBack(
 
     // Fallback: compact summary when nothing structured fired and the
     // response is substantial. Never save the full blob — distill first.
-    if (!savedStructured && assistantMsg.length > STRUCTURED_EXTRACT_THRESHOLD && saved.length === 0) {
+    if (!savedStructured && !hasIllustrativeExamples && assistantMsg.length > STRUCTURED_EXTRACT_THRESHOLD && saved.length === 0) {
       const heading = lines.find(l => l.startsWith('#'))?.replace(/^#+\s+/, '') ?? '';
       const firstMeaningful = lines.find(l => !l.startsWith('#') && l.length > 20)?.trim() ?? '';
       const summary = heading
