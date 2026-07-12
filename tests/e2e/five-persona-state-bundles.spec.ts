@@ -8,6 +8,7 @@ interface RouteProbe {
   id: string;
   path: string;
   expected: RegExp;
+  loading?: RegExp;
   viewport?: { width: number; height: number };
 }
 
@@ -162,7 +163,7 @@ const PERSONAS: PersonaBundle[] = [
     viewport: { width: 1440, height: 900 },
     nonMainGateDecisions: ['T19 deferred unless browser-capture extension evidence enters this score.'],
     routes: [
-      { id: 'memory', path: '/memory', expected: /memory|trust|timeline|wiki|harvest/i },
+      { id: 'memory', path: '/memory', expected: /memory|trust|timeline|wiki|harvest/i, loading: /Loading memories/i },
       { id: 'artifacts', path: '/artifacts', expected: /artifact|library|document|presentation/i },
       { id: 'timeline', path: '/settings/timeline', expected: /timeline|workspace|activity|event/i },
     ],
@@ -245,7 +246,7 @@ const PERSONAS: PersonaBundle[] = [
     viewport: { width: 1440, height: 900 },
     nonMainGateDecisions: ['T15/T16/T17/T18 evidenced or explicitly deferred for utility, hook, developer, and ops surfaces.'],
     routes: [
-      { id: 'launcher', path: '/launcher', expected: /tool launcher|optional prompt|detecting installed tools|launch/i },
+      { id: 'launcher', path: '/launcher', expected: /tool launcher|optional prompt|detecting installed tools|launch/i, loading: /Detecting installed tools/i },
       { id: 'mcps', path: '/mcps', expected: /mcp hub|installed|catalog|custom/i },
       { id: 'files', path: '/files', expected: /storage|files|workspace|local/i },
     ],
@@ -462,8 +463,8 @@ const PERSONAS: PersonaBundle[] = [
     nonMainGateDecisions: ['T13/T14/T19 deferred unless launch, desktop, or browser-capture flows enter this mobile score.'],
     routes: [
       { id: 'home-mobile', path: '/home', expected: /home|workspace|memory|start|chat/i },
-      { id: 'settings-mobile', path: '/settings', expected: /settings|plan|models|profile|general/i },
-      { id: 'memory-mobile', path: '/memory', expected: /memory|trust|timeline|wiki|harvest/i },
+      { id: 'settings-mobile', path: '/settings', expected: /settings|plan|models|profile|general/i, loading: /Checking your models/i },
+      { id: 'memory-mobile', path: '/memory', expected: /memory|trust|timeline|wiki|harvest/i, loading: /Loading memories/i },
     ],
     failureProbes: [
       {
@@ -556,6 +557,18 @@ async function waitForShell(page: Page): Promise<void> {
   await page.waitForTimeout(400);
 }
 
+async function waitForSettledRoute(page: Page): Promise<void> {
+  await expect.poll(
+    async () => page.locator('[aria-busy="true"]:visible').count(),
+    { message: 'Visible route loaders should settle before judge capture', timeout: 20_000 },
+  ).toBe(0);
+  await page.waitForTimeout(200);
+}
+
+async function captureScreenshot(page: Page, path: string): Promise<void> {
+  await page.screenshot({ path, fullPage: false, animations: 'disabled' });
+}
+
 async function visibleHorizontalOverflow(
   page: Page,
   selector = 'main, [role="navigation"], [role="dialog"], button, input, textarea, select, [role="tab"], [role="tabpanel"], [data-testid]',
@@ -585,7 +598,7 @@ async function runOverlayProbe(page: Page, dir: string, probe: OverlayProbe, ind
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     const overflow = await visibleHorizontalOverflow(page);
     const screenshotPath = join(dir, `overlay-${String(index + 1).padStart(2, '0')}-${probe}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: false });
+    await captureScreenshot(page, screenshotPath);
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible({ timeout: 5_000 });
     return {
@@ -602,7 +615,7 @@ async function runOverlayProbe(page: Page, dir: string, probe: OverlayProbe, ind
     await expect(dialog).toBeVisible({ timeout: 5_000 });
     const overflow = await visibleHorizontalOverflow(page);
     const screenshotPath = join(dir, `overlay-${String(index + 1).padStart(2, '0')}-${probe}.png`);
-    await page.screenshot({ path: screenshotPath, fullPage: false });
+    await captureScreenshot(page, screenshotPath);
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible({ timeout: 5_000 });
     return {
@@ -625,7 +638,7 @@ async function runOverlayProbe(page: Page, dir: string, probe: OverlayProbe, ind
     '[data-testid="command-center-dialog"] [cmdk-item]:visible, [data-testid="command-center-dialog"] [cmdk-item] *:visible, [data-testid="command-center-dialog"] input:visible, [data-testid="command-center-dialog"] kbd:visible',
   );
   const screenshotPath = join(dir, `overlay-${String(index + 1).padStart(2, '0')}-${probe}.png`);
-  await page.screenshot({ path: screenshotPath, fullPage: false });
+  await captureScreenshot(page, screenshotPath);
   await page.keyboard.press('Escape');
   await expect(dialog).not.toBeVisible({ timeout: 5_000 });
   return {
@@ -1119,6 +1132,7 @@ test.describe('five-persona state-bundle evidence', () => {
       await page.addInitScript(() => {
         localStorage.clear();
         sessionStorage.clear();
+        localStorage.setItem('waggle:tooltips_done', 'true');
         const activeWorkspace = new URLSearchParams(window.location.search).get('activeWorkspace');
         if (activeWorkspace) {
           localStorage.setItem('waggle:active-workspace-v1', activeWorkspace);
@@ -1131,8 +1145,12 @@ test.describe('five-persona state-bundle evidence', () => {
         await page.goto(routeWithState(route.path, persona.uiDisclosureTier), { waitUntil: 'domcontentloaded' });
         await waitForShell(page);
         await expect(page.locator('body')).toContainText(route.expected, { timeout: 20_000 });
+        await waitForSettledRoute(page);
+        if (route.loading) {
+          await expect(page.getByText(route.loading).first()).not.toBeVisible({ timeout: 20_000 });
+        }
         const screenshotPath = join(dir, `${String(index + 1).padStart(2, '0')}-${route.id}.png`);
-        await page.screenshot({ path: screenshotPath, fullPage: false });
+        await captureScreenshot(page, screenshotPath);
 
         routeEvidence.push({
           id: route.id,
@@ -1155,7 +1173,7 @@ test.describe('five-persona state-bundle evidence', () => {
           await runFailureAction(page, probe);
           await expect(page.locator('body')).toContainText(probe.expected, { timeout: 20_000 });
           const screenshotPath = join(dir, `failure-${String(index + 1).padStart(2, '0')}-${probe.id}.png`);
-          await page.screenshot({ path: screenshotPath, fullPage: false });
+          await captureScreenshot(page, screenshotPath);
 
           failureEvidence.push({
             id: probe.id,
