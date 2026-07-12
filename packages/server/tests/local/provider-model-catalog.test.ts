@@ -53,6 +53,24 @@ describe('provider model catalog discovery', () => {
     expect(requestedInit?.headers).toEqual({ 'x-goog-api-key': 'google-key' });
   });
 
+  it('uses Perplexity v1 discovery and preserves provider-namespaced model ids', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      data: [{ id: 'future-provider/model-released-today', owned_by: 'future-provider' }],
+    }), { status: 200 }));
+
+    const result = await discoverProviderModels('perplexity', 'perplexity-key', undefined, { fetchImpl });
+
+    expect(result.models.map((model) => model.id)).toEqual([
+      'perplexity/future-provider/model-released-today',
+    ]);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://api.perplexity.ai/v1/models',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer perplexity-key' },
+      }),
+    );
+  });
+
   it('collects every Anthropic cursor page instead of stopping at the default first 20', async () => {
     const requestedUrls: string[] = [];
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {

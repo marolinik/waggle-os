@@ -70,7 +70,7 @@ export const PROVIDER_MODEL_CATALOGS: Record<string, ProviderCatalogDefinition> 
   minimax: { endpoint: 'https://api.minimax.io/v1/models', auth: 'bearer' },
   zhipu: { endpoint: 'https://open.bigmodel.cn/api/paas/v4/models', auth: 'bearer' },
   moonshot: { endpoint: 'https://api.moonshot.ai/v1/models', auth: 'bearer' },
-  perplexity: { endpoint: 'https://api.perplexity.ai/models', auth: 'bearer' },
+  perplexity: { endpoint: 'https://api.perplexity.ai/v1/models', auth: 'bearer' },
   openrouter: { endpoint: 'https://openrouter.ai/api/v1/models', auth: 'bearer' },
 };
 
