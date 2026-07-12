@@ -10,7 +10,7 @@ import {
   Command as CommandMenu, CommandList,
   CommandEmpty, CommandGroup, CommandItem,
 } from '@/components/ui/command';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { adapter } from '@/lib/adapter';
 import { fuzzyMatch } from '@/lib/fuzzy-match';
 import { cmdKLabel } from '@/lib/platform';
@@ -218,15 +218,15 @@ const CatalogRow = ({ cmd, onSelect }: { cmd: CatalogCommand; onSelect: () => vo
     <CommandItem
       value={`cat:${cmd.id}`}
       onSelect={onSelect}
-      className="group flex items-center gap-3 rounded-[9px] px-3 py-2 aria-selected:bg-[var(--honey-wash)]"
+      className="group flex min-w-0 items-center gap-3 rounded-[9px] px-3 py-2 aria-selected:bg-[var(--honey-wash)]"
     >
       <Icon className="h-[18px] w-[18px] shrink-0 text-[var(--text-2)] group-aria-selected:text-[var(--honey-text)]" strokeWidth={1.7} />
-      <span className="min-w-0 flex-1 truncate">
-        <span className="text-sm text-[var(--text)]">{cmd.name}</span>
+      <div className="min-w-0 flex-1 text-left">
+        <span className="block truncate text-sm text-[var(--text)]">{cmd.name}</span>
         {cmd.subtitle && (
-          <span className="ml-2 font-mono text-[11px] text-[var(--text-dim)]">{cmd.subtitle}</span>
+          <span className="block truncate font-mono text-[11px] text-[var(--text-dim)]">{cmd.subtitle}</span>
         )}
-      </span>
+      </div>
       {cmd.meta && (
         <span className="shrink-0 font-mono text-[10.5px] text-[var(--text-dim)]">{cmd.meta}</span>
       )}
@@ -561,6 +561,9 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
         {/* Accessible label for the Radix dialog; visually hidden (sr-only is
             the convention already used in ui/dialog.tsx). */}
         <DialogTitle className="sr-only">Command Center</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search and run commands, navigate surfaces, launch tools, and open workspace actions.
+        </DialogDescription>
 
         <CommandMenu
           label="Command Center"
@@ -580,7 +583,7 @@ const CommandCenter = ({ open, onClose, onNavigate, onExecute, workspaceId, cata
               value={query}
               onValueChange={setQuery}
               placeholder="What do you want to do? Search, launch, create, run, navigate, extend…"
-              className="h-auto flex-1 border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--hive-500)]"
+              className="h-auto flex-1 rounded-md border-0 bg-transparent p-0 text-sm outline-none placeholder:text-[var(--hive-500)] focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--hive-850)]"
               aria-label="Command Center search"
             />
             {searching && <Loader2 className="h-4 w-4 animate-spin" style={{ color: 'var(--honey-500)' }} />}

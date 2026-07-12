@@ -185,7 +185,7 @@ const PersonaSwitcher = ({
         key={p.id}
         onClick={() => { onSelect(p.id); onClose(); }}
         aria-label={p.name}
-        className={`flex items-center gap-3 p-3 rounded-xl transition-all text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+        className={`flex items-center gap-3 p-3 rounded-xl transition-colors text-left focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
           currentPersona === p.id && !currentGroupId
             ? 'bg-primary/20 border border-primary/50'
             : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
@@ -224,7 +224,7 @@ const PersonaSwitcher = ({
           </div>
           {tooltip.bestFor.length > 0 && (
             <div>
-              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-honey/80 mb-1">Best for</p>
+              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-[var(--honey-text)] mb-1">Best for</p>
               <ul className="space-y-0.5">
                 {tooltip.bestFor.map(item => (
                   <li key={item} className="text-muted-foreground leading-tight">• {item}</li>
@@ -234,7 +234,7 @@ const PersonaSwitcher = ({
           )}
           {tooltip.wontDo && (
             <div>
-              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-destructive/80 mb-1">Won’t do</p>
+              <p className="text-[10px] font-display font-semibold uppercase tracking-wider text-[var(--status-error)] mb-1">Won’t do</p>
               <p className="text-muted-foreground leading-tight">{tooltip.wontDo}</p>
             </div>
           )}
@@ -317,7 +317,7 @@ const PersonaSwitcher = ({
                 <button
                   key={g.id}
                   onClick={() => { onSelectGroup?.(g.id); onClose(); }}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all text-left ${
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
                     currentGroupId === g.id
                       ? 'bg-primary/20 border border-primary/50'
                       : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'

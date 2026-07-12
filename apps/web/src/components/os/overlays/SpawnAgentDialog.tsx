@@ -246,7 +246,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                         key={ws.id}
                         type="button"
                         onClick={() => setForm(f => ({ ...f, workspaceId: ws.id }))}
-                        className={`px-2.5 py-1.5 text-xs rounded-lg border text-left transition-all truncate ${
+                        className={`px-2.5 py-1.5 text-xs rounded-lg border text-left transition-colors truncate ${
                           form.workspaceId === ws.id
                             ? 'border-primary bg-primary/10 text-honey ring-1 ring-primary/30'
                             : 'border-border/30 bg-secondary/20 text-muted-foreground hover:text-foreground hover:bg-secondary/40'
@@ -263,12 +263,18 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                     )}
                   </div>
                 ) : (
-                  <Input
-                    placeholder="New workspace name..."
-                    value={form.newWorkspaceName}
-                    onChange={e => setForm(f => ({ ...f, newWorkspaceName: e.target.value }))}
-                    className="bg-secondary/30 border-border/50 text-foreground placeholder:text-muted-foreground"
-                  />
+                  <>
+                    <Label htmlFor="spawn-workspace-name" className="sr-only">New workspace name</Label>
+                    <Input
+                      id="spawn-workspace-name"
+                      name="spawnWorkspaceName"
+                      autoComplete="off"
+                      placeholder="New workspace name..."
+                      value={form.newWorkspaceName}
+                      onChange={e => setForm(f => ({ ...f, newWorkspaceName: e.target.value }))}
+                      className="bg-secondary/30 border-border/50 text-foreground placeholder:text-muted-foreground"
+                    />
+                  </>
                 )}
               </div>
 
@@ -277,6 +283,8 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                 <Label htmlFor="spawn-task" className="text-foreground">Task</Label>
                 <Textarea
                   id="spawn-task"
+                  name="spawnTask"
+                  autoComplete="off"
                   placeholder="Describe what this agent should do..."
                   value={form.task}
                   onChange={e => setForm(f => ({ ...f, task: e.target.value }))}
@@ -304,13 +312,13 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                         key={p.id}
                         type="button"
                         onClick={() => setForm(f => ({ ...f, persona: f.persona === p.id ? '' : p.id }))}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-all ${
+                        className={`flex flex-col items-center gap-1 p-2 rounded-lg border text-center transition-colors ${
                           form.persona === p.id
                             ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
                             : 'border-border/30 bg-secondary/20 hover:bg-secondary/40'
                         }`}
                       >
-                        <img src={p.avatar} alt={p.name} className="w-8 h-8 rounded-full object-cover" />
+                        <img src={p.avatar} alt={p.name} width={32} height={32} className="w-8 h-8 rounded-full object-cover" />
                         <span className="text-[11px] text-foreground font-medium leading-tight truncate w-full">{p.name}</span>
                       </button>
                     ))}
@@ -422,7 +430,7 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
                   <div>
                     <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Persona</p>
                     <div className="flex items-center gap-2">
-                      <img src={selectedPersona.avatar} alt={selectedPersona.name} className="w-6 h-6 rounded-full object-cover" />
+                      <img src={selectedPersona.avatar} alt={selectedPersona.name} width={24} height={24} className="w-6 h-6 rounded-full object-cover" />
                       <span className="text-sm text-foreground">{selectedPersona.name}</span>
                     </div>
                   </div>

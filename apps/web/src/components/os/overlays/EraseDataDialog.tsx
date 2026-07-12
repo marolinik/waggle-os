@@ -189,16 +189,19 @@ export default function EraseDataDialog({ open, onClose }: EraseDataDialogProps)
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground">
+                  <label htmlFor="erase-data-confirmation-phrase" className="text-[11px] text-muted-foreground">
                     To confirm, type exactly: <span className="font-mono text-foreground">{REQUIRED_PHRASE}</span>
                   </label>
                   <input
+                    id="erase-data-confirmation-phrase"
+                    name="eraseDataConfirmationPhrase"
                     type="text"
+                    autoComplete="off"
                     value={phrase}
                     onChange={e => setPhrase(e.target.value)}
                     disabled={submitting}
                     placeholder={REQUIRED_PHRASE}
-                    className="w-full px-3 py-2 rounded-lg bg-secondary/30 border border-border/40 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-destructive/60 disabled:opacity-50"
+                    className="w-full px-3 py-2 rounded-lg bg-secondary/30 border border-border/40 text-sm font-mono text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:border-destructive/60 focus-visible:ring-2 focus-visible:ring-destructive/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50"
                     data-testid="erase-data-phrase-input"
                     autoFocus
                   />

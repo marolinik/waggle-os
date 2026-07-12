@@ -225,7 +225,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                   title so the briefing greets like a colleague catching you up.
                   Decorative (alt=""); the title carries the accessible name. */}
               <div className="flex items-center gap-2">
-                <img src={beeMascot} alt="" aria-hidden className="w-7 h-7 shrink-0" />
+                <img src={beeMascot} alt="" aria-hidden width={28} height={28} className="w-7 h-7 shrink-0" />
                 <h2 id="login-briefing-title" className="text-lg font-display font-bold text-foreground">Catching you up</h2>
               </div>
               <p className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-1 gap-y-0.5" data-testid="login-briefing-brag-line">
@@ -279,7 +279,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
             // /api/workspaces?templateId, tracked in FEATURE-REQUESTS.md.)
             <div className="py-2 space-y-3" data-testid="login-briefing-empty-hook">
               <div className="space-y-1.5">
-                <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider flex items-center gap-1.5">
+                <p className="text-[11px] font-display font-semibold text-[var(--honey-text)] uppercase tracking-wider flex items-center gap-1.5">
                   <Lightbulb className="w-3 h-3" /> Here's what I'll remember for you
                 </p>
                 {[
@@ -308,7 +308,7 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
               {/* Memory highlights — "I remember..." */}
               {highlights.length > 0 && (
                 <div className="mb-4 space-y-1.5">
-                  <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider flex items-center gap-1.5">
+                  <p className="text-[11px] font-display font-semibold text-[var(--honey-text)] uppercase tracking-wider flex items-center gap-1.5">
                     <Lightbulb className="w-3 h-3" /> I remember
                   </p>
                   {/* Cap to 2 on first paint (shownHighlights) so the briefing
@@ -341,21 +341,21 @@ const LoginBriefing = ({ onDismiss, onOpenWorkspace }: LoginBriefingProps) => {
                       key={`${revealKey}-${ws.id}`}
                       {...entranceProps(shownHighlights.length + j)}
                       onClick={() => { onOpenWorkspace(ws.id); onDismiss(); }}
-                      className="w-full text-left p-3 rounded-xl bg-secondary/30 border border-border/30 hover:bg-secondary/50 hover:border-primary/30 transition-all group"
+                      className="w-full text-left p-3 rounded-xl bg-secondary/30 border border-border/30 hover:bg-secondary/50 hover:border-primary/30 transition-colors group"
                     >
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-display font-medium text-foreground">{ws.name}</span>
                           {/* FR #27: tooltip clarifies what the Personal/Team
                               tag means. Personal workspaces are private to the
-                              account; Team workspaces (Pro/Teams tiers) are
+                              account; Team workspaces are
                               shared. Without this hint the colored chip reads
                               as decorative metadata. */}
                           <HintTooltip
                             content={
                               ws.group === 'Personal'
                                 ? 'Personal workspaces are visible only to you.'
-                                : 'Team workspaces (Pro/Enterprise) are shared across the organisation.'
+                                : 'Team workspaces (Teams/Enterprise) are shared across the organisation.'
                             }
                           >
                             <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground cursor-help">{ws.group}</span>
