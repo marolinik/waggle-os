@@ -57,7 +57,7 @@ function TaskRow({ task, onCycle, onDelete }: {
         type="button"
         onClick={() => onDelete(task)}
         aria-label={`Delete task "${task.title}"`}
-        className="shrink-0 p-0.5 rounded text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-destructive transition-all"
+        className="shrink-0 p-0.5 rounded text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-destructive transition-[opacity,color]"
       >
         <X className="w-3.5 h-3.5" />
       </button>
@@ -189,9 +189,12 @@ const TasksTab = ({ workspaceId, state }: { workspaceId: string; state: Workspac
           value={title}
           onChange={e => setTitle(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') void addTask(); }}
+          aria-label="Add workspace task"
+          name="workspace-task-title"
+          autoComplete="off"
           placeholder="Add a task…"
           data-testid="ws-task-input"
-          className="flex-1 px-3 py-2 rounded-xl bg-secondary/30 border border-border/30 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50"
+          className="flex-1 px-3 py-2 rounded-xl bg-secondary/30 border border-border/30 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
         />
         <button
           type="button"

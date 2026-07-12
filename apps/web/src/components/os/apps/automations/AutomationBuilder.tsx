@@ -302,17 +302,19 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
           <>
             <div className="space-y-1">
               <label htmlFor="aub-name" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Automation name</label>
-              <Input id="aub-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Nightly memory consolidation" className="text-xs h-8" autoFocus />
+              <Input id="aub-name" name="automationName" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Nightly memory consolidation" className="text-xs h-8" autoFocus />
             </div>
             {/* C24: schedule-only v1 + manual. Event triggers are not offered. */}
             <div className="space-y-1">
               <label htmlFor="aub-trigger" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Trigger</label>
               <select
                 id="aub-trigger"
+                name="automationTrigger"
+                autoComplete="off"
                 value={triggerType}
                 onChange={(e) => setTriggerType(e.target.value as 'schedule' | 'manual')}
                 data-testid="automation-trigger-type"
-                className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+                className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <option value="schedule">On a schedule</option>
                 <option value="manual">Manual — only when I press “Run now”</option>
@@ -323,10 +325,12 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
                 <label htmlFor="aub-preset" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">When it runs</label>
                 <select
                   id="aub-preset"
+                  name="automationPreset"
+                  autoComplete="off"
                   value={presetId}
                   onChange={(e) => setPresetId(e.target.value)}
                   data-testid="automation-preset"
-                  className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+                  className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   {CRON_SCHEDULE_PRESETS.map((p) => (
                     <option key={p.id} value={p.id}>{p.label}</option>
@@ -336,6 +340,8 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
                 {presetId === 'custom' && (
                   <Input
                     aria-label="Custom cron expression"
+                    name="automationCustomCron"
+                    autoComplete="off"
                     value={customCronExpr}
                     onChange={(e) => setCustomCronExpr(e.target.value)}
                     placeholder="e.g. 0 8 * * *"
@@ -362,10 +368,12 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
                 <label htmlFor="aub-workspace" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Workspace scope</label>
                 <select
                   id="aub-workspace"
+                  name="automationWorkspace"
+                  autoComplete="off"
                   value={workspaceId}
                   onChange={(e) => setWorkspaceId(e.target.value)}
                   data-testid="automation-workspace"
-                  className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+                  className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <option value="">All workspaces</option>
                   {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -401,10 +409,12 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
                   <label htmlFor="aub-jobtype" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">What it does</label>
                   <select
                     id="aub-jobtype"
+                    name="automationJobType"
+                    autoComplete="off"
                     value={jobType}
                     onChange={(e) => setJobType(e.target.value as CronJobType)}
                     data-testid="automation-job-type"
-                    className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+                    className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                   >
                     {CRON_JOB_TYPES.map((j) => (
                       <option key={j.id} value={j.id}>{j.label}</option>
@@ -423,6 +433,8 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
                 <label htmlFor="aub-prompt" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Agent task prompt</label>
                 <Textarea
                   id="aub-prompt"
+                  name="automationPrompt"
+                  autoComplete="off"
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value)}
                   placeholder="Prompt the agent runs each time (required for agent tasks)"
@@ -436,10 +448,12 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
                 <label htmlFor="aub-output" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Where the result goes</label>
                 <select
                   id="aub-output"
+                  name="automationOutputChannel"
+                  autoComplete="off"
                   value={outputChannel}
                   onChange={(e) => setOutputChannel(e.target.value as 'log' | 'telegram')}
                   data-testid="automation-output-channel"
-                  className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground"
+                  className="w-full bg-muted/30 text-xs py-1.5 px-2 rounded-md border border-border/40 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <option value="log">Notification + cockpit log</option>
                   <option value="telegram">Telegram (requires Settings → Advanced → Telegram digest)</option>
@@ -455,6 +469,8 @@ const AutomationBuilder = ({ initial, busy, onSubmit, onCancel }: AutomationBuil
             <label htmlFor="aub-condition" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Condition (advisory note, optional)</label>
             <Input
               id="aub-condition"
+              name="automationCondition"
+              autoComplete="off"
               value={condition}
               onChange={(e) => setCondition(e.target.value)}
               placeholder="e.g. only when the weekly report draft exists"

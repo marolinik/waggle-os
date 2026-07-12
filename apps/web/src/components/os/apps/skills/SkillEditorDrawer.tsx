@@ -80,6 +80,8 @@ const SkillEditorDrawer = ({ skillName, onOpenChange, onSaved }: SkillEditorDraw
           value={content}
           onChange={(e) => setContent(e.target.value)}
           aria-label="Skill markdown content"
+          name="skillMarkdownContent"
+          autoComplete="off"
           className="min-h-[320px] font-mono text-[11px] leading-relaxed"
           spellCheck={false}
         />

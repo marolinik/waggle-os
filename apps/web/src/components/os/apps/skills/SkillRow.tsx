@@ -24,7 +24,7 @@ interface SkillRowProps {
   verifying?: boolean;
   onTest: (skill: Skill) => void;
   onEdit: (skill: Skill) => void;
-  /** §D2: run the run-and-grade audit to mint the "verified" badge (PRO). */
+  /** §D2: run the run-and-grade audit to mint the "verified" badge. */
   onVerify?: (skill: Skill) => void;
 }
 
@@ -52,7 +52,7 @@ const SkillRow = ({ skill, testing, verifying, onTest, onEdit, onVerify }: Skill
         onClick={() => onVerify(skill)}
         disabled={verifying}
         aria-label={`Verify skill ${skill.name} (run-and-grade)`}
-        title="Run the skill against a synthesized test and grade it — mints the verified badge (PRO)"
+        title="Run the skill against a synthesized test and grade it — mints the verified badge"
         className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-500/10 transition-colors disabled:opacity-50 shrink-0"
       >
         {verifying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}

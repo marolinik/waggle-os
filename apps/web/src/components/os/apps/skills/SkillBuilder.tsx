@@ -173,7 +173,7 @@ const SkillBuilder = ({ onCreated, onCancel, onTierError }: SkillBuilderProps) =
             <label htmlFor="sb-name" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">
               Name (lowercase letters, digits, single dashes)
             </label>
-            <Input id="sb-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. weekly-report" className="text-xs h-8" autoFocus />
+            <Input id="sb-name" name="skillName" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. weekly-report" className="text-xs h-8" autoFocus />
             {name.trim().length > 0 && !nameOk && (
               <p role="alert" className="text-[11px] text-destructive" data-testid="skill-builder-name-error">
                 Must be kebab-case: lowercase letters and digits separated by single dashes.
@@ -188,11 +188,11 @@ const SkillBuilder = ({ onCreated, onCancel, onTierError }: SkillBuilderProps) =
           </div>
           <div className="space-y-1">
             <label htmlFor="sb-desc" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Description</label>
-            <Input id="sb-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this skill do?" className="text-xs h-8" />
+            <Input id="sb-desc" name="skillDescription" autoComplete="off" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this skill do?" className="text-xs h-8" />
           </div>
           <div className="space-y-1">
             <label htmlFor="sb-category" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Category</label>
-            <select id="sb-category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2">
+            <select id="sb-category" name="skillCategory" autoComplete="off" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
               {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
@@ -207,31 +207,31 @@ const SkillBuilder = ({ onCreated, onCancel, onTierError }: SkillBuilderProps) =
               {steps.map((s, i) => (
                 <li key={i} className="flex items-center gap-1">
                   <span className="text-[11px] text-muted-foreground tabular-nums w-4 shrink-0">{i + 1}.</span>
-                  <Input aria-label={`Step ${i + 1}`} value={s} onChange={(e) => setStepAt(i, e.target.value)} placeholder="What happens at this step?" className="text-xs h-8 flex-1" />
-                  <button type="button" onClick={() => moveStep(i, -1)} disabled={i === 0} aria-label={`Move step ${i + 1} up`} className="p-1 rounded hover:bg-muted/50 text-muted-foreground disabled:opacity-30">
+                  <Input aria-label={`Step ${i + 1}`} name="skillStep" autoComplete="off" value={s} onChange={(e) => setStepAt(i, e.target.value)} placeholder="What happens at this step?" className="text-xs h-8 flex-1" />
+                  <button type="button" onClick={() => moveStep(i, -1)} disabled={i === 0} aria-label={`Move step ${i + 1} up`} className="p-1 rounded hover:bg-muted/50 text-muted-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                     <ArrowUp className="w-3 h-3" />
                   </button>
-                  <button type="button" onClick={() => moveStep(i, 1)} disabled={i === steps.length - 1} aria-label={`Move step ${i + 1} down`} className="p-1 rounded hover:bg-muted/50 text-muted-foreground disabled:opacity-30">
+                  <button type="button" onClick={() => moveStep(i, 1)} disabled={i === steps.length - 1} aria-label={`Move step ${i + 1} down`} className="p-1 rounded hover:bg-muted/50 text-muted-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                     <ArrowDown className="w-3 h-3" />
                   </button>
-                  <button type="button" onClick={() => removeStepAt(i)} disabled={steps.length === 1} aria-label={`Remove step ${i + 1}`} className="p-1 rounded hover:bg-muted/50 text-muted-foreground disabled:opacity-30">
+                  <button type="button" onClick={() => removeStepAt(i)} disabled={steps.length === 1} aria-label={`Remove step ${i + 1}`} className="p-1 rounded hover:bg-muted/50 text-muted-foreground disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </li>
               ))}
             </ul>
-            <button type="button" onClick={() => setSteps((prev) => [...prev, ''])} className="inline-flex items-center gap-1 text-[11px] text-honey hover:underline" data-testid="skill-builder-add-step">
+            <button type="button" onClick={() => setSteps((prev) => [...prev, ''])} className="inline-flex items-center gap-1 rounded text-[11px] text-honey hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="skill-builder-add-step">
               <Plus className="w-3 h-3" /> Add step
             </button>
           </fieldset>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
               <label htmlFor="sb-inputs" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Inputs (optional, one per line)</label>
-              <Textarea id="sb-inputs" value={inputsText} onChange={(e) => setInputsText(e.target.value)} placeholder={'topic — what to research\naudience — who reads it'} className="min-h-[72px] text-xs" />
+              <Textarea id="sb-inputs" name="skillInputs" autoComplete="off" value={inputsText} onChange={(e) => setInputsText(e.target.value)} placeholder={'topic — what to research\naudience — who reads it'} className="min-h-[72px] text-xs" />
             </div>
             <div className="space-y-1">
               <label htmlFor="sb-outputs" className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Outputs (optional, one per line)</label>
-              <Textarea id="sb-outputs" value={outputsText} onChange={(e) => setOutputsText(e.target.value)} placeholder={'a one-page summary\na list of open questions'} className="min-h-[72px] text-xs" />
+              <Textarea id="sb-outputs" name="skillOutputs" autoComplete="off" value={outputsText} onChange={(e) => setOutputsText(e.target.value)} placeholder={'a one-page summary\na list of open questions'} className="min-h-[72px] text-xs" />
             </div>
           </div>
           <p className="text-[11px] text-muted-foreground">
