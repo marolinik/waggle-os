@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,15 +13,31 @@ function bin(name: string): string {
   return process.platform === 'win32' ? `${name}.cmd` : name;
 }
 
-function run(command: string, args: string[]): ReturnType<typeof spawnSync> {
+interface AsyncRunResult {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}
+
+function run(command: string, args: string[]): Promise<AsyncRunResult> {
   return runInCwd(command, args, ROOT);
 }
 
-function runInCwd(command: string, args: string[], cwd: string): ReturnType<typeof spawnSync> {
-  return spawnSync(command, args, {
-    cwd,
-    encoding: 'utf8',
-    shell: process.platform === 'win32' && command.endsWith('.cmd'),
+function runInCwd(command: string, args: string[], cwd: string): Promise<AsyncRunResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      shell: process.platform === 'win32' && command.endsWith('.cmd'),
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr }));
   });
 }
 
@@ -47,13 +63,13 @@ const WAGGLE_MEMORY_MCP_PACKAGE_CLOSURE = [
 
 describe('waggle-memory-mcp built runtime', () => {
   it('completes MCP initialize and lists read-only tools from built JS', async () => {
-    const coreBuild = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/core']);
+    const coreBuild = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/core']);
     expect(coreBuild.status).toBe(0);
 
-    const wikiBuild = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/wiki-compiler']);
+    const wikiBuild = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/wiki-compiler']);
     expect(wikiBuild.status).toBe(0);
 
-    const mcpBuild = run(bin('npm'), ['run', 'build', '--workspace', 'waggle-memory-mcp']);
+    const mcpBuild = await run(bin('npm'), ['run', 'build', '--workspace', 'waggle-memory-mcp']);
     expect(mcpBuild.status).toBe(0);
 
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-memory-mcp-'));
@@ -84,13 +100,13 @@ describe('waggle-memory-mcp built runtime', () => {
   }, 30_000);
 
   it('saves and recalls memory through the built write-scope MCP server', async () => {
-    const coreBuild = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/core']);
+    const coreBuild = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/core']);
     expect(coreBuild.status).toBe(0);
 
-    const wikiBuild = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/wiki-compiler']);
+    const wikiBuild = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/wiki-compiler']);
     expect(wikiBuild.status).toBe(0);
 
-    const mcpBuild = run(bin('npm'), ['run', 'build', '--workspace', 'waggle-memory-mcp']);
+    const mcpBuild = await run(bin('npm'), ['run', 'build', '--workspace', 'waggle-memory-mcp']);
     expect(mcpBuild.status).toBe(0);
 
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-memory-mcp-write-'));
@@ -160,10 +176,10 @@ describe('waggle-memory-mcp built runtime', () => {
     try {
       const dependencies: Record<string, string> = {};
       for (const workspace of WAGGLE_MEMORY_MCP_PACKAGE_CLOSURE) {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', workspace]);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', workspace]);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', workspace, '--pack-destination', packsDir, '--json'],
         );
@@ -179,7 +195,7 @@ describe('waggle-memory-mcp built runtime', () => {
         JSON.stringify({ private: true, type: 'module', dependencies }, null, 2),
       );
 
-      const install = runInCwd(
+      const install = await runInCwd(
         bin('npm'),
         ['install', '--no-audit', '--no-fund', '--prefer-offline'],
         projectDir,

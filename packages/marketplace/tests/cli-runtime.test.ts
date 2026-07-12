@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -15,21 +15,37 @@ function makeHome(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-market-cli-'));
 }
 
+interface AsyncRunResult {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}
+
 function run(
   command: string,
   args: string[],
   home: string,
   cwd = ROOT,
-): ReturnType<typeof spawnSync> {
-  return spawnSync(command, args, {
-    cwd,
-    env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
-    },
-    encoding: 'utf8',
-    shell: process.platform === 'win32' && command.endsWith('.cmd'),
+): Promise<AsyncRunResult> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        HOME: home,
+        USERPROFILE: home,
+      },
+      shell: process.platform === 'win32' && command.endsWith('.cmd'),
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', reject);
+    child.on('close', (status, signal) => resolve({ status, signal, stdout, stderr }));
   });
 }
 
@@ -46,10 +62,10 @@ function readPackageJson(): {
 }
 
 describe('marketplace CLI runtime UX', () => {
-  it('rejects unknown commands without opening the marketplace database', () => {
+  it('rejects unknown commands without opening the marketplace database', async () => {
     const home = makeHome();
     try {
-      const result = run(bin('npx'), [
+      const result = await run(bin('npx'), [
         'tsx',
         'packages/marketplace/src/cli.ts',
         'definitely-not-a-command',
@@ -64,13 +80,13 @@ describe('marketplace CLI runtime UX', () => {
     }
   });
 
-  it('runs built help under Node ESM without opening the marketplace database', () => {
+  it('runs built help under Node ESM without opening the marketplace database', async () => {
     const home = makeHome();
     try {
-      const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/marketplace'], home);
+      const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/marketplace'], home);
       expect(build.status).toBe(0);
 
-      const result = run(process.execPath, [path.join(MARKETPLACE_DIR, 'dist', 'cli.js'), '--help'], home);
+      const result = await run(process.execPath, [path.join(MARKETPLACE_DIR, 'dist', 'cli.js'), '--help'], home);
 
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('Waggle Marketplace CLI');
@@ -82,13 +98,13 @@ describe('marketplace CLI runtime UX', () => {
     }
   });
 
-  it('publishes package entrypoints that exist in the packed files', () => {
+  it('publishes package entrypoints that exist in the packed files', async () => {
     const home = makeHome();
     try {
-      const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/marketplace'], home);
+      const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/marketplace'], home);
       expect(build.status).toBe(0);
 
-      const pack = run(bin('npm'), ['pack', '--workspace', '@waggle/marketplace', '--dry-run', '--json'], home);
+      const pack = await run(bin('npm'), ['pack', '--workspace', '@waggle/marketplace', '--dry-run', '--json'], home);
       expect(pack.status).toBe(0);
       const [packResult] = JSON.parse(pack.stdout) as Array<{ files: Array<{ path: string }> }>;
       const packedFiles = new Set(packResult.files.map((file) => file.path.replace(/\\/g, '/')));
@@ -108,13 +124,13 @@ describe('marketplace CLI runtime UX', () => {
     }
   });
 
-  it('installs the packed CLI and runs npx help plus invalid-command recovery', () => {
+  it('installs the packed CLI and runs npx help plus invalid-command recovery', async () => {
     const home = makeHome();
     try {
-      const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle/marketplace'], home);
+      const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle/marketplace'], home);
       expect(build.status).toBe(0);
 
-      const pack = run(
+      const pack = await run(
         bin('npm'),
         ['pack', '--workspace', '@waggle/marketplace', '--pack-destination', home, '--json'],
         home,
@@ -129,7 +145,7 @@ describe('marketplace CLI runtime UX', () => {
         JSON.stringify({ private: true, type: 'module' }, null, 2),
       );
 
-      const install = run(
+      const install = await run(
         bin('npm'),
         [
           'install',
@@ -143,14 +159,14 @@ describe('marketplace CLI runtime UX', () => {
       );
       expect(install.status).toBe(0);
 
-      const help = run(bin('npx'), ['waggle-market', '--help'], home, projectDir);
+      const help = await run(bin('npx'), ['waggle-market', '--help'], home, projectDir);
       expect(help.status).toBe(0);
       expect(help.stdout).toContain('Waggle Marketplace CLI');
       expect(help.stdout).toContain('Usage:');
       expect(help.stderr).toBe('');
       expect(marketplaceDbExists(home)).toBe(false);
 
-      const invalid = run(bin('npx'), ['waggle-market', 'definitely-not-a-command'], home, projectDir);
+      const invalid = await run(bin('npx'), ['waggle-market', 'definitely-not-a-command'], home, projectDir);
       expect(invalid.status).toBe(1);
       expect(invalid.stderr).toContain('Unknown command: definitely-not-a-command');
       expect(invalid.stdout).toContain('Usage:');
