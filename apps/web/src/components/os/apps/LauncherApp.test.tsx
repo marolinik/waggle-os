@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
 
-import LauncherApp from './LauncherApp';
+import LauncherApp, { resetLauncherRouteCache } from './LauncherApp';
 
 const detectionResp = {
   platform: 'darwin',
@@ -43,6 +43,7 @@ const detectionResp = {
 };
 
 beforeEach(() => {
+  resetLauncherRouteCache();
   mocks.adapter.detectTools.mockResolvedValue(detectionResp);
   mocks.adapter.getToolProcesses.mockResolvedValue({ processes: [] });
   mocks.adapter.launchTool.mockResolvedValue({ ok: true, pid: 123 });
@@ -59,6 +60,17 @@ afterEach(() => {
 });
 
 describe('LauncherApp · A/B toggle', () => {
+  it('repaints detected tools on return and refreshes silently', async () => {
+    const first = render(<LauncherApp />);
+    expect(await screen.findByText('Claude Code')).toBeInTheDocument();
+    const baseline = mocks.adapter.detectTools.mock.calls.length;
+    first.unmount();
+
+    render(<LauncherApp />);
+    expect(screen.getByText('Claude Code')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.adapter.detectTools.mock.calls.length).toBeGreaterThan(baseline));
+  });
+
   it('defaults to Variation A and renders the live launch UI', async () => {
     render(<LauncherApp />);
     // The detected tool from the live adapter appears (Variation A).
@@ -308,5 +320,263 @@ describe('LauncherApp · hook cohort (#3)', () => {
     render(<LauncherApp />);
     expect(await screen.findByText('Codex')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /install hooks/i })).toBeInTheDocument();
+  });
+
+  it('offers launch for a detected third-party adapter and sends its raw prompt', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'linux',
+      detectedAt: '2026-07-08T00:00:00.000Z',
+      tools: [
+        {
+          id: 'foo-cli',
+          displayName: 'Foo CLI',
+          installed: true,
+          installedPath: '/usr/local/bin/foo',
+          version: '1.0.0',
+          hooksInstalled: false,
+          hookPointerPath: null,
+          launchable: true,
+          hookCapable: false,
+          builtin: false,
+          acceptsInlinePrompt: true,
+        },
+      ],
+    });
+
+    render(<LauncherApp activeWorkspaceId="ws-adapter" />);
+
+    expect(await screen.findByText('Foo CLI')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/optional launch prompt/i), {
+      target: { value: 'summarize adapter context' },
+    });
+    expect(screen.getByText(/Sent to:/i).parentElement).toHaveTextContent(/Foo CLI/i);
+    fireEvent.click(screen.getByRole('button', { name: /^launch$/i }));
+
+    await waitFor(() => {
+      expect(mocks.adapter.launchTool).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'foo-cli',
+          installedPath: '/usr/local/bin/foo',
+          workspaceId: 'ws-adapter',
+          prompt: 'summarize adapter context',
+        }),
+      );
+    });
+    expect(screen.queryByRole('button', { name: /install hooks/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/launch and hook management arrive in Phase 4/i)).not.toBeInTheDocument();
+  });
+
+  it('shows recovery copy instead of launch controls when a detected install cannot launch', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'win32',
+      detectedAt: '2026-07-09T00:00:00.000Z',
+      tools: [
+        {
+          id: 'codex',
+          displayName: 'Codex',
+          installed: true,
+          installedPath:
+            'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.623.19656.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe',
+          version: null,
+          hooksInstalled: false,
+          hookPointerPath: null,
+          launchable: false,
+          hookCapable: true,
+          diagnostic:
+            'Codex was found in WindowsApps, but Windows blocks command-line launch from that app alias. Install a PATH CLI build of Codex or launch Codex from Start, then refresh.',
+        },
+      ],
+    });
+
+    render(<LauncherApp />);
+
+    expect(await screen.findByText('Codex')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^launch$/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/Windows blocks command-line launch/i)).toBeInTheDocument();
+    expect(screen.getByText(/Launch is blocked for this install/i)).toBeInTheDocument();
+    expect(screen.queryByText(/adapter is not configured for launch/i)).not.toBeInTheDocument();
+  });
+
+  it('shows actionable hook install stdout details such as the backup path', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      ...detectionResp,
+      tools: [
+        {
+          ...detectionResp.tools[0],
+          hooksInstalled: false,
+          hookPointerPath: null,
+        },
+      ],
+    });
+    mocks.adapter.manageHooks.mockResolvedValueOnce({
+      ok: true,
+      action: 'install',
+      stdout: 'settings backed up: /home/.claude/settings.json.hive-mind-backup.2026-07-08T19-00-00Z\ninstall complete',
+      stderr: '',
+      code: 0,
+    });
+
+    render(<LauncherApp />);
+    fireEvent.click(await screen.findByRole('button', { name: /install hooks/i }));
+
+    expect(await screen.findByText(/Claude Code: install OK/i)).toBeInTheDocument();
+    expect(screen.getByText('Backup')).toBeInTheDocument();
+    expect(screen.getByText(/settings\.json\.hive-mind-backup/i)).toBeInTheDocument();
+    expect(screen.getByText('Recovery')).toBeInTheDocument();
+    expect(screen.queryByText(/^stdout:/i)).not.toBeInTheDocument();
+  });
+
+  it('shows hook failure stderr even when the route returns a generic error', async () => {
+    mocks.adapter.manageHooks.mockResolvedValueOnce({
+      ok: false,
+      action: 'verify',
+      stdout: '',
+      stderr: 'missing hook pointer: /home/.claude/settings.json',
+      code: 1,
+      error: 'verify failed',
+    });
+
+    render(<LauncherApp />);
+    fireEvent.click(await screen.findByRole('button', { name: /^verify$/i }));
+
+    expect(await screen.findByText(/verify failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/missing hook pointer/i)).toBeInTheDocument();
+    expect(screen.getByText(/settings\.json/i)).toBeInTheDocument();
+  });
+
+  it('summarizes long hook output instead of flooding the result panel', async () => {
+    mocks.adapter.manageHooks.mockResolvedValueOnce({
+      ok: false,
+      action: 'verify',
+      stdout: '',
+      stderr: [
+        'failure detail 1: missing hook pointer',
+        'failure detail 2: stale backup file',
+        'failure detail 3: cli not trusted',
+        'failure detail 4: config mismatch',
+        'failure detail 5: lifecycle skipped',
+        'failure detail 6: retry recommended',
+        'failure detail 7: noisy internal trace',
+        'failure detail 8: noisy internal trace',
+      ].join('\n'),
+      code: 1,
+      error: 'verify failed',
+    });
+
+    render(<LauncherApp />);
+    fireEvent.click(await screen.findByRole('button', { name: /^verify$/i }));
+
+    expect(await screen.findByText(/verify failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/failure detail 1/i)).toBeInTheDocument();
+    expect(screen.getByText('More output')).toBeInTheDocument();
+    expect(screen.getByText(/2 additional hook output lines hidden/i)).toBeInTheDocument();
+    expect(screen.queryByText(/failure detail 8/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Recovery')).toBeInTheDocument();
+  });
+
+  it('shows recovery guidance when hook verify fails without stdout or stderr', async () => {
+    mocks.adapter.manageHooks.mockResolvedValueOnce({
+      ok: false,
+      action: 'verify',
+      stdout: '',
+      stderr: '',
+      code: 1,
+    });
+
+    render(<LauncherApp />);
+    fireEvent.click(await screen.findByRole('button', { name: /^verify$/i }));
+
+    expect(await screen.findByText(/verify failed \(exit 1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/no hook output was returned/i)).toBeInTheDocument();
+    expect(screen.getByText(/reinstall hooks/i)).toBeInTheDocument();
+  });
+
+  it('summarizes hook verify check failures instead of showing raw check output', async () => {
+    mocks.adapter.manageHooks.mockResolvedValueOnce({
+      ok: false,
+      action: 'verify',
+      stdout: [
+        'hive-mind/codex-hooks: verify',
+        '  [PASS] hooks.json exists — /home/.codex/hooks.json',
+        '  [FAIL] hook command trusted — manual approval required in Codex settings',
+        'One or more checks failed.',
+      ].join('\n'),
+      stderr: '',
+      code: 1,
+    });
+
+    render(<LauncherApp />);
+    fireEvent.click(await screen.findByRole('button', { name: /^verify$/i }));
+
+    expect(await screen.findByText(/verify failed \(exit 1\)/i)).toBeInTheDocument();
+    expect(screen.getByText('Check failed')).toBeInTheDocument();
+    expect(screen.getByText(/manual approval required in Codex settings/i)).toBeInTheDocument();
+    expect(screen.getByText('Recovery')).toBeInTheDocument();
+    expect(screen.queryByText(/\[FAIL\]/)).not.toBeInTheDocument();
+  });
+
+  it('labels hook uninstall restore and cleanup details without implying install state', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      ...detectionResp,
+      tools: [
+        {
+          ...detectionResp.tools[0],
+          hooksInstalled: true,
+          hookPointerPath: '/home/.codex/hive-mind-install.json',
+        },
+      ],
+    });
+    mocks.adapter.manageHooks.mockResolvedValueOnce({
+      ok: true,
+      action: 'uninstall',
+      stdout: [
+        'hive-mind/codex-hooks: uninstall',
+        '  - hooks.json:      /home/.codex/hooks.json',
+        '  - restored from:   /home/.codex/hooks.json.hive-mind-backup.2026-07-08T19-00-00Z',
+        '  - created removed: no',
+        '  - backup removed:  yes',
+        '  - pointer removed: yes',
+        'Done. hooks.json is byte-identical to pre-install state.',
+      ].join('\n'),
+      stderr: '',
+      code: 0,
+    });
+
+    render(<LauncherApp />);
+    fireEvent.click(await screen.findByRole('button', { name: /uninstall hooks/i }));
+
+    expect(await screen.findByText(/Claude Code: uninstall OK/i)).toBeInTheDocument();
+    expect(screen.getByText('Changed file')).toBeInTheDocument();
+    expect(screen.getByText('Restored from')).toBeInTheDocument();
+    expect(screen.getByText('Backup removed')).toBeInTheDocument();
+    expect(screen.getByText('Pointer removed')).toBeInTheDocument();
+    expect(screen.queryByText('Install pointer')).not.toBeInTheDocument();
+  });
+
+  it('explains that Claude Desktop is launch-only because hooks are not supported yet', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'darwin',
+      detectedAt: '2026-07-08T00:00:00.000Z',
+      tools: [
+        {
+          id: 'claude-desktop',
+          displayName: 'Claude Desktop',
+          installed: true,
+          installedPath: '/Applications/Claude.app',
+          version: '1.2.3',
+          hooksInstalled: false,
+          hookPointerPath: null,
+        },
+      ],
+    });
+
+    render(<LauncherApp />);
+
+    expect(await screen.findByText('Claude Desktop')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^launch$/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /install hooks/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^verify$/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/launch only/i)).toBeInTheDocument();
+    expect(screen.getByText(/hooks are not supported for Claude Desktop yet/i)).toBeInTheDocument();
   });
 });

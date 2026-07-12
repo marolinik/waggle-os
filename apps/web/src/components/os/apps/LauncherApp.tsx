@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { adapter } from '@/lib/adapter';
+import { createSurfaceCache } from '@/lib/surface-cache';
 import {
   promptArgsForTool,
   toolAcceptsInlinePrompt,
@@ -52,6 +53,10 @@ const HOOKS_COHORT = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m)
 interface DetectedTool {
   id: string;
   displayName: string;
+  launchable?: boolean;
+  hookCapable?: boolean;
+  builtin?: boolean;
+  acceptsInlinePrompt?: boolean;
   capabilities?: ToolCapabilities;
   permissionModes?: readonly ExternalToolAccess[];
   installed: boolean;
@@ -83,6 +88,13 @@ interface ActionResult {
   action: ToolAction;
   ok: boolean;
   message: string;
+  details?: ActionDetail[];
+}
+
+interface ActionDetail {
+  label: string;
+  value: string;
+  tone?: 'attention' | 'recovery';
 }
 
 interface LauncherAppProps {
@@ -91,6 +103,28 @@ interface LauncherAppProps {
   workspaces?: Array<{ id: string; name: string; status?: string }>;
   onOpenRoom?: (roomId: string) => void;
 }
+
+/** Keep tool detection visible while the Launcher revalidates on return. */
+const launcherRouteCache = createSurfaceCache<DetectionResult>();
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only cache reset
+export function resetLauncherRouteCache(): void {
+  launcherRouteCache.resetForTests();
+}
+
+const HOOK_PATH_RE = /([A-Za-z]:\\[^\s]+|\/[^\s]+)/;
+const MAX_VISIBLE_HOOK_DETAILS = 6;
+
+const toolCanLaunch = (tool: DetectedTool): boolean =>
+  tool.launchable ?? LAUNCH_COHORT.includes(tool.id);
+
+const launchUnavailableMessage = (tool: DetectedTool): string =>
+  tool.installed && tool.diagnostic
+    ? 'Launch is blocked for this install. Follow the note above, then refresh.'
+    : 'Detection ready. This adapter is not configured for launch.';
+
+const toolUsesInlinePrompt = (tool: DetectedTool): boolean =>
+  toolAcceptsInlinePrompt(tool.id) || tool.acceptsInlinePrompt === true;
 
 const ACCESS_LABELS: Record<ExternalToolAccess, string> = {
   'read-only': 'Read only',
@@ -108,14 +142,152 @@ const toolCanRunCapturedTask = (tool: DetectedTool): boolean =>
   tool.capabilities?.headlessTask === true &&
   (tool.permissionModes?.length ?? 0) > 0;
 
-const LauncherApp = ({
-  activeWorkspaceId,
-  workspaces = [],
-  onOpenRoom,
-}: LauncherAppProps = {}) => {
+const hookDetailLabel = (rawLabel: string): string => {
+  const label = rawLabel.trim().toLowerCase();
+  if (label.includes('backup removed')) return 'Backup removed';
+  if (label.includes('pointer removed')) return 'Pointer removed';
+  if (label.includes('created removed')) return 'Created file removed';
+  if (label.includes('backup')) return 'Backup';
+  if (label.includes('pointer')) return 'Install pointer';
+  if (label.includes('restored')) return 'Restored from';
+  if (label.includes('settings') || label.includes('hooks.json') || label.includes('config')) return 'Changed file';
+  if (label.includes('added hooks')) return 'Hooks added';
+  if (label.includes('cli path')) return 'CLI path';
+  return rawLabel.trim().replace(/^\w/, (c) => c.toUpperCase());
+};
+
+const hookRecoveryDetail = (result?: { ok: boolean; action: ToolAction }): ActionDetail | null => {
+  if (!result) return null;
+  if (!result.ok) {
+    return {
+      label: 'Recovery',
+      value: result.action === 'verify'
+        ? 'Run Install hooks for this tool, then Verify again. If it still fails, use Uninstall hooks to restore the previous config, then reinstall hooks.'
+        : 'Retry the action. If it repeats, use Uninstall hooks to restore the previous config, then install again.',
+      tone: 'recovery',
+    };
+  }
+  if (result.action === 'install') {
+    return {
+      label: 'Recovery',
+      value: 'Use Verify to inspect the install, or Uninstall hooks to restore the previous config.',
+      tone: 'recovery',
+    };
+  }
+  if (result.action === 'uninstall') {
+    return {
+      label: 'Recovery',
+      value: 'Previous hook config was restored, or the Waggle-created config was removed.',
+      tone: 'recovery',
+    };
+  }
+  return null;
+};
+
+const parseHookOutputDetails = (text: string | undefined, stream: 'stdout' | 'stderr'): ActionDetail[] => {
+  const lines = text?.trim().split(/\r?\n/).map((line) => line.trim()).filter(Boolean) ?? [];
+  const tone = stream === 'stderr' ? 'attention' : undefined;
+
+  return lines
+    .map((line): ActionDetail | null => {
+      const check = line.match(/^\[(PASS|FAIL)\]\s+(.+?)(?:\s+(?:\u2014|-)\s+(.+))?$/);
+      if (check) {
+        const failed = check[1] === 'FAIL';
+        const name = check[2].trim();
+        const detail = check[3]?.trim();
+        return {
+          label: failed ? 'Check failed' : 'Check passed',
+          value: detail ? `${name}: ${detail}` : name,
+          tone: failed ? 'attention' : tone,
+        };
+      }
+
+      const labeled = line.match(/^\s*-\s*([^:]+):\s*(.*)$/);
+      if (labeled) {
+        return {
+          label: hookDetailLabel(labeled[1]),
+          value: labeled[2].trim() || line,
+          tone,
+        };
+      }
+
+      if (/backup|backed up/i.test(line)) {
+        return {
+          label: 'Backup',
+          value: line.match(HOOK_PATH_RE)?.[1] ?? line,
+          tone,
+        };
+      }
+
+      if (stream === 'stderr') {
+        return { label: 'Needs attention', value: line, tone: 'attention' };
+      }
+
+      if (
+        /^hive-mind\/.+:\s/.test(line) ||
+        /^done\./i.test(line) ||
+        /^run "/i.test(line) ||
+        /^all checks passed\.$/i.test(line) ||
+        /^one or more checks failed\.$/i.test(line)
+      ) {
+        return null;
+      }
+
+      return { label: 'Output', value: line };
+    })
+    .filter((detail): detail is ActionDetail => Boolean(detail));
+};
+
+const summarizeHookActionDetails = (details: ActionDetail[]): ActionDetail[] => {
+  const recoveryDetails = details.filter((detail) => detail.label === 'Recovery');
+  const outputDetails = details.filter((detail) => detail.label !== 'Recovery');
+  if (outputDetails.length <= MAX_VISIBLE_HOOK_DETAILS) return details;
+
+  const visibleOutput = outputDetails.slice(0, MAX_VISIBLE_HOOK_DETAILS);
+  const hiddenCount = outputDetails.length - visibleOutput.length;
+  const hiddenHasAttention = outputDetails
+    .slice(MAX_VISIBLE_HOOK_DETAILS)
+    .some((detail) => detail.tone === 'attention');
+
+  return [
+    ...visibleOutput,
+    {
+      label: 'More output',
+      value: `${hiddenCount} additional hook output ${hiddenCount === 1 ? 'line' : 'lines'} hidden. Run the hook action from a terminal for full output.`,
+      tone: hiddenHasAttention ? 'attention' : undefined,
+    },
+    ...recoveryDetails,
+  ];
+};
+
+const hookActionDetails = (
+  stdout?: string,
+  stderr?: string,
+  result?: { ok: boolean; action: ToolAction },
+): ActionDetail[] => {
+  const details = [
+    ...parseHookOutputDetails(stdout, 'stdout'),
+    ...parseHookOutputDetails(stderr, 'stderr'),
+  ];
+  const recovery = hookRecoveryDetail(result);
+  if (recovery) {
+    details.push(recovery);
+  }
+  if (!result?.ok && details.length === 1 && recovery) {
+    details.unshift({
+      label: 'Needs attention',
+      value: 'No hook output was returned.',
+      tone: 'attention',
+    });
+  }
+  return summarizeHookActionDetails(details);
+};
+
+const LauncherApp = ({ activeWorkspaceId, workspaces = [], onOpenRoom }: LauncherAppProps = {}) => {
   const [view, setView] = useState<LauncherView>('a');
-  const [detection, setDetection] = useState<DetectionResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cachedDetection = launcherRouteCache.read('tools');
+  const [detection, setDetection] = useState<DetectionResult | null>(cachedDetection ?? null);
+  const [loading, setLoading] = useState(() => !launcherRouteCache.hasResolved('tools'));
   const [error, setError] = useState<string | null>(null);
   const [activeAction, setActiveAction] = useState<ActionState | null>(null);
   const [lastResult, setLastResult] = useState<ActionResult | null>(null);
@@ -154,7 +326,7 @@ const LauncherApp = ({
   );
 
   const refresh = useCallback(async () => {
-    setLoading(true);
+    if (!launcherRouteCache.hasResolved('tools')) setLoading(true);
     setError(null);
     try {
       const result = await adapter.detectTools();
@@ -163,10 +335,11 @@ const LauncherApp = ({
         setDetection(null);
       } else {
         setDetection(result);
+        launcherRouteCache.write('tools', result);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Detection failed');
-      setDetection(null);
+      if (!launcherRouteCache.hasResolved('tools')) setDetection(null);
     } finally {
       setLoading(false);
     }
@@ -271,16 +444,17 @@ const LauncherApp = ({
           // bare and the prompt textarea is silently ignored for
           // that tool.
           const args = promptArgsForTool(tool.id, prompt) ?? undefined;
+          const sendsRawPrompt = !args && tool.acceptsInlinePrompt === true && prompt.trim().length > 0;
           const r = await adapter.launchTool({
             id: tool.id,
             installedPath: tool.installedPath,
             workspaceId: activeWorkspaceId,
             // Built-in tools send pre-computed args; a third-party adapter gets
             // the raw prompt so the server can apply its promptArgTemplate (#5).
-            ...(args ? { args } : (prompt.trim() ? { prompt } : {})),
+            ...(args ? { args } : (sendsRawPrompt ? { prompt } : {})),
             ...(watchMode ? { observe: true } : {}),
           });
-          const promptNote = args ? ' with prompt' : '';
+          const promptNote = (args || sendsRawPrompt) ? ' with prompt' : '';
           setLastResult({
             toolId: tool.id,
             action,
@@ -291,7 +465,7 @@ const LauncherApp = ({
           });
           // Clear the prompt after a successful launch — avoid sending
           // the same text twice by accident.
-          if (r.ok && args) setPrompt('');
+          if (r.ok && (args || sendsRawPrompt)) setPrompt('');
           // Watch mode (⌘K deep-link): auto-open the live output pane.
           if (r.ok && watchMode) setOpenPaneToolId(tool.id);
         } else {
@@ -303,6 +477,7 @@ const LauncherApp = ({
             message: r.ok
               ? `${tool.displayName}: ${action} OK`
               : (r.error || r.stderr || `${action} failed (exit ${r.code})`),
+            details: hookActionDetails(r.stdout, r.stderr, { ok: r.ok, action }),
           });
           // Refresh detection after install/uninstall so hook status
           // updates on screen without waiting for user click.
@@ -321,7 +496,7 @@ const LauncherApp = ({
         setActiveAction(null);
       }
     },
-    [activeWorkspaceId, refresh, watchMode],
+    [activeWorkspaceId, prompt, refresh, watchMode],
   );
 
   const tools = useMemo<DetectedTool[]>(() => detection?.tools ?? [], [detection]);
@@ -437,7 +612,7 @@ const LauncherApp = ({
           ))}
         </div>
         {view === 'a' && (
-          <Button variant="ghost" size="sm" onClick={refresh} className="h-7 w-7 p-0 ml-auto">
+          <Button type="button" variant="ghost" size="sm" onClick={refresh} aria-label="Refresh installed tools" className="h-7 w-7 p-0 ml-auto">
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </Button>
         )}
@@ -450,13 +625,25 @@ const LauncherApp = ({
       {/* Status bar */}
       {error && (
         <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border-b border-destructive/30 text-[12px] text-destructive">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          {error}
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">{error}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={refresh}
+            disabled={loading}
+            aria-label="Retry tool detection"
+            className="h-7 px-2 text-[11px] text-destructive hover:text-destructive"
+          >
+            <RefreshCw className={`mr-1 w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+            Retry
+          </Button>
         </div>
       )}
       {lastResult && (
         <div
-          className="flex items-center gap-2 px-3 py-2 border-b border-border/30 text-[12px]"
+          className="flex items-start gap-2 px-3 py-2 border-b border-border/30 text-[12px]"
           style={
             lastResult.ok
               ? { background: 'var(--healthy-wash)', color: 'var(--healthy)' }
@@ -464,40 +651,64 @@ const LauncherApp = ({
           }
         >
           {lastResult.ok ? (
-            <CheckCircle2 className="w-3.5 h-3.5" />
+            <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           ) : (
-            <XCircle className="w-3.5 h-3.5" />
+            <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           )}
-          {lastResult.message}
+          <div className="min-w-0 flex-1">
+            <div>{lastResult.message}</div>
+            {lastResult.details?.length ? (
+              <div className="mt-1.5 space-y-1.5 text-[11px] leading-snug opacity-90">
+                {lastResult.details.map((detail, index) => (
+                  <div key={`${detail.label}-${detail.value}-${index}`} className="min-w-0">
+                    <div className="font-display text-[10px] font-semibold uppercase tracking-normal opacity-75">
+                      {detail.label}
+                    </div>
+                    <div
+                      className={[
+                        detail.tone === 'recovery' ? 'font-sans' : 'font-mono',
+                        'whitespace-pre-wrap break-all',
+                      ].join(' ')}
+                    >
+                      {detail.value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
 
       {/* Phase 4 + E-2 — optional prompt to launch with. Only tools
-          whose promptArgsForTool() returns non-null actually use it;
-          others launch bare and silently ignore the prompt. The
-          footer surfaces the per-tool acceptance state so users know
-          which tools will receive the prompt. */}
+          Built-ins use promptArgsForTool(); third-party adapters use
+          detection metadata from their promptArgTemplate. The footer
+          surfaces which tools will receive the prompt. */}
       <div className="px-3 pt-3">
         <div className="rounded-lg border border-border/40 bg-card/30 p-2.5">
           <div className="flex items-center gap-1.5 mb-1.5 text-[11px] text-muted-foreground">
             <MessageSquare className="w-3 h-3" />
-            <span>Optional prompt — passed to tools that accept inline prompts</span>
+            <label htmlFor="launcher-prompt">Optional prompt — passed to tools that accept inline prompts</label>
           </div>
           <textarea
+            id="launcher-prompt"
+            name="launcherPrompt"
+            autoComplete="off"
+            aria-label="Optional launch prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Paste a task or question. Leave blank to launch the tool bare."
             rows={2}
-            className="w-full text-xs bg-background border border-border/40 rounded p-2 resize-y min-h-[44px] max-h-[200px]"
+            className="w-full text-xs bg-background border border-border/40 rounded p-2 resize-y min-h-[44px] max-h-[200px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
           {prompt.trim().length > 0 && (
             <div className="mt-1.5 text-[10px] text-muted-foreground/80 leading-snug">
               {(() => {
                 const accepting = tools
-                  .filter((t) => toolAcceptsInlinePrompt(t.id))
+                  .filter((t) => toolUsesInlinePrompt(t))
                   .map((t) => t.displayName);
                 const ignoring = tools
-                  .filter((t) => !toolAcceptsInlinePrompt(t.id))
+                  .filter((t) => !toolUsesInlinePrompt(t))
                   .map((t) => t.displayName);
                 return (
                   <>
@@ -528,8 +739,9 @@ const LauncherApp = ({
             </div>
           )}
           {tools.map((tool) => {
-            const inCohort = LAUNCH_COHORT.includes(tool.id);
+            const launchable = toolCanLaunch(tool);
             const hooksSupported = HOOKS_COHORT.includes(tool.id);
+            const launchOnly = launchable && !hooksSupported;
             const isActive = activeAction?.toolId === tool.id;
             return (
               <div
@@ -556,6 +768,11 @@ const LauncherApp = ({
                           Hooks active
                         </Badge>
                       )}
+                      {launchOnly && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
+                          Launch only
+                        </Badge>
+                      )}
                       {runningTools.has(tool.id) && (
                         <button
                           type="button"
@@ -569,9 +786,9 @@ const LauncherApp = ({
                           Running
                         </button>
                       )}
-                      {!inCohort && (
+                      {!launchable && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 text-muted-foreground">
-                          Phase 4
+                          Detect only
                         </Badge>
                       )}
                     </div>
@@ -590,225 +807,234 @@ const LauncherApp = ({
                 </div>
 
                 {/* Actions row */}
-                {inCohort && tool.installed && (
-                  <div className="flex flex-wrap gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      className="h-7 text-[11px]"
-                      onClick={() => doAction(tool, 'launch')}
-                      disabled={isActive}
-                    >
-                      {isActive && activeAction?.action === 'launch' ? (
-                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                      ) : (
-                        <Play className="w-3 h-3 mr-1" />
-                      )}
-                      Launch
-                    </Button>
-                    {toolCanRunCapturedTask(tool) && (
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-7 text-[11px]"
-                        onClick={() => openTaskComposer(tool)}
-                        disabled={isActive}
-                      >
-                        {isActive && activeAction?.action === 'run' ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <Workflow className="w-3 h-3 mr-1" />
-                        )}
-                        Run task
-                      </Button>
-                    )}
-                    {runningTools.has(tool.id) && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px]"
-                        style={{ color: 'var(--risk)' }}
-                        onClick={() => stopTool(tool)}
-                        disabled={isActive}
-                        title="Send SIGTERM (escalates to SIGKILL after 3s if needed)"
-                      >
-                        <Square className="w-3 h-3 mr-1" />
-                        Stop
-                      </Button>
-                    )}
-                    {hooksSupported && !tool.hooksInstalled && (
+                {launchable && tool.installed && (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
                       <Button
                         size="sm"
                         variant="secondary"
                         className="h-7 text-[11px]"
-                        onClick={() => doAction(tool, 'install')}
+                        onClick={() => doAction(tool, 'launch')}
                         disabled={isActive}
                       >
-                        {isActive && activeAction?.action === 'install' ? (
+                        {isActive && activeAction?.action === 'launch' ? (
                           <Loader2 className="w-3 h-3 animate-spin mr-1" />
                         ) : (
-                          <Download className="w-3 h-3 mr-1" />
+                          <Play className="w-3 h-3 mr-1" />
                         )}
-                        Install hooks
+                        Launch
                       </Button>
-                    )}
-                    {hooksSupported && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px]"
-                        onClick={() => doAction(tool, 'verify')}
-                        disabled={isActive}
-                      >
-                        {isActive && activeAction?.action === 'verify' ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <ShieldCheck className="w-3 h-3 mr-1" />
-                        )}
-                        Verify
-                      </Button>
-                    )}
-                    {hooksSupported && tool.hooksInstalled && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px]"
-                        style={{ color: 'var(--risk)' }}
-                        onClick={() => doAction(tool, 'uninstall')}
-                        disabled={isActive}
-                      >
-                        {isActive && activeAction?.action === 'uninstall' ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <Trash2 className="w-3 h-3 mr-1" />
-                        )}
-                        Uninstall hooks
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {taskToolId === tool.id && toolCanRunCapturedTask(tool) && (
-                  <div
-                    className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3"
-                    data-testid={`captured-task-${tool.id}`}
-                  >
-                    <div>
-                      <p className="text-xs font-display font-semibold text-foreground">
-                        Captured agent team · started from {tool.displayName}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Each selected agent runs once per workspace. Progress, results, and memory return to one Room.
-                      </p>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label htmlFor={`captured-task-prompt-${tool.id}`} className="text-[11px] font-medium text-foreground">
-                        Task
-                      </label>
-                      <textarea
-                        id={`captured-task-prompt-${tool.id}`}
-                        aria-label={`Task for ${tool.displayName}`}
-                        value={taskPrompt}
-                        onChange={(event) => setTaskPrompt(event.target.value)}
-                        rows={3}
-                        placeholder="Describe the result this agent should deliver…"
-                        className="w-full text-xs bg-background border border-border/50 rounded p-2 resize-y min-h-[64px] max-h-[220px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      />
-                    </div>
-                    <fieldset className="space-y-1.5">
-                      <legend className="text-[11px] font-medium text-foreground">Agents</legend>
-                      <div className="space-y-1.5">
-                        {taskCapableTools.map((candidate) => {
-                          const access = taskParticipants[candidate.id];
-                          return (
-                            <div
-                              key={candidate.id}
-                              className="flex flex-wrap items-center justify-between gap-2 rounded border border-border/40 bg-background/60 px-2 py-1.5"
-                            >
-                              <label className="flex items-center gap-2 text-[11px] text-foreground cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  aria-label={candidate.displayName}
-                                  checked={access !== undefined}
-                                  onChange={() => toggleTaskParticipant(candidate)}
-                                />
-                                <span>{candidate.displayName}</span>
-                              </label>
-                              {access && (
-                                <select
-                                  aria-label={`Access for ${candidate.displayName}`}
-                                  value={access}
-                                  onChange={(event) => setTaskParticipants((current) => ({
-                                    ...current,
-                                    [candidate.id]: event.target.value as ExternalToolAccess,
-                                  }))}
-                                  className="h-7 rounded border border-border/50 bg-background px-2 text-[11px] text-foreground"
-                                >
-                                  {(candidate.permissionModes ?? []).map((mode) => (
-                                    <option key={mode} value={mode}>{ACCESS_LABELS[mode]}</option>
-                                  ))}
-                                </select>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                    <fieldset className="space-y-1.5">
-                      <legend className="text-[11px] font-medium text-foreground">Workspaces</legend>
-                      {availableWorkspaces.length > 0 ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                          {availableWorkspaces.map((workspace) => (
-                            <label
-                              key={workspace.id}
-                              className="flex items-center gap-2 rounded border border-border/40 bg-background/60 px-2 py-1.5 text-[11px] text-foreground cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={taskWorkspaceIds.includes(workspace.id)}
-                                onChange={() => toggleTaskWorkspace(workspace.id)}
-                              />
-                              <span className="truncate">{workspace.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground">Create a workspace before running a captured task.</p>
+                      {toolCanRunCapturedTask(tool) && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          className="h-7 text-[11px]"
+                          onClick={() => openTaskComposer(tool)}
+                          disabled={isActive}
+                        >
+                          {isActive && activeAction?.action === 'run' ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <Workflow className="w-3 h-3 mr-1" />
+                          )}
+                          Run task
+                        </Button>
                       )}
-                    </fieldset>
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 text-[11px]"
-                        onClick={() => setTaskToolId(null)}
-                        disabled={isActive}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        className="h-7 text-[11px]"
-                        onClick={() => void runCapturedTask(tool)}
-                        disabled={isActive || !taskPrompt.trim() || Object.keys(taskParticipants).length === 0 || taskWorkspaceIds.length === 0}
-                      >
-                        {isActive && activeAction?.action === 'run' ? (
-                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                        ) : (
-                          <Workflow className="w-3 h-3 mr-1" />
-                        )}
-                        Start in Room
-                      </Button>
+                      {runningTools.has(tool.id) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[11px]"
+                          style={{ color: 'var(--risk)' }}
+                          onClick={() => stopTool(tool)}
+                          disabled={isActive}
+                          title="Send SIGTERM (escalates to SIGKILL after 3s if needed)"
+                        >
+                          <Square className="w-3 h-3 mr-1" />
+                          Stop
+                        </Button>
+                      )}
+                      {hooksSupported && !tool.hooksInstalled && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-7 text-[11px]"
+                          onClick={() => doAction(tool, 'install')}
+                          disabled={isActive}
+                        >
+                          {isActive && activeAction?.action === 'install' ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <Download className="w-3 h-3 mr-1" />
+                          )}
+                          Install hooks
+                        </Button>
+                      )}
+                      {hooksSupported && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[11px]"
+                          onClick={() => doAction(tool, 'verify')}
+                          disabled={isActive}
+                        >
+                          {isActive && activeAction?.action === 'verify' ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <ShieldCheck className="w-3 h-3 mr-1" />
+                          )}
+                          Verify
+                        </Button>
+                      )}
+                      {hooksSupported && tool.hooksInstalled && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[11px]"
+                          style={{ color: 'var(--risk)' }}
+                          onClick={() => doAction(tool, 'uninstall')}
+                          disabled={isActive}
+                        >
+                          {isActive && activeAction?.action === 'uninstall' ? (
+                            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                          ) : (
+                            <Trash2 className="w-3 h-3 mr-1" />
+                          )}
+                          Uninstall hooks
+                        </Button>
+                      )}
                     </div>
-                  </div>
+                    {launchOnly && (
+                      <div className="text-[11px] text-muted-foreground">
+                        {tool.id === 'claude-desktop'
+                          ? 'Hooks are not supported for Claude Desktop yet.'
+                          : 'Hook management is not supported for this tool yet.'}
+                      </div>
+                    )}
+                    {taskToolId === tool.id && toolCanRunCapturedTask(tool) && (
+                      <div
+                        className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3"
+                        data-testid={`captured-task-${tool.id}`}
+                      >
+                        <div>
+                          <p className="text-xs font-display font-semibold text-foreground">
+                            Captured agent team · started from {tool.displayName}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            Each selected agent runs once per workspace. Progress, results, and memory return to one Room.
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label htmlFor={`captured-task-prompt-${tool.id}`} className="text-[11px] font-medium text-foreground">
+                            Task
+                          </label>
+                          <textarea
+                            id={`captured-task-prompt-${tool.id}`}
+                            aria-label={`Task for ${tool.displayName}`}
+                            value={taskPrompt}
+                            onChange={(event) => setTaskPrompt(event.target.value)}
+                            rows={3}
+                            placeholder="Describe the result this agent should deliver…"
+                            className="w-full text-xs bg-background border border-border/50 rounded p-2 resize-y min-h-[64px] max-h-[220px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          />
+                        </div>
+                        <fieldset className="space-y-1.5">
+                          <legend className="text-[11px] font-medium text-foreground">Agents</legend>
+                          <div className="space-y-1.5">
+                            {taskCapableTools.map((candidate) => {
+                              const access = taskParticipants[candidate.id];
+                              return (
+                                <div
+                                  key={candidate.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded border border-border/40 bg-background/60 px-2 py-1.5"
+                                >
+                                  <label className="flex items-center gap-2 text-[11px] text-foreground cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      aria-label={candidate.displayName}
+                                      checked={access !== undefined}
+                                      onChange={() => toggleTaskParticipant(candidate)}
+                                    />
+                                    <span>{candidate.displayName}</span>
+                                  </label>
+                                  {access && (
+                                    <select
+                                      aria-label={`Access for ${candidate.displayName}`}
+                                      value={access}
+                                      onChange={(event) => setTaskParticipants((current) => ({
+                                        ...current,
+                                        [candidate.id]: event.target.value as ExternalToolAccess,
+                                      }))}
+                                      className="h-7 rounded border border-border/50 bg-background px-2 text-[11px] text-foreground"
+                                    >
+                                      {(candidate.permissionModes ?? []).map((mode) => (
+                                        <option key={mode} value={mode}>{ACCESS_LABELS[mode]}</option>
+                                      ))}
+                                    </select>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </fieldset>
+                        <fieldset className="space-y-1.5">
+                          <legend className="text-[11px] font-medium text-foreground">Workspaces</legend>
+                          {availableWorkspaces.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                              {availableWorkspaces.map((workspace) => (
+                                <label
+                                  key={workspace.id}
+                                  className="flex items-center gap-2 rounded border border-border/40 bg-background/60 px-2 py-1.5 text-[11px] text-foreground cursor-pointer"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={taskWorkspaceIds.includes(workspace.id)}
+                                    onChange={() => toggleTaskWorkspace(workspace.id)}
+                                  />
+                                  <span className="truncate">{workspace.name}</span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">Create a workspace before running a captured task.</p>
+                          )}
+                        </fieldset>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-[11px]"
+                            onClick={() => setTaskToolId(null)}
+                            disabled={isActive}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-7 text-[11px]"
+                            onClick={() => void runCapturedTask(tool)}
+                            disabled={isActive || !taskPrompt.trim() || Object.keys(taskParticipants).length === 0 || taskWorkspaceIds.length === 0}
+                          >
+                            {isActive && activeAction?.action === 'run' ? (
+                              <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                            ) : (
+                              <Workflow className="w-3 h-3 mr-1" />
+                            )}
+                            Start in Room
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
-                {inCohort && !tool.installed && (
+                {launchable && !tool.installed && (
                   <div className="text-[11px] text-muted-foreground">
                     Install the tool first, then refresh.
                   </div>
                 )}
-                {!inCohort && (
+                {!launchable && (
                   <div className="text-[11px] text-muted-foreground">
-                    Detection ready · launch and hook management arrive in Phase 4.
+                    {launchUnavailableMessage(tool)}
                   </div>
                 )}
 
@@ -949,7 +1175,7 @@ const MemorySharingView = () => {
                       : { border: '1px solid var(--line-strong)', background: 'var(--card, hsl(var(--card)))' }
                   }
                 >
-                  <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] mb-1.5 text-muted-foreground/80">
+                  <div className="font-mono text-[9.5px] uppercase tracking-[0.12em] mb-1.5 text-[var(--text-tertiary)]">
                     {node.tag}
                   </div>
                   <div className="text-sm font-display font-semibold text-foreground">{node.title}</div>
@@ -958,7 +1184,7 @@ const MemorySharingView = () => {
                 {i < FLOW_NODES.length - 1 && (
                   <div className="px-3 text-center shrink-0" style={{ color: 'var(--honey)' }} aria-hidden="true">
                     <ArrowRight className="w-5 h-5 mx-auto" />
-                    <span className="block font-mono text-[9px] uppercase tracking-[0.1em] text-muted-foreground/70">
+                    <span className="block font-mono text-[9px] uppercase tracking-[0.1em] text-[var(--text-tertiary)]">
                       {i === 0 ? 'hooks' : 'recall + commit'}
                     </span>
                   </div>
