@@ -18,6 +18,7 @@ describe('File Management API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let workspaceId: string;
+  let targetWorkspaceId: string;
 
   beforeAll(async () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-files-'));
@@ -40,6 +41,13 @@ describe('File Management API', () => {
       payload: { name: 'File Test Workspace', group: 'Test' },
     });
     workspaceId = res.json().id;
+
+    const targetRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/workspaces',
+      payload: { name: 'Cross-workspace Target', group: 'Test' },
+    });
+    targetWorkspaceId = targetRes.json().id;
   });
 
   afterAll(async () => {
@@ -269,6 +277,58 @@ describe('File Management API', () => {
         url: `${prefix()}/download?path=/exports/renamed.txt`,
       });
       expect(origRes.statusCode).toBe(200);
+    });
+
+    it('copies a file from another workspace without reading from the target store', async () => {
+      const source = await injectWithAuth(server, {
+        method: 'POST',
+        url: `${prefix()}/upload`,
+        payload: {
+          path: '/exports',
+          name: 'cross-workspace.txt',
+          data: Buffer.from('kept in the source workspace').toString('base64'),
+        },
+      });
+      expect(source.statusCode).toBe(201);
+
+      const copied = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/workspaces/${targetWorkspaceId}/files/copy`,
+        payload: {
+          sourceWorkspaceId: workspaceId,
+          from: '/exports/cross-workspace.txt',
+          to: '/notes/cross-workspace.txt',
+        },
+      });
+      expect(copied.statusCode).toBe(200);
+      expect(copied.json()).toMatchObject({ name: 'cross-workspace.txt', path: '/notes/cross-workspace.txt', type: 'file' });
+
+      const targetDownload = await injectWithAuth(server, {
+        method: 'GET',
+        url: `/api/workspaces/${targetWorkspaceId}/files/download?path=/notes/cross-workspace.txt`,
+      });
+      expect(targetDownload.statusCode).toBe(200);
+      expect(targetDownload.body).toBe('kept in the source workspace');
+
+      const sourceDownload = await injectWithAuth(server, {
+        method: 'GET',
+        url: `${prefix()}/download?path=/exports/cross-workspace.txt`,
+      });
+      expect(sourceDownload.statusCode).toBe(200);
+    });
+
+    it('rejects cross-workspace directory copies explicitly', async () => {
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: `/api/workspaces/${targetWorkspaceId}/files/copy`,
+        payload: {
+          sourceWorkspaceId: workspaceId,
+          from: '/attachments',
+          to: '/attachments',
+        },
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().error).toContain('files only');
     });
   });
 

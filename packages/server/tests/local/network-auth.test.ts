@@ -21,6 +21,7 @@ describe('isLocalOrigin', () => {
     expect(isLocalOrigin('http://127.0.0.1:1420')).toBe(true);
     expect(isLocalOrigin('http://localhost:3333')).toBe(true);
     expect(isLocalOrigin('tauri://localhost')).toBe(true);
+    expect(isLocalOrigin('http://tauri.localhost')).toBe(true);
     expect(isLocalOrigin('https://tauri.localhost')).toBe(true);
   });
   it('rejects external + prefix-bypass origins', () => {
@@ -71,8 +72,26 @@ describe('isLoopbackBind (AV-5)', () => {
 // ── R2-003 — CORS exact-origin match ────────────────────────────────────
 
 describe('corsOriginAllowed', () => {
+  const EXTENSION_ID = 'abcdefghijklmnopabcdefghijklmnop';
+  const EXTENSION_ORIGIN = `chrome-extension://${EXTENSION_ID}`;
+  const OTHER_EXTENSION_ORIGIN = 'chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba';
+  const originalExtIds = process.env.WAGGLE_BROWSER_EXT_IDS;
+  const originalDevAllow = process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION;
+
+  afterEach(() => {
+    if (originalExtIds === undefined) delete process.env.WAGGLE_BROWSER_EXT_IDS;
+    else process.env.WAGGLE_BROWSER_EXT_IDS = originalExtIds;
+    if (originalDevAllow === undefined) delete process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION;
+    else process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION = originalDevAllow;
+  });
+
   it('allows no-origin (same-origin / non-browser)', () => expect(corsOriginAllowed(undefined)).toBe(true));
   it('allows exact allowed origin', () => expect(corsOriginAllowed('http://localhost:1420')).toBe(true));
+  it('allows Tauri webview localhost origins', () => {
+    expect(corsOriginAllowed('tauri://localhost')).toBe(true);
+    expect(corsOriginAllowed('http://tauri.localhost')).toBe(true);
+    expect(corsOriginAllowed('https://tauri.localhost')).toBe(true);
+  });
   it('allows loopback origins on arbitrary local dev/e2e ports', () => {
     expect(corsOriginAllowed('http://127.0.0.1:8081')).toBe(true);
     expect(corsOriginAllowed('http://127.0.0.1:8082')).toBe(true);
@@ -84,6 +103,20 @@ describe('corsOriginAllowed', () => {
     expect(corsOriginAllowed('http://127.0.0.1.evil.com:3344')).toBe(false);
     expect(corsOriginAllowed('https://evil.example.com')).toBe(false);
     expect(corsOriginAllowed('https://localhost:3344')).toBe(false);
+  });
+  it('allows only configured Browser Companion extension ids', () => {
+    process.env.WAGGLE_BROWSER_EXT_IDS = EXTENSION_ID;
+    delete process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION;
+
+    expect(corsOriginAllowed(EXTENSION_ORIGIN)).toBe(true);
+    expect(corsOriginAllowed(OTHER_EXTENSION_ORIGIN)).toBe(false);
+  });
+  it('allows concrete Browser Companion extension origins in explicit dev mode', () => {
+    delete process.env.WAGGLE_BROWSER_EXT_IDS;
+    process.env.WAGGLE_DEV_ALLOW_ANY_EXTENSION = '1';
+
+    expect(corsOriginAllowed(EXTENSION_ORIGIN)).toBe(true);
+    expect(corsOriginAllowed(OTHER_EXTENSION_ORIGIN)).toBe(true);
   });
 });
 

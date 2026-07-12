@@ -54,6 +54,15 @@ describe('Docker Deployment', () => {
     expect(content).toContain('condition: service_healthy');
   });
 
+  it('production compose fails closed when database and object-store secrets are missing', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'docker-compose.production.yml'), 'utf-8');
+    expect(content).toContain('${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}');
+    expect(content).toContain('${MINIO_ROOT_USER:?set MINIO_ROOT_USER}');
+    expect(content).toContain('${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD}');
+    expect(content).not.toContain('${POSTGRES_PASSWORD:-');
+    expect(content).not.toContain('${MINIO_ROOT_PASSWORD:-');
+  });
+
   it('.dockerignore excludes sensitive and unnecessary files', () => {
     const content = fs.readFileSync(path.join(ROOT, '.dockerignore'), 'utf-8');
     expect(content).toContain('node_modules');
@@ -71,11 +80,13 @@ describe('Render.com Blueprint', () => {
     expect(content).toContain('healthCheckPath: /health');
   });
 
-  it('render.yaml references PostgreSQL and Redis', () => {
+  it('render.yaml explicitly uses the hosted local-sidecar mode', () => {
     const content = fs.readFileSync(path.join(ROOT, 'render.yaml'), 'utf-8');
-    expect(content).toContain('waggle-postgres');
-    expect(content).toContain('waggle-redis');
-    expect(content).toContain('connectionString');
+    expect(content).toContain('startCommand: npx tsx packages/server/src/local/start.ts --skip-litellm');
+    expect(content).toContain('WAGGLE_DATA_DIR');
+    expect(content).not.toContain('fromDatabase:');
+    expect(content).not.toContain('fromService:');
+    expect(content).not.toContain('databases:');
   });
 
   it('render.yaml has required environment variables', () => {
@@ -83,8 +94,8 @@ describe('Render.com Blueprint', () => {
     expect(content).toContain('ANTHROPIC_API_KEY');
     expect(content).toContain('CLERK_SECRET_KEY');
     expect(content).toContain('WAGGLE_LICENSE_KEY');
-    expect(content).toContain('DATABASE_URL');
-    expect(content).toContain('REDIS_URL');
+    expect(content).toContain('WAGGLE_FRONTEND_DIR');
+    expect(content).toContain('STRIPE_SECRET_KEY');
   });
 
   it('render.yaml has persistent disk for data', () => {

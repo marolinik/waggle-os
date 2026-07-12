@@ -6,10 +6,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import Fastify from 'fastify';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { MarketplaceDB, MarketplaceSync } from '@waggle/marketplace';
+import { MarketplaceDB, MarketplaceSync, type SyncOptions } from '@waggle/marketplace';
+import { marketplaceRoutes } from '../../src/local/routes/marketplace.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -20,6 +22,25 @@ function getRepoRoot(): string {
 function getMarketplaceDbPath(): string | null {
   const dbPath = path.join(getRepoRoot(), 'packages', 'marketplace', 'marketplace.db');
   return fs.existsSync(dbPath) ? dbPath : null;
+}
+
+async function syncHermetically(sync: MarketplaceSync, options?: SyncOptions) {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: false,
+    status: 404,
+    statusText: 'Not Found',
+    json: async () => ({}),
+    text: async () => '',
+  });
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', fetchMock);
+
+  try {
+    return await sync.syncAll(options);
+  } finally {
+    logSpy.mockRestore();
+    vi.unstubAllGlobals();
+  }
 }
 
 // ── Module Export ────────────────────────────────────────────────────
@@ -50,8 +71,8 @@ describe('POST /api/marketplace/sync', () => {
     const sync = new MarketplaceSync(db);
 
     // syncAll will try to reach external APIs — which will fail in CI/local.
-    // We just verify the return shape.
-    const results = await sync.syncAll();
+    // The adapter return shape is verified through the hermetic boundary below.
+    const results = await syncHermetically(sync);
 
     expect(Array.isArray(results)).toBe(true);
     for (const result of results) {
@@ -78,7 +99,7 @@ describe('POST /api/marketplace/sync', () => {
     const sync = new MarketplaceSync(db);
 
     // All sources point to external APIs that won't be reachable in test
-    const results = await sync.syncAll();
+    const results = await syncHermetically(sync);
 
     // Should NOT throw — errors are captured per-source
     expect(Array.isArray(results)).toBe(true);
@@ -100,7 +121,7 @@ describe('POST /api/marketplace/sync', () => {
     const sources = db.listSources();
     const sync = new MarketplaceSync(db);
 
-    const results = await sync.syncAll();
+    const results = await syncHermetically(sync);
 
     // Should have one result per source
     expect(results.length).toBe(sources.length);
@@ -112,6 +133,50 @@ describe('POST /api/marketplace/sync', () => {
     }
 
     db.close();
+  });
+
+  it('manual sync is a no-network no-op when marketplace sync is disabled', async () => {
+    const bundled = getMarketplaceDbPath();
+    if (!bundled) return;
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-sync-disabled-'));
+    const dbPath = path.join(tmpDir, 'marketplace.db');
+    fs.copyFileSync(bundled, dbPath);
+
+    const db = new MarketplaceDB(dbPath);
+    const server = Fastify({ logger: false });
+    server.decorate('marketplace', db);
+    await server.register(marketplaceRoutes);
+
+    const previousDisable = process.env.WAGGLE_DISABLE_MARKETPLACE_SYNC;
+    const fetchMock = vi.fn().mockRejectedValue(new Error('network should not be called when sync is disabled'));
+    vi.stubGlobal('fetch', fetchMock);
+    process.env.WAGGLE_DISABLE_MARKETPLACE_SYNC = '1';
+
+    try {
+      const res = await server.inject({
+        method: 'POST',
+        url: '/api/marketplace/sync',
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({
+        skipped: true,
+        sourcesChecked: 0,
+        packagesAdded: 0,
+        packagesUpdated: 0,
+        errors: [],
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      if (previousDisable === undefined) delete process.env.WAGGLE_DISABLE_MARKETPLACE_SYNC;
+      else process.env.WAGGLE_DISABLE_MARKETPLACE_SYNC = previousDisable;
+      vi.unstubAllGlobals();
+      await server.close();
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
@@ -154,7 +219,7 @@ describe('Sync result aggregation', () => {
 
     const db = new MarketplaceDB(dbPath);
     const sync = new MarketplaceSync(db);
-    const results = await sync.syncAll();
+    const results = await syncHermetically(sync);
 
     // Simulate the endpoint aggregation logic
     const sourcesChecked = results.length;
@@ -205,7 +270,7 @@ describe('POST /api/marketplace/sync — endpoint contract (mocked)', () => {
     if (!db) return;
 
     const sync = new MarketplaceSync(db);
-    const results = await sync.syncAll();
+    const results = await syncHermetically(sync);
 
     // Replicate the exact route handler logic from marketplace.ts
     const sourcesChecked = results.length;
@@ -238,7 +303,7 @@ describe('POST /api/marketplace/sync — endpoint contract (mocked)', () => {
     if (!db) return;
 
     const sync = new MarketplaceSync(db);
-    const results = await sync.syncAll({ sources: ['clawhub'] });
+    const results = await syncHermetically(sync, { sources: ['clawhub'] });
 
     const response = {
       sourcesChecked: results.length,
@@ -256,7 +321,7 @@ describe('POST /api/marketplace/sync — endpoint contract (mocked)', () => {
     if (!db) return;
 
     const sync = new MarketplaceSync(db);
-    const results = await sync.syncAll({ sources: ['clawhub', 'anthropics-skills'] });
+    const results = await syncHermetically(sync, { sources: ['clawhub', 'anthropics-skills'] });
 
     for (const detail of results) {
       expect(detail).toHaveProperty('source');

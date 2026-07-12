@@ -43,4 +43,10 @@ describe('normalizeToMemory — hasOriginalSource (Art.17 View-original gate)', 
   it('is FALSE for a frame with no provenance metadata', () => {
     expect(normalize({ kind: 'fact' }).hasOriginalSource).toBe(false);
   });
+
+  it('marks temporary agent-inferred frames as needing review', () => {
+    const f = frames.createIFrame('harvest', 'Assistant example only.', 'temporary', 'agent_inferred');
+    const m = normalizeToMemory(frames.getById(f.id)!, 'personal');
+    expect(m.status).toBe('unreviewed');
+  });
 });
