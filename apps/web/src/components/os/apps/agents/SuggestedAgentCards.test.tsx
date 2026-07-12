@@ -77,4 +77,18 @@ describe('SuggestedAgentCards entrance choreography', () => {
     expect((screen.getByText('Researcher').closest('li') as HTMLElement).style.animation).toBe('');
     expect(screen.getByTestId('persona-roster').style.animation).toBe('');
   });
+
+  it('keeps avatar media dimensions stable and avoids broad transitions', () => {
+    const { container } = render(
+      <SuggestedAgentCards personas={six} onPick={vi.fn()} allPersonas={six} onBrowseAll={vi.fn()} />,
+    );
+
+    const images = Array.from(container.querySelectorAll('img'));
+    expect(images).toHaveLength(11);
+    images.forEach((image) => {
+      expect(image).toHaveAttribute('width');
+      expect(image).toHaveAttribute('height');
+    });
+    expect(container.innerHTML).not.toContain('transition-all');
+  });
 });

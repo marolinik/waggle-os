@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
     getPersonas: vi.fn().mockResolvedValue([]),
     getCapabilityStatus: vi.fn().mockResolvedValue({}),
     getAgentGroups: vi.fn().mockResolvedValue([]),
+    runAgentGroup: vi.fn(),
+    getJobStatus: vi.fn().mockResolvedValue(null),
   },
 }));
 vi.mock('@/lib/adapter', () => ({ adapter: mocks.adapter, default: vi.fn() }));
@@ -48,7 +50,7 @@ const renderApp = () => render(
         <AgentsApp workspaces={[
           { id: 'ws-1', name: 'Acme Research', group: 'work' },
           { id: 'ws-2', name: 'Personal Lab', group: 'personal' },
-        ]} />
+        ]} activeWorkspaceId="ws-2" />
       </TooltipProvider>
     </ServiceProvider>
   </MemoryRouter>,
@@ -63,6 +65,16 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('AgentsApp — Agent Center', () => {
+  it('a11y: search control exposes stable form metadata', async () => {
+    mocks.adapter.listAgents.mockResolvedValue([]);
+    renderApp();
+    await screen.findByText(/No custom agents yet/);
+
+    const search = screen.getByRole('textbox', { name: 'Search agents' });
+    expect(search).toHaveAttribute('name', 'agentSearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+  });
+
   it('renders agent rows from the adapter with §14.5 status badges', async () => {
     mocks.adapter.listAgents.mockResolvedValue([
       makeAgent({ id: 'a1', name: 'Scout', status: 'idle' }),
@@ -74,6 +86,11 @@ describe('AgentsApp — Agent Center', () => {
     expect(screen.getByText('Drafter')).toBeInTheDocument();
     expect(screen.getByText('Idle')).toBeInTheDocument();
     expect(screen.getByText('Running')).toBeInTheDocument();
+
+    const scoutButton = screen.getByRole('button', { name: 'Open agent Scout' });
+    const scoutAvatar = scoutButton.querySelector('img');
+    expect(scoutAvatar).toHaveAttribute('width', '28');
+    expect(scoutAvatar).toHaveAttribute('height', '28');
   });
 
   it('filters by C22 category tab (Personal hides the workspace agent)', async () => {
@@ -171,6 +188,54 @@ describe('AgentsApp — Agent Center', () => {
 
     fireEvent.click(within(roster).getByRole('button', { name: /browse all 22 specialists/i }));
     expect(screen.getByRole('button', { name: /Templates/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('a11y: templates search control exposes stable form metadata', async () => {
+    mocks.adapter.listAgents.mockResolvedValue([]);
+    renderApp();
+    await screen.findByText(/No custom agents yet/);
+
+    fireEvent.click(within(screen.getByTestId('persona-roster')).getByRole('button', { name: /browse all 22 specialists/i }));
+
+    const search = await screen.findByRole('textbox', { name: 'Search persona templates' });
+    expect(search).toHaveAttribute('name', 'agentTemplateSearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+  });
+
+  it('runs an agent group in the active workspace and keeps its Room handoff', async () => {
+    mocks.adapter.listAgents.mockResolvedValue([]);
+    mocks.adapter.getAgentGroups.mockResolvedValueOnce([{
+      id: 'group-1',
+      name: 'Research pair',
+      strategy: 'parallel',
+      members: [
+        { agentId: 'researcher', roleInGroup: 'lead', executionOrder: 1 },
+        { agentId: 'general-purpose', roleInGroup: 'worker', executionOrder: 2 },
+      ],
+    }]);
+    mocks.adapter.runAgentGroup.mockResolvedValueOnce({
+      jobId: 'job-1',
+      roomId: 'room-1',
+      workspaceId: 'ws-2',
+      status: 'queued',
+    });
+    renderApp();
+    await screen.findByText(/No custom agents yet/);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Templates$/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: /Groups \(1\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Select group "Research pair"' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Group task' }), {
+      target: { value: 'Compare the launch plans' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(mocks.adapter.runAgentGroup).toHaveBeenCalledWith(
+      'group-1',
+      'Compare the launch plans',
+      { workspaceId: 'ws-2' },
+    ));
+    expect(await screen.findByRole('link', { name: 'Open Room' })).toHaveAttribute('href', '/room?room=room-1');
   });
 
   it('shows the error state with a Retry that reloads', async () => {
