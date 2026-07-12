@@ -47,6 +47,15 @@ jobs:
       - name: Tauri TS typecheck (app/scripts)
         run: npx tsc -p app/tsconfig.json
 
+      # Runtime tests pack and install workspace packages. Build every ignored
+      # dist/ payload explicitly so CI proves a fresh checkout.
+      - name: Build package-install test runtimes
+        run: |
+          npm run build:hook-runtime
+          npm run build --workspace @waggle/cli
+          npm run build --workspace @waggle-ai/waggle
+          npm run build --workspace waggle-memory-mcp
+
       - name: Unit tests — packages + cross-cutting (root vitest)
         run: npm test
 

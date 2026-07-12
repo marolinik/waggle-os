@@ -19,8 +19,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  deployment_config:
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://waggle-os.ai
+    outputs:
+      configured: ${{ steps.vercel.outputs.configured }}
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - name: Check Vercel configuration
+        id: vercel
+        shell: bash
+        run: |
+          if [[ -n "$VERCEL_TOKEN" && -n "$VERCEL_ORG_ID" && -n "$VERCEL_PROJECT_ID" ]]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Landing page verified but not deployed: Vercel secrets are not configured."
+          fi
+
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test public site
+        run: npm run test -w apps/www -- --reporter=dot
+
+      - name: Typecheck public site
+        run: npx tsc --noEmit --project apps/www/tsconfig.json
+
+      - name: Build public site
+        run: npm run build:www
+
   deploy:
     runs-on: ubuntu-latest
+    needs: [deployment_config, verify]
+    if: needs.deployment_config.outputs.configured == 'true'
     environment:
       name: production
       url: https://waggle-os.ai
@@ -39,25 +86,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify Vercel secrets are present
-        shell: bash
-        run: |
-          test -n "$VERCEL_TOKEN"
-          test -n "$VERCEL_ORG_ID"
-          test -n "$VERCEL_PROJECT_ID"
-
       - name: Pull Vercel production environment
         working-directory: apps/www
         run: npx --yes vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
-
-      - name: Test public site
-        run: npm run test -w apps/www -- --reporter=dot
-
-      - name: Typecheck public site
-        run: npx tsc --noEmit --project apps/www/tsconfig.json
-
-      - name: Build public site
-        run: npm run build:www
 
       - name: Build Vercel prebuilt output
         working-directory: apps/www

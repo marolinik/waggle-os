@@ -17,6 +17,19 @@ vi.mock('@waggle/agent', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@waggle/agent')>();
   return {
     ...actual,
+    detectInstalledTools: vi.fn(async () => ({
+      platform: process.platform,
+      detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'claude-code',
+        displayName: 'Claude Code',
+        installed: true,
+        installedPath: '/server-detected/claude-code',
+        version: 'test',
+        hooksInstalled: false,
+        hookPointerPath: null,
+      }],
+    })),
     launchTool: vi.fn((opts: { id: string; installedPath: string }) => ({
       ok: true,
       pid: 99999,
