@@ -84,6 +84,26 @@ describe('MemoryTrustManage stats + filters + actions (PR3.5 Phase B+C)', () => 
     expect(forgotten.getAttribute('aria-disabled')).toBe('true');
   });
 
+  it('a11y: search control exposes stable form metadata', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([mem({ id: '1' })]);
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    const search = await screen.findByLabelText('Search memories');
+    expect(search).toHaveAttribute('name', 'memoryTrustSearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+    expect(search.className).toContain('focus-visible:ring-2');
+    expect(search.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+  });
+
+  it('a11y: correction editor exposes stable form metadata and a visible focus style', async () => {
+    mocks.adapter.listMemories.mockResolvedValue([mem({ id: '5', createdAt: iso(1) })]);
+    render(<MemoryTrustManage mind="personal" onToast={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit or correct memory M-5' }));
+    const editor = await screen.findByLabelText('Correct this memory');
+    expect(editor).toHaveAttribute('name', 'memoryTrustCorrection');
+    expect(editor).toHaveAttribute('autocomplete', 'off');
+    expect(editor.className).toContain('focus-visible:ring-2');
+  });
+
   it('Forget hits deleteMemoryById and fires a toast', async () => {
     mocks.adapter.listMemories.mockResolvedValue([mem({ id: '5', createdAt: iso(1) })]);
     const onToast = vi.fn();

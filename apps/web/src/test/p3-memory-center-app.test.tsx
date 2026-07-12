@@ -124,6 +124,14 @@ describe('MemoryRoute + MemoryCenterApp URL wiring (P3/D2)', () => {
     expect(screen.queryByTestId('stub-mc-tab')).toBeNull();
   });
 
+  it('lets the Memory view tabs wrap instead of forcing mobile horizontal overflow', async () => {
+    await renderRoute('/memory');
+    const tablist = screen.getByRole('tablist', { name: /memory views/i });
+
+    expect(tablist).toHaveClass('min-w-0');
+    expect(tablist).toHaveClass('flex-wrap');
+  });
+
   it('an unknown ?tab= degrades to the Trust default', async () => {
     await renderRoute('/memory?tab=bogus');
     expect(screen.getByTestId('stub-trust')).toBeTruthy();
