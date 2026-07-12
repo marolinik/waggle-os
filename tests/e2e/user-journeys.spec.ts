@@ -739,7 +739,7 @@ test.describe('User Journey Tests', () => {
 
   test('J-model: onboarding API-key setup reaches a saved, continuable state', async ({ page }) => {
     let keySaved = false;
-    let settingsPayload: Record<string, unknown> | null = null;
+    const settingsPayloads: Record<string, unknown>[] = [];
     const providers = {
       providers: [
         {
@@ -785,8 +785,10 @@ test.describe('User Journey Tests', () => {
         await route.continue();
         return;
       }
-      keySaved = true;
-      settingsPayload = route.request().postDataJSON() as Record<string, unknown>;
+      const payload = route.request().postDataJSON() as Record<string, unknown>;
+      settingsPayloads.push(payload);
+      const providerUpdate = payload.providers as Record<string, { apiKey?: string }> | undefined;
+      if (providerUpdate?.anthropic?.apiKey) keySaved = true;
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ defaultModel: 'claude-sonnet-4-6', providers: {} }) });
     });
     await page.route('**/api/settings/test-key', route => route.fulfill({
@@ -818,7 +820,10 @@ test.describe('User Journey Tests', () => {
 
     await expect(onboarding.getByRole('status').filter({ hasText: /saved/i })).toBeVisible({ timeout: 10_000 });
     await expect.poll(() => keySaved).toBe(true);
-    expect(settingsPayload).toMatchObject({ providers: { anthropic: { apiKey: 'sk-ant-browser-contract' } } });
+    const keyWriteIndex = settingsPayloads.findIndex(payload => 'providers' in payload);
+    const modelWriteIndex = settingsPayloads.findIndex(payload => payload.defaultModel === 'claude-sonnet-4-6');
+    expect(settingsPayloads[keyWriteIndex]).toMatchObject({ providers: { anthropic: { apiKey: 'sk-ant-browser-contract' } } });
+    expect(modelWriteIndex).toBeGreaterThan(keyWriteIndex);
     await expect(onboarding.getByRole('button', { name: /^continue/i })).toBeEnabled({ timeout: 10_000 });
   });
 
