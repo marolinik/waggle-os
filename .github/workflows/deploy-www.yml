@@ -5,40 +5,64 @@ on:
     branches: [main]
     paths:
       - 'apps/www/**'
+      - 'docs/methodology.md'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy-www.yml'
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: www-production
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://waggle-os.ai
+    env:
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # Install at the root (apps/www is a workspace with no lockfile of its own),
-      # then build the www workspace. The `npm install → npm ci` switch is deferred
-      # to the deps/lockfile hardening pass (see ci.yml note).
-      - run: npm install
-      - run: cd apps/www && npm run build
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/www/dist
+          cache: npm
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/deploy-pages@v4
-        id: deployment
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify Vercel secrets are present
+        shell: bash
+        run: |
+          test -n "$VERCEL_TOKEN"
+          test -n "$VERCEL_ORG_ID"
+          test -n "$VERCEL_PROJECT_ID"
+
+      - name: Pull Vercel production environment
+        working-directory: apps/www
+        run: npx --yes vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Test public site
+        run: npm run test -w apps/www -- --reporter=dot
+
+      - name: Typecheck public site
+        run: npx tsc --noEmit --project apps/www/tsconfig.json
+
+      - name: Build public site
+        run: npm run build:www
+
+      - name: Build Vercel prebuilt output
+        working-directory: apps/www
+        run: npx --yes vercel build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy Vercel prebuilt output
+        working-directory: apps/www
+        run: npx --yes vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN"

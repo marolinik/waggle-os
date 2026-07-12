@@ -2,6 +2,14 @@ import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
+// Next.js pulls Node's deprecated built-in `punycode` module through a
+// dependency chain during Vitest worker startup. This is an upstream warning,
+// not a www failure; propagate the narrow suppression to child workers so the
+// release signal remains readable.
+if (!process.env.NODE_OPTIONS?.includes('--disable-warning=DEP0040')) {
+  process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ''} --disable-warning=DEP0040`.trim();
+}
+
 /**
  * Vitest config — independent of the Next.js bundler. Vitest uses Vite under
  * the hood for transformation, so `@vitejs/plugin-react` stays in devDeps
