@@ -6,7 +6,7 @@
  *    drives the rail, with Advanced surfacing only at Everything (D7).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   adapter: {
@@ -32,16 +32,28 @@ async function renderSettings() {
   const { default: SettingsApp } = await import('@/components/os/apps/SettingsApp');
   const { TooltipProvider } = await import('@/components/ui/tooltip');
   const { MemoryRouter } = await import('react-router-dom');
-  render(
-    // SettingsApp reads `?tab=` via useSearchParams (PR7a/D12) — it is a routed
-    // surface (SettingsRoute mounts it inside BrowserRouter), so tests must
-    // provide a Router context.
-    <MemoryRouter>
-      <TooltipProvider>
-        <SettingsApp />
-      </TooltipProvider>
-    </MemoryRouter>,
-  );
+  await act(async () => {
+    render(
+      // SettingsApp reads `?tab=` via useSearchParams (PR7a/D12) — it is a routed
+      // surface (SettingsRoute mounts it inside BrowserRouter), so tests must
+      // provide a Router context.
+      <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <TooltipProvider>
+          <SettingsApp />
+        </TooltipProvider>
+      </MemoryRouter>,
+    );
+  });
+
+  await screen.findByText(/no working model yet/i);
+  await waitFor(() => {
+    expect(mocks.adapter.getSettings).toHaveBeenCalled();
+    expect(mocks.adapter.getPermissions).toHaveBeenCalled();
+    expect(mocks.adapter.getTeamStatus).toHaveBeenCalled();
+    expect(mocks.adapter.getTelemetryStatus).toHaveBeenCalled();
+    expect(mocks.adapter.getProviders).toHaveBeenCalled();
+    expect(mocks.adapter.getLocalInferenceStatus).toHaveBeenCalled();
+  });
 }
 
 beforeEach(() => { window.localStorage.clear(); });

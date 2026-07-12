@@ -38,8 +38,13 @@ import ChannelsSettings from '@/components/os/settings/ChannelsSettings';
 import CoverageCompassCard from '@/components/os/settings/CoverageCompassCard';
 import { AVAILABLE_SHAPES, useSelectedShape, type PromptShape } from '@/lib/shape-selection';
 import { SectionLabel } from '@/components/os/warm';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 
 type SettingsTab = 'general' | 'models' | 'billing' | 'permissions' | 'channels' | 'team' | 'backup' | 'enterprise' | 'advanced';
+type SettingsApproval =
+  | { kind: 'clear-telemetry' }
+  | { kind: 'restore-backup'; file: File };
+type BackupStatus = { tone: 'success' | 'error'; message: string };
 
 const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'general', label: 'General', icon: Palette },
@@ -52,6 +57,15 @@ const tabs: { id: SettingsTab; label: string; icon: React.ElementType }[] = [
   { id: 'enterprise', label: 'Enterprise', icon: Building },
   { id: 'advanced', label: 'Advanced', icon: Wrench },
 ];
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ''));
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read backup file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 const SettingsApp = () => {
   // PR5 §11 "Models leads" — Settings opens on Models (the model gate + failover
@@ -109,6 +123,7 @@ const SettingsApp = () => {
   // Snaps to a KNOWN tab, respecting the tier filter (e.g. an Essential user
   // deep-linked to `advanced` falls back to general, never a half-shipped tab).
   const [searchParams] = useSearchParams();
+  const checkoutCancelled = searchParams.get('checkout') === 'cancelled';
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     if (!tabParam || !tabs.some(t => t.id === tabParam)) return;
@@ -141,8 +156,8 @@ const SettingsApp = () => {
   const [externalGates, setExternalGates] = useState<string[]>([]);
   const [newGate, setNewGate] = useState('');
   // F18: pending in-app confirmation for the transition into `yolo` ("Never
-  // ask"). Replaces the native window.confirm() with an inline confirm-row that
-  // matches the app's visual language and is focus-trapped/testable in-idiom.
+  // ask"). Keeps the risky transition inside the app's visual language with a
+  // focus-visible, testable confirm row.
   const [pendingYolo, setPendingYolo] = useState(false);
 
   // Team state
@@ -174,6 +189,11 @@ const SettingsApp = () => {
     try { return readLoginBriefingDismissed(); } catch { return false; }
   });
   const [telemetryCount, setTelemetryCount] = useState(0);
+  const [telemetryNotice, setTelemetryNotice] = useState<string | null>(null);
+  const [backupStatus, setBackupStatus] = useState<BackupStatus | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<SettingsApproval | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
 
   // Load settings
   useEffect(() => {
@@ -226,6 +246,96 @@ const SettingsApp = () => {
       setTimeout(() => setSaveMsg(''), 2000);
     } catch { setSaveMsg('Failed to save'); }
     finally { setSaving(false); }
+  };
+
+  const approvalRequest: ApprovalRequest | null = pendingApproval
+    ? pendingApproval.kind === 'clear-telemetry'
+      ? {
+        action: 'Clear telemetry events',
+        riskLevel: 'medium',
+        scope: [
+          'Deletes all local anonymous usage events collected on this machine.',
+          'Does not delete your memory, workspaces, chats, files, or vault secrets.',
+          'This cannot be undone.',
+        ],
+      }
+      : {
+        action: `Restore backup: ${pendingApproval.file.name}`,
+        riskLevel: 'critical',
+        scope: [
+          'Overwrite current data with the selected backup.',
+          'Current workspaces, sessions, and memory may be replaced.',
+          'A restart is required after restore succeeds.',
+        ],
+      }
+    : null;
+
+  const approvalLabel = pendingApproval?.kind === 'clear-telemetry'
+    ? (approvalBusy ? 'Clearing...' : 'Clear telemetry')
+    : (approvalBusy ? 'Restoring...' : 'Restore backup');
+
+  const handleCreateBackup = async () => {
+    setBackupBusy(true);
+    setBackupStatus(null);
+    try {
+      const res = await fetch(`${adapter.getServerUrl()}/api/backup`, { method: 'POST' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Backup failed' }));
+        setBackupStatus({ tone: 'error', message: err.error ?? 'Backup failed' });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupStatus({ tone: 'success', message: 'Backup created and download started.' });
+    } catch {
+      setBackupStatus({ tone: 'error', message: 'Backup failed - server unreachable' });
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const restoreBackup = async (file: File) => {
+    setBackupStatus(null);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const base64 = dataUrl.split(',')[1] ?? '';
+      const res = await fetch(`${adapter.getServerUrl()}/api/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ backup: base64 }),
+      });
+      if (res.ok) {
+        setBackupStatus({ tone: 'success', message: 'Backup restored successfully. Restart the server to apply.' });
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Restore failed' }));
+        setBackupStatus({ tone: 'error', message: err.error ?? 'Restore failed' });
+      }
+    } catch {
+      setBackupStatus({ tone: 'error', message: 'Restore failed - server unreachable' });
+    }
+  };
+
+  const confirmSettingsApproval = async () => {
+    if (!pendingApproval) return;
+    const current = pendingApproval;
+    setApprovalBusy(true);
+    try {
+      if (current.kind === 'clear-telemetry') {
+        await adapter.clearTelemetry();
+        setTelemetryCount(0);
+        setTelemetryNotice('Telemetry events cleared.');
+      } else {
+        await restoreBackup(current.file);
+      }
+      setPendingApproval(null);
+    } finally {
+      setApprovalBusy(false);
+    }
   };
 
   return (
@@ -311,7 +421,7 @@ const SettingsApp = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-3 sm:p-4" role="tabpanel">
+        <div className="flex-1 overflow-auto p-3 sm:p-4" role="tabpanel" tabIndex={0} aria-label="Settings content">
 
         {/* ═══ GENERAL ═══ */}
         {activeTab === 'general' && (
@@ -344,7 +454,7 @@ const SettingsApp = () => {
             <div className="p-3 rounded-xl bg-secondary/30 border border-border/30">
               <p className="text-xs font-display font-medium text-foreground mb-1">Local-first</p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (top-right of Settings) sets how much of the app and these settings you see; it’s independent of your Pro/Teams plan, and every app stays reachable via Ctrl+K.
+                Waggle runs on your machine — your memory and data stay local, always. The <strong className="text-foreground">Show</strong> control (top-right of Settings) sets how much of the app and these settings you see; it’s independent of your Solo/Team plan, and every app stays reachable via Ctrl+K.
               </p>
             </div>
 
@@ -395,6 +505,9 @@ const SettingsApp = () => {
                   <p className="text-[11px] text-muted-foreground">{telemetryCount} events collected</p>
                 </div>
                 <button
+                  type="button"
+                  aria-label={telemetryEnabled ? 'Disable anonymous telemetry' : 'Enable anonymous telemetry'}
+                  aria-pressed={telemetryEnabled}
                   onClick={async () => {
                     const next = !telemetryEnabled;
                     setTelemetryEnabled(next);
@@ -407,10 +520,9 @@ const SettingsApp = () => {
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={async () => {
-                    if (!confirm('Clear all collected telemetry events? This cannot be undone. (Does not delete your memory, workspaces, chats, or vault.)')) return;
-                    await adapter.clearTelemetry();
-                    setTelemetryCount(0);
+                  onClick={() => {
+                    setTelemetryNotice(null);
+                    setPendingApproval({ kind: 'clear-telemetry' });
                   }}
                   className="flex items-center gap-1.5 text-[11px] text-destructive hover:text-destructive/80 transition-colors"
                 >
@@ -418,6 +530,11 @@ const SettingsApp = () => {
                   Clear telemetry events
                 </button>
               </div>
+              {telemetryNotice && (
+                <p role="status" className="text-[11px] text-muted-foreground">
+                  {telemetryNotice}
+                </p>
+              )}
             </div>
             )}
 
@@ -488,7 +605,7 @@ const SettingsApp = () => {
 
             {/* CC Session A §2.2 — Phase 1 GEPA prompt shape selector */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">
+              <label htmlFor="settings-prompt-shape" className="text-xs text-muted-foreground block mb-1.5">
                 Prompt Shape
                 <HintTooltip
                   content="Phase 1 GEPA-evolved prompt variant. Threaded into chat requests; sidecar honors it once the A3.1 server patch lands."
@@ -497,9 +614,12 @@ const SettingsApp = () => {
                 </HintTooltip>
               </label>
               <select
+                id="settings-prompt-shape"
+                name="promptShape"
+                autoComplete="off"
                 value={selectedShape}
                 onChange={(e) => setSelectedShape(e.target.value as PromptShape)}
-                className="w-full bg-muted/50 border border-border/30 rounded-lg px-2 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                className="w-full bg-muted/50 border border-border/30 rounded-lg px-2 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 {AVAILABLE_SHAPES.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -514,10 +634,10 @@ const SettingsApp = () => {
 
             {/* Daily budget */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">
+              <label htmlFor="settings-daily-budget" className="text-xs text-muted-foreground block mb-1">
                 <DollarSign className="w-3 h-3 inline mr-1" />Daily Budget (USD)
               </label>
-              <Input value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
+              <Input id="settings-daily-budget" name="dailyBudget" autoComplete="off" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="No limit"
                 type="number" min="0" step="1"
                 className="w-full bg-muted/50 h-auto py-1.5" />
             </div>
@@ -565,7 +685,7 @@ const SettingsApp = () => {
             <div>
               <h3 className="text-sm font-display font-semibold text-foreground">Plan & Subscription</h3>
               {/* §14 load-bearing positioning copy — honestly satisfiable under the
-                  ratified Option A (BYO-key + flat subscription): Pro/Teams unlock
+                  ratified Option A (BYO-key + flat subscription): Teams unlock
                   scale, never feature-count paywalls on memory. */}
               <p className="text-[11px] text-[var(--text-muted)] mt-1">
                 Memory is free forever. You only pay for scale — no feature-count games.
@@ -575,6 +695,18 @@ const SettingsApp = () => {
             {/* F4 from the 2026-05-28 addictiveness audit — visible value-prop
                 framing so users see they're replacing 7-ish subscription tools,
                 not adding an 8th. */}
+            {checkoutCancelled && (
+              <div className="flex items-start gap-3 rounded-[14px] border border-[var(--line-soft)] bg-[var(--surface-2)] p-4">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-honey" aria-hidden="true" />
+                <div>
+                  <p className="text-[13px] font-display font-semibold text-foreground">Checkout was cancelled</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)]">
+                    No charge was made. You can review the Team plan here or keep using Solo.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <CoverageCompassCard />
 
             {/* Current tier badge. F7: while the tier is unresolved (boot race /
@@ -631,7 +763,7 @@ const SettingsApp = () => {
               </div>
             )}
 
-            {/* Plans grid — tiers that still have an upgrade path (FREE/TRIAL/PRO).
+            {/* Plans grid — tiers that still have an upgrade path (FREE/TRIAL, plus legacy PRO).
                 Choosing a plan hands off to hosted Stripe Checkout (D5); the
                 Monthly/Annual toggle resolves the REAL annual price (D8/F9), not
                 a cosmetic client discount. Only on a RESOLVED tier (F7). */}
@@ -747,9 +879,8 @@ const SettingsApp = () => {
                   );
                 })}
               </div>
-              {/* F18: inline confirm-row for the into-"Never ask" transition —
-                  replaces window.confirm() with an in-idiom, focus-visible,
-                  testable step. Only the yolo path routes here (see onClick). */}
+              {/* F18: inline confirm-row for the into-"Never ask" transition.
+                  Only the yolo path routes here (see onClick). */}
               {pendingYolo && (
                 <div
                   role="alertdialog"
@@ -804,7 +935,7 @@ const SettingsApp = () => {
                 ))}
               </div>
               <div className="flex gap-1.5">
-                <Input value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
+                <Input id="settings-mutation-gate" name="mutationGate" autoComplete="off" spellCheck={false} value={newGate} onChange={e => setNewGate(e.target.value)} placeholder="e.g., git push, rm -rf"
                   className="flex-1 bg-muted/50 text-xs h-auto py-1"
                   onKeyDown={e => { if (e.key === 'Enter' && newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }} />
                 <button onClick={() => { if (newGate.trim()) { setExternalGates(prev => [...prev, newGate.trim()]); setNewGate(''); } }}
@@ -835,13 +966,13 @@ const SettingsApp = () => {
                 </div>
               )}
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Team Server URL</label>
-                <Input value={teamUrl} onChange={e => setTeamUrl(e.target.value)} placeholder="https://team.waggle.ai"
+                <label htmlFor="settings-team-url" className="text-xs text-muted-foreground block mb-1">Team Server URL</label>
+                <Input id="settings-team-url" name="teamServerUrl" type="url" autoComplete="url" spellCheck={false} value={teamUrl} onChange={e => setTeamUrl(e.target.value)} placeholder="https://team.waggle.ai"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Auth Token</label>
-                <Input type="password" value={teamToken} onChange={e => setTeamToken(e.target.value)}
+                <label htmlFor="settings-team-token" className="text-xs text-muted-foreground block mb-1">Auth Token</label>
+                <Input id="settings-team-token" name="teamAuthToken" type="password" autoComplete="current-password" spellCheck={false} value={teamToken} onChange={e => setTeamToken(e.target.value)}
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div className="flex gap-2">
@@ -904,45 +1035,36 @@ const SettingsApp = () => {
                 Create an AES-256-GCM encrypted backup of all data. Restore on any machine with the same vault key.
               </p>
               <div className="flex gap-2">
-                <button onClick={async () => {
-                  try {
-                    const res = await fetch(`${adapter.getServerUrl()}/api/backup`, { method: 'POST' });
-                    if (!res.ok) { const err = await res.json(); alert(err.error); return; }
-                    const blob = await res.blob();
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `waggle-backup-${new Date().toISOString().slice(0, 10)}.waggle-backup`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                  } catch { alert('Backup failed — server unreachable'); }
-                }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors">
-                  <Download className="w-3 h-3" /> Create Backup
+                <button
+                  onClick={() => { void handleCreateBackup(); }}
+                  disabled={backupBusy}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-primary/20 text-honey hover:bg-primary/30 transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Download className="w-3 h-3" /> {backupBusy ? 'Creating...' : 'Create Backup'}
                 </button>
                 <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-display rounded-lg bg-secondary/50 text-foreground hover:bg-secondary/70 transition-colors cursor-pointer">
                   <Upload className="w-3 h-3" /> Restore
-                  <input type="file" accept=".waggle-backup" className="hidden" onChange={async (e) => {
+                  <input type="file" accept=".waggle-backup" aria-label="Restore backup file" className="sr-only" onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    if (!confirm('Restoring will overwrite current data. Continue?')) return;
-                    try {
-                      const reader = new FileReader();
-                      reader.onload = async () => {
-                        const base64 = (reader.result as string).split(',')[1];
-                        const res = await fetch(`${adapter.getServerUrl()}/api/restore`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ backup: base64 }),
-                        });
-                        if (res.ok) { alert('Backup restored successfully. Restart the server to apply.'); }
-                        else { const err = await res.json(); alert(err.error ?? 'Restore failed'); }
-                      };
-                      reader.readAsDataURL(file);
-                    } catch { alert('Restore failed — server unreachable'); }
+                    setBackupStatus(null);
+                    setPendingApproval({ kind: 'restore-backup', file });
+                    e.currentTarget.value = '';
                   }} />
                 </label>
               </div>
+              {backupStatus && (
+                <div
+                  role={backupStatus.tone === 'error' ? 'alert' : 'status'}
+                  className={`mt-3 rounded-lg border px-3 py-2 text-xs ${
+                    backupStatus.tone === 'error'
+                      ? 'border-destructive/30 bg-destructive/10 text-destructive'
+                      : 'border-primary/20 bg-primary/10 text-foreground'
+                  }`}
+                >
+                  {backupStatus.message}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -957,13 +1079,13 @@ const SettingsApp = () => {
             <p className="text-xs text-muted-foreground">Connect to KVARK for enterprise document retrieval, compliance, and governance features.</p>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">KVARK Server URL</label>
-                <Input value={kvarkUrl} onChange={e => setKvarkUrl(e.target.value)} placeholder="https://kvark.company.com"
+                <label htmlFor="settings-kvark-url" className="text-xs text-muted-foreground block mb-1">KVARK Server URL</label>
+                <Input id="settings-kvark-url" name="kvarkServerUrl" type="url" autoComplete="url" spellCheck={false} value={kvarkUrl} onChange={e => setKvarkUrl(e.target.value)} placeholder="https://kvark.company.com"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">API Token</label>
-                <Input type="password" value={kvarkToken} onChange={e => setKvarkToken(e.target.value)}
+                <label htmlFor="settings-kvark-token" className="text-xs text-muted-foreground block mb-1">API Token</label>
+                <Input id="settings-kvark-token" name="kvarkApiToken" type="password" autoComplete="current-password" spellCheck={false} value={kvarkToken} onChange={e => setKvarkToken(e.target.value)}
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <button disabled className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-secondary text-muted-foreground opacity-50 cursor-not-allowed">
@@ -1129,7 +1251,7 @@ const SettingsApp = () => {
                     onClick={async () => {
                       const next = !debugLogging;
                       setDebugLogging(next);
-                      try { await adapter.saveSettings({ debugLogging: next } as any); } catch { /* non-blocking */ }
+                      try { await adapter.saveSettings({ debugLogging: next }); } catch { /* non-blocking */ }
                     }}
                     role="switch"
                     aria-checked={debugLogging}
@@ -1171,6 +1293,15 @@ const SettingsApp = () => {
       {/* Phase 4.1 erasure dialog — mounted at root so the modal layer
           escapes the settings tab content (z-[220] > all other surfaces). */}
       <EraseDataDialog open={showEraseDialog} onClose={() => setShowEraseDialog(false)} />
+      <ApprovalModal
+        request={approvalRequest}
+        approveLabel={approvalLabel}
+        busy={approvalBusy}
+        onApprove={() => { void confirmSettingsApproval(); }}
+        onCancel={() => {
+          if (!approvalBusy) setPendingApproval(null);
+        }}
+      />
     </div>
   );
 };
