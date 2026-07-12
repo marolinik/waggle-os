@@ -8,7 +8,7 @@
  * WikiTab) over potentially-untrusted harvested content. Two defenses, both
  * required and both exercised below:
  *  1. Escape & < > AND " before any tag is emitted — escaping `"` closes the
- *     attribute-breakout vector (e.g. `[x](" onmouseover="alert(1))`).
+ *     attribute-breakout vector used by event-handler payloads.
  *  2. Allowlist the link href scheme — only http(s) / root-relative / anchor
  *     URLs become live links; anything else (javascript:, data:, vbscript:)
  *     renders as inert text. Closes the `[x](javascript:…)` vector.

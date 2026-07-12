@@ -14,7 +14,7 @@ import {
  * The command bar holds the depth the calm spine leaves out. Every entry is
  * **plain name + a mono technical subtitle** and routes to a REAL destination
  * (no dead links) or fires a known overlay action. Tier-gated entries (Approvals,
- * Team governance) drop below their billing rank. In Pro (power) tier a "★ Pinned"
+ * Team governance) drop below their billing rank. In power mode a "Pinned"
  * group floats the power tools to the top.
  */
 
@@ -38,7 +38,7 @@ export interface CatalogCommand {
   meta?: string;
   /** Minimum billing rank to show (FREE 0 · TRIAL 1 · TEAMS 2 · ENT 3). */
   minBillingRank?: number;
-  /** Also floats into the Pro "★ Pinned" group. */
+  /** Also floats into the Pinned group. */
   pinned?: boolean;
 }
 
@@ -110,7 +110,7 @@ export function buildCommandCatalog(ctx: CatalogContext): CatalogGroup[] {
       .filter((i) => i.pinned && (i.minBillingRank === undefined || billingRank >= i.minBillingRank))
       .map((i) => ({ ...i, id: `pin-${i.id}`, group: "pinned" as const }));
     if (pinnedItems.length > 0) {
-      groups.push({ key: "pinned", heading: "★ Pinned · Pro", items: pinnedItems });
+      groups.push({ key: "pinned", heading: "Pinned", items: pinnedItems });
     }
   }
 

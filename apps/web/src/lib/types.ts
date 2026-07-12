@@ -714,6 +714,7 @@ export interface Settings {
   theme: 'dark' | 'light';
   teamServerUrl?: string;
   teamToken?: string;
+  debugLogging?: boolean;
 }
 
 export interface KGNode {

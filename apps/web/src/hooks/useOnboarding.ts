@@ -43,6 +43,10 @@ const defaultState: OnboardingState = {
 // silently broke.
 let forceWizardConsumed = false;
 
+function forceWizardParamAllowed(): boolean {
+  return import.meta.env.DEV || import.meta.env.VITE_WAGGLE_E2E === '1';
+}
+
 function loadState(): OnboardingState {
   try {
     // E2E test bypass: ?skipOnboarding=true skips wizard and sets tier to 'power'
@@ -54,14 +58,14 @@ function loadState(): OnboardingState {
       return done;
     }
 
-    // PM walkthrough bypass (DEV only): ?forceWizard=true forces the wizard to
+    // PM walkthrough bypass (DEV/E2E only): ?forceWizard=true forces the wizard to
     // render at step 0 regardless of localStorage state OR the auto-complete
     // branch in this hook (which fires when /api/onboarding/status says a
     // prior client completed the wizard against this dataDir — P4). Mirrors
     // ?skipOnboarding=true above as the symmetric "always run" counterpart.
-    // Gated on import.meta.env.DEV so a production deployment can't
-    // accidentally re-trigger onboarding for returning users via a stray URL.
-    if (import.meta.env.DEV && params.get('forceWizard') === 'true' && !forceWizardConsumed) {
+    // Gated so a production deployment can't accidentally re-trigger onboarding
+    // for returning users via a stray URL.
+    if (forceWizardParamAllowed() && params.get('forceWizard') === 'true' && !forceWizardConsumed) {
       forceWizardConsumed = true;
       const fresh: OnboardingState = { ...defaultState, completed: false, step: 0 };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
@@ -114,7 +118,7 @@ export function isOnboardingStatusKnownSync(): boolean {
   try {
     const params = new URLSearchParams(window.location.search);
     if (params.get('skipOnboarding') === 'true') return true;
-    if (import.meta.env.DEV && params.get('forceWizard') === 'true') return true;
+    if (forceWizardParamAllowed() && params.get('forceWizard') === 'true') return true;
     if (localStorage.getItem('waggle_onboarding_complete') === 'true') return true;
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -224,10 +228,10 @@ export const useOnboarding = () => {
     // a refresh would auto-complete the wizard out from under the user,
     // skipping the remaining steps.
     if (state.step > 0) return;
-    // PM walkthrough bypass (DEV only): when ?forceWizard=true is set, skip
+    // PM walkthrough bypass (DEV/E2E only): when ?forceWizard=true is set, skip
     // the auto-complete branch so the wizard renders even for a returning
     // user. Symmetric with the loadState() bypass above.
-    if (import.meta.env.DEV) {
+    if (forceWizardParamAllowed()) {
       const params = new URLSearchParams(window.location.search);
       if (params.get('forceWizard') === 'true') return;
     }
