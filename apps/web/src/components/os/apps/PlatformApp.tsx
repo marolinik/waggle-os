@@ -117,7 +117,7 @@ function PlatformApp() {
     <div className="flex h-full flex-col bg-background text-foreground">
       {/* Controls — segmented toggle */}
       <div className="flex flex-none items-center gap-3.5 border-b border-[var(--line-soft)] px-5 py-2.5">
-        <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-[var(--text-dim)]">
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
           Platform &amp; roadmap
         </span>
         <div role="tablist" aria-label="Platform showcase" className="inline-flex gap-[3px] rounded-[10px] border border-[var(--line-soft)] bg-[var(--surface-2)] p-[3px]">
@@ -130,7 +130,7 @@ function PlatformApp() {
               onClick={() => setTab(t.id)}
               className={`whitespace-nowrap rounded-[7px] px-3 py-1.5 text-xs font-semibold transition-colors ${
                 tab === t.id
-                  ? 'bg-primary text-primary-foreground'
+                  ? 'bg-primary text-[#1a1407]'
                   : 'text-[var(--text-muted)] hover:text-foreground'
               }`}
             >
@@ -224,7 +224,7 @@ function DesktopView({ os, onOsChange }: DesktopViewProps) {
                 <span className="grid h-[38px] w-[30px] place-items-center text-xs text-[var(--text-muted)]">&#10005;</span>
               </div>
             )}
-            <div className="flex-1 text-center font-mono text-xs text-[var(--text-dim)]">Waggle</div>
+            <div className="flex-1 text-center font-mono text-xs text-[var(--text-muted)]">Waggle</div>
           </div>
 
           <div className="flex sm:h-[300px]">
@@ -278,7 +278,7 @@ function BootView() {
     <div role="tabpanel" aria-label="Boot" className="mx-auto max-w-[920px] px-8 pb-14 pt-7">
       <div className="flex min-h-[440px] flex-col items-center justify-center text-center">
         <div
-          className="boot-hex-pulse mb-6 grid h-20 w-[72px] place-items-center text-[30px] font-extrabold text-[#1a1407]"
+          className="boot-hex-pulse mb-6 grid h-20 w-[72px] place-items-center text-[30px] font-extrabold text-primary-foreground"
           style={{
             background: 'linear-gradient(150deg, var(--honey-bright), var(--honey-deep))',
             clipPath: 'polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%)',

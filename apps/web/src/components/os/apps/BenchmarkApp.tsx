@@ -136,7 +136,7 @@ const BenchmarkApp = () => {
       </div>
 
       {/* Stage */}
-      <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex-1 min-h-0 overflow-auto" tabIndex={0} role="region" aria-label="Benchmark content">
         <div className="max-w-[1000px] mx-auto px-8 py-7 pb-16">
           {view === 'caps' ? <CapabilitiesView /> : <MemorySotaView />}
         </div>
@@ -174,7 +174,7 @@ function CapabilitiesView() {
           style={{ background: 'var(--card, hsl(var(--card)))', border: '1px solid var(--line-soft)' }}
         >
           <div className="font-mono text-[10px] uppercase tracking-[0.1em] mb-2.5 text-muted-foreground">The field</div>
-          <h3 className="text-lg font-display font-semibold tracking-tight m-0 mb-2 text-foreground">Task agents</h3>
+          <h2 className="text-lg font-display font-semibold tracking-tight m-0 mb-2 text-foreground">Task agents</h2>
           <p className="m-0 text-[13px] text-muted-foreground leading-relaxed">
             Powerful, mostly terminal-based, model-locked, and built for developers. Each session starts fresh; the
             intelligence lives in the model, not in a memory of you.
@@ -194,9 +194,9 @@ function CapabilitiesView() {
           <div className="font-mono text-[10px] uppercase tracking-[0.1em] mb-2.5" style={{ color: 'var(--honey)' }}>
             Our category
           </div>
-          <h3 className="text-lg font-display font-semibold tracking-tight m-0 mb-2 text-foreground">
+          <h2 className="text-lg font-display font-semibold tracking-tight m-0 mb-2 text-foreground">
             A memory layer + workspace
-          </h3>
+          </h2>
           <p className="m-0 text-[13px] text-muted-foreground leading-relaxed">
             Knows you and your work across every session, runs on any model (even local), is built for non-technical
             experts — and can launch the task agents into its shared memory.

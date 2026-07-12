@@ -67,6 +67,8 @@ export function AskBar({
         </button>
       )}
       <input
+        name="ask-waggle"
+        autoComplete="off"
         value={value}
         onChange={(e) => setAndTap(e.target.value)}
         onKeyDown={(e) => {
@@ -77,7 +79,7 @@ export function AskBar({
         }}
         placeholder={placeholder}
         aria-label="Ask Waggle"
-        className="min-w-0 flex-1 bg-transparent px-2 text-[15px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none"
+        className="min-w-0 flex-1 rounded-md bg-transparent px-2 text-[15px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
       />
       {cmdkHint && <kbd className="kbd hidden sm:inline-block">{cmdKLabel}</kbd>}
       {submitVariant === 'search' ? (

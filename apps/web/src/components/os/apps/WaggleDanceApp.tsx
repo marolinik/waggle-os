@@ -52,7 +52,14 @@ const WaggleDanceApp = () => {
             </Badge>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={refresh} className="h-7 w-7 p-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={refresh}
+          aria-label="Refresh Waggle Dance"
+          className="h-7 w-7 p-0"
+        >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
         </Button>
       </div>
@@ -175,7 +182,7 @@ const WaggleDanceApp = () => {
 
               {selectedSignal.metadata && Object.keys(selectedSignal.metadata).length > 0 && (
                 <div className="mt-3">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground/70 mb-1">Metadata</p>
+              <p className="text-[11px] uppercase tracking-wider text-[var(--text-tertiary)] mb-1">Metadata</p>
                   <pre className="text-[11px] bg-muted/30 rounded p-2 overflow-auto max-h-32">
                     {JSON.stringify(selectedSignal.metadata, null, 2)}
                   </pre>

@@ -86,7 +86,7 @@ export function SurfaceToggle({ checked, onChange, label, disabled, className }:
     >
       <span
         className={cn(
-          'absolute top-[2px] h-4 w-4 rounded-full transition-all',
+          'absolute top-[2px] h-4 w-4 rounded-full transition-[left,background-color]',
           checked ? 'left-[18px] bg-[#1a1407]' : 'left-[2px] bg-[var(--text-muted)]',
         )}
       />
