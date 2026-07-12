@@ -75,6 +75,8 @@ const WorkspaceCreateStep = ({
       <label className="text-xs text-muted-foreground block mb-1" htmlFor="ws-name">Workspace name</label>
       <input
         id="ws-name"
+        name="onboardingWorkspaceName"
+        autoComplete="off"
         value={workspaceName}
         onChange={e => onNameChange(e.target.value)}
         placeholder="My Workspace"
