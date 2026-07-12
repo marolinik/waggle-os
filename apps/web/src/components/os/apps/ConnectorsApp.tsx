@@ -26,6 +26,7 @@ import { actionRisk } from '@/lib/risk-display';
 import ConnectorCard, { type ConnectorSetupHint } from './connectors/ConnectorCard';
 import InstallAuditPanel from './extend/InstallAuditPanel';
 import { formatPersonaName } from '@/lib/persona-display';
+import { createSurfaceCache } from '@/lib/surface-cache';
 
 type ConnTab = 'all' | 'connected' | 'available' | 'recommended' | 'activity';
 
@@ -57,6 +58,15 @@ const CATEGORY_LABELS: Record<string, string> = {
  *  (mirrors the route-side OAUTH_PROVIDER map) — revoking any of them purges
  *  the pair, so the confirm dialog must surface the blast radius. */
 const GOOGLE_FAMILY = new Set(['gcal', 'gdrive', 'gdocs', 'gmail', 'gsheets']);
+
+/** Keep the last connector roster visible while a returning hub revalidates. */
+const connectorsRouteCache = createSurfaceCache<ConnectorDefinition[]>();
+const CONNECTORS_CACHE_KEY = 'roster';
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only cache reset
+export function resetConnectorsRouteCache(): void {
+  connectorsRouteCache.resetForTests();
+}
 
 const SETUP_HINTS: Record<string, ConnectorSetupHint> = {
   github: { url: 'https://github.com/settings/tokens/new', placeholder: 'ghp_...', steps: ['Settings → Developer settings → Personal access tokens', 'Generate with repo, user scopes'] },
@@ -102,8 +112,9 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   // `connecting` connect-button busy flag below.)
   const { connecting: serviceConnecting } = useService();
   const [tab, setTab] = useState<ConnTab>('all');
-  const [connectors, setConnectors] = useState<ConnectorDefinition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedConnectors = connectorsRouteCache.read(CONNECTORS_CACHE_KEY);
+  const [connectors, setConnectors] = useState<ConnectorDefinition[]>(cachedConnectors ?? []);
+  const [loading, setLoading] = useState(() => !connectorsRouteCache.hasResolved(CONNECTORS_CACHE_KEY));
   const [expanded, setExpanded] = useState<string | null>(null);
   const [tokenInput, setTokenInput] = useState('');
   const [emailInput, setEmailInput] = useState('');
@@ -127,14 +138,17 @@ const ConnectorsApp = ({ personaId }: ConnectorsAppProps = {}) => {
   };
 
   const loadConnectors = useCallback(async () => {
-    setLoading(true);
+    if (!connectorsRouteCache.hasResolved(CONNECTORS_CACHE_KEY)) setLoading(true);
     try {
       const data = await adapter.getConnectors();
       setConnectors(data);
+      connectorsRouteCache.write(CONNECTORS_CACHE_KEY, data);
       setError(null);
     } catch (err) {
       console.error('[ConnectorsApp] load failed:', err);
-      setConnectors([]);
+      // Preserve a resolved roster during a refresh failure so a returning
+      // user sees the last known connection state and can retry in place.
+      if (!connectorsRouteCache.hasResolved(CONNECTORS_CACHE_KEY)) setConnectors([]);
       setError(err instanceof Error ? err.message : 'Server unreachable');
     } finally { setLoading(false); }
   }, []);

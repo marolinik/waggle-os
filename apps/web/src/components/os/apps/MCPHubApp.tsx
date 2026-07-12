@@ -28,6 +28,7 @@ import { useRevalidateOnError } from '@/hooks/useRevalidateOnError';
 import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { actionRisk } from '@/lib/risk-display';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { createSurfaceCache } from '@/lib/surface-cache';
 import McpCatalog from './connectors/McpCatalog';
 import InstalledMcpList from './mcp/InstalledMcpList';
 import AddCustomMcpForm from './mcp/AddCustomMcpForm';
@@ -53,6 +54,15 @@ const TAB_HINTS: Record<HubTab, string> = {
   activity: 'MCP install / revoke history from the shared audit trail',
 };
 
+/** Keep installed MCP state visible while the hub revalidates on return. */
+const mcpRouteCache = createSurfaceCache<McpListItem[]>();
+const MCP_CACHE_KEY = 'installed';
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only cache reset
+export function resetMcpRouteCache(): void {
+  mcpRouteCache.resetForTests();
+}
+
 interface PendingRiskApproval {
   id: string;
   severity?: string;
@@ -70,8 +80,9 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
   const { connecting } = useService();
   const { toast } = useToast();
   const [tab, setTab] = useState<HubTab>('installed');
-  const [items, setItems] = useState<McpListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cachedItems = mcpRouteCache.read(MCP_CACHE_KEY);
+  const [items, setItems] = useState<McpListItem[]>(cachedItems ?? []);
+  const [loading, setLoading] = useState(() => !mcpRouteCache.hasResolved(MCP_CACHE_KEY));
   const [error, setError] = useState<string | null>(null);
   const [installingId, setInstallingId] = useState<string | null>(null);
   const [installNotice, setInstallNotice] = useState<string | null>(null);
@@ -90,13 +101,15 @@ const MCPHubApp = ({ personaId }: MCPHubAppProps = {}) => {
   const [resolvableErrored, setResolvableErrored] = useState(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!mcpRouteCache.hasResolved(MCP_CACHE_KEY)) setLoading(true);
     setError(null);
     try {
       const mcps = await adapter.getMcps();
-      setItems(mcps as McpListItem[]);
+      const next = mcps as McpListItem[];
+      setItems(next);
+      mcpRouteCache.write(MCP_CACHE_KEY, next);
     } catch (err) {
-      setItems([]);
+      if (!mcpRouteCache.hasResolved(MCP_CACHE_KEY)) setItems([]);
       setError(err instanceof Error ? err.message : 'Server unreachable');
     } finally {
       setLoading(false);

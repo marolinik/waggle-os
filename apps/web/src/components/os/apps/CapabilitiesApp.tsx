@@ -467,9 +467,12 @@ const CapabilitiesApp = () => {
         ))}
       </div>
 
-      <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1.5 mb-4">
+      <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg border border-[var(--line)] px-2 py-1.5 mb-4 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
         <Search className="w-3.5 h-3.5 text-muted-foreground" />
         <Input
+          aria-label="Search skills"
+          name="skillSearch"
+          autoComplete="off"
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search skills..."

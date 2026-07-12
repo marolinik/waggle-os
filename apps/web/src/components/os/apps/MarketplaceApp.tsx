@@ -63,7 +63,7 @@ export function resetMarketplaceRouteCache(): void {
 /** Honest in-place note for the connectable/enableable shelves (D3). */
 const SHELF_NOTES: Partial<Record<Facet, string>> = {
   connector: 'Connect with an API token here — it goes straight to your vault. OAuth connectors open in the Connector Hub.',
-  mcp: 'Enable MCP servers here (security-scanned, Pro). Manage running servers in the MCP Hub.',
+  mcp: 'Enable MCP servers here (security-scanned). Manage running servers in the MCP Hub.',
 };
 
 /** Scan/trust → ApprovalModal risk. P7/D15 A7: delegates to the shared
@@ -371,7 +371,7 @@ const MarketplaceApp = () => {
                   key={f}
                   onClick={() => setFacet(f)}
                   aria-pressed={facet === f}
-                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all ${
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-[background-color,color,box-shadow] ${
                     facet === f
                       ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
                       : 'bg-secondary/40 text-muted-foreground hover:bg-secondary/60 hover:text-foreground'
@@ -405,7 +405,7 @@ const MarketplaceApp = () => {
 
             {startHere.length > 0 && (
               <div data-testid="start-here-band" className="space-y-2">
-                <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider">
+                <p className="text-[11px] font-display font-semibold text-[var(--honey-text)] uppercase tracking-wider">
                   Start here
                 </p>
                 {startHere.map(ext => (
@@ -533,7 +533,7 @@ const MarketplaceApp = () => {
             <div
               data-testid="marketplace-results"
               aria-busy={busy || undefined}
-              className={`space-y-2 transition-opacity duration-[var(--mo-fast)] motion-reduce:transition-none ${busy ? 'opacity-60' : ''}`}
+              className={`space-y-2 transition-opacity duration-mo-fast motion-reduce:transition-none ${busy ? 'opacity-60' : ''}`}
             >
               {groupedSections.length > 0
                 ? groupedSections.map(section => (

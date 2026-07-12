@@ -101,6 +101,7 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
     paused: 'text-amber-400',
     idle: 'text-muted-foreground',
   };
+  const iconButtonFocus = 'focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background';
 
   return (
     <div className="h-full overflow-auto p-4">
@@ -117,8 +118,8 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
           >
             <Plus className="w-3.5 h-3.5" /> Spawn Agent
           </Button>
-          <button onClick={refresh} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <button type="button" onClick={refresh} aria-label="Refresh Mission Control" className={`p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors ${iconButtonFocus}`}>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -195,17 +196,17 @@ const MissionControlApp = ({ onSpawnOpen }: MissionControlAppProps) => {
                   </div>
                   <div className="flex items-center gap-1">
                     {s.status === 'active' && (
-                      <button onClick={() => handleAction(s.workspaceId, 'pause')} className="p-1 rounded text-muted-foreground hover:text-amber-400 transition-colors">
-                        <Pause className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => handleAction(s.workspaceId, 'pause')} aria-label={`Pause ${s.workspaceName}`} className={`p-1 rounded text-muted-foreground hover:text-amber-400 transition-colors ${iconButtonFocus}`}>
+                        <Pause className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     )}
                     {s.status === 'paused' && (
-                      <button onClick={() => handleAction(s.workspaceId, 'resume')} className="p-1 rounded text-muted-foreground hover:text-emerald-400 transition-colors">
-                        <Play className="w-3.5 h-3.5" />
+                      <button type="button" onClick={() => handleAction(s.workspaceId, 'resume')} aria-label={`Resume ${s.workspaceName}`} className={`p-1 rounded text-muted-foreground hover:text-emerald-400 transition-colors ${iconButtonFocus}`}>
+                        <Play className="w-3.5 h-3.5" aria-hidden="true" />
                       </button>
                     )}
-                    <button onClick={() => handleAction(s.workspaceId, 'stop')} className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors">
-                      <Square className="w-3.5 h-3.5" />
+                    <button type="button" onClick={() => handleAction(s.workspaceId, 'stop')} aria-label={`Stop ${s.workspaceName}`} className={`p-1 rounded text-muted-foreground hover:text-destructive transition-colors ${iconButtonFocus}`}>
+                      <Square className="w-3.5 h-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
