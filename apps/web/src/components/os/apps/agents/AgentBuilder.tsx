@@ -65,7 +65,7 @@ function TogglePill({ active, label, onToggle }: { active: boolean; label: strin
       type="button"
       onClick={onToggle}
       aria-pressed={active}
-      className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors capitalize ${
+      className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
         active ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground'
       }`}
     >
@@ -227,20 +227,20 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
           <>
             <div className="space-y-1">
               <FieldLabel htmlFor="ab-name">Name</FieldLabel>
-              <Input id="ab-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Research scout" className="text-xs h-8" autoFocus />
+              <Input id="ab-name" name="agentName" autoComplete="off" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Research scout" className="text-xs h-8" autoFocus />
             </div>
             <div className="space-y-1">
               <FieldLabel htmlFor="ab-goal">Goal</FieldLabel>
-              <Input id="ab-goal" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="What should this agent achieve?" className="text-xs h-8" />
+              <Input id="ab-goal" name="agentGoal" autoComplete="off" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="What should this agent achieve?" className="text-xs h-8" />
             </div>
             <div className="space-y-1">
               <FieldLabel htmlFor="ab-desc">Description (optional)</FieldLabel>
-              <Textarea id="ab-desc" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Longer context for teammates and future you" className="min-h-[56px] text-xs" />
+              <Textarea id="ab-desc" name="agentDescription" autoComplete="off" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Longer context for teammates and future you" className="min-h-[56px] text-xs" />
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <FieldLabel htmlFor="ab-persona">Persona (optional)</FieldLabel>
-                <select id="ab-persona" value={personaId} onChange={(e) => setPersonaId(e.target.value)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2">
+                <select id="ab-persona" name="agentPersona" autoComplete="off" value={personaId} onChange={(e) => setPersonaId(e.target.value)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                   <option value="">None — plain agent</option>
                   {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   {/* A prefilled persona id must stay selectable even when the catalog failed to load. */}
@@ -249,7 +249,7 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
               </div>
               <div className="space-y-1">
                 <FieldLabel htmlFor="ab-type">Type</FieldLabel>
-                <select id="ab-type" value={type} onChange={(e) => setType(e.target.value as AgentType)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2 capitalize">
+                <select id="ab-type" name="agentType" autoComplete="off" value={type} onChange={(e) => setType(e.target.value as AgentType)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2 capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                   {AGENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
@@ -265,12 +265,12 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
               {providers.length > 0 ? (
                 <ModelSelector value={model === 'auto' ? '' : model} onChange={setModel} providers={providers} className="mt-1" />
               ) : (
-                <Input aria-label="Model id" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model id (provider catalog unavailable)" className="text-xs h-8 mt-1" />
+                <Input aria-label="Model id" name="agentModel" autoComplete="off" value={model} onChange={(e) => setModel(e.target.value)} placeholder="Model id (provider catalog unavailable)" className="text-xs h-8 mt-1" />
               )}
             </fieldset>
             <div className="space-y-1">
               <FieldLabel htmlFor="ab-autonomy">Autonomy level</FieldLabel>
-              <select id="ab-autonomy" value={autonomy} onChange={(e) => setAutonomy(e.target.value as AutonomyLevel)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2 capitalize">
+              <select id="ab-autonomy" name="agentAutonomyLevel" autoComplete="off" value={autonomy} onChange={(e) => setAutonomy(e.target.value as AutonomyLevel)} className="w-full text-xs h-8 rounded-md border border-border bg-muted/40 px-2 capitalize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 {AUTONOMY_LEVELS.map((a) => <option key={a.id} value={a.id}>{a.id} — {a.hint}</option>)}
               </select>
             </div>
@@ -303,12 +303,12 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
             <fieldset className="space-y-1">
               <legend className="text-[10px] font-display uppercase tracking-wide text-muted-foreground">Skills</legend>
               {skills.length > 8 && (
-                <Input aria-label="Filter skills" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} placeholder="Filter skills…" className="text-xs h-7" />
+                <Input aria-label="Filter skills" name="agentSkillFilter" autoComplete="off" value={skillFilter} onChange={(e) => setSkillFilter(e.target.value)} placeholder="Filter skills…" className="text-xs h-7" />
               )}
               <div className="max-h-36 overflow-y-auto space-y-0.5 rounded-md border border-border/40 p-1.5">
                 {visibleSkills.map((s) => (
                   <label key={s} className="flex items-center gap-2 text-xs text-foreground/90 px-1 py-0.5 rounded hover:bg-muted/40">
-                    <input type="checkbox" checked={skillIds.includes(s)} onChange={() => toggleIn(skillIds, s, setSkillIds)} className="accent-primary" />
+                    <input type="checkbox" name="agentSkillIds" checked={skillIds.includes(s)} onChange={() => toggleIn(skillIds, s, setSkillIds)} className="accent-primary" />
                     {s}
                   </label>
                 ))}
@@ -325,7 +325,7 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
               <div className="max-h-32 overflow-y-auto space-y-0.5 rounded-md border border-border/40 p-1.5">
                 {connectors.map((c) => (
                   <label key={c.id} className="flex items-center gap-2 text-xs text-foreground/90 px-1 py-0.5 rounded hover:bg-muted/40">
-                    <input type="checkbox" checked={connectorIds.includes(c.id)} onChange={() => toggleIn(connectorIds, c.id, setConnectorIds)} className="accent-primary" />
+                    <input type="checkbox" name="agentConnectorIds" checked={connectorIds.includes(c.id)} onChange={() => toggleIn(connectorIds, c.id, setConnectorIds)} className="accent-primary" />
                     {c.name}
                     <span className="text-[10px] text-muted-foreground">({c.status})</span>
                   </label>
@@ -338,7 +338,7 @@ const AgentBuilder = ({ busy, initial, workspaces, onCreate, onCancel }: AgentBu
               <div className="max-h-32 overflow-y-auto space-y-0.5 rounded-md border border-border/40 p-1.5">
                 {mcpServers.map((m) => (
                   <label key={m} className="flex items-center gap-2 text-xs text-foreground/90 px-1 py-0.5 rounded hover:bg-muted/40">
-                    <input type="checkbox" checked={mcpIds.includes(m)} onChange={() => toggleIn(mcpIds, m, setMcpIds)} className="accent-primary" />
+                    <input type="checkbox" name="agentMcpIds" checked={mcpIds.includes(m)} onChange={() => toggleIn(mcpIds, m, setMcpIds)} className="accent-primary" />
                     {m}
                   </label>
                 ))}

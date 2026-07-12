@@ -47,7 +47,9 @@ const AgentCenterRow = ({ agent, busy, onOpen, onRun, onPause }: AgentCenterRowP
           src={getPersonaAvatar(agent.personaId || 'general-purpose')}
           alt=""
           aria-hidden
-          className="w-7 h-7 shrink-0 rounded-lg object-contain transition-transform duration-[var(--mo-base)] ease-[var(--mo-ease)] motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:-rotate-3"
+          width={28}
+          height={28}
+          className="w-7 h-7 shrink-0 rounded-lg object-contain transition-transform duration-mo-base ease-mo motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:-rotate-3"
         />
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-1.5">

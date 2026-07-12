@@ -280,6 +280,9 @@ const AgentsApp = ({ workspaces, activeWorkspaceId }: AgentsAppProps) => {
             <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg border border-[var(--line)] px-2 py-1 transition-colors focus-within:border-[var(--honey-line)] focus-within:shadow-[var(--shadow-honey)]">
               <Search className="w-3.5 h-3.5 text-muted-foreground" />
               <Input
+                aria-label="Search agents"
+                name="agentSearch"
+                autoComplete="off"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search agents..."
@@ -357,7 +360,7 @@ const AgentsApp = ({ workspaces, activeWorkspaceId }: AgentsAppProps) => {
                         not read as "nothing is working for you". */}
                     {workspaces && workspaces.length > 0 && (
                       <div>
-                        <p className="text-[11px] font-display font-semibold text-honey/80 uppercase tracking-wider mb-1.5">
+                        <p className="text-[11px] font-display font-semibold text-[var(--honey-text)] uppercase tracking-wider mb-1.5">
                           Already working for you
                         </p>
                         <ul className="space-y-1">
