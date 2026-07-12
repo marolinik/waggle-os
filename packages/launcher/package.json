@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsup",
     "start": "tsx src/cli.ts",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/launcher/tests/cli.test.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

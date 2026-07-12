@@ -1,69 +1,38 @@
 /**
- * Waggle CLI Launcher — `npx waggle`
+ * Waggle CLI Launcher - `npx waggle`
  *
  * Starts the Waggle server and opens the frontend in the default browser.
- * The server serves the React frontend as static files (built by 9D-4).
  *
  * Usage:
  *   npx waggle                    # Start on default port 3333
  *   npx waggle --port 4000        # Start on custom port
- *   npx waggle --skip-litellm     # Skip LiteLLM proxy (use built-in Anthropic)
- *   npx waggle --no-open          # Don't open browser automatically
+ *   npx waggle --skip-litellm     # Skip LiteLLM proxy
+ *   npx waggle --no-open          # Do not open browser automatically
  */
 
-import { startService, isFirstRun } from '@waggle/server/local/service';
 import { execFile } from 'node:child_process';
 import os from 'node:os';
-
-// ── Parse CLI arguments ──────────────────────────────────────────
-
-function parseArgs(argv: string[]): {
-  port: number;
-  skipLiteLLM: boolean;
-  noBrowser: boolean;
-  help: boolean;
-} {
-  const args = argv.slice(2);
-  let port = 3333;
-  let skipLiteLLM = false;
-  let noBrowser = false;
-  let help = false;
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--port' || arg === '-p') {
-      const val = parseInt(args[++i], 10);
-      if (!isNaN(val) && val > 0 && val < 65536) port = val;
-    } else if (arg === '--skip-litellm') {
-      skipLiteLLM = true;
-    } else if (arg === '--no-open') {
-      noBrowser = true;
-    } else if (arg === '--help' || arg === '-h') {
-      help = true;
-    }
-  }
-
-  return { port, skipLiteLLM, noBrowser, help };
-}
-
-// ── Open URL in default browser ──────────────────────────────────
+import {
+  formatHelp,
+  formatStartupFailure,
+  formatStartupSuccess,
+  parseArgs,
+} from './cli-core.js';
 
 function openBrowser(url: string): void {
   const platform = os.platform();
+  const onOpenError = (err: Error | null): void => {
+    if (err) console.log(`  Open manually: ${url}`);
+  };
 
-  // Use platform-specific commands with execFile (no shell injection)
   if (platform === 'win32') {
-    execFile('cmd', ['/c', 'start', '', url], () => {});
+    execFile('cmd', ['/c', 'start', '', url], onOpenError);
   } else if (platform === 'darwin') {
-    execFile('open', [url], () => {});
+    execFile('open', [url], onOpenError);
   } else {
-    execFile('xdg-open', [url], (err) => {
-      if (err) console.log(`  Open manually: ${url}`);
-    });
+    execFile('xdg-open', [url], onOpenError);
   }
 }
-
-// ── Version check ────────────────────────────────────────────────
 
 function checkNodeVersion(): boolean {
   const [major] = process.versions.node.split('.').map(Number);
@@ -75,28 +44,19 @@ function checkNodeVersion(): boolean {
   return true;
 }
 
-// ── Main ─────────────────────────────────────────────────────────
-
 async function main() {
-  const { port, skipLiteLLM, noBrowser, help } = parseArgs(process.argv);
+  const { port, skipLiteLLM, noBrowser, help, error } = parseArgs(process.argv);
 
   if (help) {
-    console.log(`
-  Waggle — Your personal AI agent swarm
-
-  Usage:
-    npx waggle [options]
-
-  Options:
-    --port, -p <number>   Server port (default: 3333)
-    --skip-litellm        Use built-in Anthropic proxy instead of LiteLLM
-    --no-open             Don't open browser automatically
-    --help, -h            Show this help message
-
-  Data directory: ~/.waggle/
-  Config: ~/.waggle/config.json
-`);
+    console.log(formatHelp());
     process.exit(0);
+  }
+
+  if (error) {
+    console.error();
+    console.error(`  ${error}`);
+    console.error(formatHelp());
+    process.exit(1);
   }
 
   if (!checkNodeVersion()) {
@@ -104,11 +64,13 @@ async function main() {
   }
 
   console.log();
-  console.log('  \u{1F41D} Waggle — AI Agent Swarm');
-  console.log('  ─────────────────────────────');
+  console.log('  Waggle - AI Agent Swarm');
+  console.log('  ------------------------');
 
+  const { startService, isFirstRun } = await import('@waggle/server/local/service');
   const dataDir = process.env.WAGGLE_DATA_DIR || undefined;
-  const firstRun = isFirstRun(dataDir ?? `${os.homedir()}/.waggle`);
+  const displayDataDir = dataDir ?? `${os.homedir()}/.waggle`;
+  const firstRun = isFirstRun(displayDataDir);
 
   if (firstRun) {
     console.log('  Welcome! Setting up for the first time...');
@@ -134,22 +96,20 @@ async function main() {
     const url = `http://localhost:${actualPort}`;
     const llm = server.agentState.llmProvider;
 
-    console.log();
-    console.log(`  Server:  ${url}`);
-    console.log(`  LLM:     ${llm.provider} (${llm.health})`);
-    console.log(`  Data:    ${dataDir ?? `${os.homedir()}/.waggle`}`);
-    console.log();
-    console.log('  Press Ctrl+C to stop');
-    console.log();
+    console.log(formatStartupSuccess({
+      url,
+      llmProvider: llm.provider,
+      llmHealth: llm.health,
+      dataDir: displayDataDir,
+      noBrowser,
+    }));
 
     if (!noBrowser) {
       openBrowser(url);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error();
-    console.error(`  Failed to start: ${message}`);
-    console.error();
+    console.error(formatStartupFailure(message, port));
     process.exit(1);
   }
 }
