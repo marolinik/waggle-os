@@ -24,7 +24,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { sep as pathSep, normalize as pathNormalize, join as pathJoin } from 'node:path';
 import { tmpdir } from 'node:os';
-import { type FetchFn, defaultFetch } from './fetcher';
+import { type FetchFn, defaultFetch } from './fetcher.js';
 
 export type SkillSourceType = 'skill-md-url' | 'github-url' | 'owner-repo' | 'zip-url';
 
