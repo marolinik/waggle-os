@@ -52,6 +52,7 @@ files remain untouched.
 - diff check: pass
 - added-line credential scan outside tests/docs: 0 candidates
 - production dependency audit: 0 high, 0 critical; 19 moderate remain
+- full workspace dependency audit: 0 high, 0 critical; 24 moderate remain
 
 ## Corrections Found During Integration
 
@@ -62,8 +63,17 @@ files remain untouched.
 3. Tall onboarding steps were vertically centered on mobile, clipping content
    above the scroll origin. Mobile steps now align to the top and remain centered
    on larger viewports.
-4. Transitive `hono` was updated from 4.12.23 to 4.12.29, clearing the production
-   high-severity advisory while staying within the existing dependency range.
+4. `hono` 4.12.29, `vite` 6.4.3, `vitest` 3.2.7, and `form-data` 4.0.6 now
+   resolve across the workspace, clearing every high- and critical-severity
+   dependency advisory without a breaking application-code change.
+
+## Open Build Hygiene
+
+- Tailwind reports ambiguous arbitrary motion utility classes.
+- Vite reports mixed dynamic and static imports for shape selection.
+- The production build reports chunks larger than 500 kB.
+- Focused tests still emit known image-source and expected error-path stderr;
+  the fresh browser run remains free of console errors.
 
 ## Remaining Goal Gates
 
