@@ -21,15 +21,26 @@ import { defineConfig, devices } from '@playwright/test';
 import os from 'node:os';
 import path from 'node:path';
 
+// Playwright enables FORCE_COLOR for its workers; remove an inherited
+// NO_COLOR flag first so Node does not report the conflicting pair.
+delete process.env.FORCE_COLOR;
+delete process.env.NO_COLOR;
+
 const e2eDataDir = process.env.WAGGLE_E2E_DATA_DIR
   ?? path.join(os.tmpdir(), `waggle-os-playwright-${process.pid}`);
-const e2eBaseURL = process.env.WAGGLE_E2E_BASE_URL ?? 'http://localhost:3333';
+const e2eBaseURL = process.env.WAGGLE_E2E_BASE_URL
+  ?? `http://127.0.0.1:${process.env.WAGGLE_E2E_PORT ?? '3333'}`;
 const e2eURL = new URL(e2eBaseURL);
 const e2ePort = Number.parseInt(
   process.env.WAGGLE_E2E_PORT ?? e2eURL.port ?? '3333',
   10,
 ) || 3333;
 const e2eSkipLiteLLM = process.env.WAGGLE_E2E_SKIP_LITELLM !== '0';
+const e2eEnv = { ...process.env };
+// Keep the test runner's terminal quiet without changing production logging.
+e2eEnv.FORCE_COLOR = undefined;
+e2eEnv.NO_COLOR = undefined;
+e2eEnv.NODE_OPTIONS = `${e2eEnv.NODE_OPTIONS ?? ''} --disable-warning=DEP0040`.trim();
 
 export default defineConfig({
   testDir: './tests',
@@ -83,12 +94,15 @@ export default defineConfig({
     // this ON for the test env. The production default stays SECURE (token
     // required); this only affects the locally-spawned test server.
     env: {
-      ...process.env,
+      ...e2eEnv,
       WAGGLE_PORT: String(e2ePort),
       WAGGLE_TRUST_LOCALHOST: '1',
+      WAGGLE_RATE_LIMIT_MAX_REQUESTS: '2000',
       WAGGLE_DISABLE_MARKETPLACE_SYNC: '1',
+      WAGGLE_SUPPRESS_EMBEDDING_WARNING: '1',
       WAGGLE_DATA_DIR: e2eDataDir,
       EMBEDDING_PROVIDER: 'mock',
+      VITE_WAGGLE_E2E: '1',
       VITE_CLERK_PUBLISHABLE_KEY: '',
       CLERK_SECRET_KEY: '',
     },

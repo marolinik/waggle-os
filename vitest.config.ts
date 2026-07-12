@@ -16,11 +16,15 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Passing tests should not bury failures under expected provider/startup
+    // diagnostics. Use `--silent=false` when investigating a failing case.
+    silent: true,
     testTimeout: 30_000,
     setupFiles: ['./vitest.setup.ts'],
     include: [
       'packages/*/tests/**/*.test.ts',
       'packages/*/tests/**/*.test.tsx',
+      'packages/hive-mind-wiki-compiler/src/**/*.test.ts',
       'tests/**/*.test.ts',
       'app/scripts/**/*.test.ts',
       'app/tests/**/*.test.ts',
@@ -37,6 +41,9 @@ export default defineConfig({
       // fix (regenerate from sources-seed.ts in test setup) tracked in
       // docs/audits/2026-06-01-full-repo-verification-sweep.md.
       'packages/marketplace/tests/sync-verification.test.ts',
+      // Wall-clock budgets run in a dedicated lane so filesystem/process
+      // contention cannot make the deterministic correctness gate flaky.
+      'packages/server/tests/performance/**',
     ],
     coverage: {
       provider: 'v8',

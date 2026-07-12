@@ -60,6 +60,12 @@ if (!process.env.EMBEDDING_PROVIDER) {
   process.env.EMBEDDING_PROVIDER = 'mock';
 }
 
+// Mock embeddings are intentional in deterministic tests; the production
+// warning remains enabled unless a caller explicitly opts into this test flag.
+if (!process.env.WAGGLE_SUPPRESS_EMBEDDING_WARNING) {
+  process.env.WAGGLE_SUPPRESS_EMBEDDING_WARNING = '1';
+}
+
 try {
   const content = readFileSync(resolve(process.cwd(), '.env'), 'utf-8');
   for (const line of content.split('\n')) {
