@@ -1,11 +1,11 @@
 /**
  * PR7b Clerk config — the shared-instance publishable key + the warm appearance.
  *
- * D2(b): Clerk is OPTIONAL. With a key, sign-in unlocks sync/Teams/billing; without
- * one the SPA runs fully accountless (WaggleClerkProvider renders children with no
- * ClerkProvider; /auth shows the local-first AccountlessNotice). The key is public-safe
- * by design (ships in the client bundle); the SECRET key is server-side only and the
- * desktop never uses it (the local sidecar authorizes with its device token).
+ * D2(b): Clerk is OPTIONAL. Hosted auth must be explicitly enabled; otherwise the
+ * SPA runs fully accountless (WaggleClerkProvider renders children with no ClerkProvider;
+ * /auth shows the local-first AccountlessNotice). The key is public-safe by design
+ * (ships in the client bundle); the SECRET key is server-side only and the desktop
+ * never uses it (the local sidecar authorizes with its device token).
  */
 import { dark } from '@clerk/themes';
 
@@ -39,6 +39,7 @@ function isValidPublishableKey(key: string): boolean {
  * instead (the §6/D16 "absent → accountless" guarantee).
  */
 export function clerkPublishableKey(): string | undefined {
+  if (import.meta.env.VITE_WAGGLE_ENABLE_CLERK !== '1') return undefined;
   const k = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   return k && isValidPublishableKey(k) ? k : undefined;
 }

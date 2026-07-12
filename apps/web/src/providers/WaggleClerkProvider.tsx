@@ -1,9 +1,9 @@
 /**
  * WaggleClerkProvider — PR7b/D2(b) optional Clerk wrapper.
  *
- * With a publishable key present, wraps the app in a themed, router-integrated
+ * With hosted auth enabled and a valid publishable key present, wraps the app in a
  * ClerkProvider (routerPush/replace → react-router's navigate, per the Clerk v5 docs,
- * to avoid flicker/reload). WITHOUT a key, renders children untouched so the desktop
+ * to avoid flicker/reload). Otherwise renders children untouched so the desktop
  * stays fully accountless — never crashes, never fabricates a user (F1).
  *
  * MUST live INSIDE <BrowserRouter> (it calls useNavigate). Appearance follows the live

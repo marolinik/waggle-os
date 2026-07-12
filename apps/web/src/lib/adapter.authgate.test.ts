@@ -470,6 +470,27 @@ describe('P1b auth gate', () => {
     });
   });
 
+  it('manageHooks preserves a structured hook failure without replacing it with HTTP status text', async () => {
+    const a = new LocalAdapter(BASE);
+    routeMock(fetchSpy, [['/api/tools/hooks', () => jsonRes({
+      ok: false,
+      action: 'verify',
+      packageName: '@waggle/hive-mind-hooks-claude-code',
+      stdout: '',
+      stderr: '',
+      code: 1,
+    }, 400)]]);
+
+    await expect(a.manageHooks({ id: 'claude-code', action: 'verify' })).resolves.toMatchObject({
+      ok: false,
+      action: 'verify',
+      stdout: '',
+      stderr: '',
+      code: 1,
+      error: undefined,
+    });
+  });
+
   // ── Watchdog recovery + setServerUrl memo hygiene (review fixes) ─────────
 
   it('after a hung-body timeout, the NEXT connect probes fresh (memo does not wedge re-arms)', async () => {

@@ -2,9 +2,10 @@
  * PR7b — Auth (screen 13): the pre-shell /auth route.
  *  B1 (no key): the honest accountless local-first state — never a fabricated identity,
  *    demo email, or a fake SSO button that does nothing (F1/F10).
- *  B2 (key present): the real prebuilt Clerk <SignIn/>/<SignUp/> (D13) with a redirect to
- *    the fully-local app, the §2b honey local-first note on Sign up, our own design-faithful
- *    toggle, and the enterprise panel as a sales CTA (not a live SAML form — F11/D15).
+ *  B2 (explicitly enabled + key present): the real prebuilt Clerk <SignIn/>/<SignUp/>
+ *    (D13) with a redirect to the fully-local app, the §2b honey local-first note on
+ *    Sign up, our own design-faithful toggle, and the enterprise panel as a sales CTA
+ *    (not a live SAML form — F11/D15).
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
@@ -63,8 +64,11 @@ describe('PR7b · /auth — B1 accountless (no Clerk key)', () => {
   });
 });
 
-describe('PR7b · /auth — B2 Clerk form (key present)', () => {
-  beforeEach(() => vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', VALID_PK));
+describe('PR7b · /auth — B2 Clerk form (explicitly enabled + key present)', () => {
+  beforeEach(() => {
+    vi.stubEnv('VITE_WAGGLE_ENABLE_CLERK', '1');
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', VALID_PK);
+  });
 
   it('renders the real prebuilt Clerk <SignIn/> redirecting to /home (no fake SSO/OTP — F10)', async () => {
     const { default: AuthRoute } = await import('@/routes/AuthRoute');
@@ -109,7 +113,14 @@ describe('PR7b · clerkPublishableKey() shape gate (CRITICAL: an invalid key mus
     expect(clerkPublishableKey()).toBeUndefined();
   });
 
-  it('accepts a well-formed publishable key', async () => {
+  it('ignores a well-formed publishable key unless hosted Clerk auth is explicitly enabled', async () => {
+    vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', VALID_PK);
+    const { clerkPublishableKey } = await import('@/lib/clerk');
+    expect(clerkPublishableKey()).toBeUndefined();
+  });
+
+  it('accepts a well-formed publishable key when hosted Clerk auth is explicitly enabled', async () => {
+    vi.stubEnv('VITE_WAGGLE_ENABLE_CLERK', '1');
     vi.stubEnv('VITE_CLERK_PUBLISHABLE_KEY', VALID_PK);
     const { clerkPublishableKey } = await import('@/lib/clerk');
     expect(clerkPublishableKey()).toBe(VALID_PK);
