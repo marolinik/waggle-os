@@ -45,6 +45,10 @@ export const DEFAULT_MODEL_PRICING: Record<string, ModelPricing> = {
  */
 function fallbackPricingFor(model: string): { label: string; pricing: ModelPricing } {
   const m = model.toLowerCase();
+  // Ollama runs on the user's machine and does not incur provider charges.
+  // Treat unknown local model tags as explicitly free instead of inventing a
+  // cloud-model estimate or emitting a misleading warning.
+  if (m.startsWith('ollama/')) return { label: 'Local (free)', pricing: { inputPer1k: 0, outputPer1k: 0 } };
   if (m.includes('opus')) return { label: 'Opus', pricing: { inputPer1k: 0.015, outputPer1k: 0.075 } };
   if (m.includes('haiku')) return { label: 'Haiku', pricing: { inputPer1k: 0.001, outputPer1k: 0.005 } };
   return { label: 'Sonnet', pricing: { inputPer1k: 0.003, outputPer1k: 0.015 } };
@@ -126,6 +130,9 @@ export class CostTracker {
     // unrecognized Opus id would otherwise under-report ~5×) and warn loudly
     // once so the cost isn't silently wrong.
     const { label, pricing } = fallbackPricingFor(model);
+    if (model.toLowerCase().startsWith('ollama/')) {
+      return (input / 1000) * pricing.inputPer1k + (output / 1000) * pricing.outputPer1k;
+    }
     if (!warnedUnknownModels.has(model)) {
       warnedUnknownModels.add(model);
       console.warn(

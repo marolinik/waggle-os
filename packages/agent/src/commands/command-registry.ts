@@ -25,6 +25,13 @@ export interface CommandContext {
   listSkills?: () => string[];
   /** Spawn a sub-agent with a role */
   spawnAgent?: (role: string, task: string) => Promise<string>;
+  /** Read the currently persisted CLI execution allowlist. */
+  getCliAllowlist?: () => string[];
+  /** Persist a CLI allow/deny change and return the resulting list. */
+  updateCliAllowlist?: (action: 'allow' | 'deny', name: string) => {
+    changed: boolean;
+    allowlist: string[];
+  };
 }
 
 export interface CommandDefinition {

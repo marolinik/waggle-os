@@ -47,12 +47,14 @@ const KNOWN_CLIS = [
 export interface CliToolsConfig {
   /** Programs the agent is allowed to execute (empty = none allowed) */
   allowlist: string[];
+  /** Optional live source used when `/cli` changes the persisted allowlist. */
+  getAllowlist?: () => string[];
   /** Audit logger for tracking CLI executions */
   auditLog?: (entry: { actionType: string; description: string }) => void;
 }
 
 export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
-  const allowSet = new Set(config.allowlist.map(s => s.toLowerCase()));
+  const getAllowlist = config.getAllowlist ?? (() => config.allowlist);
 
   return [
     {
@@ -64,6 +66,8 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
       },
       execute: async () => {
         type CliResult = { name: string; version: string; allowed: boolean };
+        const allowlist = getAllowlist();
+        const allowSet = new Set(allowlist.map(s => s.toLowerCase()));
 
         // Probe every known CLI in parallel. Sequentially this was up to
         // KNOWN_CLIS.length × 5s (~130s) — far over the 30s test budget on CI
@@ -90,7 +94,7 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         return JSON.stringify({
           found: results.length,
           programs: results,
-          allowlist: config.allowlist,
+          allowlist,
         });
       },
     },
@@ -110,6 +114,8 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         const program = String(params.program ?? '').trim();
         const args = (params.args as string[]) ?? [];
         const timeoutSec = Math.min(Number(params.timeout) || 30, 120);
+        const allowlist = getAllowlist();
+        const allowSet = new Set(allowlist.map(s => s.toLowerCase()));
 
         if (!program) {
           return JSON.stringify({ success: false, error: 'program is required' });
@@ -121,7 +127,7 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
           return JSON.stringify({
             success: false,
             error: `Program "${program}" is not in the CLI allowlist. Add it in Settings > CLI Allowlist to enable.`,
-            allowlist: config.allowlist,
+            allowlist,
           });
         }
 

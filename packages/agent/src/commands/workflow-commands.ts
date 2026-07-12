@@ -482,26 +482,38 @@ function cliCommand(): CommandDefinition {
     aliases: ['cli-tools'],
     description: 'Manage CLI tool access — view, allow, or deny CLI programs',
     usage: '/cli [allow|deny|discover] [name]',
-    handler: async (args, _ctx) => {
+    handler: async (args, context) => {
       const trimmed = args.trim();
 
       // /cli (no args) — show current allowlist info
       if (!trimmed) {
-        return 'No CLI tools explicitly allowed. The agent auto-discovers common CLIs (git, node, docker, etc.) on your PATH.\n\nUse `/cli allow <name>` to add a CLI to the allowlist.';
+        const allowlist = context.getCliAllowlist?.() ?? [];
+        if (allowlist.length === 0) {
+          return 'No CLI tools explicitly allowed. The agent auto-discovers common CLIs (git, node, docker, etc.) on your PATH.\n\nUse `/cli allow <name>` to add a CLI to the allowlist.';
+        }
+        return `Allowed CLI tools: ${allowlist.join(', ')}\n\nUse \`/cli allow <name>\` or \`/cli deny <name>\` to update access.`;
       }
 
       // /cli allow <name>
       if (trimmed.startsWith('allow ')) {
         const name = trimmed.slice(6).trim();
         if (!name) return 'Usage: `/cli allow <program-name>`';
-        return `To allow "${name}", add it to your CLI allowlist in ~/.waggle/config.json under "cliAllowlist": ["${name}"].\n\nAutomatic config update coming soon.`;
+        if (!context.updateCliAllowlist) return 'CLI allowlist changes are unavailable in this server context. Open Settings > CLI Allowlist to update access.';
+        const update = context.updateCliAllowlist('allow', name);
+        return update.changed
+          ? `Allowed "${name}" for CLI execution. Current allowlist: ${update.allowlist.join(', ')}.`
+          : `"${name}" is already allowed for CLI execution.`;
       }
 
       // /cli deny <name>
       if (trimmed.startsWith('deny ')) {
         const name = trimmed.slice(5).trim();
         if (!name) return 'Usage: `/cli deny <program-name>`';
-        return `To deny "${name}", remove it from "cliAllowlist" in ~/.waggle/config.json.\n\nAutomatic config update coming soon.`;
+        if (!context.updateCliAllowlist) return 'CLI allowlist changes are unavailable in this server context. Open Settings > CLI Allowlist to update access.';
+        const update = context.updateCliAllowlist('deny', name);
+        return update.changed
+          ? `Denied "${name}" for CLI execution. Current allowlist: ${update.allowlist.length ? update.allowlist.join(', ') : 'none'}.`
+          : `"${name}" was not in the CLI allowlist.`;
       }
 
       // /cli discover

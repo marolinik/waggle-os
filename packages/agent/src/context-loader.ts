@@ -65,6 +65,7 @@ export interface RecentFrameRow {
   content: string;
   frame_type: string;
   importance: string;
+  source: string;
   created_at: string;
 }
 
@@ -85,7 +86,7 @@ export function fetchRecentFrames(
     ? `WHERE importance != 'deprecated' AND importance != 'temporary'`
     : `WHERE importance != 'deprecated'`;
   return raw.prepare(
-    `SELECT id, content, frame_type, importance, created_at
+    `SELECT id, content, frame_type, importance, source, created_at
      FROM memory_frames
      ${whereClause}
      ORDER BY
