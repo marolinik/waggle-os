@@ -204,7 +204,7 @@ const DashboardApp = ({ workspaces, activeWorkspaceId, onSelectWorkspace, onCrea
                   onClick={() => onSelectWorkspace(ws.id)}
                   onMouseEnter={() => setHoveredId(ws.id)}
                   onMouseLeave={() => setHoveredId(null)}
-                  className={`relative text-left p-3 rounded-xl border transition-all duration-[var(--mo-base)] ${
+                  className={`relative text-left p-3 rounded-xl border transition-[background-color,border-color,box-shadow] duration-mo-base ${
                     isActive
                       ? 'border-primary/50 bg-primary/10 shadow-lg shadow-primary/10'
                       : 'border-border/50 bg-secondary/30 hover:bg-secondary/50 hover:border-border'

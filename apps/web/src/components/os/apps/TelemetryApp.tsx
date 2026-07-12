@@ -138,7 +138,7 @@ const TelemetryApp = () => {
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center">
-        <BarChart3 className="w-8 h-8 text-[var(--text-dim)] mb-2" />
+        <BarChart3 className="w-8 h-8 text-[var(--text-muted)] mb-2" />
         <p className="text-sm text-[var(--text-muted)]">No telemetry data available.</p>
       </div>
     );
@@ -153,7 +153,7 @@ const TelemetryApp = () => {
       <div className="shrink-0 px-4 py-3 border-b border-[var(--line-soft)]">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-[var(--honey-text)]" />
-          <h2 className="text-sm font-display font-semibold text-[var(--text)]">Usage &amp; cost</h2>
+          <h1 className="text-sm font-display font-semibold text-[var(--text)]">Usage &amp; cost</h1>
         </div>
       </div>
 
@@ -163,21 +163,21 @@ const TelemetryApp = () => {
           <div className="p-3 rounded-[12px] bg-[var(--surface)] border border-[var(--line-soft)]">
             <div className="flex items-center gap-1.5 mb-1">
               <DollarSign className="w-3.5 h-3.5 text-[var(--honey-text)]" />
-              <span className="text-[10px] text-[var(--text-dim)] uppercase font-display tracking-wide">Total · est.</span>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-display tracking-wide">Total · est.</span>
             </div>
             <p className="text-lg font-display font-bold text-[var(--text)]">${data.totalCost.toFixed(2)}</p>
           </div>
           <div className="p-3 rounded-[12px] bg-[var(--surface)] border border-[var(--line-soft)]">
             <div className="flex items-center gap-1.5 mb-1">
               <TrendingUp className="w-3.5 h-3.5 text-[var(--intel)]" />
-              <span className="text-[10px] text-[var(--text-dim)] uppercase font-display tracking-wide">Tokens</span>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-display tracking-wide">Tokens</span>
             </div>
             <p className="text-lg font-display font-bold text-[var(--text)]">{data.totalTokens.toLocaleString()}</p>
           </div>
           <div className="p-3 rounded-[12px] bg-[var(--surface)] border border-[var(--line-soft)]">
             <div className="flex items-center gap-1.5 mb-1">
               <Zap className="w-3.5 h-3.5 text-[var(--attention)]" />
-              <span className="text-[10px] text-[var(--text-dim)] uppercase font-display tracking-wide">Tool Calls</span>
+              <span className="text-[10px] text-[var(--text-muted)] uppercase font-display tracking-wide">Tool Calls</span>
             </div>
             <p className="text-lg font-display font-bold text-[var(--text)]">{data.totalToolCalls.toLocaleString()}</p>
           </div>
@@ -186,7 +186,7 @@ const TelemetryApp = () => {
         {/* Daily budget (F8) — warns at 80% per the cost route's budgetStatus. */}
         <div className="rounded-[12px] border border-[var(--line-soft)] bg-[var(--surface)] p-3.5 space-y-2.5">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-[11px] font-display font-semibold text-[var(--text-dim)] uppercase tracking-wide">Daily budget</h3>
+            <h2 className="text-[11px] font-display font-semibold text-[var(--text-muted)] uppercase tracking-wide">Daily budget</h2>
             {budget.dailyBudget != null && budget.dailyBudget > 0 && (
               <span className="text-[11px] font-medium" style={{ color: budgetTone }}>
                 ${budget.todayCost.toFixed(2)} today · {budget.budgetPercent}% used
@@ -202,8 +202,10 @@ const TelemetryApp = () => {
               value={budgetInput}
               onChange={e => setBudgetInput(e.target.value)}
               aria-label="Daily spend budget in dollars"
+              name="telemetryDailyBudget"
+              autoComplete="off"
               placeholder="No budget set"
-              className="w-32 rounded-[8px] border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[13px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey)]"
+              className="w-32 rounded-[8px] border border-[var(--line)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[13px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey)]"
             />
             <span className="text-[12px] text-[var(--text-muted)]">/ day</span>
             <button
@@ -219,7 +221,7 @@ const TelemetryApp = () => {
             <>
               <div className="h-2 rounded-full bg-[var(--surface-3)] overflow-hidden">
                 <div
-                  className="h-full rounded-full transition-all"
+                  className="h-full rounded-full transition-[width]"
                   style={{ width: `${Math.min(budget.budgetPercent, 100)}%`, background: budgetTone }}
                 />
               </div>
@@ -238,7 +240,7 @@ const TelemetryApp = () => {
         {/* By model — per-model spend bars (from allTime.byModel). */}
         {data.byModel.length > 0 && (
           <div>
-            <h3 className="text-[11px] font-display font-semibold text-[var(--text-dim)] uppercase tracking-wide mb-2">By model</h3>
+            <h2 className="text-[11px] font-display font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">By model</h2>
             <div className="space-y-2">
               {data.byModel.map((m) => {
                 const pct = (m.cost / maxModelCost) * 100;
@@ -268,7 +270,7 @@ const TelemetryApp = () => {
         {/* By workspace (TEAMS) */}
         {data.byWorkspace.length > 0 && (
           <div>
-            <h3 className="text-[11px] font-display font-semibold text-[var(--text-dim)] uppercase tracking-wide mb-2">By workspace</h3>
+            <h2 className="text-[11px] font-display font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">By workspace</h2>
             <div className="space-y-2">
               {data.byWorkspace.map((w, i) => {
                 const pct = data.totalCost > 0 ? (w.costUsd / data.totalCost) * 100 : 0;
@@ -289,7 +291,7 @@ const TelemetryApp = () => {
         {/* Top tools */}
         {data.topTools.length > 0 && (
           <div>
-            <h3 className="text-[11px] font-display font-semibold text-[var(--text-dim)] uppercase tracking-wide mb-2">Tool usage</h3>
+            <h2 className="text-[11px] font-display font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-2">Tool usage</h2>
             <div className="grid grid-cols-2 gap-2">
               {data.topTools.map((t, i) => (
                 <SurfaceRow

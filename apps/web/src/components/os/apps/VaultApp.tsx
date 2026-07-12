@@ -254,7 +254,7 @@ const VaultApp = () => {
               <h3 className="text-sm font-display font-semibold text-foreground">
                 <Shield className="w-4 h-4 inline mr-1.5 text-honey" />Encrypted Vault
               </h3>
-              <button onClick={loadData} className="p-1 rounded hover:bg-muted/50 transition-colors">
+              <button type="button" onClick={loadData} aria-label="Refresh vault" className="p-1 rounded hover:bg-muted/50 transition-colors">
                 <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             </div>
@@ -298,17 +298,32 @@ const VaultApp = () => {
                         </button>
                       </HintTooltip>
                       <HintTooltip content="Update value">
-                        <button onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }} className="p-1 rounded hover:bg-muted/50">
+                        <button
+                          type="button"
+                          onClick={() => { setNewName(s.name); setNewType(s.type ?? 'api_key'); setNewValue(''); }}
+                          aria-label={`Edit ${s.name}`}
+                          className="p-1 rounded hover:bg-muted/50"
+                        >
                           <Pencil className="w-3 h-3 text-muted-foreground" />
                         </button>
                       </HintTooltip>
                       <HintTooltip content={revealedSecret === s.name ? 'Hide' : 'Reveal (10s)'}>
-                        <button onClick={() => handleReveal(s.name)} className="p-1 rounded hover:bg-muted/50">
+                        <button
+                          type="button"
+                          onClick={() => handleReveal(s.name)}
+                          aria-label={revealedSecret === s.name ? `Hide ${s.name}` : `Reveal ${s.name}`}
+                          className="p-1 rounded hover:bg-muted/50"
+                        >
                           {revealedSecret === s.name ? <EyeOff className="w-3 h-3 text-muted-foreground" /> : <Eye className="w-3 h-3 text-muted-foreground" />}
                         </button>
                       </HintTooltip>
                       <HintTooltip content="Delete">
-                        <button onClick={() => handleDeleteSecret(s.name)} className="p-1 rounded hover:bg-destructive/20">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSecret(s.name)}
+                          aria-label={`Delete ${s.name}`}
+                          className="p-1 rounded hover:bg-destructive/20"
+                        >
                           <Trash2 className="w-3 h-3 text-destructive" />
                         </button>
                       </HintTooltip>
@@ -326,11 +341,22 @@ const VaultApp = () => {
               {/* Name field with suggestion dropdown */}
               <div className="relative">
                 <div className="flex gap-2">
-                  <Input value={newName} onChange={e => setNewName(e.target.value)}
+                  <Input
+                    id="vault-secret-name"
+                    name="secretName"
+                    aria-label="Secret name"
+                    autoComplete="off"
+                    value={newName}
+                    onChange={e => setNewName(e.target.value)}
                     onFocus={() => setShowSuggestions(true)}
                     placeholder="Select or type secret name"
                     className="flex-1 bg-muted/50 text-xs h-auto py-1.5" />
-                  <button onClick={() => setShowSuggestions(!showSuggestions)}
+                  <button
+                    type="button"
+                    onClick={() => setShowSuggestions(!showSuggestions)}
+                    aria-label={showSuggestions ? 'Hide secret name suggestions' : 'Show secret name suggestions'}
+                    aria-expanded={showSuggestions}
+                    aria-controls="vault-secret-suggestions"
                     className="px-2 py-1.5 rounded-lg bg-muted/50 border border-border/50 hover:bg-muted transition-colors">
                     <ChevronDown className="w-3 h-3 text-muted-foreground" />
                   </button>
@@ -338,7 +364,7 @@ const VaultApp = () => {
 
                 {/* Dropdown suggestions */}
                 {showSuggestions && suggestedSecrets.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-lg max-h-60 overflow-auto">
+                  <div id="vault-secret-suggestions" className="absolute top-full left-0 right-0 mt-1 z-50 bg-card border border-border rounded-xl shadow-lg max-h-60 overflow-auto">
                     {suggestedSecrets.map(cat => (
                       <div key={cat.category}>
                         <p className="px-3 py-1.5 text-[11px] font-display font-semibold text-muted-foreground uppercase tracking-wider bg-muted/30">{cat.category}</p>
@@ -358,7 +384,13 @@ const VaultApp = () => {
               </div>
 
               {/* Type selector */}
-              <select value={newType} onChange={e => setNewType(e.target.value)}
+              <select
+                id="vault-secret-type"
+                name="secretType"
+                aria-label="Secret type"
+                autoComplete="off"
+                value={newType}
+                onChange={e => setNewType(e.target.value)}
                 className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 <option value="api_key">API Key</option>
                 <option value="bearer">Bearer Token</option>
@@ -370,17 +402,31 @@ const VaultApp = () => {
               {newType === 'basic' && (
                 <div className="flex items-center gap-2">
                   <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                  <Input value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="Username or email"
+                  <Input
+                    id="vault-basic-username"
+                    name="basicAuthUsername"
+                    aria-label="Basic auth username"
+                    autoComplete="username"
+                    value={newUsername}
+                    onChange={e => setNewUsername(e.target.value)}
+                    placeholder="Username or email"
                     className="flex-1 bg-muted/50 text-xs h-auto py-1.5" />
                 </div>
               )}
 
               {/* Value / password field */}
-              <Input type="password" value={newValue} onChange={e => setNewValue(e.target.value)}
+              <Input
+                id="vault-secret-value"
+                type="password"
+                name="secretValue"
+                aria-label={newType === 'basic' ? 'Secret password or token' : 'Secret value'}
+                autoComplete="current-password"
+                value={newValue}
+                onChange={e => setNewValue(e.target.value)}
                 placeholder={newType === 'basic' ? 'Password or API token' : 'Secret value'}
                 className="w-full bg-muted/50 text-xs h-auto py-1.5" />
 
-              <button onClick={handleAddSecret} disabled={!newName.trim() || !newValue.trim() || adding}
+              <button type="button" onClick={handleAddSecret} disabled={!newName.trim() || !newValue.trim() || adding}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
                 {adding ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
                 {secrets.some(s => s.name === newName) ? 'Update in Vault' : 'Add to Vault'}

@@ -80,7 +80,13 @@ const CockpitApp = () => {
     <div className="h-full overflow-auto p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-display font-semibold text-foreground">Cockpit</h2>
-        <button onClick={refresh} disabled={loading} className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors">
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={loading}
+          aria-label="Refresh Cockpit"
+          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+        >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
       </div>

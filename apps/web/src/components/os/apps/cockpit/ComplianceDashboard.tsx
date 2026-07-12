@@ -244,7 +244,7 @@ const ComplianceDashboard = () => {
       <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
         <div className="flex items-center gap-2 mb-3">
           <Shield className="w-4 h-4 text-muted-foreground" />
-          <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
+          <h3 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h3>
         </div>
         <Loader2 className="w-4 h-4 animate-spin text-muted-foreground mx-auto" />
       </div>
@@ -256,7 +256,7 @@ const ComplianceDashboard = () => {
       <div className="p-4 rounded-xl bg-secondary/30 border border-border/30">
         <div className="flex items-center gap-2">
           <Shield className="w-4 h-4 text-muted-foreground" />
-          <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
+          <h3 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h3>
         </div>
         {error ? (
           <p className="text-[11px] text-destructive mt-2">{error}</p>
@@ -327,7 +327,7 @@ const ComplianceDashboard = () => {
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <Shield className="w-4 h-4 text-honey shrink-0" />
-          <h4 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h4>
+          <h3 className="text-xs font-display font-semibold text-foreground">EU AI Act Compliance</h3>
           {lastRefreshed && (
             <span className="text-[11px] text-muted-foreground truncate">
               · updated {formatRelative(lastRefreshed)}
@@ -353,8 +353,10 @@ const ComplianceDashboard = () => {
           </HintTooltip>
           <HintTooltip content="Refresh compliance status">
             <button
+              type="button"
               onClick={() => fetchStatus()}
               disabled={refreshing}
+              aria-label="Refresh compliance status"
               className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
@@ -362,7 +364,10 @@ const ComplianceDashboard = () => {
           </HintTooltip>
           <HintTooltip content="Report options">
             <button
+              type="button"
               onClick={() => setShowOptions(s => !s)}
+              aria-label={showOptions ? 'Hide report options' : 'Show report options'}
+              aria-expanded={showOptions}
               className={`p-1 rounded-lg transition-colors ${
                 showOptions ? 'text-honey bg-primary/10' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
               }`}
@@ -372,8 +377,10 @@ const ComplianceDashboard = () => {
           </HintTooltip>
           <HintTooltip content="Download JSON report">
             <button
+              type="button"
               onClick={handleExport}
               disabled={exporting || exportingPdf}
+              aria-label="Download compliance JSON report"
               className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
             >
               {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -381,8 +388,10 @@ const ComplianceDashboard = () => {
           </HintTooltip>
           <HintTooltip content="Download PDF report (boardroom-styled)">
             <button
+              type="button"
               onClick={handleExportPdf}
               disabled={exporting || exportingPdf}
+              aria-label="Download compliance PDF report"
               className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
             >
               {exportingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}
@@ -397,14 +406,17 @@ const ComplianceDashboard = () => {
           {/* M-03: template picker + manage button */}
           <div className="flex items-end gap-2">
             <div className="flex-1 min-w-0">
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+              <label htmlFor="compliance-report-template" className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
                 <LayoutTemplate className="w-3 h-3" />
                 Template
               </label>
               <select
+                id="compliance-report-template"
+                name="complianceReportTemplateId"
+                autoComplete="off"
                 value={templateId ?? ''}
                 onChange={e => setTemplateId(e.target.value ? Number(e.target.value) : null)}
-                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 <option value="">No template (runtime toggles only)</option>
                 {templates.map(t => (
@@ -432,24 +444,30 @@ const ComplianceDashboard = () => {
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">From</label>
+              <label htmlFor="compliance-report-from-date" className="text-[10px] uppercase tracking-wide text-muted-foreground">From</label>
               <input
+                id="compliance-report-from-date"
+                name="complianceReportFromDate"
                 type="date"
+                autoComplete="off"
                 value={fromDate}
                 onChange={e => setFromDate(e.target.value)}
                 max={toDate}
-                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
             <div>
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">To</label>
+              <label htmlFor="compliance-report-to-date" className="text-[10px] uppercase tracking-wide text-muted-foreground">To</label>
               <input
+                id="compliance-report-to-date"
+                name="complianceReportToDate"
                 type="date"
+                autoComplete="off"
                 value={toDate}
                 onChange={e => setToDate(e.target.value)}
                 min={fromDate}
                 max={defaultTo()}
-                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
           </div>
