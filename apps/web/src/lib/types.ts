@@ -706,6 +706,8 @@ export interface StreamEvent {
 
 export interface Settings {
   model: string;
+  /** Canonical server-side model preference; `model` remains for legacy payloads. */
+  defaultModel?: string;
   provider: string;
   apiKey?: string;
   tokenLimit: number;
