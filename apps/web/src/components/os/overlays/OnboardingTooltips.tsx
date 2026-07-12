@@ -102,19 +102,19 @@ const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingToo
   return (
     <AnimatePresence>
       {!dismissed && !suppressed && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          transition={{ type: 'spring', damping: 22, stiffness: 260 }}
-          role="dialog"
-          aria-modal="false"
-          aria-labelledby="onboarding-tooltips-title"
-          aria-describedby="onboarding-tooltips-body"
-          tabIndex={-1}
-          className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-full max-w-lg px-6"
-        >
-          <div className="glass-strong rounded-2xl px-8 py-7 shadow-2xl border border-primary/20">
+        <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center px-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="onboarding-tooltips-title"
+            aria-describedby="onboarding-tooltips-body"
+            tabIndex={-1}
+            className="glass-strong pointer-events-auto w-full max-w-lg rounded-2xl border border-primary/20 px-5 py-5 shadow-2xl sm:px-8 sm:py-7"
+          >
             <h2 id="onboarding-tooltips-title" className="sr-only">Waggle tips</h2>
             <AnimatePresence mode="wait">
               <motion.p
@@ -158,8 +158,8 @@ const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingToo
                 </button>
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );

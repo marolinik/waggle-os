@@ -8,7 +8,7 @@ async function setupPage(page: Page, theme = 'dark') {
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 15000 });
   await page.evaluate((t: string) => {
     localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true }));
-    localStorage.setItem('waggle:theme', t);
+    localStorage.setItem('waggle-theme', t);
   }, theme);
   await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForTimeout(2000);
@@ -57,9 +57,9 @@ test.describe('R2 - Mega UAT Visual', () => {
     expect(bgColor).not.toBe('rgb(255, 255, 255)');
   });
 
-  test('41 - cockpit view', async ({ page }) => {
+  test('41 - home cockpit view', async ({ page }) => {
     await setupPage(page, 'dark');
-    const found = await clickNavView(page, 'Cockpit');
+    const found = await clickNavView(page, 'Home');
     const btns = await page.locator('nav button, aside button').allTextContents();
     console.log(`Nav buttons: ${btns.join(' | ')}`);
     console.log(`Found cockpit: ${found}`);
@@ -134,6 +134,7 @@ test.describe('R2 - Mega UAT Visual', () => {
 
   test('47 - light mode', async ({ page }) => {
     await setupPage(page, 'light');
+    expect(await clickNavView(page, 'Chat')).toBe(true);
     await page.screenshot({ path: `${SS}/47-light-chat.png` });
     const bgColor = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     const htmlClass = await page.evaluate(() => document.documentElement.className);
@@ -141,8 +142,10 @@ test.describe('R2 - Mega UAT Visual', () => {
     console.log(`HTML classes: ${htmlClass}`);
     const isLight = !bgColor.includes('17,') && !bgColor.includes('20,') && !bgColor.includes('0, 0, 0');
     console.log(`Light mode applied: ${isLight}`);
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe('light');
+    expect(isLight).toBe(true);
 
-    await clickNavView(page, 'Cockpit');
+    await clickNavView(page, 'Home');
     await page.screenshot({ path: `${SS}/47-light-cockpit.png` });
     await clickNavView(page, 'Memory');
     await page.screenshot({ path: `${SS}/47-light-memory.png` });
@@ -215,5 +218,14 @@ test.describe('R2 - Mega UAT Visual', () => {
     const sidebarVisible = await page.locator('nav, aside').first().isVisible().catch(() => false);
     console.log(`768 - horizontal scroll: ${hasHScroll}`);
     console.log(`768 - sidebar visible: ${sidebarVisible}`);
+    expect(hasHScroll).toBe(false);
+
+    const coachmark = page.getByRole('dialog', { name: /waggle tips/i });
+    if (await coachmark.isVisible().catch(() => false)) {
+      const box = await coachmark.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box!.x).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width).toBeLessThanOrEqual(768);
+    }
   });
 });
