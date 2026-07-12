@@ -4,7 +4,7 @@
  * validation-only Test preview framing, pause flow, empty + error states.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { Automation } from '@waggle/shared';
 import type { AutomationLog } from '@/lib/types';
@@ -158,6 +158,22 @@ describe('AutomationCenterApp', () => {
     expect(arg.jobConfig.mode).toBe('assist');
   });
 
+  it('names template workspace and assist-mode controls', async () => {
+    mocks.adapter.listAutomations.mockResolvedValue([]);
+    mocks.adapter.getWorkspaces.mockResolvedValue([{ id: 'ws-1', name: 'Acme Research' }]);
+    renderApp();
+
+    const templates = await screen.findByTestId('automation-templates');
+    const workspace = within(templates).getByRole('combobox', { name: /workspace for the new loop/i });
+    expect(workspace).toHaveAttribute('name', 'automationTemplateWorkspace');
+    expect(workspace).toHaveAttribute('autocomplete', 'off');
+    expect(workspace).toHaveClass('focus-visible:ring-ring');
+
+    const assistMode = within(templates).getByRole('checkbox', { name: /propose actions for approval/i });
+    expect(assistMode).toHaveAttribute('name', 'automationTemplateAssistMode');
+    expect(assistMode).toHaveClass('focus-visible:ring-ring');
+  });
+
   it('surfaces a failed latest run in the attention list and as a Failed badge', async () => {
     mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]);
     mocks.adapter.getAutomationLogs.mockResolvedValue([log(1, false)]);
@@ -182,6 +198,27 @@ describe('AutomationCenterApp', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Pause Nightly consolidation' }));
     expect(mocks.adapter.pauseAutomation).toHaveBeenCalledWith('1');
+  });
+
+  it('asks in-app before deleting an automation', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mocks.adapter.listAutomations.mockResolvedValue([makeAutomation()]);
+    mocks.adapter.deleteCronJob.mockResolvedValue(undefined);
+    renderApp();
+    await screen.findByTestId('automation-overview-tiles');
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Scheduled' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Nightly consolidation' }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(mocks.adapter.deleteCronJob).not.toHaveBeenCalled();
+    const modal = await screen.findByTestId('approval-modal');
+    expect(modal).toHaveTextContent(/delete automation/i);
+    expect(modal).toHaveTextContent(/Nightly consolidation/i);
+    expect(modal).toHaveTextContent(/run history/i);
+
+    fireEvent.click(screen.getByTestId('approval-modal-approve'));
+    await waitFor(() => expect(mocks.adapter.deleteCronJob).toHaveBeenCalledWith('1'));
   });
 
   it('C26: the Builder review-step Check renders issues + the nothing-executed framing', async () => {
