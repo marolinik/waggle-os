@@ -19,15 +19,15 @@
  * 100 req/min for GitHub API, unlimited for ClawHub.
  */
 
-import { MarketplaceDB } from './db';
-import { type FetchFn, defaultFetch } from './fetcher';
+import { MarketplaceDB } from './db.js';
+import { type FetchFn, defaultFetch } from './fetcher.js';
 import type {
   MarketplacePackage,
   MarketplaceSource,
   SyncOptions,
   SyncResult,
   InstallManifest,
-} from './types';
+} from './types.js';
 
 // ─── Helpers ───────────────────────────────────────────────────────
 

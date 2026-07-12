@@ -5,7 +5,7 @@
  * the package catalog via new adapters (awesome-list, npm, web registry, etc.).
  */
 
-import type { MarketplaceDB } from './db';
+import type { MarketplaceDB } from './db.js';
 
 interface NewSource {
   name: string;
