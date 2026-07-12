@@ -340,6 +340,24 @@ describe('Workspace & Session API', () => {
 
   // --- API Key Test Endpoint ---
 
+  it('saves provider keys to the vault without persisting plaintext config secrets', async () => {
+    const key = 'sk-test-openai-key-1234567890';
+    const res = await injectWithAuth(server, {
+      method: 'PUT',
+      url: '/api/settings',
+      payload: { providers: { openai: { apiKey: key, models: ['gpt-4o'] } } },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain(key);
+
+    const config = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf-8')) as {
+      providers?: Record<string, { apiKey?: string; models?: string[] }>;
+    };
+    expect(config.providers?.openai).toMatchObject({ apiKey: '', models: ['gpt-4o'] });
+    expect(server.vault?.get('openai')?.value).toBe(key);
+    server.vault?.delete('openai');
+  });
+
   it('validates OpenAI key format (valid)', async () => {
     const res = await injectWithAuth(server, {
       method: 'POST',

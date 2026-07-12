@@ -112,6 +112,10 @@ describe('Security Headers', () => {
     expect(csp).toContain('connect-src');
     expect(csp).toMatch(/connect-src[^;]*https:\/\/us\.i\.posthog\.com/);
     expect(csp).not.toMatch(/script-src[^;]*posthog/);
+    // Hosted Clerk auth is opt-in at the client boundary; local CSP must not
+    // allow Clerk script or API hosts by default.
+    expect(csp).not.toMatch(/script-src[^;]*clerk/i);
+    expect(csp).not.toMatch(/connect-src[^;]*clerk/i);
     expect(csp).toContain("img-src 'self' data: blob:");
     expect(csp).toContain('https://fonts.googleapis.com');
   });

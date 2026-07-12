@@ -149,4 +149,28 @@ describe('Command Execution Route', () => {
     // B4: Without spawnAgent, /spawn returns agent-loop reroute instruction
     expect(body.result).toContain('specialist researcher');
   });
+
+  it('POST /api/commands/execute persists and applies CLI allowlist changes', async () => {
+    const allowRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/commands/execute',
+      payload: { command: '/cli allow node' },
+    });
+    expect(allowRes.statusCode).toBe(200);
+    expect(JSON.parse(allowRes.body).result).toContain('Allowed "node"');
+
+    const listRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/commands/execute',
+      payload: { command: '/cli' },
+    });
+    expect(JSON.parse(listRes.body).result).toContain('Allowed CLI tools: node');
+
+    const denyRes = await injectWithAuth(server, {
+      method: 'POST',
+      url: '/api/commands/execute',
+      payload: { command: '/cli deny node' },
+    });
+    expect(JSON.parse(denyRes.body).result).toContain('Denied "node"');
+  });
 });

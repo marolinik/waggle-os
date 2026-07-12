@@ -110,8 +110,7 @@ describe('Tauri Production Configuration', () => {
     // latest.json with EMPTY signatures — with a pubkey present, every client
     // update would fail signature verification (a broken update channel). It
     // stays disabled until updater signing is provisioned (TAURI_SIGNING_PRIVATE_KEY
-    // + createUpdaterArtifacts + a real-signature manifest generator). The plugin
-    // dependency (Cargo.toml) and lib.rs init remain so it can be re-enabled then.
+    // + createUpdaterArtifacts + a real-signature manifest generator).
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     expect(conf.plugins?.updater).toBeUndefined();
   });
@@ -119,7 +118,30 @@ describe('Tauri Production Configuration', () => {
   it('tauri.conf.json has tray icon configured', () => {
     const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     expect(conf.app.trayIcon).toBeDefined();
-    expect(conf.app.trayIcon.tooltip).toContain('Waggle');
+    expect(conf.app.trayIcon.tooltip).toBe('Waggle - AI Agent Swarm');
+  });
+
+  it('tray menu exposes only implemented desktop actions', () => {
+    const tray = fs.readFileSync(path.join(TAURI_DIR, 'src', 'tray.rs'), 'utf-8');
+    expect(tray).toContain('"Open Waggle"');
+    expect(tray).toContain('"Settings"');
+    expect(tray).toContain('"Quit Waggle"');
+    expect(tray).toContain('app.exit(0)');
+    expect(tray).toContain('"waggle://navigate"');
+    expect(tray).toContain('"/settings"');
+
+    expect(tray).not.toContain('"Pause Agents"');
+    expect(tray).not.toContain('"About Waggle"');
+    expect(tray).not.toContain('"waggle://pause-agents"');
+    expect(tray).not.toContain('"waggle://quit"');
+    expect(tray).not.toContain('"/about"');
+  });
+
+  it('web app mounts the Tauri desktop navigation bridge', () => {
+    const app = fs.readFileSync(path.join(ROOT, 'apps', 'web', 'src', 'App.tsx'), 'utf-8');
+    expect(app).toContain('listenDesktopNavigation');
+    expect(app).toContain('listenDesktopShellEvents');
+    expect(app).toContain('<TauriDesktopEventBridge />');
   });
 
   it('tauri.conf.json has CSP that allows localhost connections', () => {
@@ -136,10 +158,27 @@ describe('Tauri Production Configuration', () => {
     expect(cargo).toContain('tauri-plugin-single-instance');
   });
 
-  it('lib.rs initializes updater plugin', () => {
+  it('capabilities do not expose updater commands while updater config is disabled', () => {
+    const caps = JSON.parse(
+      fs.readFileSync(path.join(TAURI_DIR, 'capabilities', 'default.json'), 'utf-8'),
+    );
+    expect(caps.permissions).not.toContain('updater:default');
+  });
+
+  it('does not configure unit-only Tauri plugins as objects', () => {
+    // Regression: the packaged debug exe panicked during startup when
+    // `plugins.dialog` was `{ open, save }`; tauri-plugin-dialog expects no
+    // config payload when initialized with `tauri_plugin_dialog::init()`.
+    const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
+    expect(conf.plugins?.dialog).toBeUndefined();
+  });
+
+  it('lib.rs does not initialize updater while config is disabled', () => {
+    // Regression: registering tauri-plugin-updater without plugins.updater
+    // config deserializes as null and panics before the desktop UI starts.
     const lib = fs.readFileSync(path.join(TAURI_DIR, 'src', 'lib.rs'), 'utf-8');
-    expect(lib).toContain('tauri_plugin_updater');
-    expect(lib).toContain('update-available');
+    expect(lib).not.toContain('tauri_plugin_updater::Builder::new().build()');
+    expect(lib).not.toContain('.updater()');
   });
 
   it('NSIS installer template exists', () => {
