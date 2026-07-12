@@ -21,9 +21,9 @@ import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, rmSyn
 import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { execSync } from 'child_process';
-import { MarketplaceDB } from './db';
-import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security';
-import { type FetchFn, defaultFetch } from './fetcher';
+import { MarketplaceDB } from './db.js';
+import { SecurityGate, type ScanResult, type SecurityGateConfig } from './security.js';
+import { type FetchFn, defaultFetch } from './fetcher.js';
 import type {
   MarketplacePackage,
   InstallManifest,
@@ -34,7 +34,7 @@ import type {
   McpServerConfig,
   PluginManifest,
   PostInstallHook,
-} from './types';
+} from './types.js';
 
 const WAGGLE_DIR = join(homedir(), '.waggle');
 const SKILLS_DIR = join(WAGGLE_DIR, 'skills');

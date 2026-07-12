@@ -9,8 +9,8 @@
  * packages from the MCP ecosystem.
  */
 
-import type { MarketplacePackage } from './types';
-import type { MarketplaceDB } from './db';
+import type { MarketplacePackage } from './types.js';
+import type { MarketplaceDB } from './db.js';
 
 // ─── Source ID Management ────────────────────────────────────────────
 

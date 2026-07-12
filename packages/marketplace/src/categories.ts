@@ -5,7 +5,7 @@
  * and provides auto-categorization based on name + description keywords.
  */
 
-import type { MarketplaceDB } from './db';
+import type { MarketplaceDB } from './db.js';
 
 export const PACKAGE_CATEGORIES = [
   { id: 'marketing', name: 'Marketing', icon: '\u{1F4E2}', description: 'Campaign planning, SEO, content marketing, social media' },

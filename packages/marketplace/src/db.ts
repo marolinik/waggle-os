@@ -8,7 +8,7 @@
 import Database from 'better-sqlite3';
 import { join } from 'path';
 import { homedir } from 'os';
-import { seedMcpServers } from './mcp-registry';
+import { seedMcpServers } from './mcp-registry.js';
 import type {
   MarketplacePackage,
   MarketplaceSource,
@@ -19,7 +19,7 @@ import type {
   SearchOptions,
   SearchResult,
   SearchSort,
-} from './types';
+} from './types.js';
 
 const DEFAULT_DB_PATH = join(homedir(), '.waggle', 'marketplace.db');
 

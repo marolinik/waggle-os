@@ -23,13 +23,13 @@ import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { execFileSync } from 'child_process';
 import { createHash } from 'crypto';
-import type { MarketplacePackage, InstallManifest, McpServerConfig } from './types';
+import type { MarketplacePackage, InstallManifest, McpServerConfig } from './types.js';
 import {
   isCiscoScannerAvailable,
   ciscoScan,
   getCiscoScannerVersion,
   type CiscoScanResult,
-} from './cisco-scanner';
+} from './cisco-scanner.js';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
