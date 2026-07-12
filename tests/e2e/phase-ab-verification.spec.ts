@@ -245,6 +245,37 @@ test.describe('B.4 — Approvals app', () => {
 // ── Structural health ────────────────────────────────────────────────────
 
 test.describe('Structural health', () => {
+  test('clean first-run onboarding loads without Clerk, CSP, or page errors', async ({ page }) => {
+    const consoleErrors: string[] = [];
+    const pageErrors: string[] = [];
+    page.on('console', msg => {
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
+    });
+    page.on('pageerror', err => pageErrors.push(err.message));
+    await page.addInitScript(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+
+    await page.goto(`${BASE}/?forceWizard=true`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('region', { name: /waggle onboarding/i })).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1_000);
+
+    expect(pageErrors).toHaveLength(0);
+    expect(consoleErrors.filter(e => /clerk|content security policy|csp/i.test(e))).toHaveLength(0);
+    expect(consoleErrors.filter(e =>
+      !e.includes('Failed to fetch') &&
+      !e.includes('net::ERR') &&
+      !e.includes('favicon') &&
+      !e.includes('401') &&
+      !e.includes('404') &&
+      !e.includes('sync') &&
+      !e.includes('WebSocket') &&
+      !e.includes('model') &&
+      !e.includes('fetch')
+    )).toHaveLength(0);
+  });
+
   test('health endpoint returns ok', async ({ request }) => {
     const res = await request.get(`${BASE}/health`);
     expect(res.ok()).toBeTruthy();
@@ -288,5 +319,6 @@ test.describe('Structural health', () => {
       !e.includes('fetch')
     );
     expect(realErrors).toHaveLength(0);
+    expect(errors.filter(e => /clerk|content security policy|csp/i.test(e))).toHaveLength(0);
   });
 });

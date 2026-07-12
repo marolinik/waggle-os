@@ -371,6 +371,7 @@ test.describe('7. Stability', () => {
       !e.includes('model') && !e.includes('chunk')
     );
     expect(critical).toHaveLength(0);
+    expect(errors.filter(e => /clerk|content security policy|csp/i.test(e))).toHaveLength(0);
   });
 
   test('no uncaught exceptions after opening 3 apps', async ({ page }) => {
