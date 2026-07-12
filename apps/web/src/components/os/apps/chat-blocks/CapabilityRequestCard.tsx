@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Loader2, Download, Plug, Zap, CheckCircle2, XCircle, Package, ShieldCheck } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useToast } from '@/hooks/use-toast';
@@ -42,6 +42,7 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [token, setToken] = useState('');
+  const tokenInputId = useId();
   const { toast } = useToast();
   const { install } = useInstallStore();
 
@@ -153,7 +154,13 @@ export default function CapabilityRequestCard({ request }: CapabilityRequestCard
               never touches the boolean approval channel (D3). */}
           {showToken && (
             <div className="flex items-center gap-1.5 mt-2">
+              <label htmlFor={tokenInputId} className="sr-only">
+                {request.name} API token
+              </label>
               <Input
+                id={tokenInputId}
+                name="capabilityConnectorToken"
+                autoComplete="off"
                 type="password"
                 value={token}
                 onChange={e => setToken(e.target.value)}

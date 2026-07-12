@@ -133,7 +133,7 @@ export default function PlanCards({ currentTier, onChoose, disabled = false }: P
                 </span>
               )}
               {isCurrent && (
-                <span className="absolute -top-[11px] right-6 text-[11px] font-bold uppercase text-white bg-[var(--work)] px-[11px] py-1 rounded-full">
+                <span className="absolute -top-[11px] right-6 text-[11px] font-bold uppercase text-primary-foreground bg-[var(--work)] px-[11px] py-1 rounded-full">
                   Current
                 </span>
               )}

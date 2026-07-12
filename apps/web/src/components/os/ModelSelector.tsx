@@ -81,6 +81,15 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
               {provider.models.length === 0 && !provider.requiresKey && (
                 <span className="text-[11px] text-muted-foreground">Configure in Ollama</span>
               )}
+              {provider.models.length === 0 && provider.requiresKey && provider.hasKey && (
+                <span className="text-[11px] text-muted-foreground">
+                  {provider.modelsSource === 'unavailable'
+                    ? 'Provider catalog unavailable — refresh providers'
+                    : provider.modelsSource === 'stale-provider-api'
+                      ? 'Last-known provider catalog unavailable'
+                      : 'No models returned by provider'}
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -139,7 +148,15 @@ const ModelSelector = ({ value, onChange, providers, variant = 'dropdown', onlyA
                 </button>
               ))}
               {provider.models.length === 0 && (
-                <div className="px-3 py-1.5 text-[11px] text-muted-foreground">No models — configure locally</div>
+                <div className="px-3 py-1.5 text-[11px] text-muted-foreground">
+                  {provider.requiresKey && provider.hasKey
+                    ? provider.modelsSource === 'unavailable'
+                      ? 'Provider catalog unavailable — refresh providers'
+                      : provider.modelsSource === 'stale-provider-api'
+                        ? 'Last-known provider catalog unavailable'
+                        : 'No models returned by provider'
+                    : 'No models — configure locally'}
+                </div>
               )}
             </div>
           ))}

@@ -17,7 +17,7 @@ import { useBilling } from '@/hooks/useBilling';
 
 const TIER_HEADLINE: Record<string, string> = {
   // PRO retained for legacy checkout sessions that predate the Solo/Team split.
-  PRO: 'Pro',
+  PRO: 'Legacy Pro',
   TEAMS: 'Team',
   ENTERPRISE: 'Enterprise',
 };

@@ -298,10 +298,13 @@ const ModelPilotCard = ({
           <h3 className="text-sm font-display font-semibold text-foreground">Model Pilot</h3>
           <HintTooltip content="What is Model Pilot?">
             <button
+              type="button"
+              aria-label={showInfo ? 'Hide Model Pilot details' : 'Show Model Pilot details'}
+              aria-expanded={showInfo}
               onClick={() => setShowInfo(!showInfo)}
               className="text-muted-foreground hover:text-foreground transition-colors"
             >
-              <Info className="w-3.5 h-3.5" />
+              <Info className="w-3.5 h-3.5" aria-hidden="true" />
             </button>
           </HintTooltip>
         </div>
@@ -453,13 +456,15 @@ const ModelPilotCard = ({
             </p>
           </div>
           <input
+            aria-label="Budget saver activation threshold"
+            name="budgetThreshold"
             type="range"
             min={0.1}
             max={1.0}
             step={0.05}
             value={budgetThreshold}
             onChange={(e) => onUpdate({ budgetThreshold: parseFloat(e.target.value) })}
-            className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-[var(--honey)] cursor-pointer"
+            className="w-full h-1.5 rounded-full appearance-none bg-muted/50 accent-[var(--honey)] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           />
           <div className="flex justify-between text-[11px] text-muted-foreground mt-0.5">
             <span>10%</span>
