@@ -17,6 +17,7 @@ import { useShell } from '@/providers/ShellContext';
 import { canCreateWorkspaceAtTier } from '@/lib/workspace-limit';
 import LockedFeature from '@/components/os/LockedFeature';
 import { buildBreadcrumbs } from '@/lib/browse-breadcrumbs';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 import type { StorageType, WorkspaceTemplate, TemplateCategory } from '@/lib/types';
 import { TIER_CAPABILITIES, type ConnectorDefinition } from '@waggle/shared';
 
@@ -159,7 +160,7 @@ function ChipPicker({ options, selected, onChange, label }: {
               <button
                 type="button"
                 onClick={() => toggle(opt.id)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border ${
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border ${
                   isActive
                     ? 'bg-primary/20 border-primary/50 text-foreground'
                     : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -257,31 +258,37 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
     rootLabel,
     storageType as 'local' | 'virtual' | 'team',
   );
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
+  const titleId = storageType === 'local' ? 'folder-picker-title' : 'bucket-picker-title';
 
   if (!open) return null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[110] flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
+      <motion.div ref={dialogRef} initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
         onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
           <div className="flex items-center gap-2">
             <FolderOpen className={`w-4 h-4 ${storageType === 'local' ? 'text-emerald-400' : 'text-sky-400'}`} />
-            <h3 className="text-sm font-display font-semibold text-foreground">
+            <h3 id={titleId} className="text-sm font-display font-semibold text-foreground">
               {storageType === 'local' ? 'Browse Folders' : 'Browse Buckets'}
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
+          <button type="button" onClick={onClose} aria-label="Close folder picker" className="p-1 rounded-lg text-muted-foreground hover:text-foreground"><X className="w-3.5 h-3.5" /></button>
         </div>
         <div className="flex items-center gap-0.5 px-4 py-2 border-b border-border/20 overflow-x-auto">
           {breadcrumbs.map((crumb, i) => (
             <span key={crumb.path} className="flex items-center gap-0.5 shrink-0">
               {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50" />}
-              <button onClick={() => handleNavigate(crumb.path)}
+              <button type="button" onClick={() => handleNavigate(crumb.path)}
                 className={`text-[11px] px-1.5 py-0.5 rounded transition-colors ${browsePath === crumb.path ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
                 {i === 0 ? <Home className="w-3 h-3" /> : crumb.label}
               </button>
@@ -296,7 +303,7 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
           ) : entries.length === 0 ? (
             <div className="flex items-center justify-center py-8"><span className="text-[11px] text-muted-foreground">No subdirectories</span></div>
           ) : entries.map(entry => (
-            <button key={entry.path} onClick={() => handleNavigate(entry.path)}
+            <button key={entry.path} type="button" onClick={() => handleNavigate(entry.path)}
               className="w-full flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-left transition-colors hover:bg-muted/50 text-muted-foreground hover:text-foreground">
               <Folder className="w-3.5 h-3.5 shrink-0 text-amber-400/70" /><span className="text-[11px] truncate">{entry.name}</span>
             </button>
@@ -308,14 +315,21 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
                 className="flex items-center gap-1.5 overflow-hidden">
                 <FolderPlus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <Input value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="New folder name…"
+                <Input
+                  aria-label="New folder name"
+                  name="newFolderName"
+                  autoComplete="off"
+                  value={newFolderName}
+                  onChange={e => setNewFolderName(e.target.value)}
+                  placeholder="New folder name…"
                   className="flex-1 bg-muted/50 text-[11px] h-auto py-1" autoFocus
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') { setShowNewFolder(false); setNewFolderName(''); } }} />
-                <button onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}
+                <button type="button" onClick={handleCreateFolder} disabled={!newFolderName.trim() || creatingFolder}
                   className="px-2 py-1 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors">
                   {creatingFolder ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Create'}
                 </button>
-                <button onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
+                <button type="button" onClick={() => { setShowNewFolder(false); setNewFolderName(''); }}
+                  aria-label="Cancel new folder"
                   className="px-1.5 py-1 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors"><X className="w-3 h-3" /></button>
               </motion.div>
             )}
@@ -325,13 +339,13 @@ function FolderPickerModal({ open, storageType, currentPath, onSelect, onClose }
             <span className="text-[11px] font-mono text-foreground truncate">{browsePath}</span>
           </div>
           <div className="flex justify-between">
-            <button onClick={() => setShowNewFolder(true)}
+            <button type="button" onClick={() => setShowNewFolder(true)}
               className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] rounded-lg bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors">
               <FolderPlus className="w-3 h-3" /> New Folder
             </button>
             <div className="flex gap-2">
-              <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-              <button onClick={() => { onSelect(browsePath); onClose(); }} disabled={!browsePath || browsePath === '/'}
+              <button type="button" onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+              <button type="button" onClick={() => { onSelect(browsePath); onClose(); }} disabled={!browsePath || browsePath === '/'}
                 className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors">
                 <Check className="w-3 h-3" /> Select
               </button>
@@ -353,6 +367,76 @@ interface TemplateCreatorProps {
   editingTemplate?: WorkspaceTemplate | null;
   /** Pre-fill data for duplication (creates new, does not update) */
   initialData?: WorkspaceTemplate | null;
+}
+
+interface TemplateDeleteConfirmProps {
+  template: WorkspaceTemplate | null;
+  deleting: boolean;
+  error: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+function TemplateDeleteConfirm({ template, deleting, error, onCancel, onConfirm }: TemplateDeleteConfirmProps) {
+  const dialogRef = useFocusTrap<HTMLDivElement>(!!template, onCancel);
+  if (!template) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[120] flex items-center justify-center"
+      onClick={onCancel}
+    >
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+      <motion.div
+        ref={dialogRef}
+        initial={{ opacity: 0, scale: 0.95, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 8 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-template-title"
+        aria-describedby="delete-template-description"
+        tabIndex={-1}
+        className="relative w-full max-w-sm glass-strong rounded-2xl p-5 shadow-2xl focus:outline-none"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start gap-3">
+          <div className="mt-0.5 rounded-xl bg-destructive/10 p-2 text-destructive">
+            <Trash2 className="h-4 w-4" aria-hidden />
+          </div>
+          <div>
+            <h3 id="delete-template-title" className="text-sm font-display font-semibold text-foreground">Delete template</h3>
+            <p id="delete-template-description" className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              Delete "{template.name}" from your custom workspace templates. Existing workspaces are not changed.
+            </p>
+          </div>
+        </div>
+        {error && <p className="mb-3 text-xs text-destructive" role="alert">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={deleting}
+            className="rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={deleting}
+            className="inline-flex items-center gap-1 rounded-lg bg-destructive px-3 py-1.5 text-xs font-medium text-destructive-foreground transition-colors hover:bg-destructive/90 disabled:opacity-50"
+          >
+            {deleting ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> : <Trash2 className="h-3 w-3" aria-hidden />}
+            Delete template
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 }
 
 function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, editingTemplate, initialData }: TemplateCreatorProps) {
@@ -440,6 +524,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
   // means only the header triggers drag, not clicks on form fields.
   const dragControls = useDragControls();
   const backdropRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
 
   if (!open) return null;
 
@@ -448,8 +533,9 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
       ref={backdropRef}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-[110] flex items-center justify-center" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" aria-hidden="true" />
       <motion.div
+        ref={dialogRef}
         initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
         drag
@@ -457,7 +543,11 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
         dragControls={dragControls}
         dragMomentum={false}
         dragConstraints={backdropRef}
-        className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="template-creator-title"
+        tabIndex={-1}
+        className="relative w-full max-w-lg glass-strong rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
         onClick={e => e.stopPropagation()}>
 
         {/* Header — also the drag handle. */}
@@ -468,11 +558,13 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
         >
           <div className="flex items-center gap-2">
             <Wand2 className="w-4 h-4 text-honey" />
-            <h3 className="text-sm font-display font-semibold text-foreground">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
+            <h3 id="template-creator-title" className="text-sm font-display font-semibold text-foreground">{editingTemplate ? 'Edit Template' : 'Create Template'}</h3>
           </div>
           <button
+            type="button"
             onClick={onClose}
             onPointerDown={e => e.stopPropagation()}
+            aria-label="Close template creator"
             className="p-1 rounded-lg text-muted-foreground hover:text-foreground"
           >
             <X className="w-3.5 h-3.5" />
@@ -489,6 +581,9 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           </div>
           <div className="flex gap-2">
             <Input
+              aria-label="Describe workspace template for AI fill"
+              name="templateAiPrompt"
+              autoComplete="off"
               value={aiPrompt}
               onChange={e => setAiPrompt(e.target.value)}
               placeholder="e.g. I need a workspace for managing customer support tickets via Slack and email"
@@ -497,6 +592,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
               disabled={generating}
             />
             <button
+              type="button"
               onClick={handleAiGenerate}
               disabled={!aiPrompt.trim() || generating}
               className="flex items-center gap-1.5 px-3 py-2 text-[11px] rounded-xl bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors whitespace-nowrap"
@@ -513,22 +609,29 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           {/* Name */}
           <div>
             <div className="flex items-center gap-1 mb-1">
-              <label className="text-[11px] text-muted-foreground font-medium">Template Name</label>
+              <label htmlFor="template-name" className="text-[11px] text-muted-foreground font-medium">Template Name</label>
               <Tooltip text="A short name for this template (e.g. 'Customer Support', 'Data Pipeline')"><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Customer Support Hub"
+            <Input
+              id="template-name"
+              name="templateName"
+              autoComplete="off"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Customer Support Hub"
               className="w-full bg-muted/50 rounded-xl text-[11px] h-auto py-2" />
           </div>
 
           {/* Description */}
           <div>
             <div className="flex items-center gap-1 mb-1">
-              <label className="text-[11px] text-muted-foreground font-medium">Description</label>
+              <label htmlFor="template-description" className="text-[11px] text-muted-foreground font-medium">Description</label>
               <Tooltip text="Describe the purpose and use case. This helps AI understand the workspace domain."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
-            <textarea value={description} onChange={e => setDescription(e.target.value)}
+            <textarea id="template-description" name="template-description" autoComplete="off"
+              value={description} onChange={e => setDescription(e.target.value)}
               placeholder="e.g. Handle customer tickets, track satisfaction…" rows={2}
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 resize-none" />
+              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none" />
           </div>
 
           {/* Category */}
@@ -540,7 +643,7 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
             <div className="flex flex-wrap gap-1.5">
               {TEMPLATE_CATEGORIES.filter(c => c.id !== 'all').map(cat => (
                 <button key={cat.id} onClick={() => setCategory(cat.id as TemplateCategory)}
-                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all border ${
+                  className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors border ${
                     category === cat.id
                       ? 'bg-primary/20 border-primary/50 text-foreground'
                       : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -561,8 +664,8 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
                 const Icon = p.icon;
                 const isSelected = persona === p.id;
                 return (
-                  <button key={p.id} onClick={() => setPersona(isSelected ? '' : p.id)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                  <button key={p.id} type="button" onClick={() => setPersona(isSelected ? '' : p.id)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors ${
                       isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
                     <Icon className={`w-4 h-4 ${isSelected ? 'text-honey' : 'text-muted-foreground'}`} />
@@ -596,12 +699,13 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
           {/* Starter Memory */}
           <div>
             <div className="flex items-center gap-1 mb-1">
-              <label className="text-[11px] text-muted-foreground font-medium">Starter Memory</label>
+              <label htmlFor="template-starter-memory" className="text-[11px] text-muted-foreground font-medium">Starter Memory</label>
               <Tooltip text="One instruction per line. Seeds the agent's memory so it knows the workspace context from the start."><Info className="w-3 h-3 text-honey/60 cursor-help" /></Tooltip>
             </div>
-            <textarea value={starterMemory} onChange={e => setStarterMemory(e.target.value)}
+            <textarea id="template-starter-memory" name="template-starter-memory" autoComplete="off"
+              value={starterMemory} onChange={e => setStarterMemory(e.target.value)}
               placeholder={"e.g. This workspace tracks customer support tickets.\nKey workflow: triage → investigate → respond → close."} rows={3}
-              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 resize-none font-mono" />
+              className="w-full bg-muted/50 border border-border/50 rounded-xl px-3 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none font-mono" />
           </div>
         </div>
 
@@ -609,8 +713,8 @@ function TemplateCreatorModal({ open, onClose, onCreated, availableConnectors, e
 
         {/* Footer */}
         <div className="flex justify-end gap-2 px-5 py-3 border-t border-border/30">
-          <button onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-          <button onClick={handleSave} disabled={!name.trim() || !description.trim() || saving}
+          <button type="button" onClick={onClose} className="px-3 py-1.5 text-[11px] rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+          <button type="button" onClick={handleSave} disabled={!name.trim() || !description.trim() || saving}
             className="flex items-center gap-1 px-3 py-1.5 text-[11px] rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-40 transition-colors">
             {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : editingTemplate ? <Check className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
             {editingTemplate ? 'Save Changes' : 'Create Template'}
@@ -647,8 +751,14 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [showTemplateCreator, setShowTemplateCreator] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WorkspaceTemplate | null>(null);
   const [duplicatingTemplate, setDuplicatingTemplate] = useState<WorkspaceTemplate | null>(null);
+  const [pendingDeleteTemplate, setPendingDeleteTemplate] = useState<WorkspaceTemplate | null>(null);
+  const [deletingTemplate, setDeletingTemplate] = useState(false);
+  const [templateDeleteError, setTemplateDeleteError] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<TemplateCategory | 'all'>('all');
   const [templateSearch, setTemplateSearch] = useState('');
+  const [showTemplateOptions, setShowTemplateOptions] = useState(false);
+  const [showAgentOptions, setShowAgentOptions] = useState(false);
+  const dialogRef = useFocusTrap<HTMLDivElement>(open && !showTemplateCreator && !showFolderPicker && !pendingDeleteTemplate, onClose);
 
   // Connectors from backend
   const [connectors, setConnectors] = useState<ConnectorDefinition[]>([]);
@@ -657,6 +767,14 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
   const [agentGroups, setAgentGroups] = useState<AgentGroupOption[]>([]);
   const [agentMode, setAgentMode] = useState<'single' | 'group'>('single');
   const [selectedGroupId, setSelectedGroupId] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (open) return;
+    setShowTemplateOptions(false);
+    setShowAgentOptions(false);
+    setTemplateSearch('');
+    setCategoryFilter('all');
+  }, [open]);
 
   // Fetch templates + connectors + agent groups when dialog opens
   useEffect(() => {
@@ -698,8 +816,30 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
     });
     setName(''); setGroup('Personal'); setSelectedPersona(undefined); setShared(false);
     setStorageType('virtual'); setStoragePath(''); setSelectedTemplate(null);
+    setShowTemplateOptions(false); setTemplateSearch(''); setCategoryFilter('all'); setShowAgentOptions(false);
     setAgentMode('single'); setSelectedGroupId(undefined);
     onClose();
+  };
+
+  const requestDeleteTemplate = (template: WorkspaceTemplate) => {
+    setTemplateDeleteError(null);
+    setPendingDeleteTemplate(template);
+  };
+
+  const handleDeleteTemplate = async () => {
+    if (!pendingDeleteTemplate) return;
+    setDeletingTemplate(true);
+    setTemplateDeleteError(null);
+    try {
+      await adapter.deleteWorkspaceTemplate(pendingDeleteTemplate.id);
+      setTemplates(prev => prev.filter(t => t.id !== pendingDeleteTemplate.id));
+      if (selectedTemplate === pendingDeleteTemplate.id) setSelectedTemplate(null);
+      setPendingDeleteTemplate(null);
+    } catch (err: any) {
+      setTemplateDeleteError(err?.message ?? 'Template delete failed');
+    } finally {
+      setDeletingTemplate(false);
+    }
   };
 
   // Build connector chip options — merge backend connectors + known names from templates
@@ -756,20 +896,25 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
       <motion.div key="create-workspace-dialog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         className="fixed inset-0 z-[100] flex items-center justify-center" onClick={onClose}>
         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        <motion.div ref={dialogRef} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl p-6 max-h-[85vh] overflow-y-auto"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-workspace-title"
+          tabIndex={-1}
+          className="relative w-full max-w-md glass-strong rounded-2xl shadow-2xl max-h-[85vh] overflow-hidden focus:outline-none flex flex-col"
           onClick={e => e.stopPropagation()}>
 
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-display font-semibold text-foreground">Create Workspace</h2>
-            <button onClick={onClose} className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
+          <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-border/30">
+            <h2 id="create-workspace-title" className="text-lg font-display font-semibold text-foreground">Create Workspace</h2>
+            <button type="button" onClick={onClose} aria-label="Close create workspace" className="p-1 rounded-lg text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 px-6 py-4 overflow-y-auto flex-1 min-h-0">
 
             {/* ── Template Selection ── */}
-            <div>
+            {showTemplateOptions && (
+            <div id="create-workspace-template-options">
               <div className="flex items-center justify-between mb-1.5">
                 <div className="flex items-center gap-1">
                   <label className="text-xs text-muted-foreground">Template</label>
@@ -787,7 +932,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <div className="flex flex-wrap gap-1 mb-1.5">
                 {TEMPLATE_CATEGORIES.map(cat => (
                   <button key={cat.id} onClick={() => setCategoryFilter(cat.id)}
-                    className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-all border ${
+                    className={`px-2 py-0.5 rounded-lg text-[11px] font-medium transition-colors border ${
                       categoryFilter === cat.id
                         ? 'bg-primary/20 border-primary/50 text-foreground'
                         : 'bg-secondary/30 border-transparent text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -801,6 +946,9 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <div className="relative mb-1.5">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
                 <Input
+                  aria-label="Search workspace templates"
+                  name="workspaceTemplateSearch"
+                  autoComplete="off"
                   value={templateSearch}
                   onChange={e => setTemplateSearch(e.target.value)}
                   placeholder="Search templates…"
@@ -824,7 +972,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                   {/* Blank option */}
                   {categoryFilter === 'all' && !searchLower && (
                   <button onClick={() => setSelectedTemplate(null)}
-                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                    aria-label="Start from a blank workspace"
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors ${
                       selectedTemplate === null ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
                     <FileText className="w-4 h-4 text-muted-foreground" />
@@ -841,7 +990,8 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       <div key={tmpl.id} className="relative group">
                         <Tooltip text={tmpl.description}>
                           <button onClick={() => setSelectedTemplate(isSelected ? null : tmpl.id)}
-                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all w-full ${
+                            aria-label={`${isSelected ? 'Deselect' : 'Select'} template ${tmpl.name}`}
+                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-colors w-full ${
                               isSelected ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                             }`}>
                             <Icon className={`w-4 h-4 ${isSelected ? 'text-honey' : 'text-muted-foreground'}`} />
@@ -853,36 +1003,34 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                         </Tooltip>
                         <div className="absolute top-0.5 right-0.5 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                           <HintTooltip content="Duplicate">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
-                              className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                            >
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                                aria-label={`Duplicate template ${tmpl.name} from grid`}
+                                className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                              >
                               <Copy className="w-2.5 h-2.5" />
                             </button>
                           </HintTooltip>
                           {!tmpl.builtIn && (
                             <>
                               <HintTooltip content="Edit">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
-                                  className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
-                                >
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                                    aria-label={`Edit template ${tmpl.name} from grid`}
+                                    className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                                  >
                                   <Pencil className="w-2.5 h-2.5" />
                                 </button>
                               </HintTooltip>
                               <HintTooltip content="Delete">
-                                <button
-                                  onClick={async (e) => {
-                                    e.stopPropagation();
-                                    if (!confirm(`Delete template "${tmpl.name}"?`)) return;
-                                    try {
-                                      await adapter.deleteWorkspaceTemplate(tmpl.id);
-                                      setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                                      if (selectedTemplate === tmpl.id) setSelectedTemplate(null);
-                                    } catch { /* ignore */ }
-                                  }}
-                                  className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
-                                >
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      requestDeleteTemplate(tmpl);
+                                    }}
+                                    aria-label={`Delete template ${tmpl.name} from grid`}
+                                    className="p-0.5 rounded bg-muted/80 text-muted-foreground hover:text-destructive transition-colors"
+                                  >
                                   <Trash2 className="w-2.5 h-2.5" />
                                 </button>
                               </HintTooltip>
@@ -908,6 +1056,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       <div className="flex gap-1">
                         <HintTooltip content="Duplicate">
                           <button onClick={() => { setDuplicatingTemplate(tmpl); setEditingTemplate(null); setShowTemplateCreator(true); }}
+                            aria-label={`Duplicate selected template ${tmpl.name}`}
                             className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
                             <Copy className="w-3 h-3" />
                           </button>
@@ -916,19 +1065,14 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                           <>
                             <HintTooltip content="Edit">
                               <button onClick={() => { setEditingTemplate(tmpl); setDuplicatingTemplate(null); setShowTemplateCreator(true); }}
+                                aria-label={`Edit selected template ${tmpl.name}`}
                                 className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors">
                                 <Pencil className="w-3 h-3" />
                               </button>
                             </HintTooltip>
                             <HintTooltip content="Delete">
-                              <button onClick={async () => {
-                                if (!confirm(`Delete "${tmpl.name}"?`)) return;
-                                try {
-                                  await adapter.deleteWorkspaceTemplate(tmpl.id);
-                                  setTemplates(prev => prev.filter(t => t.id !== tmpl.id));
-                                  setSelectedTemplate(null);
-                                } catch { /* ignore */ }
-                              }}
+                              <button onClick={() => requestDeleteTemplate(tmpl)}
+                                aria-label={`Delete selected template ${tmpl.name}`}
                                 className="p-0.5 rounded text-muted-foreground hover:text-destructive transition-colors">
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -951,11 +1095,18 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 );
               })()}
             </div>
+            )}
 
             {/* ── Workspace Name ── */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">What project or area is this for?</label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Acme Client, Q3 Launch, Home Renovation"
+              <label htmlFor="create-workspace-name" className="text-xs text-muted-foreground block mb-1.5">What project or area is this for?</label>
+              <Input
+                id="create-workspace-name"
+                name="workspaceName"
+                autoComplete="off"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="e.g. Acme Client, Q3 Launch, Home Renovation"
                 className="w-full bg-muted/50 rounded-xl"
                 aria-invalid={isDuplicateName || undefined}
                 autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()} />
@@ -988,7 +1139,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               <div className="grid grid-cols-3 gap-2">
                 {STORAGE_OPTIONS.map(opt => (
                   <button key={opt.type} onClick={() => setStorageType(opt.type)}
-                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-all ${
+                    className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-colors ${
                       storageType === opt.type ? 'bg-primary/20 border border-primary/50' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                     }`}>
                     <opt.icon className={`w-5 h-5 ${opt.color}`} />
@@ -1001,7 +1152,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
 
             {/* ── Storage Path ── */}
             <div>
-              <label className="text-xs text-muted-foreground block mb-1.5">
+              <label htmlFor="create-workspace-storage-path" className="text-xs text-muted-foreground block mb-1.5">
                 {storageType === 'virtual' ? 'Storage Path' : storageType === 'local' ? 'Local Directory Path' : 'Bucket / Prefix'}
               </label>
               {storageType === 'virtual' ? (
@@ -1011,7 +1162,13 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <Input value={storagePath} onChange={e => setStoragePath(e.target.value)}
+                  <Input
+                    id="create-workspace-storage-path"
+                    name="workspaceStoragePath"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={storagePath}
+                    onChange={e => setStoragePath(e.target.value)}
                     placeholder={storageType === 'local' ? '/home/user/projects/my-workspace' : 'my-bucket/workspace-prefix'}
                     className="flex-1 bg-muted/50 rounded-xl font-mono text-[11px]" />
                   <button onClick={async () => {
@@ -1034,8 +1191,44 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
               </p>
             </div>
 
+            <button
+              type="button"
+              onClick={() => setShowTemplateOptions(value => !value)}
+              aria-expanded={showTemplateOptions}
+              aria-controls="create-workspace-template-options"
+              className="w-full flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-secondary/25 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-secondary/40"
+            >
+              <span>
+                <span className="block font-display">{showTemplateOptions ? 'Hide templates' : 'Start from template'}</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {selectedTemplate ? `Using ${templates.find(t => t.id === selectedTemplate)?.name ?? 'selected template'}` : 'Optional: add preset tools, persona, and starter memory'}
+                </span>
+              </span>
+              <LayoutTemplate className="w-4 h-4 text-honey shrink-0" />
+            </button>
+
             {/* ── Agent Assignment ── */}
-            <div>
+            <button
+              type="button"
+              onClick={() => setShowAgentOptions(value => !value)}
+              aria-expanded={showAgentOptions}
+              aria-controls="create-workspace-agent-options"
+              className="w-full flex items-center justify-between gap-3 rounded-xl border border-border/40 bg-secondary/25 px-3 py-2 text-left text-xs text-foreground transition-colors hover:bg-secondary/40"
+            >
+              <span>
+                <span className="block font-display">{showAgentOptions ? 'Hide agent assignment' : 'Choose an agent'}</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {agentMode === 'group' && selectedGroupId
+                    ? `Using ${agentGroups.find(g => g.id === selectedGroupId)?.name ?? 'selected agent group'}`
+                    : selectedPersona
+                      ? `Using ${PERSONAS.find(p => p.id === selectedPersona)?.name ?? 'selected persona'}`
+                      : 'Optional: assign a persona or agent group'}
+                </span>
+              </span>
+              <ChevronRight className={`w-4 h-4 text-honey shrink-0 transition-transform ${showAgentOptions ? 'rotate-90' : ''}`} aria-hidden />
+            </button>
+
+            {showAgentOptions && <div id="create-workspace-agent-options">
               <label className="text-xs text-muted-foreground block mb-1.5">Agent (optional)</label>
               {/* Mode toggle */}
               <div className="flex gap-1 mb-2 p-0.5 rounded-lg bg-secondary/30">
@@ -1061,7 +1254,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 <div className="grid grid-cols-4 gap-2">
                   {PERSONAS.map(p => (
                     <button key={p.id} onClick={() => setSelectedPersona(selectedPersona === p.id ? undefined : p.id)}
-                      className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                      className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-[background-color,border-color,transform] ${
                         selectedPersona === p.id ? 'bg-primary/20 border border-primary/50 scale-105' : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
                       }`}>
                       <Avatar className="w-8 h-8">
@@ -1081,7 +1274,7 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                       <button
                         key={g.id}
                         onClick={() => setSelectedGroupId(selectedGroupId === g.id ? undefined : g.id)}
-                        className={`w-full flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all ${
+                        className={`w-full flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-colors ${
                           selectedGroupId === g.id
                             ? 'bg-primary/20 border border-primary/50'
                             : 'bg-secondary/30 border border-transparent hover:bg-secondary/50'
@@ -1102,11 +1295,11 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                   )}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
 
           {/* Share toggle */}
-          <div className="flex items-center justify-between p-3 mt-4 rounded-xl bg-secondary/30 border border-border/30">
+          <div className="flex items-center justify-between mx-6 mb-3 p-3 rounded-xl bg-secondary/30 border border-border/30">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-sky-400" />
               <div>
@@ -1114,15 +1307,16 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
                 <p className="text-[11px] text-muted-foreground">Make visible to all team members</p>
               </div>
             </div>
-            <button onClick={() => setShared(!shared)}
+            <button type="button" onClick={() => setShared(!shared)}
+              aria-label={shared ? 'Stop sharing workspace with team' : 'Share workspace with team'}
               className={`w-10 h-5 rounded-full transition-colors ${shared ? 'bg-sky-500' : 'bg-muted'}`}>
               <div className={`w-4 h-4 rounded-full bg-foreground transition-transform mx-0.5 ${shared ? 'translate-x-5' : ''}`} />
             </button>
           </div>
 
-          <div className="flex justify-end gap-2 mt-6">
-            <button onClick={onClose} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
-            <button onClick={handleCreate} disabled={!name.trim()}
+          <div className="flex justify-end gap-2 px-6 py-4 border-t border-border/30">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-xs font-display rounded-lg text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+            <button type="button" onClick={handleCreate} disabled={!name.trim()} aria-label="Create workspace"
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-display rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
               <Plus className="w-3.5 h-3.5" /> Create
             </button>
@@ -1150,6 +1344,19 @@ const CreateWorkspaceDialog = ({ open, onClose, onCreate }: CreateWorkspaceDialo
           setEditingTemplate(null);
           setDuplicatingTemplate(null);
         }}
+      />
+
+      <TemplateDeleteConfirm
+        key="template-delete-confirm"
+        template={pendingDeleteTemplate}
+        deleting={deletingTemplate}
+        error={templateDeleteError}
+        onCancel={() => {
+          if (deletingTemplate) return;
+          setPendingDeleteTemplate(null);
+          setTemplateDeleteError(null);
+        }}
+        onConfirm={handleDeleteTemplate}
       />
     </AnimatePresence>
   );

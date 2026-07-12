@@ -5,7 +5,7 @@
  * triggers compilation, and displays health report.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type FormEvent } from 'react';
 import {
   BookOpen, RefreshCw, Loader2, Search, FileText,
   Heart, ChevronRight, Zap, Network, Lightbulb, Download, Upload,
@@ -13,6 +13,16 @@ import {
 import { adapter } from '@/lib/adapter';
 import { renderChatMarkdown } from '@/lib/render-markdown';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 
 export interface WikiPage {
   slug: string;
@@ -72,6 +82,8 @@ interface HealthReport {
   compiledAt: string;
 }
 
+type ExportTarget = 'obsidian' | 'notion';
+
 function formatRelativeHealth(iso: string): string {
   // Normalise SQLite space-separated UTC ("YYYY-MM-DD HH:MM:SS") to ISO so
   // Date.parse reads it as UTC (not local), matching the events.ts timestamp fix.
@@ -113,6 +125,10 @@ export default function WikiTab() {
   const [compiling, setCompiling] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string | null>(null);
+  const [exportTarget, setExportTarget] = useState<ExportTarget | null>(null);
+  const [exportValue, setExportValue] = useState('');
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const loadPages = useCallback(async () => {
     try {
@@ -181,17 +197,23 @@ export default function WikiTab() {
     }
   }, []);
 
-  // M-12: Obsidian export. Uses a prompt() for the absolute path since the
-  // web layer can't open a native folder picker without Tauri APIs; power
-  // users pasting a path is fine for the v1 of this button.
-  const handleExportObsidian = useCallback(async () => {
-    const outDir = window.prompt(
-      'Absolute path to your Obsidian vault directory (will be created if missing):',
-      '',
-    );
-    if (!outDir?.trim()) return;
+  const closeExportDialog = useCallback(() => {
+    setExportTarget(null);
+    setExportValue('');
+    setExportError(null);
+  }, []);
+
+  const openExportDialog = useCallback((target: ExportTarget) => {
+    setExportTarget(target);
+    setExportValue('');
+    setExportError(null);
+  }, []);
+
+  // M-12: Obsidian export. The web layer cannot open a native folder picker, so
+  // the app asks for the absolute path in an in-app form.
+  const exportToObsidian = useCallback(async (outDir: string) => {
     try {
-      const result = await adapter.exportWikiToObsidian(outDir.trim());
+      const result = await adapter.exportWikiToObsidian(outDir);
       setPageContent(
         `# Obsidian Export Complete\n\n` +
         `- **Output dir:** \`${result.outDir}\`\n` +
@@ -207,17 +229,12 @@ export default function WikiTab() {
     }
   }, []);
 
-  // M-13: Notion export. Prompt for the root page URL; the token lives in
+  // M-13: Notion export. The token lives in
   // Vault as `notion-wiki-token` and is set up separately via Settings →
   // Vault. The 503 response carries a hint if the token is missing.
-  const handleExportNotion = useCallback(async () => {
-    const rootPageUrl = window.prompt(
-      'Notion page URL to export under (share this page with your Waggle integration first):',
-      '',
-    );
-    if (!rootPageUrl?.trim()) return;
+  const exportToNotion = useCallback(async (rootPageUrl: string) => {
     try {
-      const result = await adapter.exportWikiToNotion(rootPageUrl.trim());
+      const result = await adapter.exportWikiToNotion(rootPageUrl);
       setPageContent(
         `# Notion Export Complete\n\n` +
         `- **Pages created:** ${result.pagesCreated}\n` +
@@ -238,6 +255,35 @@ export default function WikiTab() {
     }
   }, []);
 
+  const handleExportSubmit = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!exportTarget || exporting) return;
+
+    const value = exportValue.trim();
+    if (!value) {
+      setExportError(
+        exportTarget === 'obsidian'
+          ? 'Enter the Obsidian vault directory path.'
+          : 'Enter the Notion root page URL.',
+      );
+      return;
+    }
+
+    setExporting(true);
+    setExportError(null);
+    const target = exportTarget;
+    closeExportDialog();
+    try {
+      if (target === 'obsidian') {
+        await exportToObsidian(value);
+      } else {
+        await exportToNotion(value);
+      }
+    } finally {
+      setExporting(false);
+    }
+  }, [closeExportDialog, exportTarget, exportToNotion, exportToObsidian, exportValue, exporting]);
+
   // Quality-floored base list — the single source for the list, its type counts,
   // and the header total, so no surface disagrees on what's shown.
   const visiblePages = pages.filter(passesQualityFloor);
@@ -255,6 +301,25 @@ export default function WikiTab() {
   const entityCount = visiblePages.filter(p => p.pageType === 'entity').length;
   const conceptCount = visiblePages.filter(p => p.pageType === 'concept').length;
   const synthesisCount = visiblePages.filter(p => p.pageType === 'synthesis').length;
+  const exportCopy = exportTarget === 'obsidian'
+    ? {
+      title: 'Export to Obsidian',
+      description: 'Choose the vault directory Waggle should write wiki markdown files into.',
+      label: 'Obsidian vault directory',
+      helper: 'Use an absolute path. Waggle will create the folder if it does not exist.',
+      placeholder: 'C:/Users/you/Obsidian/Waggle',
+      action: 'Export to Obsidian',
+    }
+    : exportTarget === 'notion'
+      ? {
+        title: 'Export to Notion',
+        description: 'Choose the Notion page where Waggle should create or update wiki pages.',
+        label: 'Notion root page URL',
+        helper: 'Share this page with your Waggle integration before exporting.',
+        placeholder: 'https://www.notion.so/...',
+        action: 'Export to Notion',
+      }
+      : null;
 
   return (
     <div className="flex h-full">
@@ -271,6 +336,7 @@ export default function WikiTab() {
             <div className="flex gap-1">
               <HintTooltip content="Health Report">
                 <button
+                  aria-label="Open wiki health report"
                   onClick={handleLoadHealth}
                   className="p-1 rounded text-muted-foreground hover:text-green-400 transition-colors"
                 >
@@ -279,6 +345,7 @@ export default function WikiTab() {
               </HintTooltip>
               <HintTooltip content="Compile Wiki">
                 <button
+                  aria-label="Compile wiki"
                   onClick={handleCompile}
                   disabled={compiling}
                   className="p-1 rounded text-muted-foreground hover:text-honey transition-colors disabled:opacity-50"
@@ -288,7 +355,8 @@ export default function WikiTab() {
               </HintTooltip>
               <HintTooltip content="Export to Obsidian vault">
                 <button
-                  onClick={handleExportObsidian}
+                  aria-label="Export to Obsidian vault"
+                  onClick={() => openExportDialog('obsidian')}
                   disabled={pages.length === 0}
                   className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
                 >
@@ -297,7 +365,8 @@ export default function WikiTab() {
               </HintTooltip>
               <HintTooltip content="Export to Notion workspace">
                 <button
-                  onClick={handleExportNotion}
+                  aria-label="Export to Notion workspace"
+                  onClick={() => openExportDialog('notion')}
                   disabled={pages.length === 0}
                   className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors disabled:opacity-30"
                 >
@@ -306,6 +375,7 @@ export default function WikiTab() {
               </HintTooltip>
               <HintTooltip content="Refresh">
                 <button
+                  aria-label="Refresh wiki pages"
                   onClick={loadPages}
                   className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -316,13 +386,16 @@ export default function WikiTab() {
           </div>
 
           {/* Search */}
-          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
+          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 focus-within:ring-2 focus-within:ring-[var(--focus-ring)] focus-within:ring-offset-1 focus-within:ring-offset-background">
             <Search className="w-3 h-3 text-muted-foreground" />
             <input
+              name="wikiSearch"
+              autoComplete="off"
+              aria-label="Search wiki pages"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search pages..."
-              className="flex-1 bg-transparent text-xs border-0 outline-none placeholder:text-muted-foreground"
+              className="flex-1 rounded-md bg-transparent text-xs border-0 outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background"
             />
           </div>
 
@@ -488,6 +561,49 @@ export default function WikiTab() {
           </div>
         )}
       </div>
+      <AlertDialog
+        open={!!exportCopy}
+        onOpenChange={(open) => {
+          if (!open && !exporting) closeExportDialog();
+        }}
+      >
+        <AlertDialogContent data-testid="wiki-export-dialog">
+          <form onSubmit={(event) => { void handleExportSubmit(event); }} className="space-y-4">
+            <AlertDialogHeader>
+              <AlertDialogTitle>{exportCopy?.title}</AlertDialogTitle>
+              <AlertDialogDescription>{exportCopy?.description}</AlertDialogDescription>
+            </AlertDialogHeader>
+            {exportCopy && (
+              <div className="space-y-2">
+                <label htmlFor="wiki-export-target" className="text-xs font-display font-medium text-foreground">
+                  {exportCopy.label}
+                </label>
+                <input
+                  id="wiki-export-target"
+                  name={exportTarget === 'obsidian' ? 'obsidianVaultDirectory' : 'notionRootPageUrl'}
+                  autoComplete="off"
+                  value={exportValue}
+                  onChange={(event) => {
+                    setExportValue(event.target.value);
+                    setExportError(null);
+                  }}
+                  placeholder={exportCopy.placeholder}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  disabled={exporting}
+                />
+                <p className="text-xs text-muted-foreground">{exportCopy.helper}</p>
+                {exportError && <p role="alert" className="text-xs text-destructive">{exportError}</p>}
+              </div>
+            )}
+            <AlertDialogFooter>
+              <AlertDialogCancel type="button" disabled={exporting}>Cancel</AlertDialogCancel>
+              <Button type="submit" disabled={exporting || !exportValue.trim()}>
+                {exporting ? 'Exporting...' : exportCopy?.action ?? 'Export'}
+              </Button>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

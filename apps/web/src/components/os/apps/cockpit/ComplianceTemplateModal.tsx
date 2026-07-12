@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { X, Plus, Loader2, Trash2, Pencil } from 'lucide-react';
 import { adapter } from '@/lib/adapter';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 
 export interface ComplianceTemplateSections {
   interactions: boolean;
@@ -68,6 +69,8 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
   const [editing, setEditing] = useState<ComplianceTemplate | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<ComplianceTemplate | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const [formName, setFormName] = useState('');
   const [formDescription, setFormDescription] = useState('');
@@ -152,15 +155,36 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
   };
 
   const remove = async (t: ComplianceTemplate) => {
-    if (!confirm(`Delete template "${t.name}"?`)) return;
+    setPendingDelete(t);
+  };
+
+  const deleteApproval: ApprovalRequest | null = pendingDelete
+    ? {
+      action: `Delete compliance template: ${pendingDelete.name}`,
+      riskLevel: 'medium',
+      scope: [
+        'Deletes this saved report shape.',
+        'Existing generated reports are not deleted.',
+        'This cannot be undone.',
+      ],
+    }
+    : null;
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
     setError(null);
+    setDeletingId(target.id);
     try {
-      await adapter.deleteComplianceTemplate(t.id);
-      if (editing?.id === t.id) cancelForm();
+      await adapter.deleteComplianceTemplate(target.id);
+      if (editing?.id === target.id) cancelForm();
+      setPendingDelete(null);
       await refresh();
       onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -275,24 +299,30 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
             </h4>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</label>
+              <label htmlFor="compliance-template-name" className="text-[10px] uppercase tracking-wide text-muted-foreground">Name</label>
               <input
+                id="compliance-template-name"
+                name="complianceTemplateName"
                 type="text"
+                autoComplete="off"
                 value={formName}
                 onChange={e => setFormName(e.target.value)}
                 placeholder="e.g. KVARK enterprise audit"
-                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Description</label>
+              <label htmlFor="compliance-template-description" className="text-[10px] uppercase tracking-wide text-muted-foreground">Description</label>
               <input
+                id="compliance-template-description"
+                name="complianceTemplateDescription"
                 type="text"
+                autoComplete="off"
                 value={formDescription}
                 onChange={e => setFormDescription(e.target.value)}
                 placeholder="optional"
-                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
 
@@ -318,11 +348,14 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Risk class</label>
+                <label htmlFor="compliance-template-risk-class" className="text-[10px] uppercase tracking-wide text-muted-foreground">Risk class</label>
                 <select
+                  id="compliance-template-risk-class"
+                  name="complianceTemplateRiskClass"
+                  autoComplete="off"
                   value={formRisk ?? ''}
                   onChange={e => setFormRisk((e.target.value || null) as ComplianceTemplate['riskClassification'])}
-                  className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <option value="">inherit from workspace</option>
                   <option value="minimal">minimal</option>
@@ -332,25 +365,31 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
                 </select>
               </div>
               <div>
-                <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Org name</label>
+                <label htmlFor="compliance-template-org-name" className="text-[10px] uppercase tracking-wide text-muted-foreground">Org name</label>
                 <input
+                  id="compliance-template-org-name"
+                  name="complianceTemplateOrgName"
                   type="text"
+                  autoComplete="organization"
                   value={formOrgName}
                   onChange={e => setFormOrgName(e.target.value)}
                   placeholder="optional"
-                  className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                  className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 />
               </div>
             </div>
 
             <div>
-              <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Footer text</label>
+              <label htmlFor="compliance-template-footer-text" className="text-[10px] uppercase tracking-wide text-muted-foreground">Footer text</label>
               <input
+                id="compliance-template-footer-text"
+                name="complianceTemplateFooterText"
                 type="text"
+                autoComplete="off"
                 value={formFooter}
                 onChange={e => setFormFooter(e.target.value)}
                 placeholder="e.g. Confidential — internal only"
-                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+                className="w-full px-2 py-1 mt-0.5 bg-background/60 border border-border/40 rounded text-[11px] text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               />
             </div>
 
@@ -374,6 +413,15 @@ export function ComplianceTemplateModal({ open, onClose, onChange }: ComplianceT
           </div>
         )}
       </div>
+      <ApprovalModal
+        request={deleteApproval}
+        approveLabel={deletingId !== null ? 'Deleting...' : 'Delete template'}
+        busy={deletingId !== null}
+        onApprove={() => { void confirmDelete(); }}
+        onCancel={() => {
+          if (deletingId === null) setPendingDelete(null);
+        }}
+      />
     </div>
   );
 }

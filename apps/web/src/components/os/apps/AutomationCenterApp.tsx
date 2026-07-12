@@ -12,6 +12,7 @@ import { successRateFromLogs, formatRatePercent, describeTrigger, workspaceLabel
 import AutomationRow from './automations/AutomationRow';
 import AutomationLogList, { type NamedLog } from './automations/AutomationLogList';
 import AutomationBuilder, { type AutomationDraft } from './automations/AutomationBuilder';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 
 /**
  * Automation Center (UX-Refactor Phase 3B, S11 — rename/extension of the
@@ -67,6 +68,8 @@ const AutomationCenterApp = () => {
   const [decidingIds, setDecidingIds] = useState<Set<string>>(new Set());
   /** Template create: assist mode (the Loop proposes actions for approval). */
   const [assistMode, setAssistMode] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Automation | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -181,13 +184,34 @@ const AutomationCenterApp = () => {
   };
 
   const remove = async (a: Automation) => {
-    if (!window.confirm(`Delete automation "${a.name}"? Its run history goes with it.`)) return;
+    setPendingDelete(a);
+  };
+
+  const deleteApproval: ApprovalRequest | null = pendingDelete
+    ? {
+      action: `Delete automation: ${pendingDelete.name}`,
+      riskLevel: 'medium',
+      scope: [
+        'Deletes this automation schedule from this machine.',
+        'Its run history goes with it.',
+        'This cannot be undone.',
+      ],
+    }
+    : null;
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const target = pendingDelete;
+    setDeletingId(target.id);
     try {
-      await adapter.deleteCronJob(a.id);
+      await adapter.deleteCronJob(target.id);
       toast({ title: 'Automation deleted' });
+      setPendingDelete(null);
       await refresh();
     } catch {
       toast({ title: 'Failed to delete automation', variant: 'destructive' });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -559,11 +583,13 @@ const AutomationCenterApp = () => {
                       <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         Runs in:
                         <select
+                          name="automationTemplateWorkspace"
+                          autoComplete="off"
                           value={templateWorkspaceId}
                           onChange={(e) => setTemplateWorkspaceId(e.target.value)}
                           aria-label="Workspace for the new Loop"
                           data-testid="automation-template-workspace"
-                          className="bg-muted/40 text-[10px] py-0.5 px-1 rounded border border-border/40 text-foreground"
+                          className="bg-muted/40 text-[10px] py-0.5 px-1 rounded border border-border/40 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         >
                           <option value="">All workspaces</option>
                           {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
@@ -572,10 +598,11 @@ const AutomationCenterApp = () => {
                       <label className="flex items-center gap-1 text-[10px] text-muted-foreground" title="The Loop drafts one action per run and holds it for your approval — nothing runs until you approve.">
                         <input
                           type="checkbox"
+                          name="automationTemplateAssistMode"
                           checked={assistMode}
                           onChange={(e) => setAssistMode(e.target.checked)}
                           data-testid="automation-template-assist"
-                          className="accent-[var(--accent)]"
+                          className="accent-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         />
                         Propose actions for approval
                       </label>
@@ -707,6 +734,15 @@ const AutomationCenterApp = () => {
           onCancel={() => { setCreating(false); setEditing(null); }}
         />
       )}
+      <ApprovalModal
+        request={deleteApproval}
+        approveLabel={deletingId ? 'Deleting...' : 'Delete automation'}
+        busy={deletingId !== null}
+        onApprove={() => { void confirmDelete(); }}
+        onCancel={() => {
+          if (deletingId === null) setPendingDelete(null);
+        }}
+      />
     </div>
   );
 };

@@ -14,6 +14,7 @@ import { ConfidenceBadge } from '@/components/ui/confidence-badge';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { EvidencePanel } from '@/components/ui/evidence-panel';
 import { Input } from '@/components/ui/input';
+import { ApprovalModal, type ApprovalRequest } from '@/components/ui/approval-modal';
 import { renderChatMarkdown } from '@/lib/render-markdown';
 import { cn } from '@/lib/utils';
 
@@ -59,6 +60,8 @@ const CONFIDENCE_FILTERS: { value: number; label: string }[] = [
   { value: 40, label: 'Medium+' },
   { value: 75, label: 'High only' },
 ];
+
+const CONTROL_FOCUS_CLASS = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-background';
 
 export default function MemoryCenterTab({
   mind = 'personal',
@@ -118,9 +121,15 @@ export default function MemoryCenterTab({
   // (source, sourceRef) subjects a prior Art.17 erasure recorded; a re-import of any
   // of them is skipped. "Allow re-import" lifts the suppression (deliberate re-consent).
   type SuppressedRow = { source: string; sourceRef: string; erasedAt: string; reason: string | null };
+  type PendingApproval =
+    | { kind: 'delete'; memory: Memory }
+    | { kind: 'erase'; memory: Memory }
+    | { kind: 'allow-reimport'; row: SuppressedRow };
   const [suppressionOpen, setSuppressionOpen] = useState(false);
   const [suppressed, setSuppressed] = useState<SuppressedRow[]>([]);
   const [suppressionLoading, setSuppressionLoading] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState<PendingApproval | null>(null);
+  const [approvalBusy, setApprovalBusy] = useState(false);
   // Latest source-fetch token: the id whose fetch is allowed to write state. A
   // selection change (reset effect → undefined) or a newer fetch invalidates any
   // in-flight request so a stale result can't land on the wrong memory.
@@ -222,6 +231,8 @@ export default function MemoryCenterTab({
     setEraseNotice(null);   // a receipt for the prior mind must not persist across the switch
     setSuppressionOpen(false); // the erased-source list is per-mind — collapse + drop stale rows
     setSuppressed([]);
+    setPendingApproval(null);
+    setApprovalBusy(false);
   }, [mind, wsParam]);
 
   const openDetail = (m: Memory) => {
@@ -297,35 +308,14 @@ export default function MemoryCenterTab({
   const archive = (m: Memory) => void mutate(() => adapter.archiveMemory(m.id, wsParam, mind), true);
   const unarchive = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }, wsParam, mind), true);
   const markReviewed = (m: Memory) => void mutate(() => adapter.patchMemory(m.id, { status: 'active' }, wsParam, mind), true);
-  const remove = (m: Memory) => {
-    if (!window.confirm(`Delete this memory permanently?\n\n"${m.title}"\n\nThis cannot be undone. To keep it but hide it, use Archive instead.`)) return;
-    void mutate(() => adapter.deleteMemoryById(m.id, wsParam, mind), true);
-  };
+  const remove = (m: Memory) => setPendingApproval({ kind: 'delete', memory: m });
   // #7 P1 GDPR Art.17 "right to erasure" — the FULL sweep (this memory + its
   // original source text + every search-index entry + knowledge-graph facts
   // derived solely from it + the verbatim conversation turns behind it). Runs
   // server-side in one atomic transaction. Distinct from Delete (removes just
   // this one record) and Archive (hides it). Irreversible → strong confirm +
   // a receipt of exactly what was purged.
-  const erase = (m: Memory) => {
-    if (!window.confirm(
-      `Erase this memory and ALL data derived from it?\n\n"${m.title}"\n\n` +
-      `This is a GDPR "right to erasure" action. It permanently removes the memory, ` +
-      `its original source text, every search index entry, the verbatim conversation ` +
-      `turns behind it, and any knowledge-graph facts derived solely from it. ` +
-      `It cannot be undone.\n\n` +
-      `(To simply hide it, use Archive. To remove only this one record, use Delete.)`,
-    )) return;
-    void mutate(async () => {
-      const { result } = await adapter.eraseMemory({ frameId: m.id }, { workspaceId: wsParam, mind });
-      const parts = [
-        `${result.framesDeleted} ${result.framesDeleted === 1 ? 'memory' : 'memories'} erased`,
-        result.archiveRedacted > 0 ? `${result.archiveRedacted} source ${result.archiveRedacted === 1 ? 'record' : 'records'} redacted` : null,
-        result.entitiesErased > 0 ? `${result.entitiesErased} knowledge ${result.entitiesErased === 1 ? 'entity' : 'entities'} removed` : null,
-      ].filter(Boolean);
-      setEraseNotice(`Erased "${m.title}": ${parts.join(' · ')}.`);
-    }, true);
-  };
+  const erase = (m: Memory) => setPendingApproval({ kind: 'erase', memory: m });
   const mergeSelected = () => {
     const ids = [...checked];
     if (ids.length < 2) return;
@@ -352,23 +342,87 @@ export default function MemoryCenterTab({
     setSuppressionOpen(next);
     if (next) void loadSuppression();
   };
-  const allowReimport = (row: SuppressedRow) => {
-    if (!window.confirm(
-      `Allow this source to be re-imported again?\n\n"${row.source}" / "${row.sourceRef}"\n\n` +
-      `This lifts the GDPR Art.17 erasure suppression: a future import of this source ` +
-      `will re-materialize it. Use this only when the data subject has re-consented.`,
-    )) return;
-    void (async () => {
-      setSuppressionLoading(true);
-      try {
-        await adapter.allowReimport({ source: row.source, sourceRef: row.sourceRef }, { workspaceId: wsParam, mind });
-        await loadSuppression();
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Action failed');
-      } finally {
-        setSuppressionLoading(false);
+  const allowReimport = (row: SuppressedRow) => setPendingApproval({ kind: 'allow-reimport', row });
+
+  const approvalRequest = useMemo<ApprovalRequest | null>(() => {
+    if (!pendingApproval) return null;
+    if (pendingApproval.kind === 'delete') {
+      return {
+        action: `Delete memory permanently: ${pendingApproval.memory.title}`,
+        scope: [
+          'This removes the memory record from Waggle.',
+          'This cannot be undone from the app.',
+          'Use Archive instead if you only want to hide it from recall.',
+        ],
+        riskLevel: 'high',
+      };
+    }
+    if (pendingApproval.kind === 'erase') {
+      return {
+        action: `Erase memory and derived data: ${pendingApproval.memory.title}`,
+        scope: [
+          'This permanently removes the memory, its original source text, search index entries, related conversation turns, and derived knowledge facts.',
+          'This is a GDPR Art.17 erasure action and cannot be undone.',
+          'Use Archive to hide it, or Delete to remove only this one record.',
+        ],
+        riskLevel: 'critical',
+      };
+    }
+    return {
+      action: `Allow source to be re-imported: ${pendingApproval.row.sourceRef}`,
+      scope: [
+        `Source: ${pendingApproval.row.source} / ${pendingApproval.row.sourceRef}`,
+        'This lifts the GDPR Art.17 erasure suppression for this source.',
+        'A future import can re-materialize it; use this only when the data subject has re-consented.',
+      ],
+      riskLevel: 'high',
+    };
+  }, [pendingApproval]);
+
+  const approvalLabel =
+    pendingApproval?.kind === 'delete' ? (approvalBusy ? 'Deleting...' : 'Delete memory')
+      : pendingApproval?.kind === 'erase' ? (approvalBusy ? 'Erasing...' : 'Erase memory')
+        : approvalBusy ? 'Allowing...' : 'Allow re-import';
+
+  const confirmTrustAction = async () => {
+    if (!pendingApproval) return;
+    const current = pendingApproval;
+    setApprovalBusy(true);
+    setEraseNotice(null);
+    try {
+      if (current.kind === 'delete') {
+        setBusy(true);
+        await adapter.deleteMemoryById(current.memory.id, wsParam, mind);
+        setSelected(null);
+        setPendingApproval(null);
+        setReloadTick((t) => t + 1);
+        return;
       }
-    })();
+      if (current.kind === 'erase') {
+        setBusy(true);
+        const { result } = await adapter.eraseMemory({ frameId: current.memory.id }, { workspaceId: wsParam, mind });
+        const parts = [
+          `${result.framesDeleted} ${result.framesDeleted === 1 ? 'memory' : 'memories'} erased`,
+          result.archiveRedacted > 0 ? `${result.archiveRedacted} source ${result.archiveRedacted === 1 ? 'record' : 'records'} redacted` : null,
+          result.entitiesErased > 0 ? `${result.entitiesErased} knowledge ${result.entitiesErased === 1 ? 'entity' : 'entities'} removed` : null,
+        ].filter(Boolean);
+        setEraseNotice(`Erased "${current.memory.title}": ${parts.join(' · ')}.`);
+        setSelected(null);
+        setPendingApproval(null);
+        setReloadTick((t) => t + 1);
+        return;
+      }
+      setSuppressionLoading(true);
+      await adapter.allowReimport({ source: current.row.source, sourceRef: current.row.sourceRef }, { workspaceId: wsParam, mind });
+      setPendingApproval(null);
+      await loadSuppression();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Action failed');
+    } finally {
+      if (current.kind === 'allow-reimport') setSuppressionLoading(false);
+      else setBusy(false);
+      setApprovalBusy(false);
+    }
   };
 
   // Wave V Lane A (item 2): a Trust-hero-parity result-count header frames the
@@ -401,9 +455,12 @@ export default function MemoryCenterTab({
       {/* Filter bar */}
       <div className="border-b border-border/50 p-2.5 space-y-2 bg-background/60">
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1">
-            <Search className="w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1 flex-1 focus-within:ring-2 focus-within:ring-[var(--focus-ring)] focus-within:ring-offset-1 focus-within:ring-offset-background">
+            <Search className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
             <Input
+              aria-label="Search memories"
+              name="memorySearch"
+              autoComplete="off"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search memories..."
@@ -413,7 +470,9 @@ export default function MemoryCenterTab({
           <select
             value={minConfidence}
             onChange={(e) => setMinConfidence(Number(e.target.value))}
-            className="text-[11px] rounded-md border border-border bg-muted/40 px-2 py-1 text-muted-foreground"
+            name="memoryConfidenceFilter"
+            autoComplete="off"
+            className={cn('text-[11px] rounded-md border border-border bg-muted/40 px-2 py-1 text-muted-foreground', CONTROL_FOCUS_CLASS)}
             aria-label="Filter by confidence"
           >
             {CONFIDENCE_FILTERS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
@@ -428,6 +487,7 @@ export default function MemoryCenterTab({
               aria-pressed={status === s.value}
               className={cn(
                 'px-2 py-0.5 rounded-full text-[11px] transition-colors border',
+                CONTROL_FOCUS_CLASS,
                 status === s.value ? 'border-primary/40 bg-primary/15 text-honey' : 'border-transparent bg-muted/50 text-muted-foreground hover:text-foreground',
               )}
             >
@@ -440,7 +500,7 @@ export default function MemoryCenterTab({
           <button
             onClick={() => setKind('')}
             aria-pressed={kind === ''}
-            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === '' ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+            className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', CONTROL_FOCUS_CLASS, kind === '' ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
           >
             All kinds
           </button>
@@ -449,7 +509,7 @@ export default function MemoryCenterTab({
               key={k}
               onClick={() => setKind(kind === k ? '' : k)}
               aria-pressed={kind === k}
-              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', kind === k ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
+              className={cn('px-1.5 py-0.5 rounded text-[11px] transition-colors', CONTROL_FOCUS_CLASS, kind === k ? 'bg-primary/20 text-honey' : 'bg-muted/50 text-muted-foreground hover:text-foreground')}
             >
               {memoryKindLabel(k)}
             </button>
@@ -460,7 +520,7 @@ export default function MemoryCenterTab({
           <button
             onClick={mergeSelected}
             disabled={busy}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/90 disabled:opacity-50"
+            className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium hover:bg-primary/90 disabled:opacity-50', CONTROL_FOCUS_CLASS)}
           >
             <GitMerge className="w-3 h-3" /> Merge {checked.size} memories
           </button>
@@ -472,7 +532,7 @@ export default function MemoryCenterTab({
         <div role="status" aria-live="polite" className="mx-2.5 mt-2 flex items-start gap-2 rounded-md border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs text-foreground">
           <Check className="w-3.5 h-3.5 mt-0.5 shrink-0 text-honey" />
           <span className="flex-1">{eraseNotice}</span>
-          <button onClick={() => setEraseNotice(null)} className="text-muted-foreground hover:text-foreground" aria-label="Dismiss">×</button>
+          <button onClick={() => setEraseNotice(null)} className={cn('text-muted-foreground hover:text-foreground rounded-sm', CONTROL_FOCUS_CLASS)} aria-label="Dismiss">×</button>
         </div>
       )}
 
@@ -481,7 +541,7 @@ export default function MemoryCenterTab({
         <button
           onClick={toggleSuppression}
           aria-expanded={suppressionOpen}
-          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+          className={cn('w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-muted-foreground hover:text-foreground', CONTROL_FOCUS_CLASS)}
         >
           <span className="text-[10px] w-2">{suppressionOpen ? '▾' : '▸'}</span>
           <span>Erased sources{suppressionOpen && suppressed.length > 0 ? ` (${suppressed.length})` : ''}</span>
@@ -503,7 +563,7 @@ export default function MemoryCenterTab({
                   <button
                     onClick={() => allowReimport(row)}
                     disabled={suppressionLoading}
-                    className="shrink-0 text-[11px] px-1.5 py-0.5 rounded border border-border/60 hover:bg-muted disabled:opacity-50"
+                    className={cn('shrink-0 text-[11px] px-1.5 py-0.5 rounded border border-border/60 hover:bg-muted disabled:opacity-50', CONTROL_FOCUS_CLASS)}
                   >Allow re-import</button>
                 </div>
               ))
@@ -559,7 +619,7 @@ export default function MemoryCenterTab({
         ) : error ? (
           <div role="alert" className="text-center py-12">
             <p className="text-xs text-destructive mb-2">{error}</p>
-            <button onClick={() => load()} className="text-xs text-honey hover:underline">Retry</button>
+            <button onClick={() => load()} className={cn('text-xs text-honey hover:underline rounded-sm', CONTROL_FOCUS_CLASS)}>Retry</button>
           </div>
         ) : memories.length === 0 ? (
           <div role="status" aria-live="polite" className="text-center py-12">
@@ -603,31 +663,31 @@ export default function MemoryCenterTab({
         headerExtra={selected ? <ConfidenceBadge value={selected.confidence} compact /> : undefined}
         footer={selected ? (
           <div className="flex flex-wrap items-center gap-2 gap-y-1.5 w-full [&>button]:shrink-0 [&>button]:whitespace-nowrap">
-            <button onClick={saveEdits} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
+            <button onClick={saveEdits} disabled={busy} className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 disabled:opacity-50', CONTROL_FOCUS_CLASS)}>
               <Save className="w-3 h-3" /> Save
             </button>
             {selected.status === 'unreviewed' && (
-              <button onClick={() => markReviewed(selected)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted">
+              <button onClick={() => markReviewed(selected)} disabled={busy} className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted', CONTROL_FOCUS_CLASS)}>
                 <Check className="w-3 h-3" /> Mark reviewed
               </button>
             )}
             {selected.status === 'archived' ? (
-              <button onClick={() => unarchive(selected)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted">
+              <button onClick={() => unarchive(selected)} disabled={busy} className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted', CONTROL_FOCUS_CLASS)}>
                 <RotateCcw className="w-3 h-3" /> Unarchive
               </button>
             ) : (
-              <button onClick={() => archive(selected)} disabled={busy} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted">
+              <button onClick={() => archive(selected)} disabled={busy} className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs hover:bg-muted', CONTROL_FOCUS_CLASS)}>
                 <Archive className="w-3 h-3" /> Archive
               </button>
             )}
-            <button onClick={() => remove(selected)} disabled={busy} className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-destructive hover:bg-destructive/10">
+            <button onClick={() => remove(selected)} disabled={busy} className={cn('ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs text-destructive hover:bg-destructive/10', CONTROL_FOCUS_CLASS)}>
               <Trash2 className="w-3 h-3" /> Delete
             </button>
             <button
               onClick={() => erase(selected)}
               disabled={busy}
               title="GDPR erasure: permanently removes this memory, its original source, the conversation turns behind it, and everything derived from it. Cannot be undone."
-              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-destructive/40 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              className={cn('inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-destructive/40 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50', CONTROL_FOCUS_CLASS)}
             >
               <ShieldOff className="w-3 h-3" /> Erase
             </button>
@@ -648,9 +708,11 @@ export default function MemoryCenterTab({
               <label htmlFor="mc-draft-kind" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Kind</label>
               <select
                 id="mc-draft-kind"
+                name="memoryKind"
+                autoComplete="off"
                 value={draftKind}
                 onChange={(e) => setDraftKind(e.target.value as MemoryKind)}
-                className="mt-1 block w-full text-xs rounded-md border border-border bg-muted/40 px-2 py-1"
+                className={cn('mt-1 block w-full text-xs rounded-md border border-border bg-muted/40 px-2 py-1', CONTROL_FOCUS_CLASS)}
               >
                 {KINDS.map((k) => <option key={k} value={k}>{memoryKindLabel(k)}</option>)}
               </select>
@@ -660,10 +722,12 @@ export default function MemoryCenterTab({
               <label htmlFor="mc-draft-content" className="text-[11px] font-display font-semibold uppercase tracking-wide text-muted-foreground">Content</label>
               <textarea
                 id="mc-draft-content"
+                name="memoryContent"
+                autoComplete="off"
                 value={draftContent}
                 onChange={(e) => setDraftContent(e.target.value)}
                 rows={6}
-                className="mt-1 block w-full text-sm rounded-md border border-border bg-background px-2 py-1.5 leading-relaxed resize-y"
+                className={cn('mt-1 block w-full text-sm rounded-md border border-border bg-background px-2 py-1.5 leading-relaxed resize-y', CONTROL_FOCUS_CLASS)}
               />
               {/* Read-only rendered preview below the editor for markdown context.
                   Safe: renderChatMarkdown escapes &/</> before formatting (same
@@ -723,6 +787,15 @@ export default function MemoryCenterTab({
           </>
         )}
       </DetailDrawer>
+      <ApprovalModal
+        request={approvalRequest}
+        approveLabel={approvalLabel}
+        busy={approvalBusy}
+        onApprove={() => { void confirmTrustAction(); }}
+        onCancel={() => {
+          if (!approvalBusy) setPendingApproval(null);
+        }}
+      />
     </div>
   );
 }
