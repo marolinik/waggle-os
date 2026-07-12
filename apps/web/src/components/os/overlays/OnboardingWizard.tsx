@@ -399,7 +399,7 @@ const OnboardingWizard = ({ serverBaseUrl, state, onUpdate, onComplete, onDismis
       </div>
 
       {/* Content area — renders current step by NAME */}
-      <div className="flex-1 flex items-center justify-center px-6 overflow-y-auto">
+      <div className="flex-1 flex items-start justify-center overflow-y-auto px-4 py-3 sm:items-center sm:px-6 sm:py-0">
         <div className="w-full max-w-2xl">
           <AnimatePresence mode="wait">
             {step === stepIndex('first-launch') && (
