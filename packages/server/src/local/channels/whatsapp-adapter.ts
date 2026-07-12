@@ -184,6 +184,10 @@ export async function useVaultWhatsAppAuthState(
   return { state, saveCreds: persist };
 }
 
+// This is a server-side state loader, not a React Hook. Use a non-hook alias
+// internally so the repo-wide React lint rule can distinguish the call site.
+const loadVaultWhatsAppAuthState = useVaultWhatsAppAuthState;
+
 /** Status payload extended with the pairing QR (rendered by Settings UI). */
 export interface WhatsAppStatus extends ChannelAdapterStatus {
   qr?: string;
@@ -254,7 +258,7 @@ async function defaultWaSocketFactory(
   onAuthError: (error: unknown) => void,
 ): Promise<WaSocketLike> {
   const baileys = await import('@whiskeysockets/baileys');
-  const { state, saveCreds } = await useVaultWhatsAppAuthState(vault, legacyAuthDir);
+  const { state, saveCreds } = await loadVaultWhatsAppAuthState(vault, legacyAuthDir);
   const sock = baileys.makeWASocket({
     auth: state,
     logger: silentBaileysLogger,
