@@ -1,6 +1,7 @@
 // LocalAdapter — HTTP/SSE/WS client for Waggle backend
 import { fetchWithTimeout, TimeoutError } from './fetch-utils';
 import type { AgentSearchResponse } from './agent-search';
+import { getSelectedShape } from './shape-selection';
 import {
   isTauri,
   recallMemory as tauriRecallMemory,
@@ -775,6 +776,14 @@ class LocalAdapter {
     return res.json();
   }
 
+  async copyFileBetweenWorkspaces(sourceWorkspaceId: string, targetWorkspaceId: string, from: string, to: string): Promise<FileEntry> {
+    const res = await this.fetch(`/api/workspaces/${targetWorkspaceId}/files/copy`, {
+      method: 'POST',
+      body: JSON.stringify({ sourceWorkspaceId, from, to }),
+    });
+    return res.json();
+  }
+
   // --- Chat ---
   async *sendMessage(
     workspaceId: string,
@@ -788,7 +797,6 @@ class LocalAdapter {
     // chat body. Sidecar /api/chat ignores `shape` until A3.1 wires it into
     // runRetrievalAgentLoop; carrying it now means A3.1 is a one-line server
     // change with no client redeploy needed.
-    const { getSelectedShape } = await import('./shape-selection');
     const shape = getSelectedShape();
     const res = await this.fetch('/api/chat', {
       method: 'POST',
@@ -3072,13 +3080,17 @@ class LocalAdapter {
       body: JSON.stringify(payload),
     });
     const body = await res.json().catch(() => ({}));
+    const hasHookEnvelope =
+      typeof body.ok === 'boolean' &&
+      typeof body.action === 'string' &&
+      typeof body.code === 'number';
     return {
       ok: res.ok && body.ok === true,
       action: body.action ?? payload.action,
       stdout: body.stdout ?? '',
       stderr: body.stderr ?? '',
       code: body.code ?? -1,
-      error: body.error ?? (res.ok ? undefined : `HTTP ${res.status}`),
+      error: body.error ?? (res.ok || hasHookEnvelope ? undefined : `HTTP ${res.status}`),
     };
   }
 

@@ -1,9 +1,12 @@
 /**
- * Shared provider & model registry — single source of truth for:
+ * Shared provider metadata for:
  *  - OnboardingWizard (step 5)
  *  - SettingsApp → Models tab
  *  - VaultApp → API key management
  *  - Adapter → key validation
+ *
+ * Model inventories are deliberately not stored here. The server fetches them
+ * from each configured provider's model API and exposes the live catalog.
  *
  */
 
@@ -25,163 +28,19 @@ export interface ProviderConfig {
 }
 
 const BUILT_IN_PROVIDERS: ProviderConfig[] = [
-  {
-    id: 'anthropic',
-    name: 'Anthropic',
-    keyPrefix: 'sk-ant-',
-    keyUrl: 'https://console.anthropic.com/settings/keys',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'claude-opus-4-6', name: 'Claude Opus 4.6', cost: '$$$', speed: 'slow' },
-      { id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', cost: '$$', speed: 'medium' },
-      { id: 'claude-haiku-4-5', name: 'Claude Haiku 4.5', cost: '$', speed: 'fast' },
-    ],
-  },
-  {
-    id: 'openai',
-    name: 'OpenAI',
-    keyPrefix: 'sk-',
-    keyUrl: 'https://platform.openai.com/api-keys',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'gpt-5.4', name: 'GPT-5.4', cost: '$$$', speed: 'medium' },
-      { id: 'gpt-4o', name: 'GPT-4o', cost: '$$', speed: 'fast' },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', cost: '$', speed: 'fast' },
-      { id: 'o3', name: 'o3', cost: '$$$', speed: 'slow' },
-      { id: 'o3-mini', name: 'o3-mini', cost: '$$', speed: 'medium' },
-    ],
-  },
-  {
-    id: 'google',
-    name: 'Google',
-    keyPrefix: null,
-    keyUrl: 'https://aistudio.google.com/apikey',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', cost: '$$$', speed: 'medium' },
-      { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', cost: '$', speed: 'fast' },
-      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', cost: '$$', speed: 'medium' },
-    ],
-  },
-  {
-    id: 'mistral',
-    name: 'Mistral',
-    keyPrefix: null,
-    keyUrl: 'https://console.mistral.ai/api-keys',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'mistral-large-latest', name: 'Mistral Large', cost: '$$', speed: 'medium' },
-      { id: 'mistral-small-latest', name: 'Mistral Small', cost: '$', speed: 'fast' },
-    ],
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek',
-    keyPrefix: null,
-    keyUrl: 'https://platform.deepseek.com/api_keys',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'deepseek-chat', name: 'DeepSeek Chat', cost: '$', speed: 'fast' },
-      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', cost: '$$', speed: 'slow' },
-    ],
-  },
-  {
-    id: 'xai',
-    name: 'xAI',
-    keyPrefix: null,
-    keyUrl: 'https://console.x.ai/',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'grok-3', name: 'Grok 3', cost: '$$', speed: 'medium' },
-      { id: 'grok-3-mini', name: 'Grok 3 Mini', cost: '$', speed: 'fast' },
-    ],
-  },
-  {
-    id: 'alibaba',
-    name: 'Alibaba / Qwen',
-    keyPrefix: null,
-    keyUrl: 'https://dashscope.console.aliyun.com/apiKey',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'qwen-max', name: 'Qwen Max', cost: '$$', speed: 'medium' },
-      { id: 'qwen-plus', name: 'Qwen Plus', cost: '$', speed: 'fast' },
-      { id: 'qwen-turbo', name: 'Qwen Turbo', cost: '$', speed: 'fast' },
-    ],
-  },
-  {
-    id: 'minimax',
-    name: 'MiniMax',
-    keyPrefix: null,
-    keyUrl: 'https://www.minimaxi.com/platform',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'minimax-01', name: 'MiniMax-01', cost: '$$', speed: 'medium' },
-    ],
-  },
-  {
-    id: 'zhipu',
-    name: 'GLM / Zhipu',
-    keyPrefix: null,
-    keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'glm-5', name: 'GLM-5', cost: '$$', speed: 'medium' },
-      { id: 'glm-4-plus', name: 'GLM-4 Plus', cost: '$', speed: 'fast' },
-    ],
-  },
-  {
-    id: 'moonshot',
-    name: 'Kimi / Moonshot',
-    keyPrefix: null,
-    keyUrl: 'https://platform.moonshot.cn/console/api-keys',
-    badge: null,
-    requiresKey: true,
-    models: [
-      { id: 'kimi-2.5', name: 'Kimi 2.5', cost: '$$', speed: 'medium' },
-      { id: 'kimi-2.5-thinking', name: 'Kimi 2.5 Thinking', cost: '$$', speed: 'slow' },
-    ],
-  },
-  {
-    id: 'perplexity',
-    name: 'Perplexity',
-    keyPrefix: 'pplx-',
-    keyUrl: 'https://www.perplexity.ai/settings/api',
-    badge: 'Search + LLM',
-    requiresKey: true,
-    models: [
-      { id: 'sonar-pro', name: 'Sonar Pro', cost: '$$', speed: 'medium' },
-      { id: 'sonar', name: 'Sonar', cost: '$', speed: 'fast' },
-    ],
-  },
-  {
-    id: 'openrouter',
-    name: 'OpenRouter',
-    keyPrefix: 'sk-or-',
-    keyUrl: 'https://openrouter.ai/keys',
-    badge: 'Free models!',
-    requiresKey: true,
-    models: [
-      { id: 'openrouter/auto', name: 'Auto (best available)', cost: '$$', speed: 'medium' },
-    ],
-  },
-  {
-    id: 'ollama',
-    name: 'Local / Ollama',
-    keyPrefix: null,
-    keyUrl: 'https://ollama.ai/download',
-    badge: 'No key needed',
-    requiresKey: false,
-    models: [],
-  },
+  { id: 'anthropic', name: 'Anthropic', keyPrefix: 'sk-ant-', keyUrl: 'https://console.anthropic.com/settings/keys', badge: null, requiresKey: true, models: [] },
+  { id: 'openai', name: 'OpenAI', keyPrefix: 'sk-', keyUrl: 'https://platform.openai.com/api-keys', badge: null, requiresKey: true, models: [] },
+  { id: 'google', name: 'Google', keyPrefix: null, keyUrl: 'https://aistudio.google.com/apikey', badge: null, requiresKey: true, models: [] },
+  { id: 'mistral', name: 'Mistral', keyPrefix: null, keyUrl: 'https://console.mistral.ai/api-keys', badge: null, requiresKey: true, models: [] },
+  { id: 'deepseek', name: 'DeepSeek', keyPrefix: null, keyUrl: 'https://platform.deepseek.com/api_keys', badge: null, requiresKey: true, models: [] },
+  { id: 'xai', name: 'xAI', keyPrefix: null, keyUrl: 'https://console.x.ai/', badge: null, requiresKey: true, models: [] },
+  { id: 'alibaba', name: 'Alibaba / Qwen', keyPrefix: null, keyUrl: 'https://dashscope.console.aliyun.com/apiKey', badge: null, requiresKey: true, models: [] },
+  { id: 'minimax', name: 'MiniMax', keyPrefix: null, keyUrl: 'https://www.minimaxi.com/platform', badge: null, requiresKey: true, models: [] },
+  { id: 'zhipu', name: 'GLM / Zhipu', keyPrefix: null, keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys', badge: null, requiresKey: true, models: [] },
+  { id: 'moonshot', name: 'Kimi / Moonshot', keyPrefix: null, keyUrl: 'https://platform.moonshot.cn/console/api-keys', badge: null, requiresKey: true, models: [] },
+  { id: 'perplexity', name: 'Perplexity', keyPrefix: 'pplx-', keyUrl: 'https://www.perplexity.ai/settings/api', badge: 'Search + LLM', requiresKey: true, models: [] },
+  { id: 'openrouter', name: 'OpenRouter', keyPrefix: 'sk-or-', keyUrl: 'https://openrouter.ai/keys', badge: 'Provider catalog', requiresKey: true, models: [] },
+  { id: 'ollama', name: 'Local / Ollama', keyPrefix: null, keyUrl: 'https://ollama.ai/download', badge: 'No key needed', requiresKey: false, models: [] },
 ];
 
 /** Runtime-mutable provider list (built-in + user-added) */
