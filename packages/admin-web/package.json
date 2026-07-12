@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/admin-web/tests/admin-pages.test.ts",
+    "test:rendered": "npm run build && node ../../node_modules/playwright/cli.js test -c playwright.config.ts --project=chromium --reporter=list"
   },
   "dependencies": {
     "react": "^19.0.0",

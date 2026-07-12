@@ -6,9 +6,12 @@
  * and rendering of each page component in various states.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { App } from '../src/App.js';
 import { Dashboard } from '../src/pages/Dashboard.js';
 import { Members } from '../src/pages/Members.js';
@@ -131,8 +134,19 @@ function mockFetch(responses: Record<string, unknown>) {
   return mock;
 }
 
+function mockPendingFetch() {
+  const mock = vi.fn(() => new Promise(() => {}));
+  vi.stubGlobal('fetch', mock);
+  return mock;
+}
+
 describe('App root component', () => {
+  beforeEach(() => {
+    window.location.hash = '';
+  });
+
   afterEach(() => {
+    window.location.hash = '';
     vi.restoreAllMocks();
   });
 
@@ -156,6 +170,41 @@ describe('App root component', () => {
     expect(screen.getByText('Audit Log')).toBeDefined();
     expect(screen.getByText('Team Settings')).toBeDefined();
   });
+
+  it('exposes connection inputs with accessible labels and metadata', () => {
+    render(React.createElement(App));
+
+    const teamSlug = screen.getByLabelText(/team slug/i) as HTMLInputElement;
+    const authToken = screen.getByLabelText(/auth token/i) as HTMLInputElement;
+
+    expect(teamSlug.name).toBe('teamSlug');
+    expect(teamSlug.autocomplete).toBe('organization');
+    expect(authToken.name).toBe('authToken');
+    expect(authToken.autocomplete).toBe('off');
+  });
+
+  it('uses hash deep links and aria-current for admin navigation', () => {
+    window.location.hash = '#members';
+    render(React.createElement(App));
+
+    const members = screen.getByRole('button', { name: 'Members' });
+    const capabilities = screen.getByRole('button', { name: 'Capabilities' });
+
+    expect(members.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(capabilities);
+    expect(window.location.hash).toBe('#capabilities');
+    expect(capabilities.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('ships a responsive admin shell stylesheet for narrow viewports', () => {
+    const cssPath = resolve(dirname(fileURLToPath(import.meta.url)), '../src/admin.css');
+    const css = existsSync(cssPath) ? readFileSync(cssPath, 'utf8') : '';
+
+    expect(css).toContain('@media (max-width: 720px)');
+    expect(css).toContain('.admin-shell');
+    expect(css).toContain('.admin-sidebar');
+    expect(css).toContain('.admin-main');
+  });
 });
 
 describe('Dashboard page', () => {
@@ -164,7 +213,7 @@ describe('Dashboard page', () => {
   });
 
   it('shows loading state initially', () => {
-    mockFetch({});
+    mockPendingFetch();
     render(React.createElement(Dashboard, { token: 'tok', teamSlug: 'test' }));
     expect(screen.getByText('Loading dashboard...')).toBeDefined();
   });
@@ -222,6 +271,22 @@ describe('Dashboard page', () => {
       expect(screen.getByText(/Could not connect to team server/)).toBeDefined();
     });
   });
+
+  it('shows auth guidance when both API calls reject the token', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      statusText: 'Unauthorized',
+      json: async () => ({}),
+      text: async () => 'Unauthorized',
+    })));
+
+    render(React.createElement(Dashboard, { token: 'bad-token', teamSlug: 'test' }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Authentication failed. Check the admin auth token./)).toBeDefined();
+    });
+  });
 });
 
 describe('Members page', () => {
@@ -255,6 +320,25 @@ describe('Members page', () => {
     expect(screen.getByText('Invite')).toBeDefined();
   });
 
+  it('labels invite fields and member role controls', async () => {
+    mockFetch({
+      '/api/teams/test': {
+        id: 't1', name: 'Test Team', slug: 'test', ownerId: 'u1', createdAt: '2025-01-01',
+        members: [
+          { userId: 'u1', displayName: 'Alice', role: 'owner', email: 'alice@test.com' },
+          { userId: 'u2', displayName: 'Bob', role: 'member', email: 'bob@test.com' },
+        ],
+      },
+    });
+
+    render(React.createElement(Members, { token: 'tok', teamSlug: 'test' }));
+    await screen.findByText('Bob');
+
+    expect(screen.getByLabelText(/invite email/i)).toBeDefined();
+    expect(screen.getByLabelText(/invite role/i)).toBeDefined();
+    expect(screen.getByLabelText(/role for bob/i)).toBeDefined();
+  });
+
   it('shows empty state when no members', async () => {
     mockFetch({
       '/api/teams/test': {
@@ -269,6 +353,35 @@ describe('Members page', () => {
       expect(screen.getByText(/No members found/)).toBeDefined();
     });
   });
+
+  it('asks in-app before removing a member', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const fetchMock = mockFetch({
+      '/api/teams/test/members/u2': {},
+      '/api/teams/test': {
+        id: 't1', name: 'Test Team', slug: 'test', ownerId: 'u1', createdAt: '2025-01-01',
+        members: [
+          { userId: 'u1', displayName: 'Alice', role: 'owner', email: 'alice@test.com' },
+          { userId: 'u2', displayName: 'Bob', role: 'member', email: 'bob@test.com' },
+        ],
+      },
+    });
+
+    render(React.createElement(Members, { token: 'tok', teamSlug: 'test' }));
+    await screen.findByText('Bob');
+
+    fireEvent.click(screen.getByRole('button', { name: /remove bob/i }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url, opts]) => String(url).includes('/api/teams/test/members/u2') && opts?.method === 'DELETE')).toBe(false);
+    expect(screen.getByRole('dialog').textContent).toMatch(/remove bob from the team/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /remove member/i }));
+
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([url, opts]) => String(url).includes('/api/teams/test/members/u2') && opts?.method === 'DELETE')).toBe(true);
+    });
+  });
 });
 
 describe('Jobs page', () => {
@@ -277,7 +390,7 @@ describe('Jobs page', () => {
   });
 
   it('shows loading state', () => {
-    mockFetch({});
+    mockPendingFetch();
     render(React.createElement(Jobs, { token: 'tok', teamSlug: 'test' }));
     expect(screen.getByText('Loading jobs...')).toBeDefined();
   });
@@ -327,7 +440,7 @@ describe('Audit page', () => {
   });
 
   it('shows loading state', () => {
-    mockFetch({});
+    mockPendingFetch();
     render(React.createElement(Audit, { token: 'tok', teamSlug: 'test' }));
     expect(screen.getByText('Loading audit log...')).toBeDefined();
   });
@@ -374,7 +487,7 @@ describe('TeamSettings page', () => {
   });
 
   it('shows loading state', () => {
-    mockFetch({});
+    mockPendingFetch();
     render(React.createElement(TeamSettings, { token: 'tok', teamSlug: 'test' }));
     expect(screen.getByText('Loading team settings...')).toBeDefined();
   });
@@ -403,6 +516,19 @@ describe('TeamSettings page', () => {
     expect(screen.getByText('Created')).toBeDefined();
   });
 
+  it('labels the editable team name field', async () => {
+    mockFetch({
+      '/api/teams/test': {
+        id: 'team-uuid-123', name: 'Test Team', slug: 'test', ownerId: 'u1', createdAt: '2025-01-01T00:00:00Z',
+      },
+    });
+
+    render(React.createElement(TeamSettings, { token: 'tok', teamSlug: 'test' }));
+
+    const teamName = await screen.findByLabelText(/team name/i);
+    expect((teamName as HTMLInputElement).name).toBe('teamName');
+  });
+
   it('save button is disabled when name unchanged', async () => {
     mockFetch({
       '/api/teams/test': {
@@ -427,9 +553,7 @@ describe('Capabilities page', () => {
   });
 
   it('renders heading and tab bar', () => {
-    mockFetch({
-      '/api/teams/test/capability-policies': [],
-    });
+    mockPendingFetch();
 
     render(React.createElement(Capabilities, { token: 'tok', teamSlug: 'test' }));
 
@@ -446,7 +570,7 @@ describe('Analytics page', () => {
   });
 
   it('shows loading state', () => {
-    mockFetch({});
+    mockPendingFetch();
     render(React.createElement(Analytics, { token: 'tok', teamSlug: 'test' }));
     expect(screen.getByText('Loading analytics...')).toBeDefined();
   });
