@@ -19,7 +19,7 @@
   "scripts": {
     "build": "tsup",
     "start": "tsx src/cli.ts",
-    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/launcher/tests/cli.test.ts",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/launcher/tests/cli.test.ts --pool=threads --maxWorkers=1",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -38,6 +38,7 @@
     "@fastify/cors": "^10.0.0",
     "@fastify/static": "^9.0.0",
     "@fastify/websocket": "^11.0.0",
+    "@whiskeysockets/baileys": "^7.0.0-rc13",
     "archiver": "^7.0.1",
     "better-sqlite3": "^12.6.2",
     "bullmq": "^5.0.0",
@@ -53,6 +54,7 @@
     "pdf-parse": "^2.4.5",
     "postgres": "^3.4.0",
     "sqlite-vec": "^0.1.7-alpha.2",
+    "ws": "^8.21.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {

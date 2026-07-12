@@ -5,7 +5,7 @@
  * Every test exercises the real implementation — no mocks, no stubs.
  *
  * Coverage:
- *   - Persona system: tool lists, system prompt composition, all 8 personas
+ *   - Persona system: tool lists, system prompt composition, all personas
  *   - Trust model: risk classification journeys for capability installation
  *   - Confirmation gates: approval decisions across all tool categories
  *   - Injection scanner: multi-lingual, encoded, and authority-claim patterns
@@ -52,16 +52,18 @@ import { CapabilityRouter } from '../../packages/agent/src/capability-router.js'
 // Persona System
 // ═════════════════════════════════════════════════════════════════════════════
 
-describe('Persona system — all 17 personas', () => {
+describe('Persona system — all 23 personas', () => {
   const EXPECTED_PERSONAS = [
     'researcher', 'writer', 'analyst', 'coder',
     'project-manager', 'executive-assistant', 'sales-rep', 'marketer',
     'product-manager-senior', 'hr-manager', 'legal-professional', 'finance-owner', 'consultant',
     'general-purpose', 'planner', 'verifier', 'coordinator',
+    'support-agent', 'ops-manager', 'data-engineer', 'recruiter', 'creative-director',
+    'session-reviewer',
   ] as const;
 
-  it('exports exactly 22 personas', () => {
-    expect(listPersonas()).toHaveLength(22);
+  it('exports exactly 23 personas', () => {
+    expect(listPersonas()).toHaveLength(23);
     const ids = listPersonas().map(p => p.id);
     for (const id of EXPECTED_PERSONAS) {
       expect(ids).toContain(id);
