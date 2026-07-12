@@ -126,7 +126,12 @@ const StorageApp = ({ workspaceId, workspaceName, workspace }: StorageAppProps) 
   const memoryCount = typeof workspace?.memoryCount === 'number' ? workspace.memoryCount : null;
 
   return (
-    <div className="flex-1 min-h-0 overflow-auto">
+    <div
+      className="flex-1 min-h-0 overflow-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      role="region"
+      aria-label="Workspace storage overview"
+      tabIndex={0}
+    >
       <div className="max-w-[940px] mx-auto px-8 py-7 pb-16">
         {/* Header */}
         <header className="mb-2">
@@ -271,7 +276,7 @@ const StorageApp = ({ workspaceId, workspaceName, workspace }: StorageAppProps) 
                 <div className="w-9 h-10 grid place-items-center mb-3">
                   <Icon className="w-[19px] h-[19px]" style={{ color: card.accent }} />
                 </div>
-                <h3 className="text-base font-display font-semibold tracking-tight m-0 mb-1 text-foreground">{card.title}</h3>
+                <h2 className="text-base font-display font-semibold tracking-tight m-0 mb-1 text-foreground">{card.title}</h2>
                 <div className="font-mono text-[10.5px] mb-2.5" style={{ color: 'var(--text-dim, hsl(var(--muted-foreground)))' }}>
                   {card.where}
                 </div>

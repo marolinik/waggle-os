@@ -47,8 +47,12 @@ const FilePreview = ({ file, content, loading, isImage, onClose, onDownload }: F
           </div>
         ) : isImage ? (
           <div className="flex flex-col items-center gap-3">
-            <div className="w-full aspect-square rounded-lg bg-muted/30 border border-border/20 flex items-center justify-center overflow-hidden">
-              <Image className="w-12 h-12 text-muted-foreground/30" />
+            <div
+              className="w-full aspect-square rounded-lg bg-muted/30 border border-border/20 flex items-center justify-center overflow-hidden"
+              role="img"
+              aria-label={`Preview placeholder for ${file.name}`}
+            >
+              <Image className="w-12 h-12 text-muted-foreground/30" aria-hidden="true" />
             </div>
             <p className="text-[11px] text-muted-foreground text-center">
               Image preview loads from backend

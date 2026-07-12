@@ -19,6 +19,7 @@ import { getFileIcon, formatSize, STORAGE_LABELS, normalizeWorkspacePath } from 
 import { consumeDeepLink } from '@/lib/app-deeplink';
 import { useToast } from '@/hooks/use-toast';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
+import { createSurfaceCache, surfaceCacheKey } from '@/lib/surface-cache';
 
 import FileTree from './files/FileTree';
 import FilePreview from './files/FilePreview';
@@ -70,6 +71,14 @@ const isImageFile = (name: string) => {
   return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'].includes(ext);
 };
 
+/** Route cache keyed by workspace and directory for warm file-surface returns. */
+const filesRouteCache = createSurfaceCache<FileEntry[]>();
+
+// eslint-disable-next-line react-refresh/only-export-components -- test-only reset for the module-scoped route cache
+export function resetFilesRouteCache(): void {
+  filesRouteCache.resetForTests();
+}
+
 /* ── Props ── */
 interface FilesAppProps {
   workspaceId: string;
@@ -95,8 +104,9 @@ const FilesApp = ({
 }: FilesAppProps) => {
   const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/');
+  const routeKey = surfaceCacheKey(['files', workspaceId, currentPath]);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
-  const [files, setFiles] = useState<FileEntry[]>([]);
+  const [files, setFiles] = useState<FileEntry[]>(() => filesRouteCache.read(routeKey) ?? []);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -105,13 +115,15 @@ const FilesApp = ({
   const [renameValue, setRenameValue] = useState('');
   const [creating, setCreating] = useState<'file' | 'folder' | null>(null);
   const [newName, setNewName] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !filesRouteCache.hasResolved(routeKey));
   const [offline, setOffline] = useState(false);
   // P7/D15 B4 (review): `files.length` conflates "never loaded", "loaded-empty",
   // and "stale data from another dir". Track WHICH path the cached `files`
   // actually belong to so error / empty / cached-banner stay mutually exclusive
   // regardless of stale cross-directory data. null until the first success.
-  const [loadedPath, setLoadedPath] = useState<string | null>(null);
+  const [loadedKey, setLoadedKey] = useState<string | null>(() => (
+    filesRouteCache.hasResolved(routeKey) ? routeKey : null
+  ));
   const [clipboard, setClipboard] = useState<{ files: FileEntry[]; operation: 'copy' | 'cut' } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [previewFile, setPreviewFile] = useState<FileEntry | null>(null);
@@ -120,9 +132,12 @@ const FilesApp = ({
   const [propertiesFile, setPropertiesFile] = useState<FileEntry | null>(null);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
   const [breadcrumbDropTarget, setBreadcrumbDropTarget] = useState<string | null>(null);
+  const [crossWorkspaceCopying, setCrossWorkspaceCopying] = useState<string | null>(null);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const internalDragPaths = useRef<string[]>([]);
+  const routeKeyRef = useRef(routeKey);
+  routeKeyRef.current = routeKey;
 
   const storageMeta = STORAGE_LABELS[storageType];
 
@@ -157,24 +172,45 @@ const FilesApp = ({
 
   /* ── Data fetching ── */
   const refreshFiles = useCallback(async () => {
+    const requestKey = routeKey;
     setLoading(true);
     try {
       const result = await adapter.listFiles(workspaceId, currentPath);
-      setFiles(result);
-      setLoadedPath(currentPath); // this directory now has authoritative data
-      setOffline(false);
+      filesRouteCache.write(requestKey, result);
+      if (routeKeyRef.current === requestKey) {
+        setFiles(result);
+        setLoadedKey(requestKey);
+        setOffline(false);
+      }
     } catch {
-      // Leave `files`/`loadedPath` as-is: a refresh failure on a dir we already
-      // loaded keeps showing its cache; a cold-nav failure leaves loadedPath
-      // pointing at the OLD dir, so loadedPath !== currentPath flags the error.
-      setOffline(true);
+      // A cold-nav failure keeps loadedKey on the old route, so stale entries
+      // cannot be presented as the current directory.
+      if (routeKeyRef.current === requestKey) setOffline(true);
     } finally {
-      setLoading(false);
+      if (routeKeyRef.current === requestKey) setLoading(false);
     }
-  }, [workspaceId, currentPath]);
+  }, [workspaceId, currentPath, routeKey]);
 
-  // True when the cached `files` belong to the directory currently in view.
-  const haveCurrentData = loadedPath === currentPath;
+  // Switching workspace or directory reseeds from its own cache before the
+  // refresh resolves, and clears selection so paths cannot leak across routes.
+  useEffect(() => {
+    const cached = filesRouteCache.read(routeKey);
+    const resolved = filesRouteCache.hasResolved(routeKey);
+    setFiles(cached ?? []);
+    setLoadedKey(resolved ? routeKey : null);
+    setLoading(!resolved);
+    setOffline(false);
+    setSelectedFiles(new Set());
+  }, [routeKey]);
+
+  // Keep optimistic file operations warm for a later remount, including a
+  // genuinely empty directory.
+  useEffect(() => {
+    if (loadedKey === routeKey && !loading) filesRouteCache.write(routeKey, files);
+  }, [files, loadedKey, loading, routeKey]);
+
+  // True when the cached `files` belong to the current workspace+directory.
+  const haveCurrentData = loadedKey === routeKey;
 
   useEffect(() => { refreshFiles(); }, [refreshFiles]);
 
@@ -255,6 +291,7 @@ const FilesApp = ({
   };
 
   const handleContextMenu = (e: React.MouseEvent, file?: FileEntry) => {
+    e.stopPropagation();
     e.preventDefault();
     setContextMenu({ x: e.clientX, y: e.clientY, file });
   };
@@ -262,15 +299,19 @@ const FilesApp = ({
   const handleUpload = async (uploadFiles: FileList | null) => {
     if (!uploadFiles) return;
     for (const file of Array.from(uploadFiles)) {
-      try { await adapter.uploadFile(workspaceId, currentPath, file); } catch { /* offline */ }
-      setFiles(prev => [...prev, {
-        name: file.name,
-        path: `${currentPath === '/' ? '' : currentPath}/${file.name}`,
-        type: 'file',
-        size: file.size,
-        mimeType: file.type,
-        modifiedAt: new Date().toISOString(),
-      }]);
+      try {
+        const uploaded = await adapter.uploadFile(workspaceId, currentPath, file);
+        setFiles(prev => [
+          ...prev.filter(existing => existing.path !== uploaded.path),
+          uploaded,
+        ]);
+      } catch {
+        toast({
+          title: 'Upload failed',
+          description: `${file.name} could not be uploaded. Check the file service and try again.`,
+          variant: 'destructive',
+        });
+      }
     }
   };
 
@@ -334,6 +375,42 @@ const FilesApp = ({
     setShowMoveDialog(false);
   };
   const handleSelectAll = () => { setSelectedFiles(new Set(visibleFiles.map(f => f.path))); };
+
+  const handleCrossWorkspaceCopy = async (targetWorkspaceId: string) => {
+    if (crossWorkspaceCopying) return;
+    const paths = [...internalDragPaths.current];
+    internalDragPaths.current = [];
+    const filesToCopy = files.filter(file => paths.includes(file.path) && file.type === 'file');
+    if (filesToCopy.length === 0) {
+      toast({
+        title: 'Select files to copy',
+        description: 'Cross-workspace copy supports files. Move folders within a workspace instead.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setCrossWorkspaceCopying(targetWorkspaceId);
+    try {
+      const results = await Promise.allSettled(filesToCopy.map(file =>
+        adapter.copyFileBetweenWorkspaces(workspaceId, targetWorkspaceId, file.path, `/${file.name}`),
+      ));
+      const copied = results.filter(result => result.status === 'fulfilled').length;
+      const failed = results.length - copied;
+      const targetName = workspaces?.find(workspace => workspace.id === targetWorkspaceId)?.name ?? targetWorkspaceId;
+      if (failed === 0) {
+        toast({ title: `${copied} file${copied === 1 ? '' : 's'} copied`, description: `Copied to ${targetName} at the workspace root.` });
+      } else {
+        toast({
+          title: `${copied} copied, ${failed} failed`,
+          description: `Some files could not be copied to ${targetName}. Check the target workspace and try again.`,
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setCrossWorkspaceCopying(null);
+    }
+  };
 
   /* ── Keyboard shortcuts ── */
   useEffect(() => {
@@ -440,12 +517,7 @@ const FilesApp = ({
           workspaces={workspaces}
           activeWorkspaceId={workspaceId}
           onSelect={onSelectWorkspace}
-          onDropFiles={(targetWorkspaceId) => {
-            toast({
-              title: 'Cross-workspace copy coming soon',
-              description: `Dropping files to "${workspaces.find(w => w.id === targetWorkspaceId)?.name ?? targetWorkspaceId}" will be wired up in Phase B.2.`,
-            });
-          }}
+          onDropFiles={handleCrossWorkspaceCopy}
         />
       )}
 
@@ -491,6 +563,10 @@ const FilesApp = ({
               <div className="flex items-center gap-2 py-1.5">
                 <Folder className="w-4 h-4" style={{ color: 'var(--honey)' }} />
                 <input
+                  aria-label="New folder name"
+                  name="newFolderName"
+                  autoComplete="off"
+                  spellCheck={false}
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') { setCreating(null); setNewName(''); } }}
@@ -506,7 +582,13 @@ const FilesApp = ({
         </AnimatePresence>
 
         {/* File list/grid */}
-        <div className="flex-1 overflow-auto p-2" onContextMenu={e => handleContextMenu(e)}>
+        <div
+          className="flex-1 overflow-auto p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          role="region"
+          aria-label={`Files in ${workspaceName || workspaceId}`}
+          tabIndex={0}
+          onContextMenu={e => handleContextMenu(e)}
+        >
           {loading && !haveCurrentData ? (
             /* P7/D15 B4: in-flight cold load (no data for this dir yet) — not empty. */
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground gap-2" data-testid="files-loading">
@@ -515,7 +597,7 @@ const FilesApp = ({
             </div>
           ) : offline && !haveCurrentData ? (
             /* P7/D15 B4 (review): cold-load FAILURE for THIS dir (we never loaded
-               it — loadedPath still points elsewhere or is null). A real error,
+               it — loadedKey still points elsewhere or is null). A real error,
                never the stale "empty directory"/"cached files" lie. A failed
                REFRESH of an already-loaded dir keeps haveCurrentData true and
                falls through to its cache instead of this branch. */
@@ -560,7 +642,10 @@ const FilesApp = ({
                       draggable
                       onDragStart={e => startInternalDrag(e, file)}
                       onDragEnd={endInternalDrag}
-                      onClick={e => { e.ctrlKey || e.metaKey ? handleFileSelect(file, true) : handleFileClick(file); }}
+                      onClick={e => {
+                        if (e.ctrlKey || e.metaKey) handleFileSelect(file, true);
+                        else handleFileClick(file);
+                      }}
                       onDoubleClick={() => file.type === 'directory' && handleNavigate(file.path)}
                       onContextMenu={e => handleContextMenu(e, file)}
                       className={`group text-xs cursor-pointer transition-colors ${isSelected ? 'bg-primary/15' : 'hover:bg-muted/30'}`}
@@ -569,6 +654,10 @@ const FilesApp = ({
                         <Icon className={`w-4 h-4 ${file.type === 'directory' ? '' : 'text-muted-foreground'}`} style={file.type === 'directory' ? { color: 'var(--honey)' } : undefined} />
                         {renaming === file.path ? (
                           <input
+                            aria-label={`Rename ${file.name}`}
+                            name="fileRename"
+                            autoComplete="off"
+                            spellCheck={false}
                             value={renameValue}
                             onChange={e => setRenameValue(e.target.value)}
                             onKeyDown={e => { if (e.key === 'Enter') handleRename(file); if (e.key === 'Escape') setRenaming(null); }}
@@ -601,7 +690,10 @@ const FilesApp = ({
                     draggable
                     onDragStart={e => startInternalDrag(e, file)}
                     onDragEnd={endInternalDrag}
-                    onClick={e => { e.ctrlKey || e.metaKey ? handleFileSelect(file, true) : handleFileClick(file); }}
+                    onClick={e => {
+                      if (e.ctrlKey || e.metaKey) handleFileSelect(file, true);
+                      else handleFileClick(file);
+                    }}
                     onDoubleClick={() => file.type === 'directory' && handleNavigate(file.path)}
                     onContextMenu={e => handleContextMenu(e, file)}
                     className={`flex flex-col items-center gap-1 p-3 rounded-xl transition-colors ${isSelected ? 'bg-primary/15 border border-primary/30' : 'hover:bg-muted/30 border border-transparent'}`}
@@ -668,7 +760,7 @@ const FilesApp = ({
             <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }} className="w-[300px] bg-background border border-border/40 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
               <div className="px-4 py-3 border-b border-border/20 flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-foreground">Move {selectedFileCount} items to...</h3>
-                <button onClick={() => setShowMoveDialog(false)} className="p-0.5 rounded hover:bg-muted/50"><XIcon className="w-4 h-4 text-muted-foreground" /></button>
+                <button type="button" aria-label="Close move dialog" onClick={() => setShowMoveDialog(false)} className="p-0.5 rounded hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"><XIcon className="w-4 h-4 text-muted-foreground" /></button>
               </div>
               <div className="p-2 max-h-[250px] overflow-auto space-y-0.5">
                 <button onClick={() => handleBulkMove('/')} className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs hover:bg-muted/50 transition-colors ${currentPath === '/' ? 'opacity-40 pointer-events-none' : ''}`}>
@@ -746,7 +838,7 @@ const FilesApp = ({
                   <h3 className="text-sm font-semibold text-foreground truncate">{propertiesFile.name}</h3>
                   <p className="text-[11px] text-muted-foreground font-mono truncate">{propertiesFile.path}</p>
                 </div>
-                <button onClick={() => setPropertiesFile(null)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors"><XIcon className="w-4 h-4 text-muted-foreground" /></button>
+                <button type="button" aria-label="Close file properties" onClick={() => setPropertiesFile(null)} className="p-1 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"><XIcon className="w-4 h-4 text-muted-foreground" /></button>
               </div>
               <div className="px-5 py-4 space-y-4 overflow-auto max-h-[60vh]">
                 <div>

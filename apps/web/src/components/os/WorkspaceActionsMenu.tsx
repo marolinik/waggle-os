@@ -8,7 +8,7 @@
  * canonical workspace list stays in sync; hosts with their own server-fed
  * views (Home briefing) refresh via `onChanged`.
  */
-import { useRef, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MoreHorizontal, Pencil, Archive, ArchiveRestore, Download, Trash2 } from 'lucide-react';
 import ContextMenu, { type ContextMenuItem } from './ContextMenu';
@@ -39,6 +39,7 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
   const { patchWorkspace, deleteWorkspace } = useShell();
   const { toast } = useToast();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const formId = useId();
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [renameOpen, setRenameOpen] = useState(false);
   const [renameValue, setRenameValue] = useState(workspace.name);
@@ -146,6 +147,8 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
   ];
 
   const deleteMatches = deleteConfirm.trim() === workspace.name;
+  const renameInputId = `${formId}-workspace-name`;
+  const deleteConfirmInputId = `${formId}-workspace-delete-confirmation`;
 
   return (
     <>
@@ -183,13 +186,19 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
           <div className="relative w-full max-w-sm glass-strong rounded-2xl shadow-2xl p-5" onClick={e => e.stopPropagation()}>
             <h2 className="text-sm font-display font-semibold text-foreground mb-3">Rename workspace</h2>
+            <label htmlFor={renameInputId} className="block text-xs text-muted-foreground mb-1">
+              Workspace name
+            </label>
             <input
+              id={renameInputId}
+              name="workspace-name"
+              autoComplete="off"
               autoFocus
               value={renameValue}
               onChange={e => setRenameValue(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void handleRename(); if (e.key === 'Escape') setRenameOpen(false); }}
               data-testid="workspace-rename-input"
-              className="w-full px-3 py-2 rounded-xl bg-secondary/30 border border-border text-sm text-foreground focus:outline-none focus:border-primary/50"
+              className="w-full px-3 py-2 rounded-xl bg-secondary/30 border border-border text-sm text-foreground focus:outline-none focus:border-primary/50 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setRenameOpen(false)} className="px-3 py-1.5 text-xs rounded-lg text-muted-foreground hover:bg-muted/50 transition-colors">
@@ -219,16 +228,19 @@ const WorkspaceActionsMenu = ({ workspace, onChanged, buttonClassName }: Workspa
               chats, and files. This can&rsquo;t be undone.
               {!isArchived && ' If you just want it out of the way, Archive keeps the memory safe.'}
             </p>
-            <label className="block text-xs text-muted-foreground mb-1">
+            <label htmlFor={deleteConfirmInputId} className="block text-xs text-muted-foreground mb-1">
               Type <span className="font-medium text-foreground">{workspace.name}</span> to confirm
             </label>
             <input
+              id={deleteConfirmInputId}
+              name="workspace-delete-confirmation"
+              autoComplete="off"
               autoFocus
               value={deleteConfirm}
               onChange={e => setDeleteConfirm(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && deleteMatches) void handleDelete(); if (e.key === 'Escape') setDeleteOpen(false); }}
               data-testid="workspace-delete-confirm-input"
-              className="w-full px-3 py-2 rounded-xl bg-secondary/30 border border-border text-sm text-foreground focus:outline-none focus:border-destructive/50"
+              className="w-full px-3 py-2 rounded-xl bg-secondary/30 border border-border text-sm text-foreground focus:outline-none focus:border-destructive/50 focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={() => setDeleteOpen(false)} className="px-3 py-1.5 text-xs rounded-lg text-muted-foreground hover:bg-muted/50 transition-colors">
