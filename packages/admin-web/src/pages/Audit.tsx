@@ -80,7 +80,7 @@ export function Audit({ token, teamSlug }: AuditProps) {
       <h1 style={{ marginTop: 0, color: '#f0f2f7' }}>Audit Log</h1>
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: '12px 16px',
           background: 'rgba(251, 191, 36, 0.1)',
           border: '1px solid rgba(251, 191, 36, 0.3)',
@@ -109,7 +109,8 @@ export function Audit({ token, teamSlug }: AuditProps) {
           <p style={{ fontSize: 13 }}>Agent actions will appear here as they are logged.</p>
         </div>
       ) : entries.length > 0 ? (
-        <table style={TABLE_STYLE}>
+        <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Audit log table" tabIndex={0}>
+        <table style={{ ...TABLE_STYLE, minWidth: 720 }}>
           <thead>
             <tr>
               <th style={TH_STYLE}>Agent</th>
@@ -155,6 +156,7 @@ export function Audit({ token, teamSlug }: AuditProps) {
             ))}
           </tbody>
         </table>
+        </div>
       ) : null}
     </div>
   );

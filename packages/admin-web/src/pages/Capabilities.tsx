@@ -118,6 +118,7 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
   const [editSources, setEditSources] = useState<string[]>([]);
   const [editBlocked, setEditBlocked] = useState('');
   const [editThreshold, setEditThreshold] = useState('none');
+  const [savingRole, setSavingRole] = useState<string | null>(null);
 
   const fetchPolicies = useCallback(async () => {
     try {
@@ -147,9 +148,11 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
 
   const saveEdit = async () => {
     if (!editingRole) return;
+    const role = editingRole;
     try {
       setError(null);
-      await api.updateCapabilityPolicy(token, teamSlug, editingRole, {
+      setSavingRole(role);
+      await api.updateCapabilityPolicy(token, teamSlug, role, {
         allowedSources: editSources,
         blockedTools: editBlocked
           .split(',')
@@ -161,6 +164,8 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
       await fetchPolicies();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to update policy'));
+    } finally {
+      setSavingRole(null);
     }
   };
 
@@ -174,8 +179,9 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
 
   return (
     <div>
-      {error && <div style={WARNING_STYLE}>{error}</div>}
-      <table style={TABLE_STYLE}>
+      {error && <div role="alert" style={WARNING_STYLE}>{error}</div>}
+      <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Capability role policies table" tabIndex={0}>
+      <table style={{ ...TABLE_STYLE, minWidth: 760 }}>
         <thead>
           <tr>
             <th style={TH_STYLE}>Role</th>
@@ -225,6 +231,7 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
           ))}
         </tbody>
       </table>
+      </div>
 
       {editingRole && (
         <div
@@ -261,11 +268,14 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
           </div>
 
           <div style={{ marginBottom: 12 }}>
-            <label style={{ fontSize: 13, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+            <label htmlFor="policy-blocked-tools" style={{ fontSize: 13, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
               Blocked Tools (comma-separated)
             </label>
             <input
+              id="policy-blocked-tools"
+              name="blockedTools"
               type="text"
+              autoComplete="off"
               value={editBlocked}
               onChange={(e) => setEditBlocked(e.target.value)}
               placeholder="tool_name_1, tool_name_2"
@@ -283,10 +293,12 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <label style={{ fontSize: 13, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+            <label htmlFor="policy-approval-threshold" style={{ fontSize: 13, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
               Approval Threshold
             </label>
             <select
+              id="policy-approval-threshold"
+              name="approvalThreshold"
               value={editThreshold}
               onChange={(e) => setEditThreshold(e.target.value)}
               style={{
@@ -308,17 +320,19 @@ function PoliciesTab({ token, teamSlug }: CapabilitiesProps) {
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               onClick={saveEdit}
+              disabled={savingRole === editingRole}
               style={{
                 padding: '8px 16px',
                 background: '#e5a000',
                 color: '#08090c',
                 border: 'none',
                 borderRadius: 4,
-                cursor: 'pointer',
+                cursor: savingRole === editingRole ? 'wait' : 'pointer',
                 fontSize: 14,
+                opacity: savingRole === editingRole ? 0.7 : 1,
               }}
             >
-              Save
+              {savingRole === editingRole ? 'Saving...' : 'Save'}
             </button>
             <button
               onClick={cancelEdit}
@@ -352,6 +366,8 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
   const [formType, setFormType] = useState('native');
   const [formDecision, setFormDecision] = useState('approved');
   const [formReason, setFormReason] = useState('');
+  const [creatingOverride, setCreatingOverride] = useState(false);
+  const [removingOverrideId, setRemovingOverrideId] = useState<string | null>(null);
 
   const fetchOverrides = useCallback(async () => {
     try {
@@ -374,6 +390,7 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
     if (!formName.trim()) return;
     try {
       setError(null);
+      setCreatingOverride(true);
       await api.createCapabilityOverride(token, teamSlug, {
         capabilityName: formName.trim(),
         capabilityType: formType,
@@ -388,16 +405,21 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
       await fetchOverrides();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to create override'));
+    } finally {
+      setCreatingOverride(false);
     }
   };
 
   const handleRemove = async (id: string) => {
     try {
       setError(null);
+      setRemovingOverrideId(id);
       await api.deleteCapabilityOverride(token, teamSlug, id);
       await fetchOverrides();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to remove override'));
+    } finally {
+      setRemovingOverrideId(null);
     }
   };
 
@@ -405,7 +427,7 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
 
   return (
     <div>
-      {error && <div style={WARNING_STYLE}>{error}</div>}
+      {error && <div role="alert" style={WARNING_STYLE}>{error}</div>}
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
         <button
@@ -438,11 +460,14 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
         >
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
-              <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+              <label htmlFor="override-capability-name" style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
                 Capability Name
               </label>
               <input
+                id="override-capability-name"
+                name="capabilityName"
                 type="text"
+                autoComplete="off"
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
                 placeholder="e.g. shell_exec"
@@ -457,10 +482,12 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
               />
             </div>
             <div>
-              <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+              <label htmlFor="override-capability-type" style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
                 Type
               </label>
               <select
+                id="override-capability-type"
+                name="capabilityType"
                 value={formType}
                 onChange={(e) => setFormType(e.target.value)}
                 style={{
@@ -478,10 +505,12 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+              <label htmlFor="override-decision" style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
                 Decision
               </label>
               <select
+                id="override-decision"
+                name="overrideDecision"
                 value={formDecision}
                 onChange={(e) => setFormDecision(e.target.value)}
                 style={{
@@ -498,11 +527,14 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
               </select>
             </div>
             <div>
-              <label style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
+              <label htmlFor="override-reason" style={{ fontSize: 12, color: '#9ca3af', display: 'block', marginBottom: 4 }}>
                 Reason
               </label>
               <input
+                id="override-reason"
+                name="overrideReason"
                 type="text"
+                autoComplete="off"
                 value={formReason}
                 onChange={(e) => setFormReason(e.target.value)}
                 placeholder="Optional reason"
@@ -518,25 +550,26 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
             </div>
             <button
               onClick={handleCreate}
-              disabled={!formName.trim()}
+              disabled={creatingOverride || !formName.trim()}
               style={{
                 padding: '8px 16px',
                 background: '#e5a000',
                 color: '#08090c',
                 border: 'none',
                 borderRadius: 4,
-                cursor: 'pointer',
+                cursor: creatingOverride ? 'wait' : 'pointer',
                 fontSize: 14,
-                opacity: !formName.trim() ? 0.6 : 1,
+                opacity: creatingOverride || !formName.trim() ? 0.6 : 1,
               }}
             >
-              Submit
+              {creatingOverride ? 'Submitting...' : 'Submit'}
             </button>
           </div>
         </div>
       )}
 
-      <table style={TABLE_STYLE}>
+      <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Capability overrides table" tabIndex={0}>
+      <table style={{ ...TABLE_STYLE, minWidth: 680 }}>
         <thead>
           <tr>
             <th style={TH_STYLE}>Capability</th>
@@ -571,16 +604,18 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
                 <td style={TD_STYLE}>
                   <button
                     onClick={() => handleRemove(o.id)}
+                    disabled={removingOverrideId === o.id}
                     style={{
                       background: 'none',
                       border: 'none',
                       color: '#dc2626',
-                      cursor: 'pointer',
+                      cursor: removingOverrideId === o.id ? 'wait' : 'pointer',
                       fontSize: 13,
+                      opacity: removingOverrideId === o.id ? 0.7 : 1,
                       padding: '4px 8px',
                     }}
                   >
-                    Remove
+                    {removingOverrideId === o.id ? 'Removing...' : 'Remove'}
                   </button>
                 </td>
               </tr>
@@ -588,6 +623,7 @@ function OverridesTab({ token, teamSlug }: CapabilitiesProps) {
           )}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
@@ -604,6 +640,7 @@ function RequestsTab({
   const [error, setError] = useState<string | null>(null);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [decisionReason, setDecisionReason] = useState('');
+  const [savingDecision, setSavingDecision] = useState<{ id: string; status: string } | null>(null);
 
   const fetchRequests = useCallback(async () => {
     try {
@@ -626,6 +663,7 @@ function RequestsTab({
   const handleDecision = async (id: string, status: string) => {
     try {
       setError(null);
+      setSavingDecision({ id, status });
       await api.decideCapabilityRequest(token, teamSlug, id, {
         status,
         reason: decisionReason.trim() || undefined,
@@ -635,6 +673,8 @@ function RequestsTab({
       await fetchRequests();
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to process decision'));
+    } finally {
+      setSavingDecision(null);
     }
   };
 
@@ -645,7 +685,7 @@ function RequestsTab({
 
   return (
     <div>
-      {error && <div style={WARNING_STYLE}>{error}</div>}
+      {error && <div role="alert" style={WARNING_STYLE}>{error}</div>}
 
       {pending.length === 0 && decided.length === 0 && (
         <p style={{ color: '#9ca3af' }}>No capability requests.</p>
@@ -656,7 +696,12 @@ function RequestsTab({
           <h3 style={{ fontSize: 15, color: '#cbd5e1', marginBottom: 12 }}>
             Pending Requests ({pending.length})
           </h3>
-          {pending.map((r) => (
+          {pending.map((r) => {
+            const isSavingDecision = savingDecision?.id === r.id;
+            const isSavingApprove = isSavingDecision && savingDecision?.status === 'approved';
+            const isSavingReject = isSavingDecision && savingDecision?.status === 'rejected';
+
+            return (
             <div
               key={r.id}
               style={{
@@ -682,8 +727,12 @@ function RequestsTab({
               {decidingId === r.id ? (
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
+                    name="decisionReason"
+                    aria-label="Decision reason"
                     type="text"
+                    autoComplete="off"
                     value={decisionReason}
+                    disabled={isSavingDecision}
                     onChange={(e) => setDecisionReason(e.target.value)}
                     placeholder="Reason (optional)"
                     style={{
@@ -699,42 +748,48 @@ function RequestsTab({
                   />
                   <button
                     onClick={() => handleDecision(r.id, 'approved')}
+                    disabled={isSavingDecision}
                     style={{
                       padding: '6px 14px',
                       background: '#10b981',
                       color: '#fff',
                       border: 'none',
                       borderRadius: 4,
-                      cursor: 'pointer',
+                      cursor: isSavingDecision ? 'wait' : 'pointer',
                       fontSize: 13,
+                      opacity: isSavingDecision ? 0.7 : 1,
                     }}
                   >
-                    Approve
+                    {isSavingApprove ? 'Saving...' : 'Approve'}
                   </button>
                   <button
                     onClick={() => handleDecision(r.id, 'rejected')}
+                    disabled={isSavingDecision}
                     style={{
                       padding: '6px 14px',
                       background: '#ef4444',
                       color: '#fff',
                       border: 'none',
                       borderRadius: 4,
-                      cursor: 'pointer',
+                      cursor: isSavingDecision ? 'wait' : 'pointer',
                       fontSize: 13,
+                      opacity: isSavingDecision ? 0.7 : 1,
                     }}
                   >
-                    Reject
+                    {isSavingReject ? 'Saving...' : 'Reject'}
                   </button>
                   <button
                     onClick={() => { setDecidingId(null); setDecisionReason(''); }}
+                    disabled={isSavingDecision}
                     style={{
                       padding: '6px 14px',
                       background: '#1a1d25',
                       color: '#cbd5e1',
                       border: 'none',
                       borderRadius: 4,
-                      cursor: 'pointer',
+                      cursor: isSavingDecision ? 'wait' : 'pointer',
                       fontSize: 13,
+                      opacity: isSavingDecision ? 0.7 : 1,
                     }}
                   >
                     Cancel
@@ -773,7 +828,8 @@ function RequestsTab({
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </>
       )}
 

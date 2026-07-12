@@ -73,7 +73,7 @@ export function Jobs({ token, teamSlug }: JobsProps) {
       <h1 style={{ marginTop: 0, color: '#f0f2f7' }}>Agent Jobs</h1>
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: '12px 16px',
           background: 'rgba(251, 191, 36, 0.1)',
           border: '1px solid rgba(251, 191, 36, 0.3)',
@@ -102,7 +102,8 @@ export function Jobs({ token, teamSlug }: JobsProps) {
           <p style={{ fontSize: 13 }}>Jobs appear here when agents execute tasks in the team workspace.</p>
         </div>
       ) : jobs.length > 0 ? (
-        <table style={TABLE_STYLE}>
+        <div className="admin-table-scroll" data-admin-scroll-region="true" role="region" aria-label="Agent jobs table" tabIndex={0}>
+        <table style={{ ...TABLE_STYLE, minWidth: 640 }}>
           <thead>
             <tr>
               <th style={TH_STYLE}>ID</th>
@@ -141,6 +142,7 @@ export function Jobs({ token, teamSlug }: JobsProps) {
             ))}
           </tbody>
         </table>
+        </div>
       ) : null}
     </div>
   );

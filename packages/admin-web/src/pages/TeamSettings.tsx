@@ -61,7 +61,7 @@ export function TeamSettings({ token, teamSlug, onTeamUpdated }: TeamSettingsPro
       <h1 style={{ marginTop: 0, color: '#f0f2f7' }}>Team Settings</h1>
 
       {error && (
-        <div style={{
+        <div role="alert" style={{
           padding: '8px 12px',
           background: 'rgba(239, 68, 68, 0.1)',
           border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -83,10 +83,13 @@ export function TeamSettings({ token, teamSlug, onTeamUpdated }: TeamSettingsPro
         maxWidth: 480,
       }}>
         <div style={{ marginBottom: 16 }}>
-          <label style={labelStyle}>Team Name</label>
+          <label htmlFor="team-name" style={labelStyle}>Team Name</label>
           <div style={{ display: 'flex', gap: 8 }}>
             <input
+              id="team-name"
+              name="teamName"
               type="text"
+              autoComplete="organization"
               value={name}
               onChange={(e) => setName(e.target.value)}
               style={{
