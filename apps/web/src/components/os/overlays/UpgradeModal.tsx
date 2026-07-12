@@ -87,7 +87,12 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
             className="relative w-full max-w-2xl glass-strong rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
             onClick={e => e.stopPropagation()}
           >
-            <button onClick={close} className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors">
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close upgrade dialog"
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+            >
               <X className="w-4 h-4" />
             </button>
 
@@ -111,9 +116,9 @@ export default function UpgradeModal({ onStartTrial, onUpgrade, onOpenChange }: 
                   <thead>
                     <tr className="border-b border-border/50">
                       <th className="text-left p-3 text-muted-foreground font-medium">Feature</th>
-                      <th className="text-center p-3 text-muted-foreground font-medium w-28">Solo</th>
+                      <th className="text-center p-3 text-foreground font-medium w-28">Solo</th>
                       <th className="text-center p-3 font-medium w-28">
-                        <span className="text-accent-foreground flex items-center justify-center gap-1">
+                        <span className="text-foreground flex items-center justify-center gap-1">
                           <Users className="w-3.5 h-3.5" /> Team
                         </span>
                       </th>

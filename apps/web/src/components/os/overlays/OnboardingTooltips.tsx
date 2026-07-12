@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DUR } from '@/lib/motion/tokens';
 
@@ -66,25 +66,38 @@ const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingToo
     return [...BASE_TIPS, ...specific, CLOSING_TIP];
   }, [templateId]);
 
-  if (dismissed) return null;
-
   const isLast = tipIndex >= tips.length - 1;
+
+  const dismissTour = useCallback(() => {
+    setDismissed(true);
+    localStorage.setItem('waggle:tooltips_done', 'true');
+    onDismiss?.();
+  }, [onDismiss]);
+
+  useEffect(() => {
+    if (dismissed || suppressed) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') dismissTour();
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dismissed, dismissTour, suppressed]);
 
   const handleNext = () => {
     if (isLast) {
-      setDismissed(true);
-      localStorage.setItem('waggle:tooltips_done', 'true');
-      onDismiss?.();
+      dismissTour();
     } else {
       setTipIndex(i => i + 1);
     }
   };
 
   const handleDismissAll = () => {
-    setDismissed(true);
-    localStorage.setItem('waggle:tooltips_done', 'true');
-    onDismiss?.();
+    dismissTour();
   };
+
+  if (dismissed) return null;
 
   return (
     <AnimatePresence>
@@ -94,12 +107,19 @@ const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingToo
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ type: 'spring', damping: 22, stiffness: 260 }}
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="onboarding-tooltips-title"
+          aria-describedby="onboarding-tooltips-body"
+          tabIndex={-1}
           className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100] w-full max-w-lg px-6"
         >
           <div className="glass-strong rounded-2xl px-8 py-7 shadow-2xl border border-primary/20">
+            <h2 id="onboarding-tooltips-title" className="sr-only">Waggle tips</h2>
             <AnimatePresence mode="wait">
               <motion.p
                 key={tipIndex}
+                id="onboarding-tooltips-body"
                 initial={{ opacity: 0, x: 10 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -10 }}
@@ -112,7 +132,7 @@ const OnboardingTooltips = ({ templateId, onDismiss, suppressed }: OnboardingToo
 
             <div className="flex items-center justify-between">
               {/* Dot indicators */}
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5" aria-hidden="true">
                 {tips.map((_, i) => (
                   <div
                     key={i}

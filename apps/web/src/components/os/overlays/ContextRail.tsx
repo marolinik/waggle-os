@@ -59,6 +59,8 @@ const ContextRail = ({ target, onClose }: ContextRailProps) => {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 320, opacity: 0 }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          role="complementary"
+          aria-label={`Related context for ${target.label}`}
           className="fixed top-8 right-0 bottom-16 w-80 z-40 glass-strong border-l border-border/50 flex flex-col"
         >
           {/* Header */}
@@ -72,7 +74,12 @@ const ContextRail = ({ target, onClose }: ContextRailProps) => {
                 <p className="text-[10px] text-muted-foreground capitalize">{target.type}</p>
               </div>
             </div>
-            <button onClick={onClose} className="p-1 rounded-lg hover:bg-muted/50">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close related context"
+              className="p-1 rounded-lg hover:bg-muted/50"
+            >
               <X className="w-4 h-4 text-muted-foreground" />
             </button>
           </div>
@@ -99,10 +106,15 @@ const ContextRail = ({ target, onClose }: ContextRailProps) => {
                   const isExpanded = expandedId === item.id;
 
                   return (
-                    <button key={item.id} onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : item.id)}
+                      aria-expanded={isExpanded}
                       className={`w-full text-left p-2 rounded-lg transition-colors ${
                         isExpanded ? 'bg-muted/30' : 'hover:bg-muted/20'
-                      }`}>
+                      }`}
+                    >
                       <div className="flex items-start gap-2">
                         <Icon className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${color}`} />
                         <div className="flex-1 min-w-0">

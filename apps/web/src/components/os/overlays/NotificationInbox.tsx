@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { humanizeNotification } from '@/lib/notification-copy';
 import { formatRelativeTime } from '@/lib/agent-center-display';
+import { useFocusTrap } from '@/hooks/useFocusTrap';
 
 interface NotificationInboxProps {
   open: boolean;
@@ -21,6 +22,7 @@ const typeIcons: Record<string, LucideIcon> = {
 
 const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAllRead }: NotificationInboxProps) => {
   const navigate = useNavigate();
+  const dialogRef = useFocusTrap<HTMLDivElement>(open, onClose);
   if (!open) return null;
 
   const openAction = (n: Notification, href: string) => {
@@ -40,24 +42,33 @@ const NotificationInbox = ({ open, onClose, notifications, onMarkRead, onMarkAll
       >
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
         <motion.div
-          initial={{ opacity: 0, x: 20, y: -10 }}
-          animate={{ opacity: 1, x: 0, y: 0 }}
-          exit={{ opacity: 0, x: 20 }}
-          className="absolute top-10 right-4 w-80 glass-strong rounded-2xl shadow-2xl overflow-hidden"
+          ref={dialogRef}
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="notification-inbox-title"
+          tabIndex={-1}
+          className="absolute top-10 right-4 w-80 glass-strong rounded-2xl shadow-2xl overflow-hidden focus:outline-none"
           onClick={e => e.stopPropagation()}
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
             <div className="flex items-center gap-2">
               <Bell className="w-4 h-4 text-honey" />
-              <span className="text-sm font-display font-semibold text-foreground">Notifications</span>
+              <span id="notification-inbox-title" className="text-sm font-display font-semibold text-foreground">Notifications</span>
             </div>
             <div className="flex items-center gap-1">
               <HintTooltip content="Mark all read">
-                <button onClick={onMarkAllRead} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+                <button
+                  onClick={onMarkAllRead}
+                  aria-label="Mark all notifications as read"
+                  className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                >
                   <CheckCheck className="w-3.5 h-3.5" />
                 </button>
               </HintTooltip>
-              <button onClick={onClose} className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={onClose} aria-label="Close notifications" className="p-1 rounded text-muted-foreground hover:text-foreground transition-colors">
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>

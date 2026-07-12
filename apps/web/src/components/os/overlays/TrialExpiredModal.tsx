@@ -56,7 +56,9 @@ export default function TrialExpiredModal({ open, onDismiss, onUpgrade }: TrialE
             onClick={e => e.stopPropagation()}
           >
             <button
+              type="button"
               onClick={onDismiss}
+              aria-label="Close trial expired dialog"
               className="absolute top-4 right-4 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
             >
               <X className="w-4 h-4" />
