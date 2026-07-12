@@ -10,6 +10,8 @@ import { validateBody } from '../../validate-body.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
 import { resolveUsableModel } from '../model-availability.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
+import { applyProviderKeyToEnv } from '../provider-env.js';
+import { refreshManagedLiteLLM, type LiteLLMRefreshResult } from '../litellm-runtime-config.js';
 
 const VALID_AUTONOMY: AutonomyLevel[] = ['normal', 'trusted', 'yolo'];
 
@@ -115,6 +117,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
   }>('/api/settings', { preHandler: validateBody(settingsUpdateSchema) }, async (request) => {
     const config = new WaggleConfig(server.localConfig.dataDir);
     const { defaultModel, providers, dailyBudget, budgetHardCap, fallbackModel, budgetModel, budgetThreshold } = request.body;
+    let providerKeyChanged = false;
 
     if (defaultModel) {
       config.setDefaultModel(defaultModel);
@@ -162,22 +165,42 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
     if (providers && typeof providers === 'object') {
       for (const [name, entry] of Object.entries(providers)) {
         const { apiKey, models, baseUrl } = entry as { apiKey?: string; models?: string[]; baseUrl?: string };
+        const providerModels = Array.isArray(models)
+          ? models.filter((model): model is string => typeof model === 'string')
+          : [];
+        const providerBaseUrl = typeof baseUrl === 'string' ? baseUrl : undefined;
 
         // Save secret to vault (encrypted)
         if (apiKey && server.vault) {
-          server.vault.set(name, apiKey, { models, baseUrl });
+          server.vault.set(name, apiKey, { models: providerModels, baseUrl: providerBaseUrl });
+          applyProviderKeyToEnv(name, apiKey, true);
+          providerKeyChanged = true;
           // Invalidate health check key cache so next /health re-validates
           if (typeof server._invalidateKeyValidationCache === 'function') {
             server._invalidateKeyValidationCache();
           }
         }
 
-        // Also keep in config.json for backward compat (non-secret fields)
-        config.setProvider(name, entry as { apiKey: string; models: string[] });
+        // Keep only non-secret provider metadata in config.json. The raw key is
+        // Vault-only; an empty value preserves the legacy provider shape while
+        // preventing new saves from reintroducing plaintext credentials.
+        config.setProvider(name, {
+          apiKey: '',
+          models: providerModels,
+          ...(providerBaseUrl ? { baseUrl: providerBaseUrl } : {}),
+        });
       }
     }
 
     config.save();
+
+    let router: LiteLLMRefreshResult | undefined;
+    if (providerKeyChanged && server.localConfig.manageLiteLLM) {
+      router = await refreshManagedLiteLLM(server);
+    }
+    if (defaultModel) {
+      server.agentState.currentModel = await resolveUsableModel(server, defaultModel);
+    }
 
     // Return providers from vault (same as GET)
     const responseProviders: Record<string, { apiKey: string; models: string[]; baseUrl?: string }> = {};
@@ -206,6 +229,7 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       defaultModel: config.getDefaultModel(),
       providers: responseProviders,
       mindPath: config.getMindPath(),
+      ...(router ? { router } : {}),
     };
   });
 

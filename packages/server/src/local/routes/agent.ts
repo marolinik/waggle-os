@@ -55,8 +55,9 @@ export const agentRoutes: FastifyPluginAsync = async (server) => {
     if (!model) {
       return reply.status(400).send({ error: 'model is required' });
     }
-    server.agentState.currentModel = model;
-    return { ok: true, model };
+    const resolvedModel = await resolveUsableModel(server, model);
+    server.agentState.currentModel = resolvedModel;
+    return { ok: true, model: resolvedModel };
   });
 
   // GET /api/agents/active — current sub-agent orchestrator state

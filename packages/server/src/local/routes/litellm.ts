@@ -1,14 +1,13 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../lifecycle.js';
+import { getLiteLLMStatus } from '../lifecycle.js';
 import { listOllamaChatModelIds } from '../model-availability.js';
+import { discoverProviderModels, PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
+import { refreshManagedLiteLLM } from '../litellm-runtime-config.js';
+import { getProviderApiKey } from '../provider-env.js';
 
 export const litellmRoutes: FastifyPluginAsync = async (server) => {
-  /**
-   * GET /api/litellm/status — Check if LiteLLM is running
-   * Returns: { running: boolean, port: number }
-   */
   server.get('/api/litellm/status', async () => {
-    const status = await getLiteLLMStatus();
+    const status = await getLiteLLMStatus(server.localConfig.managedLiteLLMPort);
     const error = status.error ?? (status.status === 'timeout' ? 'LiteLLM did not start in time' : undefined);
     return {
       running: status.status === 'running',
@@ -17,59 +16,74 @@ export const litellmRoutes: FastifyPluginAsync = async (server) => {
     };
   });
 
-  /**
-   * POST /api/litellm/restart — Stop then start LiteLLM
-   * Returns: { running: boolean, port: number, error?: string }
-   */
   server.post('/api/litellm/restart', async () => {
-    try {
-      await stopLiteLLM();
-    } catch {
-      // Best-effort stop — proceed to start anyway
-    }
-    const status = await startLiteLLM();
-    const running = status.status === 'running' || status.status === 'started';
-    const error = status.error ?? (status.status === 'timeout' ? 'LiteLLM did not start in time' : undefined);
+    const refresh = await refreshManagedLiteLLM(server);
     return {
-      running,
-      port: status.port,
-      ...(error ? { error } : {}),
+      running: refresh.ready,
+      port: refresh.port,
+      models: refresh.models,
+      unavailableProviders: refresh.unavailableProviders,
+      ...(refresh.error ? { error: refresh.error } : {}),
     };
   });
 
-  /**
-   * GET /api/litellm/models — List available models from LiteLLM
-   * Returns: { models: string[] }
-   */
   server.get('/api/litellm/models', async () => {
-    const localModels = await listOllamaChatModelIds();
+    const localModelsPromise = listOllamaChatModelIds();
+    const providerModelsPromise = Promise.all(Object.keys(PROVIDER_MODEL_CATALOGS).map(async (providerId) => {
+      const entry = server.vault?.get(providerId);
+      const apiKey = getProviderApiKey(providerId, server.vault);
+      if (!apiKey) return [] as string[];
+      const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
+      const catalog = await discoverProviderModels(providerId, apiKey, baseUrl);
+      return catalog.models.map((model) => model.id);
+    }));
+    const [localModels, providerModels] = await Promise.all([localModelsPromise, providerModelsPromise]);
     try {
-      const litellmUrl = server.localConfig.litellmUrl;
-      const res = await fetch(`${litellmUrl}/models`);
-      if (!res.ok) {
-        return { models: localModels };
+      const response = await fetch(`${server.localConfig.litellmUrl}/models`);
+      if (!response.ok) {
+        return { models: [...new Set([...providerModels.flat(), ...localModels])] };
       }
-      const data = await res.json() as { data?: Array<{ id: string }> };
-      const models = [...new Set([...(data.data ?? []).map((m) => m.id), ...localModels])];
-      return { models };
+      const body = await response.json() as { data?: Array<{ id: string }> };
+      return {
+        models: [...new Set([
+          ...(body.data ?? []).map((model) => model.id),
+          ...providerModels.flat(),
+          ...localModels,
+        ])],
+      };
     } catch {
-      return { models: localModels };
+      return { models: [...new Set([...providerModels.flat(), ...localModels])] };
     }
   });
 
-  /**
-   * GET /api/litellm/pricing — Model pricing info
-   * Returns basic pricing data for known models (local reference, no external call)
-   */
+  // Pricing is router metadata, not a second static model catalog.
   server.get('/api/litellm/pricing', async () => {
-    return [
-      { model: 'claude-sonnet-4-6', inputPer1k: 0.003, outputPer1k: 0.015, provider: 'anthropic' },
-      { model: 'claude-haiku-4-6', inputPer1k: 0.0008, outputPer1k: 0.004, provider: 'anthropic' },
-      { model: 'claude-opus-4-6', inputPer1k: 0.015, outputPer1k: 0.075, provider: 'anthropic' },
-      { model: 'gpt-5.4', inputPer1k: 0.005, outputPer1k: 0.015, provider: 'openai' },
-      { model: 'gpt-5.4-mini', inputPer1k: 0.0004, outputPer1k: 0.0016, provider: 'openai' },
-      { model: 'gemini-3.1-pro', inputPer1k: 0.00125, outputPer1k: 0.005, provider: 'google' },
-      { model: 'gemini-3.1-flash', inputPer1k: 0.000075, outputPer1k: 0.0003, provider: 'google' },
-    ];
+    try {
+      const response = await fetch(`${server.localConfig.litellmUrl}/model/info`);
+      if (!response.ok) return [];
+      const body = await response.json() as {
+        data?: Array<{
+          model_name?: string;
+          model_info?: {
+            input_cost_per_token?: number;
+            output_cost_per_token?: number;
+          };
+        }>;
+      };
+      return (body.data ?? []).flatMap((entry) => {
+        if (!entry.model_name) return [];
+        const input = Number(entry.model_info?.input_cost_per_token);
+        const output = Number(entry.model_info?.output_cost_per_token);
+        if (!Number.isFinite(input) || !Number.isFinite(output)) return [];
+        return [{
+          model: entry.model_name,
+          inputPer1k: input * 1000,
+          outputPer1k: output * 1000,
+          provider: entry.model_name.split('/')[0] ?? 'unknown',
+        }];
+      });
+    } catch {
+      return [];
+    }
   });
 };
