@@ -170,6 +170,26 @@ describe('Workflow Commands', () => {
     expect(result).toContain('2 skill(s)');
   });
 
+  it('/cli allow and deny persist through the command context', async () => {
+    let allowlist: string[] = [];
+    const ctx = mockContext({
+      getCliAllowlist: () => allowlist,
+      updateCliAllowlist: (action, name) => {
+        const before = [...allowlist];
+        const key = name.toLowerCase();
+        allowlist = action === 'allow'
+          ? before.some(item => item.toLowerCase() === key) ? before : [...before, name]
+          : before.filter(item => item.toLowerCase() !== key);
+        return { changed: before.length !== allowlist.length, allowlist };
+      },
+    });
+
+    expect(await registry.execute('/cli allow git', ctx)).toContain('Allowed "git"');
+    expect(await registry.execute('/cli', ctx)).toContain('Allowed CLI tools: git');
+    expect(await registry.execute('/cli deny git', ctx)).toContain('Denied "git"');
+    expect(await registry.execute('/cli', ctx)).toContain('No CLI tools explicitly allowed');
+  });
+
   it('/memory calls searchMemory', async () => {
     const ctx = mockContext();
     const result = await registry.execute('/memory architecture decisions', ctx);

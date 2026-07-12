@@ -122,6 +122,18 @@ describe('Orchestrator — recall path hardening', () => {
   // Review M4 — OR-in-JOIN rewritten as UNION ALL
   // ────────────────────────────────────────────────────────────────
 
+  describe('memory trust - illustrative assistant output is not user evidence', () => {
+    it('does not auto-save example bullets as key points', async () => {
+      const saved = await orchestrator.autoSaveFromExchange(
+        "What's the very first small thing I should try so I don't feel overwhelmed?",
+        'Try this right now:\n\nJust tell me something small you would like me to remember.\n\nFor example:\n- "I prefer short emails"\n- "I hate meetings before 10am"\n- "Call me Priya"\n- "My budget for trips is around $500"\n\nWhy this matters: examples are not facts about you.',
+      );
+
+      expect(saved.some((entry) => entry.includes('$500'))).toBe(false);
+      expect(orchestrator.getFrames().getRecent(20).some((frame) => frame.content.includes('$500'))).toBe(false);
+    });
+  });
+
   describe('M4 — topEntities uses UNION ALL join that preserves index usage', () => {
     it('counts relations where entity is source OR target (equivalent to old behavior)', () => {
       const knowledge = orchestrator.getKnowledge();
@@ -182,6 +194,32 @@ describe('Orchestrator — recall path hardening', () => {
         const betaHits = (result.text.match(/beta tail/g) ?? []).length;
         expect(alphaHits).toBeGreaterThanOrEqual(1);
         expect(betaHits).toBeGreaterThanOrEqual(1);
+      } finally {
+        orchestrator.clearWorkspaceMind();
+        wsDb.close();
+      }
+    });
+
+    it('preserves imported workspace provenance in catch-up recalledFrames', async () => {
+      const wsDb = new MindDB(':memory:');
+      orchestrator.setWorkspaceMind(wsDb);
+      try {
+        const marker = `Browser Companion imported catch-up marker ${Date.now()}`;
+        await orchestrator.executeTool('save_memory', {
+          content: marker,
+          importance: 'important',
+          source: 'import',
+        });
+
+        const result = await orchestrator.recallMemory('catch me up');
+
+        expect(result.text).toContain(marker);
+        expect(result.recalledFrames).toEqual(
+          expect.arrayContaining([expect.objectContaining({ source: 'import' })]),
+        );
+        expect(result.recalledFrames).not.toEqual(
+          expect.arrayContaining([expect.objectContaining({ source: 'unknown' })]),
+        );
       } finally {
         orchestrator.clearWorkspaceMind();
         wsDb.close();
