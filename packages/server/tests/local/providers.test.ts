@@ -4,7 +4,7 @@
  * Tests the single source of truth endpoint for LLM providers,
  * models, and search tools with vault key status.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -12,6 +12,7 @@ import { MindDB, SessionStore, FrameStore } from '@waggle/core';
 import { buildLocalServer } from '../../src/local/index.js';
 import type { FastifyInstance } from 'fastify';
 import { injectWithAuth } from '../test-utils.js';
+import { PROVIDER_ENV_NAMES } from '../../src/local/provider-env.js';
 
 /** Shape of a model entry in the GET /api/providers response (test-asserted fields). */
 interface ProviderModelResponse {
@@ -19,6 +20,7 @@ interface ProviderModelResponse {
   name: string;
   cost: string;
   speed: string;
+  source?: string;
 }
 
 /** Shape of a provider entry in the GET /api/providers response (test-asserted fields). */
@@ -29,6 +31,21 @@ interface ProviderResponse {
   requiresKey: boolean;
   badge: string | null;
   models: ProviderModelResponse[];
+  modelsSource?: string;
+}
+
+function mockProviderCatalogFetch() {
+  const realFetch = globalThis.fetch;
+  return vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.includes('/api/tags')) return realFetch(input, init);
+    if (url.includes('/models')) {
+      return Promise.resolve(new Response(JSON.stringify({
+        data: [{ id: 'provider-model-added-at-runtime', name: 'Provider Model Added At Runtime' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } }));
+    }
+    return realFetch(input, init);
+  });
 }
 
 /** Shape of a search-provider entry in the GET /api/providers response (test-asserted fields). */
@@ -43,8 +60,13 @@ describe('Provider API', () => {
   let server: FastifyInstance;
   let tmpDir: string;
   let prevOllamaHost: string | undefined;
+  const originalProviderEnv = new Map<string, string | undefined>();
 
   beforeAll(async () => {
+    for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+      originalProviderEnv.set(envName, process.env[envName]);
+      delete process.env[envName];
+    }
     // Pin Ollama to a dead port so reachability is deterministic everywhere:
     // Windows dev boxes often run a local daemon (:11434 → reachable), CI does
     // not. The route reports hasKey = live reachability for ollama.
@@ -66,6 +88,10 @@ describe('Provider API', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
     if (prevOllamaHost === undefined) delete process.env.OLLAMA_HOST;
     else process.env.OLLAMA_HOST = prevOllamaHost;
+    for (const [envName, value] of originalProviderEnv) {
+      if (value === undefined) delete process.env[envName];
+      else process.env[envName] = value;
+    }
   });
 
   describe('GET /api/providers', () => {
@@ -132,43 +158,76 @@ describe('Provider API', () => {
     it('providers with vault keys show hasKey=true', async () => {
       // Add a key to vault
       server.vault!.set('anthropic', 'sk-ant-test-key');
+      const fetchSpy = mockProviderCatalogFetch();
 
-      const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
-      const { providers } = res.json();
-      const anthropic = providers.find((p: ProviderResponse) => p.id === 'anthropic');
-      expect(anthropic.hasKey).toBe(true);
-
-      // Cleanup
-      server.vault!.delete('anthropic');
+      try {
+        const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const { providers } = res.json();
+        const anthropic = providers.find((p: ProviderResponse) => p.id === 'anthropic');
+        expect(anthropic.hasKey).toBe(true);
+      } finally {
+        fetchSpy.mockRestore();
+        server.vault!.delete('anthropic');
+      }
     });
 
-    it('each provider model has id, name, cost, speed', async () => {
+    it('environment-configured providers expose the same live catalog as Vault keys', async () => {
+      process.env.OPENAI_API_KEY = 'openai-env-catalog-key';
+      const fetchSpy = mockProviderCatalogFetch();
+
+      try {
+        const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const { providers } = res.json();
+        const openai = providers.find((provider: ProviderResponse) => provider.id === 'openai');
+
+        expect(openai.hasKey).toBe(true);
+        expect(openai.modelsSource).toBe('provider-api');
+        expect(openai.models.map((model) => model.id)).toContain('openai/provider-model-added-at-runtime');
+      } finally {
+        fetchSpy.mockRestore();
+        delete process.env.OPENAI_API_KEY;
+      }
+    });
+
+    it('returns live provider models with id, name, cost, and speed metadata', async () => {
+      server.vault!.set('anthropic', 'sk-ant-catalog-test-key');
+      const fetchSpy = mockProviderCatalogFetch();
+
+      try {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
       const anthropic = providers.find((p: ProviderResponse) => p.id === 'anthropic');
 
-      expect(anthropic.models.length).toBeGreaterThanOrEqual(3);
+      expect(anthropic.modelsSource).toBe('provider-api');
+      expect(anthropic.models.length).toBeGreaterThan(0);
+      expect(anthropic.models.map((model) => model.id)).toContain('anthropic/provider-model-added-at-runtime');
       for (const m of anthropic.models) {
         expect(m.id).toBeDefined();
         expect(m.name).toBeDefined();
         expect(['$', '$$', '$$$']).toContain(m.cost);
         expect(['fast', 'medium', 'slow']).toContain(m.speed);
       }
+      } finally {
+        fetchSpy.mockRestore();
+        server.vault!.delete('anthropic');
+      }
     });
 
-    // LOCKED 2026-04-19 target model. Guards against accidental removal
-    // from the alibaba provider catalog — this model is the canonical
-    // engine for Waggle Pro/Teams default + KVARK prod + Track 2
-    // benchmarks, and the server route is what the SpawnAgentDialog +
-    // onboarding picker read from.
-    it('alibaba provider includes qwen3.6-35b-a3b (LOCKED target)', async () => {
-      const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
-      const { providers } = res.json();
-      const alibaba = providers.find((p: ProviderResponse) => p.id === 'alibaba');
+    it('does not require a code change when an Alibaba model appears in its API catalog', async () => {
+      server.vault!.set('alibaba', 'alibaba-catalog-test-key');
+      const fetchSpy = mockProviderCatalogFetch();
 
-      expect(alibaba).toBeDefined();
-      const modelIds = alibaba.models.map((m: ProviderModelResponse) => m.id);
-      expect(modelIds).toContain('qwen3.6-35b-a3b');
+      try {
+        const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
+        const { providers } = res.json();
+        const alibaba = providers.find((p: ProviderResponse) => p.id === 'alibaba');
+
+        expect(alibaba.modelsSource).toBe('provider-api');
+        expect(alibaba.models.map((model) => model.id)).toContain('alibaba/provider-model-added-at-runtime');
+      } finally {
+        fetchSpy.mockRestore();
+        server.vault!.delete('alibaba');
+      }
     });
 
     it('returns search providers with priority', async () => {
@@ -231,11 +290,11 @@ describe('Provider API', () => {
       expect(perplexity.badge).toBe('Search + LLM');
     });
 
-    it('openrouter has badge "Free models!"', async () => {
+    it('openrouter identifies its live provider catalog', async () => {
       const res = await injectWithAuth(server, { method: 'GET', url: '/api/providers' });
       const { providers } = res.json();
       const openrouter = providers.find((p: ProviderResponse) => p.id === 'openrouter');
-      expect(openrouter.badge).toBe('Free models!');
+      expect(openrouter.badge).toBe('Provider catalog');
     });
   });
 });
@@ -257,6 +316,30 @@ describe('Perplexity Search Tool', () => {
     expect(perplexity).toBeDefined();
     const result = await perplexity!.execute({ query: 'test' });
     expect(result).toContain('not configured');
+  });
+});
+
+describe('Legacy provider key migration', () => {
+  it('moves legacy plaintext keys into Vault and scrubs config.json', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-key-migration-'));
+    const key = 'sk-ant-legacy-key-1234567890';
+    fs.writeFileSync(
+      path.join(dataDir, 'config.json'),
+      JSON.stringify({ defaultModel: 'test/model', providers: { anthropic: { apiKey: key, models: ['claude-sonnet-4-6'] } } }),
+      'utf-8',
+    );
+
+    const migratedServer = await buildLocalServer({ dataDir, port: 0 });
+    try {
+      const config = JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf-8')) as {
+        providers?: Record<string, { apiKey?: string; models?: string[] }>;
+      };
+      expect(config.providers?.anthropic).toMatchObject({ apiKey: '', models: ['claude-sonnet-4-6'] });
+      expect(migratedServer.vault?.get('anthropic')?.value).toBe(key);
+    } finally {
+      await migratedServer.close();
+      fs.rmSync(dataDir, { recursive: true, force: true });
+    }
   });
 });
 

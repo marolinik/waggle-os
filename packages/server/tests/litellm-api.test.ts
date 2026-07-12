@@ -14,6 +14,7 @@ vi.mock('../src/local/lifecycle.js', () => ({
 import { buildLocalServer } from '../src/local/index.js';
 import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../src/local/lifecycle.js';
 import { resolveUsableModel } from '../src/local/model-availability.js';
+import { PROVIDER_ENV_NAMES } from '../src/local/provider-env.js';
 import { injectWithAuth } from './test-utils.js';
 
 const mockGetStatus = getLiteLLMStatus as ReturnType<typeof vi.fn>;
@@ -23,8 +24,13 @@ const mockStop = stopLiteLLM as ReturnType<typeof vi.fn>;
 describe('LiteLLM Management API', () => {
   let server: FastifyInstance;
   let dataDir: string;
+  const originalProviderEnv = new Map<string, string | undefined>();
 
   beforeAll(async () => {
+    for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+      originalProviderEnv.set(envName, process.env[envName]);
+      delete process.env[envName];
+    }
     dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-litellm-api-'));
 
     // Write minimal config.json
@@ -34,20 +40,31 @@ describe('LiteLLM Management API', () => {
       'utf-8'
     );
 
-    server = await buildLocalServer({ dataDir, port: 0 });
+    server = await buildLocalServer({
+      dataDir,
+      port: 0,
+      manageLiteLLM: true,
+      managedLiteLLMPort: 4000,
+    });
   });
 
   afterAll(async () => {
     await server.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
+    for (const [envName, value] of originalProviderEnv) {
+      if (value === undefined) delete process.env[envName];
+      else process.env[envName] = value;
+    }
   });
 
   beforeEach(() => {
     vi.clearAllMocks();
+    for (const envName of originalProviderEnv.keys()) delete process.env[envName];
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    server.vault.delete('openai');
   });
 
   // --- GET /api/litellm/status ---
@@ -84,7 +101,15 @@ describe('LiteLLM Management API', () => {
 
   // --- POST /api/litellm/restart ---
 
+  function configureDynamicCatalog(model = 'provider-model-added-today'): void {
+    server.vault.set('openai', 'openai-router-test-key');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{ id: model }],
+    }), { status: 200 }));
+  }
+
   it('POST /api/litellm/restart calls stop then start, returns new status', async () => {
+    configureDynamicCatalog();
     mockStop.mockResolvedValue(undefined);
     mockStart.mockResolvedValue({ status: 'started', port: 4000 });
 
@@ -96,6 +121,7 @@ describe('LiteLLM Management API', () => {
     const body = JSON.parse(res.body);
     expect(body.running).toBe(true);
     expect(body.port).toBe(4000);
+    expect(body.models).toEqual(['openai/provider-model-added-today']);
 
     // Verify stop was called before start
     expect(mockStop).toHaveBeenCalledTimes(1);
@@ -103,9 +129,12 @@ describe('LiteLLM Management API', () => {
     const stopOrder = mockStop.mock.invocationCallOrder[0];
     const startOrder = mockStart.mock.invocationCallOrder[0];
     expect(stopOrder).toBeLessThan(startOrder);
+    expect(mockStart).toHaveBeenCalledWith(4000, path.join(dataDir, 'litellm.runtime.json'));
+    server.vault.delete('openai');
   });
 
   it('POST /api/litellm/restart returns error on start failure', async () => {
+    configureDynamicCatalog();
     mockStop.mockResolvedValue(undefined);
     mockStart.mockResolvedValue({
       status: 'error',
@@ -121,9 +150,11 @@ describe('LiteLLM Management API', () => {
     const body = JSON.parse(res.body);
     expect(body.running).toBe(false);
     expect(body.error).toBe('Failed to spawn LiteLLM');
+    server.vault.delete('openai');
   });
 
   it('POST /api/litellm/restart proceeds to start even if stop throws', async () => {
+    configureDynamicCatalog();
     mockStop.mockRejectedValue(new Error('kill ESRCH'));
     mockStart.mockResolvedValue({ status: 'started', port: 4000 });
 
@@ -136,9 +167,11 @@ describe('LiteLLM Management API', () => {
     expect(body.running).toBe(true);
     expect(body.port).toBe(4000);
     expect(mockStart).toHaveBeenCalledTimes(1);
+    server.vault.delete('openai');
   });
 
   it('POST /api/litellm/restart returns fallback error on timeout status', async () => {
+    configureDynamicCatalog();
     mockStop.mockResolvedValue(undefined);
     mockStart.mockResolvedValue({ status: 'timeout', port: 4000 });
 
@@ -150,6 +183,26 @@ describe('LiteLLM Management API', () => {
     const body = JSON.parse(res.body);
     expect(body.running).toBe(false);
     expect(body.error).toBe('LiteLLM did not start in time');
+    server.vault.delete('openai');
+  });
+
+  it('GET /api/litellm/pricing uses router metadata instead of a static model list', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      data: [{
+        model_name: 'openai/model-added-after-release',
+        model_info: { input_cost_per_token: 0.000002, output_cost_per_token: 0.000006 },
+      }],
+    }), { status: 200 }));
+
+    const res = await injectWithAuth(server, { method: 'GET', url: '/api/litellm/pricing' });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual([{
+      model: 'openai/model-added-after-release',
+      inputPer1k: 0.002,
+      outputPer1k: 0.006,
+      provider: 'openai',
+    }]);
   });
 
   // --- GET /api/litellm/models ---
@@ -173,6 +226,30 @@ describe('LiteLLM Management API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.models).toEqual(['gpt-4o', 'claude-sonnet-4-20250514', 'gemini-pro']);
+  });
+
+  it('GET /api/litellm/models merges newly discovered models from configured providers', async () => {
+    server.vault!.set('openai', 'openai-catalog-key');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === 'https://api.openai.com/v1/models') {
+        return new Response(JSON.stringify({ data: [{ id: 'new-model-v9' }] }), { status: 200 });
+      }
+      if (url.endsWith('/api/tags')) return { ok: false, status: 503 } as Response;
+      if (url.endsWith('/models')) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'GET',
+        url: '/api/litellm/models',
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).models).toContain('openai/new-model-v9');
+    } finally {
+      server.vault!.delete('openai');
+    }
   });
 
   it('GET /api/litellm/models returns empty array on fetch failure', async () => {
