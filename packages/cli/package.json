@@ -45,7 +45,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/cli/tests/commands.test.ts packages/cli/tests/admin.test.ts packages/cli/tests/renderer.test.ts packages/cli/tests/memory-persistence-hard.test.ts packages/cli/tests/auth.test.ts packages/cli/tests/mode-detector.test.ts packages/cli/tests/comprehensive-e2e.test.ts packages/cli/tests/cli-runtime.test.ts",
     "dev": "tsx src/index.ts"
   },
   "dependencies": {

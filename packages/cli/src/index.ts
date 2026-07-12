@@ -7,8 +7,6 @@
  *   waggle --help           Show help
  */
 
-import { startRepl } from './repl.js';
-
 function printHelp(): void {
   console.log(`
 Waggle CLI — interactive AI agent with persistent memory
@@ -50,7 +48,12 @@ if (modelIdx !== -1 && args[modelIdx + 1]) {
 const local = args.includes('--local');
 const team = args.includes('--team');
 
-startRepl({ model, local, team }).catch((err) => {
+async function main(): Promise<void> {
+  const { startRepl } = await import('./repl.js');
+  await startRepl({ model, local, team });
+}
+
+main().catch((err) => {
   console.error('Fatal error:', (err as Error).message);
   process.exit(1);
 });
