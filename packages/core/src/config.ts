@@ -16,11 +16,17 @@ export interface TeamServerConfig {
   displayName?: string;
 }
 
+export interface CliConfig {
+  allowlist?: string[];
+}
+
 interface ConfigData {
   defaultModel: string;
   providers: Record<string, ProviderEntry>;
   mindPath?: string;
   teamServer?: TeamServerConfig;
+  /** Governed CLI programs the agent may execute. */
+  cli?: CliConfig;
   /** F8: Daily cost budget in dollars. null = no limit. */
   dailyBudget?: number | null;
   /** When true, exceeding dailyBudget blocks agent. When false, warns only. */
@@ -203,6 +209,26 @@ export class WaggleConfig {
 
   isTeamConnected(): boolean {
     return this.data.teamServer !== null && this.data.teamServer !== undefined && typeof this.data.teamServer.url === 'string' && this.data.teamServer.url.length > 0;
+  }
+
+  // --- Governed CLI access ---
+
+  getCliAllowlist(): string[] {
+    return [...(this.data.cli?.allowlist ?? [])];
+  }
+
+  setCliAllowlist(allowlist: string[]): void {
+    const seen = new Set<string>();
+    const next = allowlist.reduce<string[]>((result, entry) => {
+      const value = entry.trim();
+      const key = value.toLowerCase();
+      if (value && !seen.has(key)) {
+        seen.add(key);
+        result.push(value);
+      }
+      return result;
+    }, []);
+    this.data.cli = { ...(this.data.cli ?? {}), allowlist: next };
   }
 
   // --- Telemetry (M2-7) ---

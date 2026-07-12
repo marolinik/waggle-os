@@ -155,6 +155,20 @@ describe('WaggleConfig', () => {
     });
   });
 
+  describe('governed CLI config', () => {
+    it('normalizes, deduplicates, and persists the CLI allowlist', () => {
+      const configDir = makeTempDir();
+      const config = new WaggleConfig(configDir);
+
+      config.setCliAllowlist([' node ', 'NODE', '', 'git']);
+      expect(config.getCliAllowlist()).toEqual(['node', 'git']);
+      config.save();
+
+      const config2 = new WaggleConfig(configDir);
+      expect(config2.getCliAllowlist()).toEqual(['node', 'git']);
+    });
+  });
+
   describe('Model Pilot config fields', () => {
     let tmpDir: string;
 
