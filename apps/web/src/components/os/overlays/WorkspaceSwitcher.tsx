@@ -56,7 +56,7 @@ function WorkspaceRow({ ws, isActive, isDuplicateName, onSelect }: {
   const subtitle = rel ? (ws.group ? `${ws.group} · ${rel}` : rel) : (ws.group || null);
   return (
     <div
-      className={`group flex items-center gap-1 rounded-xl transition-all ${
+      className={`group flex items-center gap-1 rounded-xl transition-colors ${
         isActive
           ? 'bg-primary/20 border border-primary/50'
           : 'bg-secondary/20 border border-transparent hover:bg-secondary/40'

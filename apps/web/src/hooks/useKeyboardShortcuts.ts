@@ -69,7 +69,7 @@ export const useKeyboardShortcuts = (options: UseKeyboardShortcutsOptions) => {
         return;
       }
 
-      // Ctrl+Shift+N: New chat window on the active workspace (bug #7).
+      // Ctrl+Shift+N: Open chat on the active workspace.
       // Matches the cornerstone's Phase A.3 acceptance test flow:
       //   "Cmd+Shift+N → pick Researcher → ..."
       if (ctrl && e.shiftKey && (e.key === 'N' || e.key === 'n')) {

@@ -12,7 +12,7 @@
  * Stage C (the flip): this IS the live shell — App.tsx mounts it as the `/`
  * layout route; Desktop.tsx and the window manager are deleted (§3.1).
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Home, MessageSquare, Brain, ListTodo, Library, Network, Plug, Shield } from 'lucide-react';
@@ -20,23 +20,10 @@ import wallpaperDark from '@/assets/wallpaper.jpg';
 import wallpaperLight from '@/assets/wallpaper-light.jpg';
 import BootScreen from './BootScreen';
 import StatusBar from './StatusBar';
-import ChatHost from './ChatHost';
 import RouteTransition from './RouteTransition';
-import CommandCenter from './overlays/CommandCenter';
 import Sidebar, { type SidebarNavItem } from './Sidebar';
 import AppErrorBoundary from './ErrorBoundary';
-import CreateWorkspaceDialog from './overlays/CreateWorkspaceDialog';
-import PersonaSwitcher from './overlays/PersonaSwitcher';
-import SpawnAgentDialog from './overlays/SpawnAgentDialog';
-import WorkspaceSwitcher from './overlays/WorkspaceSwitcher';
-import NotificationInbox from './overlays/NotificationInbox';
-import KeyboardShortcutsHelp from './overlays/KeyboardShortcutsHelp';
-import OnboardingWizard from './overlays/OnboardingWizard';
-import OnboardingTooltips from './overlays/OnboardingTooltips';
-import LoginBriefing from './overlays/LoginBriefing';
-import ContextRail from './overlays/ContextRail';
 import UpgradeModal from './overlays/UpgradeModal';
-import TrialExpiredModal from './overlays/TrialExpiredModal';
 import { adapter } from '@/lib/adapter';
 import { stashDeepLink } from '@/lib/app-deeplink';
 import { writeLoginBriefingDismissed, writeLoginBriefingLastDismissedAt, readLoginBriefingDismissed, readSkipBriefingParam } from '@/lib/login-briefing';
@@ -58,6 +45,24 @@ import { useDockNudge } from '@/hooks/useDockNudge';
 import { useToast } from '@/hooks/use-toast';
 
 const BOOT_KEY = 'waggle-booted';
+
+const ChatHost = lazy(() => import('./ChatHost'));
+const CommandCenter = lazy(() => import('./overlays/CommandCenter'));
+const CreateWorkspaceDialog = lazy(() => import('./overlays/CreateWorkspaceDialog'));
+const PersonaSwitcher = lazy(() => import('./overlays/PersonaSwitcher'));
+const SpawnAgentDialog = lazy(() => import('./overlays/SpawnAgentDialog'));
+const WorkspaceSwitcher = lazy(() => import('./overlays/WorkspaceSwitcher'));
+const NotificationInbox = lazy(() => import('./overlays/NotificationInbox'));
+const KeyboardShortcutsHelp = lazy(() => import('./overlays/KeyboardShortcutsHelp'));
+const OnboardingWizard = lazy(() => import('./overlays/OnboardingWizard'));
+const OnboardingTooltips = lazy(() => import('./overlays/OnboardingTooltips'));
+const LoginBriefing = lazy(() => import('./overlays/LoginBriefing'));
+const ContextRail = lazy(() => import('./overlays/ContextRail'));
+const TrialExpiredModal = lazy(() => import('./overlays/TrialExpiredModal'));
+
+const deferredShellElement = (element: ReactNode) => (
+  <Suspense fallback={null}>{element}</Suspense>
+);
 
 /**
  * F32: workspace sub-tab → breadcrumb label. Mirrors WorkspaceRoute.WS_TABS +
@@ -118,6 +123,7 @@ const ShellLayout = () => {
   const {
     workspaces, activeWorkspace, activeWorkspaceId,
     selectWorkspace, createWorkspace, patchWorkspace, refreshWorkspaces, workspacesError,
+    workspacesLoading,
     currentTier, billingTier, trialInfo, refreshTier, showTrialExpired, setShowTrialExpired,
     notifications, unreadCount, markRead, markAllRead,
     onboardingState, updateOnboarding, completeOnboarding,
@@ -127,6 +133,10 @@ const ShellLayout = () => {
   } = useShell();
 
   const { allSignals: waggleSignals } = useWaggleDance();
+  const overlaysRef = useRef(ov);
+  useEffect(() => {
+    overlaysRef.current = ov;
+  }, [ov]);
   const waggleUnacknowledged = waggleSignals.filter(s => !s.acknowledged).length;
   // W2A: no implicit workspaces[0] fallback — the chrome shows a workspace only
   // when one was explicitly selected. Sidebar/StatusBar accept null names; the
@@ -137,15 +147,41 @@ const ShellLayout = () => {
       : null;
   const effectiveActiveWorkspace =
     activeWorkspace ?? workspaces.find(ws => ws.id === effectiveActiveWorkspaceId) ?? null;
+  const firstAvailableWorkspaceId = useMemo(
+    () => workspaces.find(ws => ws.status !== 'archived')?.id ?? null,
+    [workspaces],
+  );
+  const chatShortcutWorkspaceId = effectiveActiveWorkspaceId ?? firstAvailableWorkspaceId;
+  const [pendingChatShortcut, setPendingChatShortcut] = useState(false);
   const navigateToActiveChat = useCallback(() => {
-    if (effectiveActiveWorkspaceId) {
-      navigate(routeFor('chat', { activeWorkspaceId: effectiveActiveWorkspaceId }));
+    if (chatShortcutWorkspaceId) {
+      selectWorkspace(chatShortcutWorkspaceId);
+      ov.setShowWorkspaceSwitcher(false);
+      navigate(routeFor('chat', { activeWorkspaceId: chatShortcutWorkspaceId }));
       return;
     }
-    // W2A: with no explicit selection, prompt the user to pick a workspace
-    // instead of jumping into the filesystem-first one.
+    if (workspacesLoading && !workspacesError) {
+      setPendingChatShortcut(true);
+      return;
+    }
+    // No workspace exists yet; ask the user to create or pick one.
     ov.toggleWorkspaceSwitcher();
-  }, [effectiveActiveWorkspaceId, navigate, ov]);
+  }, [chatShortcutWorkspaceId, navigate, ov, selectWorkspace, workspacesError, workspacesLoading]);
+
+  useEffect(() => {
+    if (!pendingChatShortcut) return;
+    if (chatShortcutWorkspaceId) {
+      setPendingChatShortcut(false);
+      selectWorkspace(chatShortcutWorkspaceId);
+      ov.setShowWorkspaceSwitcher(false);
+      navigate(routeFor('chat', { activeWorkspaceId: chatShortcutWorkspaceId }));
+      return;
+    }
+    if (!workspacesLoading) {
+      setPendingChatShortcut(false);
+      ov.toggleWorkspaceSwitcher();
+    }
+  }, [chatShortcutWorkspaceId, navigate, ov, pendingChatShortcut, selectWorkspace, workspacesLoading]);
 
   // §4.2/§1.2: PersonaSwitcher (Ctrl+Shift+P) targets the ACTIVE workspace's
   // chat widget (focused-window resolution died with focus tracking, §4.3);
@@ -215,6 +251,7 @@ const ShellLayout = () => {
         | undefined;
       if (!detail?.appId || detail.redispatch) return;
       stashDeepLink({ appId: detail.appId, tab: detail.tab, automationId: detail.automationId, filter: detail.filter });
+      ov.setShowWorkspaceSwitcher(false);
       navigate(
         routeFor(detail.appId, { activeWorkspaceId: effectiveActiveWorkspaceId }) +
         queryString({ tab: detail.tab, automationId: detail.automationId, filter: detail.filter }),
@@ -226,13 +263,16 @@ const ShellLayout = () => {
     };
     window.addEventListener('waggle:open-app', handler);
     return () => window.removeEventListener('waggle:open-app', handler);
-  }, [navigate, effectiveActiveWorkspaceId]);
+  }, [navigate, effectiveActiveWorkspaceId, ov]);
 
   // Keyboard shortcuts — every app shortcut is a navigate() now (§2.2).
   // Ctrl+W / Ctrl+Shift+M window handlers retire with the window manager
   // (§3.1); Ctrl+Shift+N navigates to the active workspace's chat tab (§4.2).
   useKeyboardShortcuts({
-    onOpenApp: (id) => navigate(routeFor(id, { activeWorkspaceId: effectiveActiveWorkspaceId })),
+    onOpenApp: (id) => {
+      ov.setShowWorkspaceSwitcher(false);
+      navigate(routeFor(id, { activeWorkspaceId: effectiveActiveWorkspaceId }));
+    },
     onToggleGlobalSearch: ov.toggleGlobalSearch,
     onTogglePersonaSwitcher: ov.togglePersonaSwitcher,
     onToggleWorkspaceSwitcher: ov.toggleWorkspaceSwitcher,
@@ -252,8 +292,9 @@ const ShellLayout = () => {
       const [, wsId] = id.split(':');
       if (wsId) selectWorkspace(wsId);
     }
+    ov.setShowWorkspaceSwitcher(false);
     navigate(route);
-  }, [effectiveActiveWorkspaceId, selectWorkspace, navigate]);
+  }, [effectiveActiveWorkspaceId, selectWorkspace, navigate, ov]);
 
   // Onboarding completion handlers (relocated from Desktop.tsx:290-313).
   const handleOnboardingComplete = useCallback((_serverBaseUrl: string) => {
@@ -315,6 +356,14 @@ const ShellLayout = () => {
     setContextRailTarget(null);
   }, [location.pathname, setContextRailTarget]);
 
+  // Route changes should dismiss route-independent selection overlays. Without
+  // this, a workspace picker opened during a prior navigation can sit above the
+  // next surface and intercept sidebar clicks.
+  useEffect(() => {
+    const overlays = overlaysRef.current;
+    if (overlays.showWorkspaceSwitcher) overlays.setShowWorkspaceSwitcher(false);
+  }, [location.pathname, location.search]);
+
   // Wave U Lane B (item 1): drive the briefing gate off the pathname STREAM via
   // nextBriefingLanding, not the live pathname at render — so an in-session
   // navigation to Home (Settings→Home) can never re-open the modal. The home hero
@@ -350,12 +399,12 @@ const ShellLayout = () => {
       // static '/workspaces' prefix wrongly lit Chat on Overview and every
       // other workspace tab. Workspace-agnostic regex, no id coupling.
       match: [], activeWhen: (p: string) => /^\/workspaces\/[^/]+\/chat(\/|$)/.test(p),
-      onClick: hasRealActiveWorkspace ? undefined : ov.toggleWorkspaceSwitcher,
+      onClick: navigateToActiveChat,
     },
     { key: 'memory', label: 'Memory', icon: Brain, to: '/memory', match: ['/memory'] },
     { key: 'agents', label: 'Agents', icon: ListTodo, to: '/agents', match: ['/agents', '/automations'], badge: waggleUnacknowledged || undefined },
     { key: 'library', label: 'Library', icon: Library, to: '/artifacts', match: ['/artifacts', '/files', '/skills'] },
-  ], [effectiveActiveWorkspaceId, waggleUnacknowledged, hasRealActiveWorkspace, ov.toggleWorkspaceSwitcher]);
+  ], [effectiveActiveWorkspaceId, navigateToActiveChat, waggleUnacknowledged]);
   const pinned: SidebarNavItem[] = useMemo(() => {
     if (!isPro) return [];
     const items: SidebarNavItem[] = [
@@ -382,7 +431,10 @@ const ShellLayout = () => {
   );
   const handleCatalogSelect = useCallback((cmd: CatalogCommand) => {
     if (cmd.action === 'spawn') { ov.setShowSpawnAgent(true); return; }
-    if (cmd.to) navigate(cmd.to);
+    if (cmd.to) {
+      ov.setShowWorkspaceSwitcher(false);
+      navigate(cmd.to);
+    }
   }, [navigate, ov]);
 
   // FR #33: when the onboarding wizard is active, render ONLY the wizard —
@@ -390,7 +442,7 @@ const ShellLayout = () => {
   // takeover at the layout level, any URL). Hooks above keep running so
   // completion re-renders with workspaces/personas already populated.
   if (!onboardingState.completed) {
-    return (
+    return deferredShellElement(
       <OnboardingWizard
         serverBaseUrl={adapter.getServerUrl()}
         state={onboardingState}
@@ -448,7 +500,7 @@ const ShellLayout = () => {
               streams. It renders no layout DOM of its own. NOTE: it stays a
               SIBLING of RouteTransition (never wrapped) so the crossfade can
               never remount it and kill an in-flight stream. */}
-          <ChatHost />
+          {deferredShellElement(<ChatHost />)}
           {/* Pillar 1.1 · Lane RT: the default fade-through crossfade + persistent
               chrome for top-level route changes. Wraps ONLY the Outlet; the
               sidebar + StatusBar above are outside this subtree, so they persist.
@@ -462,54 +514,68 @@ const ShellLayout = () => {
       {/* P7/D15 B3: the Win+K overlay sits outside the SurfaceBoundary-wrapped
           Outlet, so an un-caught render throw here blanks the whole shell. Wrap
           it in the same AppErrorBoundary the routes use; onClose dismisses it. */}
-      <AppErrorBoundary appName="Command Center" onClose={() => ov.setShowGlobalSearch(false)}>
-        <CommandCenter
-          open={ov.showGlobalSearch}
-          onClose={() => ov.setShowGlobalSearch(false)}
-          onNavigate={handleSearchNavigate}
-          onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
-          workspaceId={effectiveActiveWorkspaceId ?? undefined}
-          catalog={commandCatalog}
-          onCatalogSelect={handleCatalogSelect}
-        />
-      </AppErrorBoundary>
-      <CreateWorkspaceDialog open={ov.showCreateWorkspace} onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
+      {ov.showGlobalSearch && deferredShellElement(
+        <AppErrorBoundary appName="Command Center" onClose={() => ov.setShowGlobalSearch(false)}>
+          <CommandCenter
+            open
+            onClose={() => ov.setShowGlobalSearch(false)}
+            onNavigate={handleSearchNavigate}
+            onExecute={() => { /* post-success hook — overlay closes itself; refresh feeds lazily */ }}
+            workspaceId={effectiveActiveWorkspaceId ?? undefined}
+            catalog={commandCatalog}
+            onCatalogSelect={handleCatalogSelect}
+          />
+        </AppErrorBoundary>
+      )}
+      {ov.showCreateWorkspace && deferredShellElement(
+        <CreateWorkspaceDialog open onClose={() => ov.setShowCreateWorkspace(false)} onCreate={createWorkspace} />
+      )}
       {/* §1.2/§4.2: PersonaSwitcher acts on the active workspace's chat widget
           (widget state, NOT the workspace record — acceptance check 7); the
           workspace-record patch survives as the no-real-workspace fallback. */}
-      <PersonaSwitcher open={ov.showPersonaSwitcher} onClose={() => ov.setShowPersonaSwitcher(false)}
-        currentPersona={(hasRealActiveWorkspace ? activeChatEntry.personaId : undefined) ?? effectiveActiveWorkspace?.persona}
-        currentGroupId={effectiveActiveWorkspace?.agentGroupId}
-        currentTemplateId={effectiveActiveWorkspace?.templateId}
-        onSelect={(personaId) => {
-          if (hasRealActiveWorkspace) {
-            setActiveChatPersona(personaId);
-          } else if (effectiveActiveWorkspaceId) {
-            patchWorkspace(effectiveActiveWorkspaceId, { persona: personaId, agentGroupId: undefined });
-          }
-        }}
-        onSelectGroup={(groupId) => { if (effectiveActiveWorkspaceId) patchWorkspace(effectiveActiveWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
-      <WorkspaceSwitcher open={ov.showWorkspaceSwitcher} onClose={() => ov.setShowWorkspaceSwitcher(false)}
-        workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId}
-        error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
-        onCreateNew={() => ov.setShowCreateWorkspace(true)}
-        onViewAll={() => navigate('/workspaces')}
-        onSelect={(id) => { selectWorkspace(id); navigate(`/workspaces/${id}`); }} />
-      <NotificationInbox open={ov.showNotifications} onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
-      <KeyboardShortcutsHelp open={ov.showKeyboardHelp} onClose={() => ov.setShowKeyboardHelp(false)} />
-      <SpawnAgentDialog open={ov.showSpawnAgent} onClose={() => ov.setShowSpawnAgent(false)}
-        workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)}
-        onSpawned={({ roomId, runId }) => {
-          ov.setShowSpawnAgent(false);
-          navigate(`/room?room=${encodeURIComponent(roomId)}&run=${encodeURIComponent(runId)}`);
-        }} />
+      {ov.showPersonaSwitcher && deferredShellElement(
+        <PersonaSwitcher open onClose={() => ov.setShowPersonaSwitcher(false)}
+          currentPersona={(hasRealActiveWorkspace ? activeChatEntry.personaId : undefined) ?? effectiveActiveWorkspace?.persona}
+          currentGroupId={effectiveActiveWorkspace?.agentGroupId}
+          currentTemplateId={effectiveActiveWorkspace?.templateId}
+          onSelect={(personaId) => {
+            if (hasRealActiveWorkspace) {
+              setActiveChatPersona(personaId);
+            } else if (effectiveActiveWorkspaceId) {
+              patchWorkspace(effectiveActiveWorkspaceId, { persona: personaId, agentGroupId: undefined });
+            }
+          }}
+          onSelectGroup={(groupId) => { if (effectiveActiveWorkspaceId) patchWorkspace(effectiveActiveWorkspaceId, { agentGroupId: groupId, persona: undefined }); }} />
+      )}
+      {ov.showWorkspaceSwitcher && deferredShellElement(
+        <WorkspaceSwitcher open onClose={() => ov.setShowWorkspaceSwitcher(false)}
+          workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId}
+          error={workspacesError} onRetry={() => { void refreshWorkspaces(); }}
+          onCreateNew={() => ov.setShowCreateWorkspace(true)}
+          onViewAll={() => { ov.setShowWorkspaceSwitcher(false); navigate('/workspaces'); }}
+          onSelect={(id) => { selectWorkspace(id); ov.setShowWorkspaceSwitcher(false); navigate(`/workspaces/${id}`); }} />
+      )}
+      {ov.showNotifications && deferredShellElement(
+        <NotificationInbox open onClose={() => ov.setShowNotifications(false)} notifications={notifications} onMarkRead={markRead} onMarkAllRead={markAllRead} />
+      )}
+      {ov.showKeyboardHelp && deferredShellElement(
+        <KeyboardShortcutsHelp open onClose={() => ov.setShowKeyboardHelp(false)} />
+      )}
+      {ov.showSpawnAgent && deferredShellElement(
+        <SpawnAgentDialog open onClose={() => ov.setShowSpawnAgent(false)}
+          workspaces={workspaces} activeWorkspaceId={effectiveActiveWorkspaceId} onWorkspaceCreated={(ws) => selectWorkspace(ws.id)}
+          onSpawned={({ roomId, runId }) => {
+            ov.setShowSpawnAgent(false);
+            navigate(`/room?room=${encodeURIComponent(roomId)}&run=${encodeURIComponent(runId)}`);
+          }} />
+      )}
       {shouldShowCoachMarks({
         completed: onboardingState.completed,
         tooltipsDismissed: !!onboardingState.tooltipsDismissed,
         completedAt: onboardingState.completedAt ?? null,
         completedThisSession: readOnboardedThisSession(),
         forceTour: readForceTour(),
-      }) && (
+      }) && deferredShellElement(
         <OnboardingTooltips
           templateId={onboardingState.templateId}
           onDismiss={() => { clearForceTour(); updateOnboarding({ tooltipsDismissed: true }); }}
@@ -533,19 +599,23 @@ const ShellLayout = () => {
       {onboardingState.completed && onboardingState.tooltipsDismissed && ov.showLoginBriefing
         && briefingLanding === 'armed' && location.pathname.startsWith('/home') && !offline
         && briefingAwayDays >= BRIEFING_ABSENCE_DAYS && (
-        <LoginBriefing
-          onDismiss={(permanent) => {
-            if (permanent) writeLoginBriefingDismissed(true);
-            writeLoginBriefingLastDismissedAt();
-            ov.setShowLoginBriefing(false);
-          }}
-          onOpenWorkspace={(wsId) => { writeLoginBriefingLastDismissedAt(); selectWorkspace(wsId); navigate(routeFor('chat', { activeWorkspaceId: wsId })); ov.setShowLoginBriefing(false); }}
-        />
+        deferredShellElement(
+          <LoginBriefing
+            onDismiss={(permanent) => {
+              if (permanent) writeLoginBriefingDismissed(true);
+              writeLoginBriefingLastDismissedAt();
+              ov.setShowLoginBriefing(false);
+            }}
+            onOpenWorkspace={(wsId) => { writeLoginBriefingLastDismissedAt(); selectWorkspace(wsId); navigate(routeFor('chat', { activeWorkspaceId: wsId })); ov.setShowLoginBriefing(false); }}
+          />
+        )
       )}
 
       {/* Phase C.1: Context Rail (owned by the shell; surfaces feed it via
           onContextRail props — §1.2 last row). */}
-      <ContextRail target={contextRailTarget} onClose={() => setContextRailTarget(null)} />
+      {contextRailTarget && deferredShellElement(
+        <ContextRail target={contextRailTarget} onClose={() => setContextRailTarget(null)} />
+      )}
 
       <UpgradeModal
         onOpenChange={setUpgradeOpen}
@@ -564,18 +634,20 @@ const ShellLayout = () => {
         }}
       />
 
-      <TrialExpiredModal
-        open={showTrialExpired}
-        onDismiss={() => setShowTrialExpired(false)}
-        onUpgrade={(tier) => {
-          setShowTrialExpired(false);
-          // PR7a: same-tab navigate to hosted Checkout (avoids the deferred-popup
-          // blocker; redirects back to /payment-success). Plan-tab fallback on failure.
-          adapter.createCheckoutSession(tier)
-            .then(({ url }) => { if (url) window.location.assign(url); })
-            .catch(() => { navigate('/settings?tab=billing'); });
-        }}
-      />
+      {showTrialExpired && deferredShellElement(
+        <TrialExpiredModal
+          open
+          onDismiss={() => setShowTrialExpired(false)}
+          onUpgrade={(tier) => {
+            setShowTrialExpired(false);
+            // PR7a: same-tab navigate to hosted Checkout (avoids the deferred-popup
+            // blocker; redirects back to /payment-success). Plan-tab fallback on failure.
+            adapter.createCheckoutSession(tier)
+              .then(({ url }) => { if (url) window.location.assign(url); })
+              .catch(() => { navigate('/settings?tab=billing'); });
+          }}
+        />
+      )}
     </div>
   );
 };
