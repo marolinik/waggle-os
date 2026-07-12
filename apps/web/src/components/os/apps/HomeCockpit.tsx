@@ -26,7 +26,7 @@ import {
 import { adapter } from '@/lib/adapter';
 import { cn } from '@/lib/utils';
 import { DATE_LOCALE } from '@/lib/date-locale';
-import { SPRING, STAGGER, DUR, EASE_OUT } from '@/lib/motion/tokens';
+import { STAGGER, DUR, EASE_OUT } from '@/lib/motion/tokens';
 import { useOfflineStatus } from '@/hooks/useOfflineStatus';
 import { useService } from '@/providers/ServiceProvider';
 import { useToast } from '@/hooks/use-toast';
@@ -113,7 +113,7 @@ function honey(n: ReactNode): ReactNode {
 /**
  * A honey-accented count that pulses when its value changes over a cache-first
  * paint (Pillar 2.3b / Pillar 3.3 delta pulse, born here). When fresh data
- * lands with a different number, the digit does one SPRING.micro scale pulse and
+ * lands with a different number, the digit does one timed scale pulse and
  * carries the `home-delta-pulse` marker class — so a silent refresh SHOWS its
  * material deltas instead of silently swapping them. Reduced motion → instant
  * set (REDUCED.countUp), no pulse.
@@ -134,7 +134,7 @@ function DeltaNumber({ value }: { value: number }) {
     <motion.span
       className={cn('font-semibold text-[var(--honey-text)]', pulsing && 'home-delta-pulse')}
       animate={pulsing && !reduce ? { scale: [1, 1.14, 1] } : { scale: 1 }}
-      transition={SPRING.micro}
+      transition={pulsing && !reduce ? { duration: DUR.base, ease: EASE_OUT } : undefined}
       style={{ display: 'inline-block' }}
     >
       {value}
@@ -155,7 +155,7 @@ function RecallStrip({ highlights }: { highlights: MemoryHighlight[] }) {
   const shown = highlights.slice(0, 2);
   return (
     <section className="mb-8 space-y-1.5" data-testid="home-cockpit-recall">
-      <p className="mb-1.5 flex items-center gap-1.5 font-display text-[11px] font-semibold uppercase tracking-wider text-honey/80">
+      <p className="mb-1.5 flex items-center gap-1.5 font-display text-[11px] font-semibold uppercase tracking-wider text-[var(--honey-text)]">
         <Lightbulb className="h-3 w-3" aria-hidden /> I remember
       </p>
       {shown.map((h, i) => (
@@ -447,7 +447,7 @@ function RecentWorkspacesPanel({
         {cards.map(ws => (
           <div
             key={ws.id}
-            className="group relative rounded-[var(--r-lg)] border border-[var(--line-soft)] bg-card p-4 shadow-[var(--shadow-card)] transition-all hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
+            className="group relative rounded-[var(--r-lg)] border border-[var(--line-soft)] bg-card p-4 shadow-[var(--shadow-card)] transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-[var(--honey-line)] hover:shadow-[var(--shadow)]"
             data-testid={`home-cockpit-ws-${ws.id}`}
           >
             <button type="button" onClick={() => onOpenDesktop(ws.id)} className="block w-full text-left">

@@ -236,17 +236,8 @@ function WorkspaceCard({
     // motion-safe 2px lift + a honey glow bloom (--shadow-honey) ON TOP of the
     // border tier; reduced motion keeps the color tier (border + bloom) and
     // drops only the lift (transform gated behind motion-safe), --mo-fast · --mo-ease.
-    <div
-      role="button"
-      tabIndex={0}
+    <article
       onClick={onOpen}
-      onKeyDown={(e) => {
-        // Only when the card itself is focused — Enter on the nested actions
-        // menu must not also open the workspace.
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); }
-      }}
-      aria-label={`Open ${ws.name}`}
       // Wave W (Lane A) item 1: the shelf's staggered entrance reuses the memory
       // surface's `card-enter` keyframe (8px rise + fade, --mo-ease). Fill mode is
       // `backwards` (NOT the memory row's `both`): this card carries a hover/focus
@@ -254,7 +245,7 @@ function WorkspaceCard({
       // break that tier — `backwards` only holds the hidden start-state during the
       // stagger delay, then hands transform back to the hover tier once it settles.
       style={enterDelayMs != null ? { animation: 'card-enter var(--mo-slow) var(--mo-ease) backwards', animationDelay: `${enterDelayMs}ms` } : undefined}
-      className="hive-interactive group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+      className="hive-interactive group relative flex min-h-[132px] cursor-pointer flex-col overflow-hidden rounded-[18px] border border-[var(--line-soft)] [:root:not([data-theme=light])_&:not(:hover)]:border-[var(--line)] bg-[var(--surface)] p-[18px] shadow-[var(--shadow-sm)]"
       data-testid={`all-workspaces-card-${ws.id}`}
     >
       {/* Wave S (Lane B) fix 2: the one live signal — a 2px top band in the
@@ -270,14 +261,14 @@ function WorkspaceCard({
           the card grows them into the workspace header. */}
       <div className="mb-2.5 flex items-center gap-3">
         <HexAvatar label={ws.name} size={36} layoutId={avatarLayoutId} />
-        <motion.h3
+        <motion.h2
           layoutId={nameLayoutId}
           transition={SPRING.expressive}
           className="min-w-0 flex-1 truncate text-[16px] font-semibold leading-tight tracking-[-0.01em] text-[var(--text)]"
           data-testid={`all-workspaces-open-${ws.id}`}
         >
           {ws.name}
-        </motion.h3>
+        </motion.h2>
         {badge && (
           <span
             className="inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10.5px] font-semibold"
@@ -295,14 +286,14 @@ function WorkspaceCard({
           "duplicate name" pill whose tooltip carries the slug to resolve them. */}
       <div className="mb-2.5 flex items-center gap-1.5">
         <span
-          className="inline-flex items-center rounded-[6px] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-muted)]"
+          className="inline-flex items-center rounded-[6px] bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-medium text-[var(--text)]"
           title={`Workspace ID: ${ws.id}`}
         >
           {ws.group?.trim() || 'Personal'}
         </span>
         {isDuplicateName && (
           <span
-            className="inline-flex items-center rounded-[6px] border border-[var(--line)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-dim)]"
+            className="inline-flex items-center rounded-[6px] border border-[var(--line)] px-2 py-0.5 text-[11px] font-medium text-[var(--text)]"
             title={`Workspace ID: ${ws.id}`}
           >
             duplicate name
@@ -358,16 +349,17 @@ function WorkspaceCard({
           {/* Wave R (Lane B) fix 3: a PERSISTENT quiet "Open →" cue — text-dim at
               rest so the whole-card target is always legible, warming to honey on
               hover/focus. No longer opacity-0 (the hover-only reveal read as a
-              missing affordance). Decorative — the card carries the "Open <name>"
-              aria-label — so it's aria-hidden. */}
-          <span
-            aria-hidden
-            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--text-dim)] transition-colors duration-[var(--mo-fast)] group-hover:text-[var(--honey-text)] group-focus-within:text-[var(--honey-text)]"
+              missing affordance). Keep it as an explicit keyboard and touch action. */}
+          <button
+            type="button"
+            aria-label={`Open ${ws.name}`}
+            onClick={(e) => { e.stopPropagation(); onOpen(); }}
+            className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[var(--text-muted)] transition-colors duration-mo-fast hover:text-[var(--honey-text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
           >
-            Open <ArrowRight className="h-3 w-3" />
-          </span>
-          {/* Interactive-within-interactive: keep menu clicks out of the card's
-              open handler (keyboard is guarded by the card's target check). */}
+            Open <ArrowRight className="h-3 w-3" aria-hidden />
+          </button>
+          {/* Interactive-within-interactive: keep action clicks out of the card's
+              open handler so each action has one predictable result. */}
           <span onClick={(e) => e.stopPropagation()}>
             {/* Wave U (Lane A) fix 2: a rest affordance, not a hover-only reveal
                 — visible at low opacity at rest (touch + keyboard users can see
@@ -376,12 +368,12 @@ function WorkspaceCard({
             <WorkspaceActionsMenu
               workspace={{ id: ws.id, name: ws.name, status: ws.status }}
               onChanged={onChanged}
-              buttonClassName="opacity-60 transition-opacity duration-[var(--mo-fast)] group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100"
+              buttonClassName="opacity-60 transition-opacity duration-mo-fast group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100"
             />
           </span>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -623,16 +615,18 @@ const AllWorkspacesApp = ({ onOpenWorkspace }: AllWorkspacesAppProps) => {
 
       {/* Toolbar: search + storage filter pills */}
       <div className="mb-5 flex flex-wrap items-center gap-3">
-        <div className="flex min-w-[220px] flex-1 items-center gap-2.5 rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2.5 focus-within:border-[var(--honey-line)]">
+        <div className="flex min-w-[220px] flex-1 items-center gap-2.5 rounded-[11px] border border-[var(--line)] bg-[var(--surface)] px-3.5 py-2.5 focus-within:border-[var(--honey-line)] focus-within:ring-2 focus-within:ring-[var(--honey-line)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--surface)]">
           <Search className="h-4 w-4 shrink-0 text-[var(--text-dim)]" aria-hidden />
           <input
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
             placeholder="Search workspaces…"
+            name="workspaceSearch"
+            autoComplete="off"
             aria-label="Search workspaces by name"
             data-testid="all-workspaces-search"
-            className="flex-1 border-0 bg-transparent text-[14px] text-[var(--text)] outline-none placeholder:text-[var(--text-dim)]"
+            className="flex-1 rounded-md border-0 bg-transparent text-[14px] text-[var(--text)] outline-none placeholder:text-[var(--text-dim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--honey-line)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
           />
         </div>
         <FilterPills active={storageFilter} counts={counts} onChange={setStorageFilter} />

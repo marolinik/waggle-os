@@ -324,23 +324,23 @@ const UserProfileApp = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Name</label>
-                <Input value={name} onChange={e => setName(e.target.value)} placeholder="Marko Markovic"
+                <label htmlFor="profile-name" className="text-xs text-muted-foreground block mb-1">Name</label>
+                <Input id="profile-name" name="name" autoComplete="name" value={name} onChange={e => setName(e.target.value)} placeholder="Marko Markovic"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Role</label>
-                <Input value={role} onChange={e => setRole(e.target.value)} placeholder="Partner, Strategy Consultant"
+                <label htmlFor="profile-role" className="text-xs text-muted-foreground block mb-1">Role</label>
+                <Input id="profile-role" name="role" autoComplete="organization-title" value={role} onChange={e => setRole(e.target.value)} placeholder="Partner, Strategy Consultant"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Company</label>
-                <Input value={company} onChange={e => setCompany(e.target.value)} placeholder="Egzakta Advisory"
+                <label htmlFor="profile-company" className="text-xs text-muted-foreground block mb-1">Company</label>
+                <Input id="profile-company" name="company" autoComplete="organization" value={company} onChange={e => setCompany(e.target.value)} placeholder="Egzakta Advisory"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Industry</label>
-                <select value={industry} onChange={e => setIndustry(e.target.value)}
+                <label htmlFor="profile-industry" className="text-xs text-muted-foreground block mb-1">Industry</label>
+                <select id="profile-industry" name="industry" autoComplete="off" value={industry} onChange={e => setIndustry(e.target.value)}
                   className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                   <option value="">Select...</option>
                   {INDUSTRIES.map(i => <option key={i} value={i}>{i}</option>)}
@@ -349,8 +349,8 @@ const UserProfileApp = () => {
             </div>
 
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Bio</label>
-              <textarea value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Brief professional bio..."
+              <label htmlFor="profile-bio" className="text-xs text-muted-foreground block mb-1">Bio</label>
+              <textarea id="profile-bio" name="bio" autoComplete="off" value={bio} onChange={e => setBio(e.target.value)} rows={3} placeholder="Brief professional bio..."
                 className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
             </div>
 
@@ -399,12 +399,19 @@ const UserProfileApp = () => {
             <h3 className="text-sm font-display font-semibold text-foreground">Writing Style</h3>
             <p className="text-[11px] text-muted-foreground">Paste a sample of your writing (email, report, article) and the AI will analyze your style. This shapes how the agent writes for you.</p>
 
-            <textarea value={styleSample} onChange={e => setStyleSample(e.target.value)} rows={6}
+            <textarea
+              id="profile-writing-style-sample"
+              name="writingStyleSample"
+              aria-label="Writing style sample"
+              autoComplete="off"
+              value={styleSample}
+              onChange={e => setStyleSample(e.target.value)}
+              rows={6}
               placeholder="Paste at least 50 characters of your writing here... An email, report excerpt, article paragraph, or any text that represents how you naturally write."
               className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-sm text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
 
-            <button onClick={handleAnalyzeStyle} disabled={analyzing || styleSample.length < 50}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors">
+            <button type="button" onClick={handleAnalyzeStyle} disabled={analyzing || styleSample.length < 50}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-background">
               {analyzing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Analyze Style
             </button>
 
@@ -452,24 +459,24 @@ const UserProfileApp = () => {
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Primary</label>
                 <div className="flex gap-2 items-center">
-                  <input type="color" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
-                  <Input value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
+                  <input type="color" name="brandPrimaryColor" aria-label="Primary color picker" autoComplete="off" value={primaryColor} onChange={e => setPrimaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
+                  <Input name="brandPrimaryColorHex" aria-label="Primary color value" autoComplete="off" spellCheck={false} value={primaryColor} onChange={e => setPrimaryColor(e.target.value)}
                     className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Secondary</label>
                 <div className="flex gap-2 items-center">
-                  <input type="color" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
-                  <Input value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
+                  <input type="color" name="brandSecondaryColor" aria-label="Secondary color picker" autoComplete="off" value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
+                  <Input name="brandSecondaryColorHex" aria-label="Secondary color value" autoComplete="off" spellCheck={false} value={secondaryColor} onChange={e => setSecondaryColor(e.target.value)}
                     className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
               <div>
                 <label className="text-xs text-muted-foreground block mb-1">Accent</label>
                 <div className="flex gap-2 items-center">
-                  <input type="color" value={accentColor} onChange={e => setAccentColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
-                  <Input value={accentColor} onChange={e => setAccentColor(e.target.value)}
+                  <input type="color" name="brandAccentColor" aria-label="Accent color picker" autoComplete="off" value={accentColor} onChange={e => setAccentColor(e.target.value)} className="w-8 h-8 rounded border-0 cursor-pointer" />
+                  <Input name="brandAccentColorHex" aria-label="Accent color value" autoComplete="off" spellCheck={false} value={accentColor} onChange={e => setAccentColor(e.target.value)}
                     className="flex-1 bg-muted/50 text-xs h-auto py-1 font-mono" />
                 </div>
               </div>
@@ -478,13 +485,13 @@ const UserProfileApp = () => {
             {/* Fonts */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Heading Font</label>
-                <Input value={fontHeading} onChange={e => setFontHeading(e.target.value)} placeholder="Inter"
+                <label htmlFor="profile-brand-heading-font" className="text-xs text-muted-foreground block mb-1">Heading Font</label>
+                <Input id="profile-brand-heading-font" name="brandHeadingFont" autoComplete="off" value={fontHeading} onChange={e => setFontHeading(e.target.value)} placeholder="Inter"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
               <div>
-                <label className="text-xs text-muted-foreground block mb-1">Body Font</label>
-                <Input value={fontBody} onChange={e => setFontBody(e.target.value)} placeholder="Inter"
+                <label htmlFor="profile-brand-body-font" className="text-xs text-muted-foreground block mb-1">Body Font</label>
+                <Input id="profile-brand-body-font" name="brandBodyFont" autoComplete="off" value={fontBody} onChange={e => setFontBody(e.target.value)} placeholder="Inter"
                   className="w-full bg-muted/50 h-auto py-1.5" />
               </div>
             </div>
@@ -497,7 +504,14 @@ const UserProfileApp = () => {
             {/* AI extraction */}
             <div className="border-t border-border/30 pt-4">
               <h4 className="text-xs font-display font-semibold text-foreground mb-2">Auto-Extract from Brand Guide</h4>
-              <textarea value={brandDesc} onChange={e => setBrandDesc(e.target.value)} rows={3}
+              <textarea
+                id="profile-brand-guide"
+                name="brandGuide"
+                aria-label="Brand guide"
+                autoComplete="off"
+                value={brandDesc}
+                onChange={e => setBrandDesc(e.target.value)}
+                rows={3}
                 placeholder="Paste your brand guidelines text here, or describe your brand (colors, fonts, style)..."
                 className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-2 text-xs text-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" />
               <button onClick={handleAnalyzeBrand} disabled={analyzing || !brandDesc}
@@ -554,8 +568,8 @@ const UserProfileApp = () => {
             </div>
 
             <div>
-              <label className="text-xs text-muted-foreground block mb-1">Language</label>
-              <select value={language} onChange={e => setLanguage(e.target.value)}
+              <label htmlFor="profile-language" className="text-xs text-muted-foreground block mb-1">Language</label>
+              <select id="profile-language" name="language" autoComplete="off" value={language} onChange={e => setLanguage(e.target.value)}
                 className="w-full bg-muted/50 border border-border/50 rounded-lg px-3 py-1.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
                 <option value="en">English</option>
                 <option value="sr">Serbian</option>

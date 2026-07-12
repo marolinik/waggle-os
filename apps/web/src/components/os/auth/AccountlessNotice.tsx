@@ -2,11 +2,11 @@
  * AccountlessNotice — warm-Hive PR7b Auth (design screen 13) honest local-first state.
  *
  * The design's own "you don't need this to start" framing (recon 03 §2b/§5/§8). Shown
- * when Clerk is NOT configured (no VITE_CLERK_PUBLISHABLE_KEY) — which is the desktop's
- * default, accountless path. It NEVER renders a fabricated identity, a fake SSO button,
+ * when hosted Clerk auth is NOT configured, which is the desktop's default accountless
+ * path. It NEVER renders a fabricated identity, a fake SSO button,
  * or a sign-in that does nothing (F1/F10): the only action is to continue into the
- * fully-local app. B2 renders the real themed Clerk <SignIn/> when a key IS present and
- * falls back to exactly this component when it isn't.
+ * fully-local app. B2 renders the real themed Clerk <SignIn/> only with explicit
+ * enablement plus a valid key.
  */
 import { useNavigate } from 'react-router-dom';
 import { Check } from 'lucide-react';

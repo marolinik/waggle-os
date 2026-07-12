@@ -240,7 +240,7 @@ const FeedbackButtons = ({ messageId, messageIndex, sessionId, feedback, content
     // hover AND on :focus-within (keyboard parity). 16px icons rest at
     // --text-dim (AA-tuned) and brighten to --text on direct hover. Reduced-
     // motion drops the slide (opacity-only), honoring the guard.
-    <div data-testid="chat-action-row" className="inline-flex items-center gap-1 mt-1 relative rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 opacity-75 translate-y-0.5 transition-[opacity,transform] duration-[var(--mo-fast)] ease-[var(--mo-ease)] group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
+    <div data-testid="chat-action-row" className="inline-flex items-center gap-1 mt-1 relative rounded-full bg-[var(--surface-2)] px-1.5 py-0.5 opacity-75 translate-y-0.5 transition-[opacity,transform] duration-mo-fast ease-mo group-hover/turn:opacity-100 group-hover/turn:translate-y-0 group-focus-within/turn:opacity-100 group-focus-within/turn:translate-y-0 motion-reduce:transition-none motion-reduce:translate-y-0">
       <HintTooltip content="Good response">
         <button
           onClick={() => handleVote('up')}
@@ -806,10 +806,10 @@ const ChatApp = ({
     prevCanSendRef.current = canSend;
   }, [canSend]);
 
-  // F2: mount-once auto-send of the wizard's first task. The prefill (line ~464)
-  // stays visible — the same "about to ship" beat as the FR #32 starter prompts —
-  // and this fires it exactly once, after the session has landed and history has
-  // been fetched (so the optimistic turn isn't clobbered by the history replace).
+  // F2: mount-once auto-send of the wizard's first task. This fires exactly once,
+  // after the session has landed and history has been fetched (so the optimistic
+  // turn isn't clobbered by the history replace). Once consumed, the untouched
+  // seed clears immediately so the first generated turn never looks duplicate.
   const autoSentRef = useRef(false);
   useEffect(() => {
     const inputUnchanged = !inputRef.current || inputRef.current.value === initialMessage;
@@ -819,10 +819,10 @@ const ChatApp = ({
     })) return;
     const text = (initialMessage as string).trim();
     autoSentRef.current = true; // consume BEFORE dispatch: StrictMode/effect-rerun safe
+    if (inputUnchanged) setInput('');
     void Promise.resolve(onSendMessage(text)).then((ok) => {
-      // Clear only if untouched and the send succeeded; on failure leave the
-      // text in the composer (useChat already rendered the inline error block).
-      if (ok !== false) setInput(prev => (prev === initialMessage ? '' : prev));
+      // If the send failed, restore the untouched seed so the user can retry.
+      if (ok === false && inputUnchanged) setInput(prev => (prev === '' ? text : prev));
     });
   }, [autoSendInitial, initialMessage, activeSessionId, historyLoaded, onSendMessage]);
 
@@ -945,7 +945,7 @@ const ChatApp = ({
 
       {/* Session sidebar */}
       {sessions && sessions.length > 0 && (
-        <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-all overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
+        <div className={`${showSessions ? 'w-32 sm:w-48' : 'w-0'} transition-[width] overflow-hidden border-r border-border/50 shrink-0`} data-testid="chat-session-sidebar">
           <div className="p-2 space-y-1">
             <button onClick={onNewSession} className="flex items-center gap-1 text-xs text-honey hover:text-honey/80 mb-2 w-full">
               <Plus className="w-3 h-3" /> New Session
@@ -1071,6 +1071,8 @@ const ChatApp = ({
                 src={getPersonaAvatar('general-purpose')}
                 alt=""
                 aria-hidden="true"
+                width={56}
+                height={56}
                 className="w-14 h-14 mb-3 opacity-90 float"
               />
               <p className="text-sm font-display text-foreground mb-1">Pick a workspace and Waggle's ready</p>
@@ -1329,7 +1331,7 @@ const ChatApp = ({
               dropdowns open UPWARD because the strip sits at the viewport bottom. */}
           <div
             ref={stripRef}
-            className="flex items-center gap-1.5 px-1 pb-1.5"
+            className="flex min-w-0 flex-wrap items-center gap-1.5 px-1 pb-1.5 sm:flex-nowrap"
             data-testid="chat-agent-strip"
             data-compact={isStripCompact ? 'true' : 'false'}
           >
@@ -1510,7 +1512,7 @@ const ChatApp = ({
               </div>
             )}
 
-            <div className="ml-auto flex items-center gap-1.5">
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5">
               {/* Round-7 fix 2a: subtle divider between the context cluster
                   (sessions · persona · Memory · presence) and the control
                   cluster (autonomy · model · profile). */}
@@ -1532,7 +1534,7 @@ const ChatApp = ({
                   className={STRIP_PILL}
                 >
                   <DotLive tone="healthy" size={7} />
-                  <span className="max-w-[140px] truncate font-mono text-[var(--text-2)]">
+                  <span className="max-w-[82px] truncate font-mono text-[var(--text-2)] sm:max-w-[140px]">
                     {currentModel ? formatModelLabel(currentModel) : 'auto'}
                   </span>
                   <ChevronDown className="h-3 w-3 text-[var(--text-dim)]" />
@@ -1588,11 +1590,14 @@ const ChatApp = ({
             </button>
             <textarea
               ref={inputRef}
+              aria-label="Message composer"
+              name="message"
+              autoComplete="off"
               value={input}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder="Reply, or ask Waggle to take the next step…"
-              className="min-h-[64px] max-h-[300px] flex-1 resize-none bg-transparent py-1 text-[14.5px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus-visible:outline-none"
+              className="min-h-[64px] max-h-[300px] flex-1 resize-none bg-transparent py-1 text-[14.5px] text-[var(--text)] placeholder:text-[var(--text-dim)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
               rows={3}
             />
             <div className="flex items-center gap-2.5 pb-0.5">
@@ -1624,7 +1629,7 @@ const ChatApp = ({
                 onClick={handleSend}
                 disabled={!canSend}
                 aria-label="Send"
-                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-[var(--mo-base)] ${
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full transition-[color,background-color,transform] duration-mo-base ${
                   canSend
                     ? 'bg-primary text-[#1a1407] hover:opacity-90'
                     : 'bg-[var(--surface-2)] text-[var(--text-dim)]'
