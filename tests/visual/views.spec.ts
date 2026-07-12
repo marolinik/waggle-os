@@ -24,6 +24,23 @@ const THEME_LABELS = {
   light: 'Light Mode',
 } as const;
 
+const VISUAL_MODEL = 'openai/visual-fixture-model';
+const VISUAL_PROVIDER_META = [
+  ['anthropic', 'Anthropic'],
+  ['openai', 'OpenAI'],
+  ['google', 'Google'],
+  ['deepseek', 'DeepSeek'],
+  ['xai', 'xAI'],
+  ['mistral', 'Mistral'],
+  ['alibaba', 'Alibaba / Qwen'],
+  ['minimax', 'MiniMax'],
+  ['zhipu', 'GLM / Zhipu'],
+  ['moonshot', 'Kimi / Moonshot'],
+  ['perplexity', 'Perplexity'],
+  ['openrouter', 'OpenRouter'],
+  ['ollama', 'Local / Ollama'],
+] as const;
+
 function routeWithSkip(route: string) {
   const sep = route.includes('?') ? '&' : '?';
   return `${route}${sep}${SKIP_PARAMS}`;
@@ -50,7 +67,57 @@ async function applyTheme(page: Page, theme: 'dark' | 'light') {
   }, theme);
 }
 
+async function stubDynamicRuntime(page: Page) {
+  const json = (body: unknown) => ({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  });
+  const providers = VISUAL_PROVIDER_META.map(([id, name]) => ({
+    id,
+    name,
+    hasKey: id === 'openai',
+    badge: null,
+    keyUrl: null,
+    requiresKey: id !== 'ollama',
+    models: id === 'openai'
+      ? [{ id: VISUAL_MODEL, name: 'Visual Fixture Model', cost: '$$', speed: 'medium', source: 'provider-api' }]
+      : [],
+    modelsSource: id === 'openai' ? 'provider-api' : id === 'ollama' ? 'local-runtime' : 'requires-key',
+    ...(id === 'ollama' ? { reachable: false } : {}),
+  }));
+
+  await page.route('**/api/providers', route => route.fulfill(json({
+    providers,
+    search: [],
+    activeSearch: 'duckduckgo',
+  })));
+  await page.route('**/api/agent/status', route => route.fulfill(json({
+    model: VISUAL_MODEL,
+    tokensUsed: 0,
+    costUsd: 0,
+    isActive: false,
+  })));
+  await page.route('**/api/agent/model', route => route.fulfill(json({ model: VISUAL_MODEL })));
+  await page.route('**/api/litellm/models', route => route.fulfill(json({ models: [VISUAL_MODEL] })));
+  await page.route('**/api/local-inference/status', route => route.fulfill(json({
+    servers: [],
+    ollamaInstalled: false,
+    totalLocalModels: 0,
+  })));
+  await page.route('**/api/settings/probe-model', route => route.fulfill(json({
+    model: VISUAL_MODEL,
+    configured: true,
+    verified: true,
+  })));
+  await page.route('**/api/settings', route => {
+    if (route.request().method() === 'GET') return route.fulfill(json({ defaultModel: VISUAL_MODEL }));
+    return route.continue();
+  });
+}
+
 async function gotoVisualView(page: Page, view: typeof VIEWS[number], theme: 'dark' | 'light') {
+  await stubDynamicRuntime(page);
   await applyTheme(page, theme);
   const route = view.route === 'chat' ? await firstWorkspaceChatRoute(page) : view.route;
   await page.goto(routeWithSkip(route), { waitUntil: 'domcontentloaded' });

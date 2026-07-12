@@ -10,7 +10,7 @@ async function setupPage(page: Page, theme = 'dark') {
     localStorage.setItem('waggle:onboarding', JSON.stringify({ completed: true }));
     localStorage.setItem('waggle:theme', t);
   }, theme);
-  await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 20000 });
+  await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForTimeout(2000);
 }
 
@@ -111,7 +111,7 @@ test.describe('R2 - Mega UAT Visual', () => {
     await page.evaluate(() => {
       localStorage.removeItem('waggle:onboarding');
     });
-    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 20000 });
+    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForTimeout(2000);
     await page.screenshot({ path: `${SS}/45-onboarding.png` });
     const html = await page.content();
