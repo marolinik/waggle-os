@@ -30,6 +30,8 @@ Companion artifacts:
 
 Purpose: one tracking register for every UX finding currently blocking or reducing the five-persona 9/10 goal. This file does not replace the audit; it maps audit findings to tickets, phases, likely files, judge impact, and closure evidence.
 
+Final reconciliation (2026-07-13): the row-level entries below preserve the chronology of the audit and may describe an earlier branch state. The current integrated result is authoritative in `docs/audits/2026-07-13-final-goal-verification.md`. In particular, Channels hardening is integrated, the final five-persona run passes 5/5 at 9.1-9.5, full current-head lint/typecheck/build/test/visual/accessibility gates pass, and Tauri now has generated MSI and NSIS packages plus a healthy launch from an extracted MSI payload. T13 public DNS/deployment, production signing/updater delivery, and credential-dependent external-provider smokes remain release gates; they are not represented as completed product work.
+
 Status key:
 
 - `Open`: analyzed, not fixed.

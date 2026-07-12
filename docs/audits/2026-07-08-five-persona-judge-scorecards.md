@@ -17,6 +17,8 @@ Companion artifacts:
 
 Purpose: define the final judge gate before any claim that Waggle OS is 9/10 across five personas. These scorecards extend the existing `tests/vision/personas.spec.ts` harness. That harness proves live persona chat, persistence, screenshots, and no cross-persona prompt leakage; it does not yet score the full route/UX rubric.
 
+Final status (2026-07-13): the fixed-rubric in-product judge run is complete. All five personas score at least 9/10 with no score cap triggered. The historical pre-fix findings and table below are retained as the audit trail; the final table at the end of this document supersedes them. Public launch availability is reported separately and is not silently counted as passing: `waggle-os.ai` is currently unresolved, and signed production distribution plus credential-dependent external-provider smokes remain release gates.
+
 Execution protocol: use `docs/audits/2026-07-08-five-persona-judge-runbook.md` after the blocking tickets are fixed or explicitly deferred. The runbook is the authoritative checklist for state bundles, screenshots, score caps, and deferral records.
 
 Phase 1 status update: the approved Phase 1 implementation is complete and verified. The standard cockpit lane now has clean accountless Clerk/CSP behavior, passing mobile Settings and mobile first-run onboarding checks, active Solo/Teams/Enterprise copy cleanup, passing `Ctrl+Shift+N` and Workspace Switcher route behavior, updated visual baselines, and codified thin-route evidence. The full combined browser gate passed 156/156 on port `34150`. Phase 2 has started with partial overlay fixes: Notification Inbox and Create Workspace primary/subdialog contracts now have named dialog/close coverage, custom-template delete uses an in-app confirmation, the sampled 390 x 844 Create Workspace hierarchy prioritizes required setup before optional templates, Context Rail has a labelled complementary contract, Onboarding Tooltips has an explicit non-modal Escape-dismiss contract, and tier-modal close labels are named. These remove some overlay caps, but the final 9/10 gate is still blocked by remaining trust-critical dialogs, screenshot/state refresh, broader runtime accessibility, and T13-T19 non-main evidence unless those are fixed or explicitly deferred.
@@ -477,3 +479,36 @@ Suggested output table:
 | Developer API, background worker, and substrate verification evidence missing | T17 |
 | Ops, deployment, CI, benchmark, and judging evidence missing | T18 |
 | Browser Companion auth/background save, popup keyboard/focus/Enter save, direct Save page click, restricted-page disabled-state recovery, stable packaged-ID pairing, Memory search provenance, existing chat `auto_recall`/catch-up provenance, and rendered Memory UI after secure save are live-proven, but native toolbar-bubble/native context-menu proof remains incomplete; future recall result shapes need evidence if scored | T19 |
+
+## Final Judge Run - 2026-07-13
+
+This table scores the product UX itself. Each persona used a declared account,
+billing, disclosure, model, data, failure, and viewport state bundle. Captures
+waited for visible accessible loaders and route-specific legacy loading labels
+to settle, and animations were disabled for deterministic inspection.
+
+| Persona | Functional /2 | Flow /2 | Trust /2 | Visual+A11y /2 | Perf /1 | Memory fit /1 | Total | Verdict | Blocking corrections |
+|---|---:|---:|---:|---:|---:|---:|---:|---|---|
+| Solo founder | 1.9 | 1.9 | 1.8 | 1.9 | 0.9 | 1.0 | **9.4** | Pass | None in scored lane |
+| Researcher | 1.9 | 1.8 | 2.0 | 1.9 | 0.9 | 1.0 | **9.5** | Pass | None in scored lane |
+| Engineer / power user | 1.9 | 1.8 | 1.9 | 1.9 | 0.9 | 0.9 | **9.3** | Pass | None in scored lane |
+| Team admin / security reviewer | 1.8 | 1.8 | 2.0 | 1.8 | 0.9 | 0.8 | **9.1** | Pass | None in scored lane |
+| Mobile executive | 1.9 | 1.9 | 1.8 | 1.9 | 0.9 | 0.9 | **9.3** | Pass | None in scored lane |
+
+Pass-rule checks:
+
+- Lowest persona total: 9.1/10.
+- Lowest normalized dimension: 8/10.
+- Critical console errors: 0 across all five bundles.
+- Page errors: 0 across all five bundles.
+- Unexpected critical network failures: 0 across all five bundles.
+- Visible horizontal overflow findings: 0 across route, failure, and overlay captures.
+- Score caps triggered: none.
+
+The five bundles exercise 15 primary route states, 25 failure/slow/large-data
+states, and 3 selected overlays. The run passed 5/5 in Chromium. Representative
+screenshots were inspected after the run, including settled Home, Memory,
+Launcher, Approvals, mobile Settings, and mobile Command Center states.
+
+The detailed current-head evidence and release boundary are recorded in
+`docs/audits/2026-07-13-final-goal-verification.md`.
