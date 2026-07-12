@@ -94,6 +94,53 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe('SpawnAgentDialog media stability', () => {
+  it('keeps persona avatars intrinsically sized in the picker and launch review', async () => {
+    renderDialog();
+
+    const workspaceButton = await screen.findByRole('button', { name: 'Launch Room' });
+    expect(workspaceButton.className).not.toContain('transition-all');
+    expect(workspaceButton.className).toContain('transition-colors');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Persona override' }));
+
+    const personaButton = await screen.findByRole('button', { name: /General Purpose/i });
+    expect(personaButton.className).not.toContain('transition-all');
+    expect(personaButton.className).toContain('transition-colors');
+    const pickerAvatar = personaButton.querySelector('img');
+    expect(pickerAvatar).toHaveAttribute('width', '32');
+    expect(pickerAvatar).toHaveAttribute('height', '32');
+
+    fireEvent.click(personaButton);
+    fireEvent.change(screen.getByLabelText('Task'), {
+      target: { value: 'Map adoption risks' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Review & Launch' }));
+
+    await waitFor(() => expect(screen.getByText('Confirm Launch')).toBeInTheDocument());
+    const reviewAvatar = screen.getByText('General Purpose').closest('div')?.querySelector('img');
+    expect(reviewAvatar).toHaveAttribute('width', '24');
+    expect(reviewAvatar).toHaveAttribute('height', '24');
+  });
+});
+
+describe('SpawnAgentDialog form metadata', () => {
+  it('labels and names the custom workspace and task controls', async () => {
+    renderDialog();
+
+    await waitFor(() => expect(screen.queryByTestId('spawn-models-loading')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: '+ New' }));
+
+    const workspaceName = screen.getByRole('textbox', { name: /new workspace name/i });
+    expect(workspaceName).toHaveAttribute('name', 'spawnWorkspaceName');
+    expect(workspaceName).toHaveAttribute('autocomplete', 'off');
+
+    const task = screen.getByRole('textbox', { name: 'Task' });
+    expect(task).toHaveAttribute('name', 'spawnTask');
+    expect(task).toHaveAttribute('autocomplete', 'off');
+  });
+});
+
 describe('SpawnAgentDialog durable launch', () => {
   it('preserves the selected task, persona, model, and workspace and returns canonical Room identity', async () => {
     const onClose = vi.fn();

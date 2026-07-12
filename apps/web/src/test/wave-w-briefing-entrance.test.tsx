@@ -61,10 +61,18 @@ describe('LoginBriefing entrance (Wave W Lane B)', () => {
 
     const screen = await renderBriefing();
 
+    const briefing = await screen.findByRole('dialog', { name: 'Catching you up' });
+    const mascot = briefing.querySelector('img[aria-hidden="true"]');
+    expect(mascot).toHaveAttribute('width', '28');
+    expect(mascot).toHaveAttribute('height', '28');
+
     // Workspace row lands — and is still a real <button> after the
     // motion.button conversion (a broken conversion would strand the row).
     const row = await screen.findByText('Alpha Project');
-    expect(row.closest('button')).not.toBeNull();
+    const rowButton = row.closest('button');
+    expect(rowButton).not.toBeNull();
+    expect(rowButton?.className).not.toContain('transition-all');
+    expect(rowButton?.className).toContain('transition-colors');
 
     // Recall card (the "I remember" highlight) lands too.
     await waitFor(() => expect(screen.getByText(/prioritise compliance/)).toBeInTheDocument());

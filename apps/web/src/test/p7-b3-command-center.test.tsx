@@ -34,6 +34,54 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('P7/B3 — Command Center error containment', () => {
+  it('provides an accessible dialog description for screen readers', async () => {
+    render(<CommandCenter open onClose={() => {}} onNavigate={() => {}} onExecute={() => {}} />);
+    const dialog = await screen.findByRole('dialog', { name: /command center/i });
+    const describedBy = dialog.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy ?? '')).toHaveTextContent(/search and run commands/i);
+  });
+
+  it('gives the command search input a visible token focus ring', async () => {
+    render(<CommandCenter open onClose={() => {}} onNavigate={() => {}} onExecute={() => {}} />);
+    const input = await screen.findByLabelText('Command Center search');
+
+    expect(input.className).toContain('focus-visible:ring-2');
+    expect(input.className).toContain('focus-visible:ring-[var(--focus-ring)]');
+  });
+
+  it('renders catalog subtitles as their own truncating line for mobile fit', async () => {
+    const Icon = () => <span aria-hidden="true" />;
+    render(
+      <CommandCenter
+        open
+        onClose={() => {}}
+        onNavigate={() => {}}
+        onExecute={() => {}}
+        catalog={[
+          {
+            key: 'power',
+            heading: 'Power tools',
+            items: [
+              {
+                id: 'watch-agent',
+                group: 'power',
+                name: 'Watch a coding agent live',
+                subtitle: 'Claude Code · Cursor · Codex — stream its output',
+                icon: Icon,
+                to: '/launcher?watch=1',
+              },
+            ],
+          },
+        ]}
+      />,
+    );
+
+    const subtitle = await screen.findByText(/stream its output/i);
+    expect(subtitle).toHaveClass('block');
+    expect(subtitle).toHaveClass('truncate');
+  });
+
   it('Part 1: a render throw inside the overlay is caught by AppErrorBoundary (shell survives)', () => {
     const Boom = () => { throw new Error('overlay exploded'); };
     vi.spyOn(console, 'error').mockImplementation(() => {});

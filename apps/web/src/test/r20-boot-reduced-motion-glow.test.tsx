@@ -13,7 +13,7 @@
  * reduce, no element may carry an array-valued (keyframe-loop) animate.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
+import { render, cleanup, screen } from '@testing-library/react';
 
 const h = vi.hoisted(() => ({ reduce: false }));
 
@@ -66,6 +66,13 @@ describe('BootScreen — reduced-motion glow/pulse freeze (R20 Lane CL item 1)',
     const { container } = render(<BootScreen onComplete={vi.fn()} ready />);
     // At least the logo glow breath and the active phase-dot scale pulse loop.
     expect(keyframeLoopCount(container)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('renders the boot logo with stable intrinsic dimensions', () => {
+    render(<BootScreen onComplete={vi.fn()} ready />);
+    const logo = screen.getByAltText('Waggle AI');
+    expect(logo).toHaveAttribute('width', '80');
+    expect(logo).toHaveAttribute('height', '80');
   });
 
   it('freezes ALL keyframe loops under prefers-reduced-motion — zero lingering animation', () => {
