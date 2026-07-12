@@ -117,7 +117,11 @@ const EmbeddingRoutingCard = ({ providers, tier }: EmbeddingRoutingCardProps) =>
           <Boxes className="w-4 h-4 text-honey" />
           <h3 className="text-sm font-display font-semibold text-foreground">Memory Embeddings</h3>
           <HintTooltip content="Which model turns your memories into vectors for semantic search. Local options keep everything on-device; cloud options are higher quality but send text to the provider.">
-            <button type="button" className="text-muted-foreground hover:text-foreground transition-colors">
+            <button
+              type="button"
+              aria-label="About memory embeddings"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
               <Info className="w-3.5 h-3.5" />
             </button>
           </HintTooltip>

@@ -53,6 +53,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('EmbeddingRoutingCard', () => {
+  it('names the embeddings information control', async () => {
+    await renderCard('FREE');
+    expect(screen.getByRole('button', { name: 'About memory embeddings' })).toBeInTheDocument();
+  });
+
   it('renders the tier-allowed provider options (FREE has no litellm)', async () => {
     await renderCard('FREE');
     const select = await screen.findByTestId('embedding-provider-select');
