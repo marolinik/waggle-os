@@ -42,10 +42,9 @@ describe('auto-update configuration', () => {
     // The updater plugin CONFIG was removed for v1 because release.yml published
     // latest.json with EMPTY signatures — with a pubkey present, every client
     // update would fail signature verification (a broken update channel). The
-    // plugin dependency, lib.rs registration, and capability permission remain
-    // (verified below) so it can be re-enabled once updater signing is
+    // dependency remains staged so it can be re-enabled once updater signing is
     // provisioned (TAURI_SIGNING_PRIVATE_KEY + createUpdaterArtifacts + a
-    // real-signature latest.json generator).
+    // real-signature latest.json generator), but runtime registration is off.
     it('has the updater plugin config intentionally disabled for v1', () => {
       expect(config.plugins?.updater).toBeUndefined();
     });
@@ -56,9 +55,9 @@ describe('auto-update configuration', () => {
       permissions?: string[];
     };
 
-    it('includes updater:default permission', () => {
+    it('does not expose updater commands while updater config is disabled', () => {
       expect(caps.permissions).toBeDefined();
-      expect(caps.permissions).toContain('updater:default');
+      expect(caps.permissions).not.toContain('updater:default');
     });
   });
 
@@ -73,16 +72,16 @@ describe('auto-update configuration', () => {
   describe('Rust updater plugin registration', () => {
     const libRs = readFileSync(resolve(ROOT, 'src-tauri/src/lib.rs'), 'utf-8');
 
-    it('imports UpdaterExt', () => {
-      expect(libRs).toContain('UpdaterExt');
+    it('does not import UpdaterExt while updater config is disabled', () => {
+      expect(libRs).not.toContain('UpdaterExt');
     });
 
-    it('registers the updater plugin', () => {
-      expect(libRs).toContain('tauri_plugin_updater');
+    it('does not register the updater plugin while updater config is disabled', () => {
+      expect(libRs).not.toContain('tauri_plugin_updater::Builder::new().build()');
     });
 
-    it('emits waggle://update-available event', () => {
-      expect(libRs).toContain('waggle://update-available');
+    it('does not run startup update checks while updater config is disabled', () => {
+      expect(libRs).not.toContain('.updater()');
     });
   });
 
@@ -121,8 +120,7 @@ describe('auto-update configuration', () => {
   });
 
   // Frontend update hook describe block removed — the Tauri app/src/
-  // frontend was deprecated in favor of apps/web/ (see commit a883050);
-  // the useAutoUpdate listener was dropped along with it. The Rust shell
-  // still emits `waggle://update-available` for future consumers, which
-  // is verified by the "Rust updater plugin registration" block above.
+  // frontend was deprecated in favor of apps/web/ (see commit a883050).
+  // apps/web keeps a future `waggle://update-available` notice mapper, but
+  // native updater emission stays disabled until signed updater artifacts exist.
 });
