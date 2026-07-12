@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Cpu, ArrowRight, Loader2 } from 'lucide-react';
+import { Cpu, ArrowRight, Loader2, Check } from 'lucide-react';
 import { fadeSlide } from './constants';
 import { ModelGate } from '@/components/os/model-gate/ModelGate';
 import { useHasWorkingModel } from '@/hooks/useHasWorkingModel';
@@ -16,7 +16,7 @@ import type { ModelGateStepProps } from './types';
  * the permanent home of model setup can never drift.
  */
 const ModelGateStep = ({ onContinue, onLater }: ModelGateStepProps) => {
-  const { hasWorkingModel, loading, refresh } = useHasWorkingModel();
+  const { hasWorkingModel, cloudReady, localReady, loading, refresh } = useHasWorkingModel();
   return (
     <motion.div key="step-model-gate" {...fadeSlide}>
       <div className="text-center mb-5">
@@ -28,7 +28,27 @@ const ModelGateStep = ({ onContinue, onLater }: ModelGateStepProps) => {
         </p>
       </div>
 
-      <ModelGate variant="onboarding" onModelReady={refresh} />
+      {hasWorkingModel && localReady && !cloudReady ? (
+        <div role="status" className="flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left">
+          <Check className="mt-0.5 h-5 w-5 shrink-0 text-honey" aria-hidden />
+          <div>
+            <p className="text-sm font-display font-semibold text-foreground">Model ready</p>
+            <p className="text-xs text-muted-foreground">
+              {cloudReady
+                ? 'Your provider key is in Vault. You can tune models later in Settings.'
+                : localReady
+                  ? 'A local model is available. You can tune models later in Settings.'
+                  : 'A model is available. You can tune models later in Settings.'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      <ModelGate
+        variant="onboarding"
+        onModelReady={refresh}
+        suppressReadinessBanner={hasWorkingModel && localReady && !cloudReady}
+      />
 
       <div className="flex items-center justify-end gap-4 mt-6">
         <div className="flex items-center gap-3">
@@ -45,7 +65,7 @@ const ModelGateStep = ({ onContinue, onLater }: ModelGateStepProps) => {
             title={hasWorkingModel ? undefined : 'Add a working model to continue'}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground font-display text-sm font-semibold hover:bg-primary/80 disabled:opacity-50 transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            {loading ? <Loader2 aria-hidden className="w-4 h-4 animate-spin" /> : null}
+            {loading && !hasWorkingModel ? <Loader2 aria-hidden className="w-4 h-4 animate-spin" /> : null}
             Continue <ArrowRight className="w-4 h-4" aria-hidden />
           </button>
         </div>

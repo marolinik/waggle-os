@@ -44,6 +44,22 @@ describe('ModelGateStep — the hard model gate', () => {
     expect(p.onContinue).toHaveBeenCalledTimes(1);
   });
 
+  it('shows a local-ready state while keeping the setup gate available for another provider', () => {
+    mocks.useHasWorkingModel.mockReturnValue(state({ hasWorkingModel: true, localReady: true, loading: true }));
+    render(<ModelGateStep {...props()} />);
+
+    expect(screen.getByTestId('model-gate')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/model ready/i);
+  });
+
+  it('keeps cloud readiness owned by the shared gate so rejected keys remain visible', () => {
+    mocks.useHasWorkingModel.mockReturnValue(state({ hasWorkingModel: true, cloudReady: true, loading: true }));
+    render(<ModelGateStep {...props()} />);
+
+    expect(screen.getByTestId('model-gate')).toBeInTheDocument();
+    expect(screen.queryByText(/model ready/i)).not.toBeInTheDocument();
+  });
+
   it('"I\'ll do this later" escapes even with no model (dismiss to Home)', () => {
     const p = props();
     render(<ModelGateStep {...p} />);
