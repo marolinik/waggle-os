@@ -21,6 +21,8 @@ export default defineConfig({
     silent: true,
     testTimeout: 30_000,
     setupFiles: ['./vitest.setup.ts'],
+    pool: 'forks',
+    maxWorkers: 4,
     include: [
       'packages/*/tests/**/*.test.ts',
       'packages/*/tests/**/*.test.tsx',

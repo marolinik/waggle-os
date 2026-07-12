@@ -20,6 +20,13 @@ import {
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const LAUNCHER_DIR = path.join(ROOT, 'packages', 'launcher');
 
+interface CommandResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+  error?: Error;
+}
+
 function bin(name: string): string {
   return process.platform === 'win32' ? `${name}.cmd` : name;
 }
@@ -33,7 +40,7 @@ function run(
   args: string[],
   home: string,
   extraEnv: NodeJS.ProcessEnv = {},
-): ReturnType<typeof spawnSync> {
+): Promise<CommandResult> {
   return runInCwd(command, args, ROOT, home, extraEnv);
 }
 
@@ -43,17 +50,27 @@ function runInCwd(
   cwd: string,
   home: string,
   extraEnv: NodeJS.ProcessEnv = {},
-): ReturnType<typeof spawnSync> {
-  return spawnSync(command, args, {
-    cwd,
-    env: {
-      ...process.env,
-      HOME: home,
-      USERPROFILE: home,
-      ...extraEnv,
-    },
-    encoding: 'utf8',
-    shell: process.platform === 'win32' && command.endsWith('.cmd'),
+): Promise<CommandResult> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: {
+        ...process.env,
+        HOME: home,
+        USERPROFILE: home,
+        ...extraEnv,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: process.platform === 'win32' && command.endsWith('.cmd'),
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.once('error', (error) => resolve({ status: null, stdout, stderr, error }));
+    child.once('close', (status) => resolve({ status, stdout, stderr }));
   });
 }
 
@@ -278,13 +295,13 @@ describe('Waggle CLI Launcher', () => {
   });
 
   describe('runtime help', () => {
-    it('runs built help without starting service setup', () => {
+    it('runs built help without starting service setup', async () => {
       const home = makeHome();
       try {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
 
-        const result = run(process.execPath, [path.join(LAUNCHER_DIR, 'dist', 'cli.js'), '--help'], home);
+        const result = await run(process.execPath, [path.join(LAUNCHER_DIR, 'dist', 'cli.js'), '--help'], home);
 
         expect(result.status).toBe(0);
         expect(result.stdout).toContain('Usage:');
@@ -296,13 +313,13 @@ describe('Waggle CLI Launcher', () => {
       }
     });
 
-    it('runs built invalid-port validation before starting service setup', () => {
+    it('runs built invalid-port validation before starting service setup', async () => {
       const home = makeHome();
       try {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
 
-        const result = run(process.execPath, [path.join(LAUNCHER_DIR, 'dist', 'cli.js'), '--port', 'abc'], home);
+        const result = await run(process.execPath, [path.join(LAUNCHER_DIR, 'dist', 'cli.js'), '--port', 'abc'], home);
 
         expect(result.status).toBe(1);
         expect(result.stderr).toContain('Invalid port: abc');
@@ -317,10 +334,10 @@ describe('Waggle CLI Launcher', () => {
       const home = makeHome();
       const { server: blocker, port } = await occupyPort();
       try {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
 
-        const result = run(
+        const result = await run(
           process.execPath,
           [
             path.join(LAUNCHER_DIR, 'dist', 'cli.js'),
@@ -345,10 +362,10 @@ describe('Waggle CLI Launcher', () => {
     it('packs a tarball with a runnable first command', async () => {
       const home = makeHome();
       try {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', '@waggle-ai/waggle', '--pack-destination', home, '--json'],
           home,
@@ -364,7 +381,7 @@ describe('Waggle CLI Launcher', () => {
         const pkg = JSON.parse(
           fs.readFileSync(path.join(extractDir, 'package', 'package.json'), 'utf8'),
         );
-        const result = run(
+        const result = await run(
           process.execPath,
           [path.join(extractDir, 'package', 'dist', 'cli.js'), '--help'],
           home,
@@ -385,10 +402,10 @@ describe('Waggle CLI Launcher', () => {
       const home = makeHome();
       const { server: blocker, port } = await occupyPort();
       try {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', '@waggle-ai/waggle', '--pack-destination', home, '--json'],
           home,
@@ -403,7 +420,7 @@ describe('Waggle CLI Launcher', () => {
           JSON.stringify({ private: true, type: 'module' }, null, 2),
         );
 
-        const install = runInCwd(
+        const install = await runInCwd(
           bin('npm'),
           [
             'install',
@@ -417,14 +434,14 @@ describe('Waggle CLI Launcher', () => {
         );
         expect(install.status).toBe(0);
 
-        const help = runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
+        const help = await runInCwd(bin('npx'), ['waggle', '--help'], projectDir, home);
         expect(help.status).toBe(0);
         expect(help.stdout).toContain('Usage:');
         expect(help.stdout).not.toContain('[waggle:service]');
         expect(help.stderr).toBe('');
         expect(fs.existsSync(path.join(home, '.waggle'))).toBe(false);
 
-        const startup = runInCwd(
+        const startup = await runInCwd(
           bin('npx'),
           ['waggle', '--port', String(port), '--skip-litellm', '--no-open'],
           projectDir,
@@ -446,10 +463,10 @@ describe('Waggle CLI Launcher', () => {
       const home = makeHome();
       let child: ChildProcessWithoutNullStreams | undefined;
       try {
-        const build = run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
+        const build = await run(bin('npm'), ['run', 'build', '--workspace', '@waggle-ai/waggle'], home);
         expect(build.status).toBe(0);
 
-        const pack = run(
+        const pack = await run(
           bin('npm'),
           ['pack', '--workspace', '@waggle-ai/waggle', '--pack-destination', home, '--json'],
           home,
@@ -464,7 +481,7 @@ describe('Waggle CLI Launcher', () => {
           JSON.stringify({ private: true, type: 'module' }, null, 2),
         );
 
-        const install = runInCwd(
+        const install = await runInCwd(
           bin('npm'),
           [
             'install',
