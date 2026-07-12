@@ -158,7 +158,12 @@ describe('AllWorkspacesApp', () => {
 
   it('filters by name via the search box', () => {
     render(<AllWorkspacesApp />);
-    fireEvent.change(screen.getByTestId('all-workspaces-search'), { target: { value: 'pricing' } });
+    const search = screen.getByRole('textbox', { name: /search workspaces by name/i });
+    expect(search).toHaveAttribute('name', 'workspaceSearch');
+    expect(search).toHaveAttribute('autocomplete', 'off');
+    expect(search.className).toContain('focus-visible:ring-2');
+
+    fireEvent.change(search, { target: { value: 'pricing' } });
     expect(screen.getByTestId('all-workspaces-card-w2')).toBeInTheDocument();
     expect(screen.queryByTestId('all-workspaces-card-w1')).not.toBeInTheDocument();
     expect(screen.queryByTestId('all-workspaces-card-w3')).not.toBeInTheDocument();

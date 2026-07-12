@@ -297,6 +297,37 @@ describe('BackupApp (P1b)', () => {
     render(<BackupApp />);
     await waitFor(() => expect(screen.queryByText(/no backups yet/i)).toBeNull());
   });
+
+  it('restore uses an in-app approval before posting backup data', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mocks.adapter.fetchRaw
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'no backups' }), { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ filesRestored: 2 }), { status: 200 }));
+
+    const { default: BackupApp } = await import('@/components/os/apps/BackupApp');
+    const { render, screen, fireEvent } = await import('@testing-library/react');
+    render(<BackupApp />);
+
+    await screen.findByText(/no backups yet/i);
+    const file = new File(['backup-data'], 'team.waggle-backup', { type: 'application/octet-stream' });
+    fireEvent.change(screen.getByLabelText(/restore backup file/i), { target: { files: [file] } });
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(mocks.adapter.fetchRaw).toHaveBeenCalledTimes(1);
+
+    const modal = await screen.findByTestId('approval-modal');
+    expect(modal).toHaveTextContent(/restore backup/i);
+    expect(modal).toHaveTextContent(/team\.waggle-backup/i);
+    expect(modal).toHaveTextContent(/overwrite current data/i);
+
+    fireEvent.click(screen.getByTestId('approval-modal-approve'));
+
+    await waitFor(() => expect(mocks.adapter.fetchRaw).toHaveBeenCalledWith(
+      '/api/restore',
+      expect.objectContaining({ method: 'POST' }),
+    ));
+    await screen.findByText(/backup restored successfully \(2 files\)/i);
+  });
 });
 
 // ── SettingsApp tier-as-fact pins ──────────────────────────────────────────
@@ -331,7 +362,9 @@ describe('SettingsApp tier badges (P1b D3-4)', () => {
   it('resolved TEAMS tier renders the real plan in the General tab', async () => {
     mocks.adapter.getTier.mockResolvedValue({ tier: 'TEAMS', capabilities: {}, usage: {} });
     const screen = await renderSettings();
-    await waitFor(() => expect(screen.getByText(/Team plan/i)).toBeInTheDocument());
+    await waitFor(() => {
+      expect(screen.getAllByText(/Team plan/i).some((el) => el.textContent?.trim() === 'Team plan')).toBe(true);
+    });
   }, 15000);
 });
 

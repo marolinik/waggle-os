@@ -155,6 +155,18 @@ describe('HomeCockpit (P2)', () => {
     expect(positioning).toMatch(/guides the next step/i);
   });
 
+  it('scopes recent workspace card transitions to explicit properties', async () => {
+    await renderHome(briefing({
+      recentWorkspaces: [
+        { id: 'launch', name: 'Launch Plan', group: 'Marketing', summary: 'Three decisions still need review.', lastActive: RAW_ISO, pendingCount: 3 },
+      ],
+    }));
+
+    const card = screen.getByTestId('home-cockpit-ws-launch');
+    expect(card.className).not.toContain('transition-all');
+    expect(card.className).toContain('transition-[border-color,box-shadow,transform]');
+  });
+
   it('promotes the best suggested action into one Start Here move', async () => {
     const onContinue = vi.fn();
     await renderHome(briefing({

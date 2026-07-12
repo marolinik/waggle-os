@@ -5,7 +5,7 @@
  * renders zero facts (and the section is hidden), never an invented one.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, cleanup, within } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   adapter: {
@@ -26,6 +26,50 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('UserProfileApp — What Waggle knows (D20)', () => {
+  it('associates labels and metadata with profile form controls', async () => {
+    mocks.adapter.getProfile.mockResolvedValue({});
+    render(<UserProfileApp />);
+
+    const name = await screen.findByRole('textbox', { name: /^name$/i });
+    expect(name).toHaveAttribute('name', 'name');
+    expect(name).toHaveAttribute('autocomplete', 'name');
+
+    const role = screen.getByRole('textbox', { name: /^role$/i });
+    expect(role).toHaveAttribute('name', 'role');
+    expect(role).toHaveAttribute('autocomplete', 'organization-title');
+
+    const company = screen.getByRole('textbox', { name: /^company$/i });
+    expect(company).toHaveAttribute('name', 'company');
+    expect(company).toHaveAttribute('autocomplete', 'organization');
+
+    expect(screen.getByRole('combobox', { name: /^industry$/i })).toHaveAttribute('name', 'industry');
+    expect(screen.getByRole('textbox', { name: /^bio$/i })).toHaveAttribute('name', 'bio');
+  });
+
+  it('associates labels and metadata with preference and brand controls', async () => {
+    mocks.adapter.getProfile.mockResolvedValue({});
+    render(<UserProfileApp />);
+
+    await screen.findByText(/who are you\?/i);
+
+    fireEvent.click(screen.getByRole('tab', { name: /writing style/i }));
+    const styleSample = screen.getByRole('textbox', { name: /writing style sample/i });
+    expect(styleSample).toHaveAttribute('name', 'writingStyleSample');
+    expect(styleSample).toHaveAttribute('autocomplete', 'off');
+    expect(screen.getByRole('button', { name: /analyze style/i }).className).toContain('focus-visible:ring-2');
+
+    fireEvent.click(screen.getByRole('tab', { name: /brand & templates/i }));
+    expect(screen.getByLabelText(/primary color picker/i)).toHaveAttribute('name', 'brandPrimaryColor');
+    expect(screen.getByRole('textbox', { name: /primary color value/i })).toHaveAttribute('name', 'brandPrimaryColorHex');
+    expect(screen.getByRole('textbox', { name: /heading font/i })).toHaveAttribute('name', 'brandHeadingFont');
+    expect(screen.getByRole('textbox', { name: /brand guide/i })).toHaveAttribute('name', 'brandGuide');
+
+    fireEvent.click(screen.getByRole('tab', { name: /interests/i }));
+    const language = screen.getByRole('combobox', { name: /language/i });
+    expect(language).toHaveAttribute('name', 'language');
+    expect(language).toHaveAttribute('autocomplete', 'off');
+  });
+
   it('renders read-only facts derived from the stored profile values', async () => {
     mocks.adapter.getProfile.mockResolvedValue({
       name: 'Mara Kovač',

@@ -14,7 +14,7 @@
  *      cached paint (no re-skeleton, no wipe).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act, render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { renderHook, act, render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import type { ChatMessage } from '@/lib/types';
 import {
@@ -228,6 +228,10 @@ describe('ChatApp — composer input primacy', () => {
     onClearHistory: noop,
     pendingApproval: null,
     onApprove: noop,
+    activeSessionId: null as string | null,
+    historyLoaded: false,
+    initialMessage: undefined as string | undefined,
+    autoSendInitial: false,
   };
   const renderChat = (props: Partial<typeof baseProps> & { messages: ChatMessage[] }) =>
     render(<TooltipProvider><ChatAppEl {...baseProps} {...props} /></TooltipProvider>);
@@ -241,6 +245,15 @@ describe('ChatApp — composer input primacy', () => {
   it('the composer textarea is ENABLED at paint (not gated behind loading)', () => {
     renderChat({ messages: [] });
     expect(screen.getByRole('textbox')).not.toBeDisabled();
+  });
+
+  it('names the composer textarea for assistive tech and browser metadata', () => {
+    renderChat({ messages: [] });
+    const composer = screen.getByRole('textbox', { name: /message composer/i });
+    expect(composer).toHaveAttribute('name', 'message');
+    expect(composer).toHaveAttribute('autocomplete', 'off');
+    expect(composer.className).toContain('focus-visible:ring-2');
+    expect(composer.className).toContain('focus-visible:ring-[var(--focus-ring)]');
   });
 
   it('the textarea stays enabled even while a reply streams (isLoading)', () => {
@@ -260,5 +273,24 @@ describe('ChatApp — composer input primacy', () => {
     const badge = screen.getByTestId('chat-msg-queued');
     expect(badge).toBeInTheDocument();
     expect(badge.textContent).toContain('Waiting to send');
+  });
+
+  it('clears an auto-sent first task before the send promise resolves', async () => {
+    const gate = deferred<boolean | void>();
+    const onSendMessage = vi.fn(() => gate.promise);
+
+    renderChat({
+      messages: [],
+      activeSessionId: 'sess-first-task',
+      historyLoaded: true,
+      initialMessage: 'Draft my launch checklist',
+      autoSendInitial: true,
+      onSendMessage,
+    });
+
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith('Draft my launch checklist'));
+    expect(screen.getByRole('textbox', { name: /message composer/i })).toHaveValue('');
+
+    gate.resolve(true);
   });
 });
