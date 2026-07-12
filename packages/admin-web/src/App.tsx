@@ -35,6 +35,15 @@ export function App() {
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    const main = document.querySelector<HTMLElement>('.admin-main');
+    if (main) {
+      main.scrollTop = 0;
+      main.scrollLeft = 0;
+    }
+  }, [page]);
+
   const navigateTo = (nextPage: Page) => {
     setPage(nextPage);
     window.location.hash = nextPage;

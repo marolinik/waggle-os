@@ -300,6 +300,7 @@ test.describe('admin web rendered UX', () => {
         await expect(page.getByRole('heading', { name: item.heading })).toBeVisible();
         await expect(page).toHaveURL(new RegExp(`#${item.key}$`));
         await expect(page.getByRole('button', { name: item.label })).toHaveAttribute('aria-current', 'page');
+        await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${item.key} scroll position` }).toBe(0);
 
         const metrics = await renderedMetrics(page);
         expect(metrics.hasFrameworkOverlay, item.key).toBe(false);
@@ -323,6 +324,7 @@ test.describe('admin web rendered UX', () => {
       for (const item of pages) {
         await connect(page, item.key);
         await expect(page.getByRole('heading', { name: item.heading })).toBeVisible();
+        await expect.poll(() => page.evaluate(() => window.scrollY), { message: `${item.key} scroll position` }).toBe(0);
         await blurActiveElement(page);
         await expect(page).toHaveScreenshot(`admin-${item.key}-${viewport.name}.png`, {
           animations: 'disabled',
@@ -419,10 +421,14 @@ test.describe('admin web rendered UX', () => {
     await connect(page, 'dashboard');
     await expect(page.getByRole('button', { name: 'Dashboard' })).toHaveAttribute('aria-current', 'page');
 
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
     await page.getByRole('button', { name: 'Members' }).click();
     await expect(page).toHaveURL(/#members$/);
     await expect(page.getByRole('heading', { name: /Team Members/ })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Members' })).toHaveAttribute('aria-current', 'page');
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
 
     await page.getByRole('button', { name: 'Capabilities' }).click();
     await expect(page).toHaveURL(/#capabilities$/);
