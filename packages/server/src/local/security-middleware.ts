@@ -249,7 +249,12 @@ export class SessionTimeoutTracker {
  * loopback bind. The path string matches the route registered in
  * stripe/webhook.ts (`POST /api/stripe/webhook`, no prefix).
  */
-const AUTH_EXEMPT_PATHS = ['/health', '/api/auth/session-token', '/api/stripe/webhook'];
+const AUTH_EXEMPT_PATHS = [
+  '/health',
+  '/api/auth/session-token',
+  '/api/browser-ext/session-token',
+  '/api/stripe/webhook',
+];
 
 /**
  * P1b-SSE: EventSource cannot send an Authorization header, so these exact

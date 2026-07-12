@@ -4,7 +4,7 @@
  *
  * Origins are URL-parsed (not prefix-matched) so http://localhost.evil.com
  * cannot impersonate the local app. The Tauri desktop webview presents either
- * `tauri://localhost` or (on Windows) `https://tauri.localhost`.
+ * `tauri://localhost` or a `tauri.localhost` webview origin.
  */
 
 import type { FastifyRequest } from 'fastify';
@@ -16,6 +16,7 @@ export function isLocalOrigin(raw: string): boolean {
   try {
     const u = new URL(raw);
     if (u.protocol === 'tauri:') return true;
+    if (u.protocol === 'http:' && u.hostname === 'tauri.localhost') return true;
     if (u.protocol === 'https:' && u.hostname === 'tauri.localhost') return true;
     if ((u.protocol === 'http:' || u.protocol === 'https:') && LOCAL_HOSTS.has(u.hostname)) {
       return true;
