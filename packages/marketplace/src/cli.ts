@@ -14,14 +14,36 @@
  *   waggle-market info <name|id>        Show package details
  */
 
-import { MarketplaceDB } from './db';
-import { MarketplaceInstaller } from './installer';
-import { MarketplaceSync } from './sync';
-import { SecurityGate } from './security';
-import type { InstallationType, ScannedPackage } from './types';
+import { MarketplaceDB } from './db.js';
+import { MarketplaceInstaller } from './installer.js';
+import { MarketplaceSync } from './sync.js';
+import { SecurityGate } from './security.js';
+import type { InstallationType, ScannedPackage } from './types.js';
 
 const args = process.argv.slice(2);
 const command = args[0];
+
+const HELP_COMMANDS = new Set([undefined, 'help', '--help', '-h']);
+const KNOWN_COMMANDS = new Set([
+  'search',
+  's',
+  'install',
+  'i',
+  'install-pack',
+  'ip',
+  'uninstall',
+  'u',
+  'list',
+  'ls',
+  'packs',
+  'sources',
+  'sync',
+  'info',
+  'scan',
+  'scan-all',
+  'audit',
+  'security-config',
+]);
 
 // Parse flags
 const flags: Record<string, string> = {};
@@ -34,7 +56,49 @@ for (const arg of args.slice(1)) {
 
 const positionals = args.slice(1).filter(a => !a.startsWith('--'));
 
+function printHelp(): void {
+  console.log(`
+Waggle Marketplace CLI
+
+Usage:
+  waggle-market search <query>              Search packages
+  waggle-market install <name|id>           Install a package
+  waggle-market install-pack <slug>         Install a capability pack
+  waggle-market uninstall <name|id>         Uninstall a package
+  waggle-market list                        List installed packages
+  waggle-market packs                       List available packs
+  waggle-market sources                     List marketplace sources
+  waggle-market sync [--source=<name>]      Sync from live sources
+  waggle-market info <name|id>              Show package details
+
+Security:
+  waggle-market scan <name|id>              Scan a package for security issues
+  waggle-market scan-all [--type=<type>]    Scan all packages in the database
+  waggle-market audit                       Security audit summary
+  waggle-market security-config             View/edit security settings
+
+Flags:
+  --type=<skill|plugin|mcp>   Filter by install type
+  --category=<name>           Filter by category
+  --pack=<slug>               Filter by pack membership
+  --force                     Force reinstall
+  --force-insecure            Bypass security gate (DANGEROUS)
+  --limit=<n>                 Limit search results
+        `);
+}
+
 async function main() {
+  if (HELP_COMMANDS.has(command)) {
+    printHelp();
+    return;
+  }
+
+  if (!KNOWN_COMMANDS.has(command)) {
+    console.error(`Unknown command: ${command}`);
+    printHelp();
+    process.exit(1);
+  }
+
   const db = new MarketplaceDB();
   const installer = new MarketplaceInstaller(db);
 
@@ -358,34 +422,7 @@ async function main() {
       }
 
       default:
-        console.log(`
-Waggle Marketplace CLI
-
-Usage:
-  waggle-market search <query>              Search packages
-  waggle-market install <name|id>           Install a package
-  waggle-market install-pack <slug>         Install a capability pack
-  waggle-market uninstall <name|id>         Uninstall a package
-  waggle-market list                        List installed packages
-  waggle-market packs                       List available packs
-  waggle-market sources                     List marketplace sources
-  waggle-market sync [--source=<name>]      Sync from live sources
-  waggle-market info <name|id>              Show package details
-
-Security:
-  waggle-market scan <name|id>              Scan a package for security issues
-  waggle-market scan-all [--type=<type>]    Scan all packages in the database
-  waggle-market audit                       Security audit summary
-  waggle-market security-config             View/edit security settings
-
-Flags:
-  --type=<skill|plugin|mcp>   Filter by install type
-  --category=<name>           Filter by category
-  --pack=<slug>               Filter by pack membership
-  --force                     Force reinstall
-  --force-insecure            Bypass security gate (DANGEROUS)
-  --limit=<n>                 Limit search results
-        `);
+        printHelp();
     }
   } finally {
     db.close();

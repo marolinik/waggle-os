@@ -26,24 +26,24 @@
  *   await sync.syncAll();
  */
 
-export { MarketplaceDB } from './db';
-export { MarketplaceInstaller } from './installer';
-export { MarketplaceSync, deduplicatePackages, parseAwesomeListMarkdown, parseNpmSearchResults, normalizeName } from './sync';
-export type { VaultLookupFn } from './sync';
-export { defaultFetch } from './fetcher';
-export type { FetchFn } from './fetcher';
-export { resolveSkillSource, classifySource, isSafeZipEntry, SkillSourceError } from './multi-source';
-export type { ResolvedSkillSource, SkillSourceType, ResolveOptions, ZipEntry, ZipExtractor } from './multi-source';
-export { seedNewSources, NEW_SOURCES } from './sources-seed';
-export { SecurityGate } from './security';
-export { isCiscoScannerAvailable, ciscoScan, getCiscoScannerVersion, resetAvailabilityCache, setExecFile } from './cisco-scanner';
-export type { CiscoScanResult, CiscoScanIssue } from './cisco-scanner';
-export { ENTERPRISE_PACKS } from './enterprise-packs';
-export type { EnterprisePack } from './enterprise-packs';
-export { MCP_SERVERS, seedMcpServers } from './mcp-registry';
-export type { McpServerEntry } from './mcp-registry';
-export { PACKAGE_CATEGORIES, categorizePackage, recategorizeAll } from './categories';
-export type { PackageCategoryId } from './categories';
+export { MarketplaceDB } from './db.js';
+export { MarketplaceInstaller } from './installer.js';
+export { MarketplaceSync, deduplicatePackages, parseAwesomeListMarkdown, parseNpmSearchResults, normalizeName } from './sync.js';
+export type { VaultLookupFn } from './sync.js';
+export { defaultFetch } from './fetcher.js';
+export type { FetchFn } from './fetcher.js';
+export { resolveSkillSource, classifySource, isSafeZipEntry, SkillSourceError } from './multi-source.js';
+export type { ResolvedSkillSource, SkillSourceType, ResolveOptions, ZipEntry, ZipExtractor } from './multi-source.js';
+export { seedNewSources, NEW_SOURCES } from './sources-seed.js';
+export { SecurityGate } from './security.js';
+export { isCiscoScannerAvailable, ciscoScan, getCiscoScannerVersion, resetAvailabilityCache, setExecFile } from './cisco-scanner.js';
+export type { CiscoScanResult, CiscoScanIssue } from './cisco-scanner.js';
+export { ENTERPRISE_PACKS } from './enterprise-packs.js';
+export type { EnterprisePack } from './enterprise-packs.js';
+export { MCP_SERVERS, seedMcpServers } from './mcp-registry.js';
+export type { McpServerEntry } from './mcp-registry.js';
+export { PACKAGE_CATEGORIES, categorizePackage, recategorizeAll } from './categories.js';
+export type { PackageCategoryId } from './categories.js';
 
 export type {
   MarketplaceSource,
@@ -64,7 +64,7 @@ export type {
   SearchSort,
   SyncOptions,
   SyncResult,
-} from './types';
+} from './types.js';
 
 export type {
   Severity,
@@ -73,4 +73,4 @@ export type {
   SecurityEngine,
   ScanResult,
   SecurityGateConfig,
-} from './security';
+} from './security.js';
