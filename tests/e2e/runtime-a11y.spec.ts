@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
@@ -106,11 +106,24 @@ function formatViolations(violations: AxeViolation[]) {
   }));
 }
 
+async function seedWaggleDanceSignal(request: APIRequestContext) {
+  const response = await request.post('/api/waggle-dance/signal', {
+    data: {
+      type: 'broadcast',
+      subtype: 'discovery',
+      senderId: 'runtime-a11y',
+      content: { tool: 'playwright', topic: 'accessible signal timestamp' },
+    },
+  });
+  expect(response.status()).toBe(201);
+}
+
 test.describe('Runtime accessibility smoke', () => {
   for (const viewport of VIEWPORTS) {
-    test(`axe has no violations across core routes (${viewport.name})`, async ({ page }) => {
+    test(`axe has no violations across core routes (${viewport.name})`, async ({ page, request }) => {
       test.setTimeout(150_000);
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await seedWaggleDanceSignal(request);
 
       const findings: Array<{ route: string; violations: ReturnType<typeof formatViolations> }> = [];
       for (const route of ROUTES) {

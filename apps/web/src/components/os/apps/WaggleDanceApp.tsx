@@ -140,7 +140,7 @@ const WaggleDanceApp = () => {
                         {signal.sourceUser && (
                           <span className="text-[11px] text-muted-foreground/70">· {signal.sourceUser}</span>
                         )}
-                        <span className="text-[11px] text-muted-foreground/50 ml-auto">
+                        <span className="ml-auto text-[11px] text-muted-foreground">
                           {new Date(signal.timestamp).toLocaleTimeString(DATE_LOCALE, { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       </div>

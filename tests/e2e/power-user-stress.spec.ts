@@ -6,6 +6,7 @@
  * This is NOT a "does it render" test. This is a "can I actually USE this" test.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { isDevNoiseWorkspace } from '../../apps/web/src/lib/workspace-counts';
 
 const BASE = process.env.WAGGLE_E2E_BASE_URL ?? 'http://127.0.0.1:3333';
 
@@ -35,6 +36,7 @@ async function gotoDesktop(page: Page) {
 async function openSurface(page: Page, label: string) {
   const routes: Record<string, string> = {
     Home: '/home',
+    Workspaces: '/workspaces',
     Chat: '/workspaces/default-workspace/chat',
     Memory: '/memory',
     Room: '/room',
@@ -46,6 +48,7 @@ async function openSurface(page: Page, label: string) {
   };
   const routePatterns: Record<string, RegExp> = {
     Home: /\/home/,
+    Workspaces: /\/workspaces$/,
     Chat: /\/workspaces\/[^/]+\/chat/,
     Memory: /\/memory/,
     Room: /\/room/,
@@ -97,7 +100,7 @@ function dispatch(page: Page, key: string, opts: { ctrl?: boolean; shift?: boole
 
 test.describe('1. Workspace Creation', () => {
   test('can create a workspace via API and see it in dashboard', async ({ page, request }) => {
-    const name = `StressTest-${Date.now()}`;
+    const name = `Power Workspace ${Date.now()}`;
     const res = await request.post(`${BASE}/api/workspaces`, {
       data: { name, group: 'testing', persona: 'researcher' },
       headers: { 'Content-Type': 'application/json' },
@@ -109,10 +112,8 @@ test.describe('1. Workspace Creation', () => {
       expect(ws.name).toBe(name);
 
       await gotoDesktop(page);
-      await openSurface(page, 'Home');
-      await page.waitForTimeout(1000);
-      const text = await page.locator('body').innerText();
-      expect(text).toContain(name);
+      await openSurface(page, 'Workspaces');
+      await expect(page.locator('body')).toContainText(name, { timeout: 10_000 });
     } else {
       // If creation fails (tier limit, etc.), just verify the API returns a meaningful error
       expect(res.status()).toBeLessThan(500);
@@ -382,16 +383,19 @@ test.describe('8. Data Integrity', () => {
   test('workspace list is consistent between API and UI', async ({ page, request }) => {
     const apiRes = await request.get(`${BASE}/api/workspaces`);
     const apiWorkspaces = await apiRes.json();
-    const apiNames = (Array.isArray(apiWorkspaces) ? apiWorkspaces : []).map((w: { name: string }) => w.name);
+    const apiNames = (Array.isArray(apiWorkspaces) ? apiWorkspaces : [])
+      .filter((workspace: { name: string; status?: string }) => (
+        workspace.status !== 'archived' && !isDevNoiseWorkspace(workspace.name)
+      ))
+      .map((workspace: { name: string }) => workspace.name);
 
     await gotoDesktop(page);
-    await openSurface(page, 'Home');
-    await page.waitForTimeout(1000);
-    const uiText = await page.locator('body').innerText();
+    await openSurface(page, 'Workspaces');
+    const body = page.locator('body');
 
-    // Every API workspace should appear in the dashboard
+    // Every sampled API workspace should appear in the complete workspace view.
     for (const name of apiNames.slice(0, 3)) {
-      expect(uiText).toContain(name);
+      await expect(body).toContainText(name, { timeout: 10_000 });
     }
   });
 
