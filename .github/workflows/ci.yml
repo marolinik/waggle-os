@@ -57,7 +57,27 @@ jobs:
           npm run build --workspace waggle-memory-mcp
 
       - name: Unit tests — packages + cross-cutting (root vitest)
-        run: npm test
+        run: |
+          npm test -- \
+            --exclude=packages/cli/tests/cli-runtime.test.ts \
+            --exclude=packages/hive-mind-cli/tests/cli-help.test.ts \
+            --exclude=packages/hive-mind-mcp-server/tests/runtime.test.ts \
+            --exclude=packages/launcher/tests/cli.test.ts \
+            --exclude=packages/memory-mcp/tests/runtime.test.ts
+
+      # These tests each create a temporary project and run npm install. Running
+      # several cold installs in parallel makes individual test timeouts measure
+      # runner contention rather than package correctness.
+      - name: Package-install runtime tests (serial)
+        run: |
+          npx vitest run \
+            packages/cli/tests/cli-runtime.test.ts \
+            packages/hive-mind-cli/tests/cli-help.test.ts \
+            packages/hive-mind-mcp-server/tests/runtime.test.ts \
+            packages/launcher/tests/cli.test.ts \
+            packages/memory-mcp/tests/runtime.test.ts \
+            --maxWorkers=1 \
+            --no-file-parallelism
 
       # The root vitest.config.ts excludes `apps/**`, so apps/web's own 131-file
       # suite never ran in CI. Run it via its own vitest config (jsdom). Blocking.
