@@ -64,7 +64,7 @@ type AxeViolation = {
   impact: string | null;
   description: string;
   help: string;
-  nodes: Array<{ target: string[]; failureSummary?: string }>;
+  nodes: Array<{ target: string[]; html: string; failureSummary?: string }>;
 };
 
 type AxeResult = {
@@ -102,23 +102,43 @@ function formatViolations(violations: AxeViolation[]) {
     id: violation.id,
     impact: violation.impact,
     help: violation.help,
-    targets: violation.nodes.map((node) => node.target.join(' ')),
+    nodes: violation.nodes.map((node) => ({
+      target: node.target.join(' '),
+      html: node.html,
+      failureSummary: node.failureSummary,
+    })),
   }));
 }
 
 async function seedWaggleDanceSignal(request: APIRequestContext) {
-  const response = await request.post('/api/waggle-dance/signal', {
+  const response = await request.post('/api/waggle/signals', {
     data: {
-      type: 'broadcast',
-      subtype: 'discovery',
-      senderId: 'runtime-a11y',
-      content: { tool: 'playwright', topic: 'accessible signal timestamp' },
+      type: 'discovery',
+      workspaceId: 'default-workspace',
+      content: 'Accessible signal timestamp',
+      metadata: { senderId: 'runtime-a11y' },
     },
   });
   expect(response.status()).toBe(201);
 }
 
 test.describe('Runtime accessibility smoke', () => {
+  test('milestone toast and signal badges have no mobile accessibility violations', async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await seedWaggleDanceSignal(request);
+    await page.addInitScript(() => {
+      window.localStorage.setItem('waggle:session-count', '49');
+      window.localStorage.setItem('waggle:dock-nudge-dismissed', '[10]');
+    });
+
+    await gotoApp(page, '/waggle-dance');
+    await expect(page.getByText('50 sessions in — nicely done', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Close notification' })).toHaveCSS('opacity', '1');
+    await expect(page.getByTestId('waggle-unacknowledged-count')).toBeVisible();
+
+    expect(formatViolations(await runAxe(page))).toEqual([]);
+  });
+
   for (const viewport of VIEWPORTS) {
     test(`axe has no violations across core routes (${viewport.name})`, async ({ page, request }) => {
       test.setTimeout(150_000);

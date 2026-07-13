@@ -47,7 +47,7 @@ const WaggleDanceApp = () => {
           <Zap className="w-4 h-4 text-amber-400" />
           <span className="text-sm font-display font-semibold">Waggle Dance</span>
           {unacknowledgedCount > 0 && (
-            <Badge variant="destructive" className="text-[11px] px-1.5 py-0 h-4">
+            <Badge data-testid="waggle-unacknowledged-count" variant="destructive" className="text-[11px] px-1.5 py-0 h-4">
               {unacknowledgedCount}
             </Badge>
           )}
@@ -126,10 +126,10 @@ const WaggleDanceApp = () => {
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold truncate">{signal.title}</span>
                         {signal.priority === 'critical' && (
-                          <Badge variant="destructive" className="text-[11px] px-1 py-0 h-3.5">CRITICAL</Badge>
+                          <Badge data-testid="waggle-critical-priority" variant="destructive" className="text-[11px] px-1 py-0 h-3.5">CRITICAL</Badge>
                         )}
                         {signal.priority === 'high' && (
-                          <Badge className="text-[11px] px-1 py-0 h-3.5 bg-amber-500/20 text-amber-400 border-amber-500/30">HIGH</Badge>
+                          <Badge className="text-[11px] px-1 py-0 h-3.5 bg-amber-500/20 text-foreground border-amber-500/40">HIGH</Badge>
                         )}
                       </div>
                       <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{signal.content}</p>
