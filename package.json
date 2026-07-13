@@ -85,7 +85,7 @@
     "@tauri-apps/plugin-shell": "^2.3.5",
     "@vitejs/plugin-react": "^6.0.1",
     "stripe": "^21.0.1",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.6.0"
   },
   "//optionalDependencies": "Platform-specific native binaries — optional so npm SKIPS them on os/cpu mismatch (Linux/macOS CI) instead of failing install with EBADPLATFORM. See docs/audits/2026-06-01-full-repo-verification-sweep.md.",
   "optionalDependencies": {
