@@ -50,13 +50,15 @@ describe('skill requirements route annotation (#15)', () => {
       'utf-8',
     );
     server = await buildLocalServer({ dataDir: tmpDir });
-  });
+    // Full-suite runs saturate the CPU during collect; server boot can exceed
+    // vitest's 10s default hook timeout (observed 2026-07-15 full-suite flake).
+  }, 60_000);
 
   afterAll(async () => {
     await server.close();
     delete process.env[PRESENT_ENV];
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
-  });
+  }, 60_000);
 
   beforeEach(() => {
     clearSkillRequirementsCache();
