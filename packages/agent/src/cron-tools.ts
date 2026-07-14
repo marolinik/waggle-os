@@ -56,11 +56,15 @@ function firesTooOften(expr: string): boolean {
     return true;
   }
   const minuteField = parts.length === 6 ? parts[1] : parts[0];
-  if (minuteField === '*') return true; // every minute
+  // Allowlist, not denylist (ranges like "1-59" and step-on-range forms like
+  // "0-59/2" fire near-every-minute and must not slip through): accept only a
+  // fixed minute, */N with N >= 5, or a comma list of <= 12 fixed minutes.
+  if (/^\d+$/.test(minuteField)) return false;
   const step = minuteField.match(/^\*\/(\d+)$/);
-  if (step && Number(step[1]) < 5) return true; // */1 … */4
-  if (minuteField.split(',').length > 12) return true; // >12 firings/hour
-  return false;
+  if (step) return Number(step[1]) < 5;
+  const list = minuteField.split(',');
+  if (list.length <= 12 && list.every(p => /^\d+$/.test(p))) return false;
+  return true;
 }
 
 /**
@@ -147,6 +151,16 @@ export function createCronTools(opts?: { getTurnOrigin?: () => TurnOrigin | null
             jobConfig = JSON.parse(jobData);
           } catch {
             return `Error: Invalid JSON in job_data: "${jobData}"`;
+          }
+          // #17 SEC: mode/deliverTo/once are executor-internal and settable
+          // ONLY via the typed params below (deliverTo exclusively from the
+          // trusted origin snapshot). Free-form job_data must not smuggle
+          // them — otherwise the agent could route ai_task output to an
+          // arbitrary, unpaired chat.
+          if (jobConfig) {
+            delete jobConfig.mode;
+            delete jobConfig.deliverTo;
+            delete jobConfig.once;
           }
         }
 

@@ -208,20 +208,43 @@ describe('Cron Tools', () => {
       expect(fetchSpy).not.toHaveBeenCalled();
     });
 
-    it('min-interval guard: rejects every-minute and */4 exprs, accepts */5 and @hourly', async () => {
+    it('min-interval guard: rejects every-minute, */4, range, and step-on-range exprs; accepts */5, lists, @hourly', async () => {
       const tool = toolsWithOrigin(null).find(t => t.name === 'create_schedule')!;
 
-      for (const expr of ['* * * * *', '*/4 * * * *', '* * * * * *', '1,2,3,4,5,6,7,8,9,10,11,12,13 * * * *']) {
+      for (const expr of [
+        '* * * * *', '*/4 * * * *', '* * * * * *',
+        '1,2,3,4,5,6,7,8,9,10,11,12,13 * * * *',
+        '1-59 * * * *',      // range bypass (verifier class)
+        '0-59/2 * * * *',    // step-on-range bypass
+      ]) {
         const result = await tool.execute({ name: 'Fast', cron_expression: expr, prompt: 'x' });
         expect(result, expr).toContain('may not fire more often than every 5 minutes');
       }
       expect(fetchSpy).not.toHaveBeenCalled();
 
-      for (const expr of ['*/5 * * * *', '@hourly', '0 8 * * *']) {
+      for (const expr of ['*/5 * * * *', '@hourly', '0 8 * * *', '0,30 * * * *']) {
         fetchSpy.mockResolvedValueOnce(createdResponse({ cronExpr: expr }));
         const result = await tool.execute({ name: 'OK', cron_expression: expr, prompt: 'x' });
         expect(result, expr).toContain('Schedule created successfully');
       }
+    });
+
+    it('SEC: job_data cannot smuggle mode/deliverTo/once past the trusted param path', async () => {
+      fetchSpy.mockResolvedValueOnce(createdResponse());
+      const tool = toolsWithOrigin(null).find(t => t.name === 'create_schedule')!;
+
+      // No `prompt` param — a raw job_data trying to fabricate an ai_task
+      // with an attacker-controlled delivery target must be stripped.
+      await tool.execute({
+        name: 'Sneaky', cron_expression: '0 8 * * *', workspace_id: 'ws-1',
+        job_data: '{"prompt":"x","mode":"ai_task","once":true,"deliverTo":{"platform":"telegram","chatId":"attacker"}}',
+      });
+
+      const body = JSON.parse((fetchSpy.mock.calls[0][1] as RequestInit).body as string);
+      expect(body.jobConfig.mode).toBeUndefined();
+      expect(body.jobConfig.deliverTo).toBeUndefined();
+      expect(body.jobConfig.once).toBeUndefined();
+      expect(body.jobConfig.prompt).toBe('x'); // legacy prompt field untouched
     });
 
     it('legacy create without prompt is byte-identical (no mode injected)', async () => {

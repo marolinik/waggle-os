@@ -1484,10 +1484,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
               // #12: dual-use — persist the summary the compressor already
               // paid for as a durable memory frame (skipped for automated
-              // turns per #13). The summary aggregates tool/connector output,
-              // so scan it before it can enter durable memory; fail-soft with
-              // the W4A closed-DB guard so persistence never fails the turn.
-              if (!isAutomatedTurn) {
+              // turns per #13, and for injected-runner turns like every other
+              // write-back seam in this route). The summary aggregates
+              // tool/connector output, so scan it before it can enter durable
+              // memory; fail-soft with the W4A closed-DB guard so persistence
+              // never fails the turn.
+              if (!hasCustomRunner && !isAutomatedTurn) {
                 const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
                 if (summaryScan.score >= 0.7) {
                   log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
@@ -2195,7 +2197,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // HybridSearch now; embedded on the next cognify/distill pass). The 8-char
       // floor skips trivial acks ("ok", "thanks"). Best-effort: a persistence
       // failure must never mask the original error or break the SSE stream.
-      if (activeSessionOrch && message.trim().length >= 8) {
+      // #13: gated for automated turns — an idle-watcher review instruction
+      // embeds the ENTIRE session transcript, and review turns are the most
+      // likely to fail on context_length; persisting that here as a
+      // 'user_stated' frame would dump the transcript into memory at highest
+      // trust, exactly the pollution #13 exists to stop.
+      if (activeSessionOrch && !isAutomatedTurn && message.trim().length >= 8) {
         try {
           const frames = activeSessionOrch.getFrames();
           const sessions = activeSessionOrch.getSessions();

@@ -32,7 +32,6 @@ import { buildAwarenessSummary, markSummarySurfaced, type AwarenessSummary } fro
 import { CognifyPipeline } from './cognify.js';
 import { scanForInjection } from './injection-scanner.js';
 import { runPatternWriteBack } from './pattern-write-back.js';
-import { isSelfIncapacityAssertion } from './memory-sign-gate.js';
 import {
   fetchRecentFrames,
   loadRecentContext as loadRecentContextImpl,
@@ -902,17 +901,29 @@ export class Orchestrator {
     priorFrameId?: number | null,
   ): Promise<number | null> {
     if (!summary.trim()) return null;
-    // Sign-gate: a summary that reads as self-incapacity ("I can't…") is
-    // audit-only, not recallable fact.
-    const importance = isSelfIncapacityAssertion(summary) ? 'temporary' : 'normal';
-    const content = `[Session summary — ${sessionKey}]\n\n${summary}`;
+    // Deliberately NO sign-gate here: the summary is a multi-section
+    // COMPACTION_PROMPT aggregate, and a single boilerplate "you'll need to
+    // run X" line inside it would downgrade the whole session gist to
+    // 'temporary' (recall-invisible) — silently no-op'ing the feature for
+    // exactly the long sessions it targets. Provenance is source='system'.
+    const importance = 'normal';
+    const marker = `[Session summary — ${sessionKey}]`;
+    const content = `${marker}\n\n${summary}`;
 
     const frames = this.workspaceLayers?.frames ?? this.frames;
     const cognify = this.workspaceLayers?.cognify ?? this.cognify;
 
-    if (priorFrameId != null && frames.getById(priorFrameId)) {
-      const updated = frames.update(priorFrameId, content, importance);
-      return updated ? priorFrameId : null;
+    // Update in place ONLY when the prior frame is verifiably this session's
+    // summary. The caller's id map is keyed by session while this method
+    // routes by active mind — after a workspace switch the same rowid can
+    // point at an UNRELATED frame in the new mind, and a blind update would
+    // destructively overwrite user memory.
+    if (priorFrameId != null) {
+      const existing = frames.getById(priorFrameId);
+      if (existing?.content.startsWith(marker)) {
+        const updated = frames.update(priorFrameId, content, importance);
+        if (updated) return priorFrameId;
+      }
     }
     const result = await cognify.cognify(content, importance, undefined, undefined, 'system');
     return result.frameId;

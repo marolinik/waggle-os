@@ -56,12 +56,27 @@ describe('persistCompactionSummary (#12)', () => {
     expect(frameId).not.toBe(99999);
   });
 
-  it('sign-gate: self-incapacity summaries are downgraded to temporary', async () => {
+  it('no sign-gate downgrade: aggregate summaries stay normal even with incapacity lines', async () => {
     const frameId = await orchestrator.persistCompactionSummary(
-      "I don't have a tool to access external calendars.", 's3',
+      "Work completed: shipped billing. Pending: you'll need to run npm install after pulling.", 's3',
     );
     expect(frameId).not.toBeNull();
-    expect(new FrameStore(db).getById(frameId!)!.importance).toBe('temporary');
+    expect(new FrameStore(db).getById(frameId!)!.importance).toBe('normal');
+  });
+
+  it('never overwrites an unrelated frame when the prior id points at foreign content (cross-mind guard)', async () => {
+    // Simulate the cross-mind rowid collision: priorFrameId exists in the
+    // active mind but holds USER memory, not this session's summary.
+    const frames = new FrameStore(db);
+    const gopId = orchestrator.getSessions().create().gop_id;
+    const userFrame = frames.createIFrame(gopId, 'Precious user memory about Q3 strategy.', 'critical');
+
+    const frameId = await orchestrator.persistCompactionSummary('Summary text.', 's-x', userFrame.id);
+
+    expect(frameId).not.toBeNull();
+    expect(frameId).not.toBe(userFrame.id);
+    expect(frames.getById(userFrame.id)!.content).toBe('Precious user memory about Q3 strategy.');
+    expect(frames.getById(userFrame.id)!.importance).toBe('critical');
   });
 
   it('blank summary persists nothing', async () => {

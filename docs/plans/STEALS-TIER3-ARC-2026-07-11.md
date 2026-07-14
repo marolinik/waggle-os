@@ -48,7 +48,7 @@ The compaction summarizer's output (one existing LLM call, `context-compressor.t
 - **Interplay with #13:** persist is gated `if (!isAutomatedTurn)` — automated turns never persist compaction summaries.
 - Tests: new-frame save w/ source `'system'`; update-in-place on 2nd compaction; sign-gate downgrade; workspace routing; server test — exactly one frame across two compactions (mock summarizer).
 
-**D-rulings:** D1 importance=`normal`+sign-gate. D2 one frame/session update-in-place. D3 bypass pre:memory-write hook (false-positive risk on legit failure mentions); scanForInjection+sign-gate instead. D4 chat route only — long-task surface (`retrieval-agent-loop.ts:614`) explicitly deferred v2, note in handoff. D5 workspace-first-else-personal.
+**D-rulings:** D1 importance=`normal`, ~~+sign-gate~~ **NO sign-gate (amended 2026-07-15 verifier: `.some()` over a multi-section aggregate downgrades the whole gist to `temporary` on one boilerplate line — no-ops the feature).** D2 one frame/session update-in-place **ONLY when the existing frame's content starts with this session's marker (cross-mind rowid-collision guard, verifier HIGH).** D3 scanForInjection only (no sign-gate). D4 chat route only — long-task surface (`retrieval-agent-loop.ts:614`) explicitly deferred v2. D5 workspace-first-else-personal. **Persist gated `!hasCustomRunner && !isAutomatedTurn` (seam parity).**
 
 ## #13 spec — automation-origin write-back gate (BUILD)
 
