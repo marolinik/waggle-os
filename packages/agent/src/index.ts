@@ -549,3 +549,26 @@ export {
   type ExternalProcessHandle,
   type ExternalToolRunnerDeps,
 } from './external-tool-runner.js';
+
+// SPEC P1-A — pure ExecutorRouter (A1) + static fit table & task classifier (A2).
+export {
+  routeTask,
+  type TaskCategory,
+  type PrivacyClass,
+  type AuthClass,
+  type RateLimitState,
+  type ExecutorCandidate,
+  type RouteTask,
+  type RouteRejection,
+  type RouteScoreParts,
+  type RouteScore,
+  type RouteDecision,
+} from './executor-router.js';
+export {
+  EXECUTOR_FIT,
+  DEFAULT_TASK_FIT,
+  resolveTaskFit,
+  buildTaskFit,
+  classifyTask,
+  type TaskClassification,
+} from './executor-fit.js';
