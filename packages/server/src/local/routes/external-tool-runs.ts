@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { FrameStore, SessionStore } from '@waggle/core';
 import {
+  classifyRateLimitError,
   detectInstalledTools,
   getToolRegistry,
   resolveWaggleRuntime,
@@ -81,6 +82,10 @@ const participantSchema = z.object({
   access: accessSchema.optional(),
   sessionIds: sessionIdsSchema.optional(),
 });
+const attributionSchema = z.object({
+  routeDecisionId: z.string().uuid(),
+  briefHash: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
 const runSchema = z.object({
   toolId: toolIdSchema.optional(),
   workspaceIds: workspaceIdsSchema.optional(),
@@ -89,6 +94,7 @@ const runSchema = z.object({
   access: accessSchema.optional(),
   timeoutMs: z.number().int().min(1_000).max(30 * 60 * 1_000).optional(),
   sessionIds: sessionIdsSchema.optional(),
+  attribution: attributionSchema.optional(),
 }).superRefine((value, ctx) => {
   if (value.participants) {
     if (value.toolId) ctx.addIssue({ code: 'custom', path: ['toolId'], message: 'Use toolId or participants, not both' });
@@ -228,6 +234,7 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
       },
       title: `${participants.map((participant) => participant.manifest.displayName).join(' + ')} collaboration`,
       task: body.prompt,
+      attribution: body.attribution,
       capabilities: { cancel: true },
     });
     const runner = server.externalToolRunner ?? runExternalTool;
@@ -245,6 +252,7 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
         executor: { kind: 'external_tool', toolId: manifest.id },
         title: `${manifest.displayName} · ${workspace.name}`,
         task: body.prompt,
+        attribution: body.attribution,
         capabilities: { cancel: true },
       });
       const runToken = server.agentRunRegistry.issueCredential(run.id);
@@ -273,6 +281,7 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
         executor: { kind: 'external_tool', toolId: target.participant.manifest.id },
         title: `WaggleDance synthesis · ${target.target.workspace.name}`,
         task: 'Synthesize peer findings delivered through WaggleDance',
+        attribution: body.attribution,
         capabilities: { cancel: true },
       });
       const releaseQueuedControl = server.agentRunRegistry.registerControls(synthesisRun.id, {
@@ -577,6 +586,14 @@ async function executeExternalRun(
     });
 
     const status = resultStatus(result);
+    if (status === 'completed') {
+      server.executorRegistry?.noteHealthy(manifest.id);
+    } else if (status === 'failed') {
+      const assessment = classifyRateLimitError(result.stderrTail || result.summary, Date.now());
+      if (assessment.isRateLimit) {
+        server.executorRegistry?.noteRateLimit(manifest.id, assessment.resetAtMs);
+      }
+    }
     server.agentRunRegistry.update(run.id, {
       status,
       result: {
@@ -614,6 +631,12 @@ async function executeExternalRun(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    if (!controller.signal.aborted) {
+      const assessment = classifyRateLimitError(message, Date.now());
+      if (assessment.isRateLimit) {
+        server.executorRegistry?.noteRateLimit(manifest.id, assessment.resetAtMs);
+      }
+    }
     const current = server.agentRunRegistry.get(run.id);
     if (current && !['completed', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
       server.agentRunRegistry.update(run.id, {
@@ -688,6 +711,7 @@ async function recordResultToMinds(
     workspaceId: input.run.workspaceId,
     toolId: input.run.executor.toolId,
     externalSessionId: input.result.sessionId ?? null,
+    ...(input.run.attribution ?? {}),
     injection: scan,
   });
   const personalFrameIds: number[] = [];

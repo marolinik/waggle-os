@@ -449,6 +449,11 @@ export interface CollaborationRunCapabilities {
   message: boolean;
 }
 
+export interface CollaborationRunAttribution {
+  routeDecisionId: string;
+  briefHash: string;
+}
+
 /**
  * One executable leaf is bound to exactly one `workspaceId`. A Room/root run
  * may coordinate several leaves and therefore carries only `workspaceIds`.
@@ -462,6 +467,7 @@ interface CollaborationRunBase {
   executor: CollaborationRunExecutor;
   title: string;
   task: string;
+  attribution?: CollaborationRunAttribution;
   status: CollaborationRunStatus;
   progress?: CollaborationRunProgress;
   result?: CollaborationRunResult;

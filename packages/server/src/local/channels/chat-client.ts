@@ -42,7 +42,7 @@ export interface ChatTurnRequest {
    * post-response memory write-back. IM channel adapters must NOT set this —
    * inbound IM messages are real user turns and must keep writing memory.
    */
-  origin?: 'automation';
+  origin?: 'automation' | 'router';
   /**
    * #17: originating IM channel of this turn (REAL platform + chatId — the
    * session id normalizes chatId irreversibly). The chat route publishes it

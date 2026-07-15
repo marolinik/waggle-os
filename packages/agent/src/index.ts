@@ -207,7 +207,7 @@ export {
   type TraceHandle, type FinalizeOptions as TraceFinalizeOptions,
 } from './trace-recorder.js';
 export {
-  EvalDatasetBuilder, detectSecrets, SECRET_PATTERN_NAMES,
+  EvalDatasetBuilder, detectSecrets, redactSecrets, SECRET_PATTERN_NAMES,
   toJSONL as evalToJSONL, fromJSONL as evalFromJSONL,
   type EvalExample, type EvalExampleMetadata, type DatasetSplit,
   type BuildOptions as EvalBuildOptions, type JudgeVerdict,

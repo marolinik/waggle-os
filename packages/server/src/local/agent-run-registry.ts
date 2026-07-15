@@ -5,6 +5,7 @@ import {
   COLLABORATION_RUN_STATUSES,
   type CollaborationRoomRun,
   type CollaborationRun,
+  type CollaborationRunAttribution,
   type CollaborationRunCapabilities,
   type CollaborationRunControl,
   type CollaborationRunEvent,
@@ -65,6 +66,7 @@ export interface CreateRoomRunInput {
   source: CollaborationRunSource;
   title: string;
   task: string;
+  attribution?: CollaborationRunAttribution;
   executor?: CollaborationRunExecutor;
   status?: CollaborationRunStatus;
   capabilities?: Partial<CollaborationRunCapabilities>;
@@ -77,6 +79,7 @@ export interface CreateWorkerRunInput {
   executor: CollaborationRunExecutor;
   title: string;
   task: string;
+  attribution?: CollaborationRunAttribution;
   status?: CollaborationRunStatus;
   capabilities?: Partial<CollaborationRunCapabilities>;
   retryOfRunId?: string;
@@ -151,6 +154,7 @@ export class AgentRunRegistry {
       executor: input.executor ?? { kind: 'coordinator' },
       title: input.title.trim() || 'Agent collaboration',
       task: input.task,
+      ...(input.attribution ? { attribution: input.attribution } : {}),
       status: input.status ?? 'queued',
       memoryRefs: clone(DEFAULT_MEMORY_REFS),
       capabilities: { ...DEFAULT_CAPABILITIES, ...input.capabilities },
@@ -196,6 +200,7 @@ export class AgentRunRegistry {
       executor: input.executor,
       title: input.title.trim() || 'Agent run',
       task: input.task,
+      ...(input.attribution ? { attribution: input.attribution } : {}),
       status: input.status ?? 'queued',
       memoryRefs: clone(DEFAULT_MEMORY_REFS),
       capabilities: { ...DEFAULT_CAPABILITIES, ...input.capabilities },

@@ -58,6 +58,8 @@ import {
   TraceRecorder,
   HarnessTraceBridge,
   safeFetch,
+  detectInstalledTools,
+  PERSONAS,
   type ToolDefinition,
   type LoadedSkill,
   type DeliveryPreferences,
@@ -96,6 +98,7 @@ import { taskRoutes } from './routes/tasks.js';
 import { capabilitiesRoutes } from './routes/capabilities.js';
 import { toolsRoutes } from './routes/tools.js';
 import { externalToolRunRoutes } from './routes/external-tool-runs.js';
+import { routeProposalRoutes } from './routes/route-proposals.js';
 import { waggleDanceRoutes } from './routes/waggle-dance.js';
 import { commandRoutes } from './routes/commands.js';
 import { commandRoutes as commandCenterRoutes } from './routes/command.js';
@@ -180,6 +183,7 @@ import { maxWorkspaceSessionsForTier } from './tier-session-cap.js';
 import { EventEmitter } from 'node:events';
 import { LocalJobStore } from './job-store.js';
 import { AgentRunRegistry } from './agent-run-registry.js';
+import { ExecutorRegistry } from './executor-registry.js';
 import { hydrateProviderEnvFromVault } from './provider-env.js';
 
 export interface LocalConfig {
@@ -1516,6 +1520,12 @@ export async function buildLocalServer(config: Partial<LocalConfig> = {}) {
   const dreamJournal = new DreamJournal(fullConfig.dataDir);
   server.decorate('dreamJournal', dreamJournal);
 
+  const executorRegistry = new ExecutorRegistry({
+    detectTools: async () => (await detectInstalledTools()).tools,
+    personas: () => PERSONAS,
+  });
+  server.decorate('executorRegistry', executorRegistry);
+
   // Local scheduler — runs cron jobs in-process (Solo, no Redis/BullMQ)
   const persistCronHistory = makeRecordExecutionCallback(cronStore);
   // #17: hard daily bound on ai_task firings per schedule — each firing is a
@@ -2485,6 +2495,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
   await server.register(capabilitiesRoutes);
   await server.register(toolsRoutes);
   await server.register(externalToolRunRoutes);
+  await server.register(routeProposalRoutes);
   await server.register(waggleDanceRoutes);
   await server.register(commandRoutes);
   // UX-Refactor Phase 1: Home Cockpit (S01) + Command Center (S00/S03) surfaces.

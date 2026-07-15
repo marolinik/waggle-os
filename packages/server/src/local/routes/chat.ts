@@ -647,7 +647,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
        * re-detected "decisions" and false correction signals. IM channel
        * adapters must NOT set this: inbound IM messages are real user turns.
        */
-      origin?: 'automation';
+      origin?: 'automation' | 'router';
       /**
        * #17: originating IM channel of this turn (real platform + chatId).
        * Set only by ChannelManager.handleInbound via the loopback client —

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,6 +22,7 @@ function tempDir(name = 'waggle-external-runs-'): string {
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -68,8 +69,13 @@ describe('external tool run routes', () => {
     const betaDir = path.join(dataDir, 'beta-files');
     fs.mkdirSync(alphaDir);
     fs.mkdirSync(betaDir);
-    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const registryPath = path.join(dataDir, 'agent-runs.json');
+    const registry = new AgentRunRegistry(registryPath);
     const bus = new SignalBus();
+    const attribution = {
+      routeDecisionId: '6b7df0df-e082-4c99-bd11-55d5ac4ba403',
+      briefHash: 'a'.repeat(64),
+    };
     const calls: Array<{
       workspaceId: string;
       workspacePath: string;
@@ -82,7 +88,8 @@ describe('external tool run routes', () => {
       dataDir?: string;
       credentialWasActive: boolean;
     }> = [];
-    const memoryRuns: string[] = [];
+    const memoryRuns: Array<{ id: string; attribution?: typeof attribution }> = [];
+    const healthyExecutorIds: string[] = [];
     const server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
     server.decorate('workspaceManager', {
@@ -94,6 +101,11 @@ describe('external tool run routes', () => {
     server.decorate('agentRunRegistry', registry);
     server.decorate('signalBus', bus);
     server.decorate('externalCollaborationRuntime', collaborationRuntime);
+    server.decorate('executorRegistry', {
+      snapshot: async () => [],
+      noteHealthy: (executorId: string) => healthyExecutorIds.push(executorId),
+      noteRateLimit: () => undefined,
+    } as never);
     server.decorate('externalToolDetector', async () => ({
       platform: 'win32', detectedAt: new Date().toISOString(),
       tools: [{ id: 'codex', displayName: 'Codex CLI', installed: true, installedPath: 'C:\\trusted\\codex.cmd', version: 'test', hooksInstalled: true, hookPointerPath: null }],
@@ -127,7 +139,7 @@ describe('external tool run routes', () => {
       };
     });
     server.decorate('externalResultRecorder', async ({ run }) => {
-      memoryRuns.push(run.id);
+      memoryRuns.push({ id: run.id, attribution: run.attribution });
       return { status: 'complete', personalFrameIds: [1], workspaceFrameIds: { [run.workspaceId]: [2] } };
     });
     await server.register(externalToolRunRoutes);
@@ -137,6 +149,7 @@ describe('external tool run routes', () => {
       payload: {
         toolId: 'codex', workspaceIds: ['alpha', 'beta'], prompt: 'Inspect both workspaces',
         access: 'read-only', installedPath: 'C:\\attacker\\fake.exe', cwd: 'C:\\attacker',
+        attribution,
       },
     });
     expect(response.statusCode).toBe(202);
@@ -162,10 +175,16 @@ describe('external tool run routes', () => {
     expect(calls.every((call) => !call.prompt.includes("'dance' 'receive' '--json'"))).toBe(true);
     expect(calls.every((call) => !registry.authenticateCredential(call.runToken ?? ''))).toBe(true);
     expect(memoryRuns).toHaveLength(2);
-    expect(registry.get(body.roomId)?.status).toBe('completed');
+    expect(memoryRuns).toEqual(expect.arrayContaining(
+      body.runs.map(({ runId }) => ({ id: runId, attribution })),
+    ));
+    expect(healthyExecutorIds).toEqual(['codex', 'codex']);
+    const durableRegistry = new AgentRunRegistry(registryPath);
+    expect(durableRegistry.get(body.roomId)).toMatchObject({ status: 'completed', attribution });
     for (const { runId, workspaceId } of body.runs) {
-      expect(registry.get(runId)).toMatchObject({
+      expect(durableRegistry.get(runId)).toMatchObject({
         kind: 'worker', workspaceId, status: 'completed',
+        attribution,
         result: { summary: `Result for ${workspaceId}`, sessionId: `session-${workspaceId}` },
         memoryRefs: { status: 'complete' },
       });
@@ -272,6 +291,61 @@ describe('external tool run routes', () => {
     const subtypes = bus.query({ teamId: `room::${body.roomId}` }).map((message) => message.subtype);
     expect(subtypes).toEqual(expect.arrayContaining(['routed_share', 'knowledge_match']));
     expect(calls.every((call) => !registry.authenticateCredential(call.token ?? ''))).toBe(true);
+    await server.close();
+  });
+
+  it('feeds parsed external rate limits into the executor registry', async () => {
+    const nowMs = Date.UTC(2026, 6, 15, 12, 0, 0);
+    vi.spyOn(Date, 'now').mockReturnValue(nowMs);
+    const dataDir = tempDir();
+    const workspaceDir = path.join(dataDir, 'alpha-files');
+    fs.mkdirSync(workspaceDir);
+    const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
+    const rateLimitCalls: Array<{ executorId: string; resumeAtMs: number | null }> = [];
+    const healthyExecutorIds: string[] = [];
+    const server = Fastify({ logger: false });
+    server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
+    server.decorate('workspaceManager', {
+      get: (id: string) => id === 'alpha'
+        ? { id, name: 'Alpha', group: 'test', created: new Date().toISOString(), directory: workspaceDir }
+        : undefined,
+    } as never);
+    server.decorate('agentRunRegistry', registry);
+    server.decorate('externalCollaborationRuntime', collaborationRuntime);
+    server.decorate('executorRegistry', {
+      snapshot: async () => [],
+      noteHealthy: (executorId: string) => healthyExecutorIds.push(executorId),
+      noteRateLimit: (executorId: string, resumeAtMs: number | null) => {
+        rateLimitCalls.push({ executorId, resumeAtMs });
+      },
+    } as never);
+    server.decorate('externalToolDetector', async () => ({
+      platform: 'win32', detectedAt: new Date().toISOString(),
+      tools: [{ id: 'codex', displayName: 'Codex CLI', installed: true, installedPath: 'codex.cmd', version: 'test', hooksInstalled: false, hookPointerPath: null }],
+    }));
+    server.decorate('externalToolRunner', async () => ({
+      status: 'failed', exitCode: 1, summary: 'Request failed', stdoutTail: '',
+      stderrTail: '429 rate limit exceeded\nRetry-After: 120', durationMs: 5,
+    }));
+    server.decorate('externalResultRecorder', async ({ run }) => ({
+      status: 'complete', personalFrameIds: [], workspaceFrameIds: { [run.workspaceId]: [] },
+    }));
+    await server.register(externalToolRunRoutes);
+
+    const response = await server.inject({
+      method: 'POST', url: '/api/tools/run',
+      payload: { toolId: 'codex', workspaceIds: ['alpha'], prompt: 'Try the provider' },
+    });
+    expect(response.statusCode).toBe(202);
+    const body = response.json() as { runs: Array<{ runId: string }> };
+    await waitFor(
+      () => registry.get(body.runs[0].runId)?.memoryRefs.status === 'complete',
+      'failed external run did not finish',
+    );
+
+    expect(registry.get(body.runs[0].runId)?.status).toBe('failed');
+    expect(rateLimitCalls).toEqual([{ executorId: 'codex', resumeAtMs: nowMs + 120_000 }]);
+    expect(healthyExecutorIds).toEqual([]);
     await server.close();
   });
 
