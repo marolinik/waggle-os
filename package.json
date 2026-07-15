@@ -32,6 +32,7 @@
     "ux:contrast-runtime": "node scripts/ux-gates/contrast-runtime.mjs",
     "ux:warm-gate": "node scripts/ux-gates/warm-interaction-gate.mjs",
     "test": "vitest run",
+    "test:critical": "vitest run --config vitest.critical.config.ts --coverage",
     "test:perf": "vitest run --config vitest.perf.config.ts",
     "test:infra": "vitest run --config vitest.infra.config.ts",
     "test:watch": "vitest",

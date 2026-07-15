@@ -55,6 +55,7 @@ import {
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { getToolRegistry } from './tool-registry.js';
 import type { ManifestLoaderDeps } from './tool-manifest-loader.js';
+import { resolvedShellPath, mergePathValue } from './shell-env.js';
 
 const execFileAsync = promisify(execFile);
 const CODEX_WINDOWS_APPS_DIAGNOSTIC =
@@ -150,13 +151,31 @@ async function defaultReadJson(p: string): Promise<unknown> {
   }
 }
 
+/**
+ * Env for the `which`/`where` lookup. On POSIX, merge the resolved login-shell
+ * PATH (GUI-launched sidecars inherit a bare PATH) so `which claude`
+ * can find CLIs installed behind shell-profile shims. Returns `undefined` (keep
+ * the inherited env) on Windows or when no login-shell PATH is available yet.
+ */
+export function pathLookupEnv(
+  platform: NodeJS.Platform = process.platform,
+  base: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv | undefined {
+  if (platform === 'win32') return undefined;
+  const shellPath = resolvedShellPath();
+  if (!shellPath) return undefined;
+  return { ...base, PATH: mergePathValue(shellPath, base.PATH) };
+}
+
 async function defaultPathFromEnv(name: string): Promise<string | null> {
   const isWin = process.platform === 'win32';
   const cmd = isWin ? 'where.exe' : 'which';
+  const env = pathLookupEnv(process.platform);
   try {
     const { stdout } = await execFileAsync(cmd, [name], {
       timeout: 3000,
       shell: false,
+      ...(env ? { env } : {}),
     });
     return selectPathLookupCandidate(stdout, process.platform);
   } catch {

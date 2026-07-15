@@ -10,6 +10,7 @@ import type {
 } from '@waggle/shared';
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { stripAnsi } from './tool-output-buffer.js';
+import { resolvedShellPath, mergePathValue } from './shell-env.js';
 
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 64 * 1024;
@@ -253,6 +254,13 @@ export function buildExternalToolEnv(
   const env: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(base)) {
     if (value !== undefined && ENV_ALLOWLIST.has(key.toUpperCase())) env[key] = value;
+  }
+  // POSIX GUI-launched sidecars inherit a bare PATH. Merge the
+  // resolved login-shell PATH so spawned CLIs resolve their shims; the value
+  // stays ENV_ALLOWLIST-scoped (PATH only). No-op on win32 / before resolve.
+  if (process.platform !== 'win32') {
+    const shellPath = resolvedShellPath();
+    if (shellPath) env.PATH = mergePathValue(shellPath, env.PATH);
   }
   return {
     ...env,
