@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal, Square } from 'lucide-react';
+import { Send, Sparkles, Plus, Slash, Paperclip, ChevronDown, ThumbsUp, ThumbsDown, Loader2, AlertTriangle, CheckCircle2, XCircle, Clock, Upload, Code, Copy, Check, RotateCcw, FileText, Users, X, Bot, Brain, Cpu, Layers, Pin, PinOff, Shield, Zap, MoreHorizontal, Square, Route } from 'lucide-react';
 import { HintTooltip } from '@/components/ui/hint-tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -8,6 +8,7 @@ import { adapter } from '@/lib/adapter';
 import { DATE_LOCALE } from '@/lib/date-locale';
 import { formatModelLabel } from '@/lib/model-label';
 import type { ChatMessage, ToolExecution, ApprovalRequest } from '@/lib/types';
+import type { RouteProposalPayload } from '@/lib/route-proposals';
 import { RiskBadge, canAlwaysAllow } from '@/lib/risk-display';
 import { BlockRenderer } from './chat-blocks';
 import ChatWorkCanvas, { selectCanvasArtifact } from './chat-blocks/ChatWorkCanvas';
@@ -826,6 +827,63 @@ const ChatApp = ({
     });
   }, [autoSendInitial, initialMessage, activeSessionId, historyLoaded, onSendMessage]);
 
+  // Router arc P1-B (B2): composer "Best fit" — POST the composer text to
+  // /api/route-proposals and inject the proposal as a LOCAL route_proposal
+  // block in the thread (client-driven, no model marker). The composer text
+  // stays intact until the user confirms the dispatch.
+  const [routeProposals, setRouteProposals] = useState<Array<{
+    blockId: string; prompt: string; proposal: RouteProposalPayload;
+  }>>([]);
+  const [bestFitBusy, setBestFitBusy] = useState(false);
+  useEffect(() => {
+    setRouteProposals([]);
+  }, [activeSessionId, workspaceId]);
+
+  const handleBestFit = async () => {
+    const text = input.trim();
+    if (!text || !workspaceId || bestFitBusy) return;
+    setBestFitBusy(true);
+    try {
+      const proposal = await adapter.routeProposals.propose({ workspaceId, prompt: text });
+      setRouteProposals(prev => [
+        ...prev,
+        { blockId: `route-${proposal.routeDecisionId}`, prompt: text, proposal },
+      ]);
+    } catch (err) {
+      console.error('[ChatApp] route propose failed:', err);
+      toast({
+        variant: 'destructive',
+        title: "Couldn't check where this should run",
+        description: 'Please try again.',
+      });
+    } finally {
+      setBestFitBusy(false);
+    }
+  };
+
+  const handleRouteProposalDispatched = (blockId: string) => {
+    const entry = routeProposals.find(p => p.blockId === blockId);
+    // Consume the composer text on confirm — but only if the user hasn't
+    // edited it since the proposal was made.
+    if (entry && input.trim() === entry.prompt) setInput('');
+  };
+
+  const handleRouteProposalRePropose = async (blockId: string) => {
+    const entry = routeProposals.find(p => p.blockId === blockId);
+    if (!entry || !workspaceId) return;
+    try {
+      const proposal = await adapter.routeProposals.propose({ workspaceId, prompt: entry.prompt });
+      setRouteProposals(prev => prev.map(p => (p.blockId === blockId ? { ...p, proposal } : p)));
+    } catch (err) {
+      console.error('[ChatApp] route re-propose failed:', err);
+      toast({
+        variant: 'destructive',
+        title: "Couldn't re-propose a route",
+        description: 'Please try again.',
+      });
+    }
+  };
+
   const handleSend = () => {
     const text = input.trim();
     if (!text) return;
@@ -1238,6 +1296,19 @@ const ChatApp = ({
             </div>
           ))}
 
+          {/* Router arc B2: locally injected route proposals (composer Best fit). */}
+          {routeProposals.map(rp => (
+            <div key={rp.blockId} className="flex justify-start" data-testid="chat-route-proposal">
+              <div className="w-full min-w-0">
+                <BlockRenderer
+                  blocks={[{ type: 'route_proposal', blockId: rp.blockId, proposal: rp.proposal }]}
+                  onRouteProposalDispatched={handleRouteProposalDispatched}
+                  onRouteProposalRePropose={blockId => void handleRouteProposalRePropose(blockId)}
+                />
+              </div>
+            </div>
+          ))}
+
           {pendingApproval && (
             <ApprovalGate request={pendingApproval} onRespond={onApprove} />
           )}
@@ -1615,6 +1686,25 @@ const ChatApp = ({
                     className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)]"
                   >
                     <Square className="w-3.5 h-3.5 fill-current" aria-hidden="true" />
+                  </button>
+                </HintTooltip>
+              )}
+              {/* Router arc B2: "Best fit" — propose where this task should run
+                  (persona vs external CLI) before sending. Renders only when a
+                  workspace is active (the proposal is workspace-scoped). The
+                  composer text stays intact until the proposal is confirmed. */}
+              {workspaceId && (
+                <HintTooltip content="Best fit — let Waggle propose where this should run">
+                  <button
+                    onClick={() => void handleBestFit()}
+                    disabled={!canSend || bestFitBusy}
+                    aria-label="Best fit — propose where to run"
+                    data-testid="chat-best-fit"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-2)] transition-colors hover:border-[var(--honey-line)] hover:text-[var(--text)] disabled:opacity-50"
+                  >
+                    {bestFitBusy
+                      ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      : <Route className="w-4 h-4" aria-hidden="true" />}
                   </button>
                 </HintTooltip>
               )}

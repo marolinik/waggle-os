@@ -532,7 +532,8 @@ export type ContentBlock =
   | StepContentBlock
   | ToolUseContentBlock
   | ModelSwitchContentBlock
-  | ErrorContentBlock;
+  | ErrorContentBlock
+  | RouteProposalContentBlock;
 
 export interface TextContentBlock {
   type: 'text';
@@ -575,6 +576,18 @@ export interface ErrorContentBlock {
   type: 'error';
   blockId: string;
   message: string;
+}
+
+/**
+ * Router arc P1-B (B2): a "Where should this run?" proposal card injected
+ * client-side by the composer's Best fit action (no model marker). Payload
+ * mirrors the POST /api/route-proposals response (SPEC A4 — see
+ * lib/route-proposals.ts).
+ */
+export interface RouteProposalContentBlock {
+  type: 'route_proposal';
+  blockId: string;
+  proposal: import('./route-proposals').RouteProposalPayload;
 }
 
 export interface Session {

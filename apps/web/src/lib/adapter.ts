@@ -1,6 +1,9 @@
 // LocalAdapter — HTTP/SSE/WS client for Waggle backend
 import { fetchWithTimeout, TimeoutError } from './fetch-utils';
 import type { AgentSearchResponse } from './agent-search';
+import type {
+  RouteProposalPayload, RouteProposalConfirmBody, RouteProposalConfirmResponse,
+} from './route-proposals';
 import { getSelectedShape } from './shape-selection';
 import {
   isTauri,
@@ -2921,6 +2924,36 @@ class LocalAdapter {
   async submitFeedback(data: { sessionId: string; messageIndex: number; rating: 'up' | 'down'; reason?: string; detail?: string }): Promise<void> {
     this.fetch('/api/feedback', { method: 'POST', body: JSON.stringify(data) }).catch(() => {});
   }
+
+  // --- Route proposals (router arc P1-B B2) ---
+  /**
+   * Composer "Best fit" flow: propose → (confirm | reject). Response shapes
+   * mirror SPEC-P1-router-core.md §A4 (types in lib/route-proposals.ts).
+   * confirm's 409 `{error:'revalidation_failed', reason}` body is load-bearing:
+   * the throwing fetch preserves it on AdapterHttpError.body for the card.
+   */
+  readonly routeProposals = {
+    propose: async (body: { workspaceId: string; prompt: string }): Promise<RouteProposalPayload> => {
+      const res = await this.fetch('/api/route-proposals', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    },
+    confirm: async (id: string, body: RouteProposalConfirmBody = {}): Promise<RouteProposalConfirmResponse> => {
+      const res = await this.fetch(`/api/route-proposals/${encodeURIComponent(id)}/confirm`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    },
+    reject: async (id: string): Promise<void> => {
+      await this.fetch(`/api/route-proposals/${encodeURIComponent(id)}/reject`, {
+        method: 'POST',
+        body: '{}',
+      });
+    },
+  };
 
   // --- Waggle Dance ---
   async getWaggleSignals(): Promise<WaggleSignal[]> {

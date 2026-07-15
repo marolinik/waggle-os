@@ -5,6 +5,8 @@ import ToolUseBlock from './ToolUseBlock';
 import ModelSwitchBlock from './ModelSwitchBlock';
 import ArtifactBlock, { isArtifactBlock } from './ArtifactBlock';
 import ErrorBlock from './ErrorBlock';
+import RouteProposalCard from './RouteProposalCard';
+import type { RouteProposalConfirmResponse } from '@/lib/route-proposals';
 import { ActivityStream, type ActivityStep } from '../../warm';
 import { frameSourceLabel } from '@/lib/frame-source';
 
@@ -13,6 +15,10 @@ interface BlockRendererProps {
   isStreaming?: boolean;
   /** F4: re-issue the last failed turn (threaded to error blocks). */
   onRetry?: () => void;
+  /** Router arc B2: a route_proposal dispatch landed (ChatApp consumes the composer text). */
+  onRouteProposalDispatched?: (blockId: string, result: RouteProposalConfirmResponse) => void;
+  /** Router arc B2: re-run propose after a revalidation_failed confirm. */
+  onRouteProposalRePropose?: (blockId: string) => void;
 }
 
 function getBlockKey(block: ContentBlock, index: number): string {
@@ -64,7 +70,9 @@ function renderStepGroup(steps: StepContentBlock[], key: string, isStreaming: bo
   );
 }
 
-const BlockRenderer = ({ blocks, isStreaming, onRetry }: BlockRendererProps) => {
+const BlockRenderer = ({
+  blocks, isStreaming, onRetry, onRouteProposalDispatched, onRouteProposalRePropose,
+}: BlockRendererProps) => {
   const out: ReactNode[] = [];
   // F11: one Activity card per turn. Collect every step of the turn and render
   // the single group at the FIRST step's position; skip the rest. Non-step
@@ -98,6 +106,21 @@ const BlockRenderer = ({ blocks, isStreaming, onRetry }: BlockRendererProps) => 
         break;
       case 'error':
         out.push(<ErrorBlock key={key} block={block} onRetry={onRetry} />);
+        break;
+      case 'route_proposal':
+        // Router arc B2: composer-injected "Where should this run?" card.
+        out.push(
+          <RouteProposalCard
+            key={key}
+            proposal={block.proposal}
+            onDispatched={onRouteProposalDispatched
+              ? result => onRouteProposalDispatched(block.blockId, result)
+              : undefined}
+            onRePropose={onRouteProposalRePropose
+              ? () => onRouteProposalRePropose(block.blockId)
+              : undefined}
+          />,
+        );
         break;
       default:
         break;
