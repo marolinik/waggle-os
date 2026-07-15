@@ -1,9 +1,10 @@
 import { EventEmitter } from 'node:events';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BUILTIN_TOOL_MANIFESTS, type ToolManifest } from '@waggle/shared';
 import {
   buildExternalToolEnv,
   runExternalTool,
+  type ExternalRunEvent,
   type ExternalProcessHandle,
 } from '../src/external-tool-runner.js';
 import { loadThirdPartyManifests } from '../src/tool-manifest-loader.js';
@@ -49,6 +50,10 @@ function baseRequest(id: string) {
     access: 'read-only' as const,
   };
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('runExternalTool', () => {
   it('runs Claude Code headlessly with literal stdin and structured result parsing', async () => {
@@ -266,6 +271,127 @@ describe('runExternalTool', () => {
     const result = await promise;
     expect(kills).toBe(1);
     expect(result.status).toBe('cancelled');
+  });
+
+  it('emits one stall per quiet episode, recovers on output, and clears its watchdog on exit', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const child = new FakeChild();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      timeoutMs: 120_000,
+      stallAfterMs: 30_000,
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => child,
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(events.filter((event) => event.stalled === true)).toHaveLength(1);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'progress',
+      text: '[stalled] no output for 30s',
+      stalled: true,
+    }));
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(events.filter((event) => event.stalled === true)).toHaveLength(1);
+
+    child.stdout.emit('data', '{"type":"system"}\n');
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'progress',
+      text: '[recovered] output resumed',
+      stalled: false,
+    }));
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(events.filter((event) => event.stalled === true)).toHaveLength(2);
+
+    child.emit('exit', 0);
+    await promise;
+    const eventCountAtExit = events.length;
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(events).toHaveLength(eventCountAtExit);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not emit a stall after cancellation while process exit is pending', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const child = new FakeChild();
+    const controller = new AbortController();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      timeoutMs: 120_000,
+      stallAfterMs: 30_000,
+      signal: controller.signal,
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => child,
+      killTree: async () => undefined,
+    });
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(events.some((event) => event.stalled === true)).toBe(false);
+
+    child.emit('exit', null);
+    await expect(promise).resolves.toMatchObject({ status: 'cancelled' });
+  });
+
+  it.each([
+    ['uses the default', undefined, 120_000],
+    ['respects an override', 45_000, 45_000],
+    ['clamps short overrides', 1_000, 30_000],
+  ])('%s stall delay', async (_label, configuredStallAfterMs, expectedStallAfterMs) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const child = new FakeChild();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      timeoutMs: 300_000,
+      ...(configuredStallAfterMs === undefined ? {} : { stallAfterMs: configuredStallAfterMs }),
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => child,
+    });
+
+    await vi.advanceTimersByTimeAsync(expectedStallAfterMs - 1);
+    expect(events.some((event) => event.stalled === true)).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(events.filter((event) => event.stalled === true)).toHaveLength(1);
+
+    child.emit('exit', 0);
+    await promise;
+  });
+
+  it('disables the stall watchdog when its threshold is not below the run timeout', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const child = new FakeChild();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      timeoutMs: 30_000,
+      stallAfterMs: 30_000,
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => child,
+      killTree: async () => undefined,
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(events.some((event) => event.stalled !== undefined)).toBe(false);
+    child.emit('exit', null);
+    await expect(promise).resolves.toMatchObject({ status: 'timed_out' });
   });
 });
 

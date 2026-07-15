@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { ExternalToolRunResult } from '@waggle/agent';
+import type { ExternalRunEvent, ExternalToolRunResult } from '@waggle/agent';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import { SignalBus } from '../../src/local/signal-bus.js';
 import { externalToolRunRoutes } from '../../src/local/routes/external-tool-runs.js';
@@ -275,11 +275,12 @@ describe('external tool run routes', () => {
     await server.close();
   });
 
-  it('cancels one of two live runs without aborting its sibling', async () => {
+  it('tracks stall recovery while cancelling one live run without aborting its sibling', async () => {
     const dataDir = tempDir();
     for (const id of ['alpha', 'beta']) fs.mkdirSync(path.join(dataDir, id));
     const registry = new AgentRunRegistry(path.join(dataDir, 'agent-runs.json'));
     const pending = new Map<string, (result: ExternalToolRunResult) => void>();
+    const emitEvents = new Map<string, (event: ExternalRunEvent) => void>();
     const server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: '' });
     server.decorate('workspaceManager', {
@@ -298,6 +299,7 @@ describe('external tool run routes', () => {
         runId: request.runId, roomId: request.roomId, workspaceId: request.workspaceId,
         toolId: 'codex', seq: 1, type: 'started', timestamp: new Date().toISOString(), pid: 200,
       });
+      if (request.onEvent) emitEvents.set(request.workspaceId, request.onEvent);
       pending.set(request.workspaceId, resolve);
       request.signal?.addEventListener('abort', () => resolve({
         status: 'cancelled', exitCode: null, summary: 'Cancelled', stdoutTail: '', stderrTail: '', durationMs: 1,
@@ -312,10 +314,23 @@ describe('external tool run routes', () => {
       method: 'POST', url: '/api/tools/run',
       payload: { toolId: 'codex', workspaceIds: ['alpha', 'beta'], prompt: 'Wait', access: 'read-only' },
     });
-    const body = response.json() as { runs: Array<{ runId: string; workspaceId: string }> };
+    const body = response.json() as { roomId: string; runs: Array<{ runId: string; workspaceId: string }> };
     await waitFor(() => pending.size === 2, 'workers did not start concurrently');
     const alpha = body.runs.find((run) => run.workspaceId === 'alpha')!;
     const beta = body.runs.find((run) => run.workspaceId === 'beta')!;
+
+    const event = {
+      runId: beta.runId, roomId: body.roomId, workspaceId: 'beta', toolId: 'codex',
+      type: 'progress' as const, timestamp: new Date().toISOString(),
+    };
+    emitEvents.get('beta')!({ ...event, seq: 2, text: '[stalled] no output for 120s', stalled: true });
+    expect(registry.get(beta.runId)).toMatchObject({
+      status: 'running', progress: { message: '[stalled] no output for 120s', phase: 'stalled' },
+    });
+    emitEvents.get('beta')!({ ...event, seq: 3, text: '[recovered] output resumed', stalled: false });
+    expect(registry.get(beta.runId)).toMatchObject({
+      status: 'running', progress: { message: '[recovered] output resumed', phase: 'running' },
+    });
 
     await registry.control(alpha.runId, 'cancel');
     expect(registry.get(alpha.runId)?.status).toBe('cancelled');

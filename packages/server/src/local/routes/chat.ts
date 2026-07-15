@@ -32,7 +32,7 @@ import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC, isEnabled, detectT
 function resolvePersona(id: string) {
   return listPersonas().find(p => p.id === id) ?? null;
 }
-import { TeamSync, WaggleConfig } from '@waggle/core';
+import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
 import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse } from './chat-helpers.js';
@@ -206,6 +206,91 @@ function conversationalToolPolicyPrompt(message: string, autonomyLevel: Autonomy
 // Read once at plugin registration — consistent for the lifetime of the server
 const AUTO_APPROVE = process.env.WAGGLE_AUTO_APPROVE === '1' || process.env.WAGGLE_AUTO_APPROVE === 'true';
 
+const DEFAULT_APPROVAL_TIMEOUT_MS = 300_000;
+const APPROVAL_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
+
+export interface ApprovalTimeoutPolicy {
+  timeoutMs: number;
+  action: 'deny' | 'hold';
+}
+
+export function resolveApprovalTimeoutPolicy(env: NodeJS.ProcessEnv = process.env): ApprovalTimeoutPolicy {
+  const configuredTimeout = Number(env.WAGGLE_APPROVAL_TIMEOUT_MS);
+  const timeoutMs = Number.isFinite(configuredTimeout) && configuredTimeout > 0
+    ? Math.floor(configuredTimeout)
+    : DEFAULT_APPROVAL_TIMEOUT_MS;
+  const action = env.WAGGLE_APPROVAL_TIMEOUT_ACTION?.trim().toLowerCase() === 'hold' ? 'hold' : 'deny';
+  return { timeoutMs, action };
+}
+
+interface ApprovalWaitOptions {
+  pendingApprovals: Map<string, {
+    resolve: (approved: boolean) => void;
+    toolName: string;
+    input: Record<string, unknown>;
+    timestamp: number;
+  }>;
+  cronStore: Pick<CronStore, 'savePendingAction'>;
+  requestId: string;
+  toolName: string;
+  input: Record<string, unknown>;
+  heldAction: Omit<SavePendingActionInput, 'id' | 'source' | 'expiresAt'>;
+  heldEvent: Record<string, unknown>;
+  policy: ApprovalTimeoutPolicy;
+  sendEvent: (event: 'approval_held', data: Record<string, unknown>) => void;
+  onHeld: (expiresAt: string) => void;
+}
+
+export async function waitForApprovalDecision(options: ApprovalWaitOptions): Promise<{ approved: boolean; held: boolean; timedOut: boolean }> {
+  let held = false;
+  let timedOut = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const approved = await new Promise<boolean>((resolve) => {
+    options.pendingApprovals.set(options.requestId, {
+      resolve,
+      toolName: options.toolName,
+      input: options.input,
+      timestamp: Date.now(),
+    });
+
+    timeout = setTimeout(() => {
+      if (!options.pendingApprovals.delete(options.requestId)) return;
+      timedOut = true;
+
+      if (options.policy.action === 'hold') {
+        const expiresAt = new Date(Date.now() + APPROVAL_HOLD_TTL_MS).toISOString();
+        try {
+          options.cronStore.savePendingAction({
+            ...options.heldAction,
+            id: options.requestId,
+            source: `approval-timeout:${options.requestId}`,
+            expiresAt,
+          });
+          held = true;
+        } catch (error) {
+          log.warn(`[security] Failed to hold timed-out approval ${options.requestId}; auto-denying instead: ${error instanceof Error ? error.message : error}`);
+        }
+        if (held) {
+          try {
+            options.sendEvent('approval_held', { ...options.heldEvent, expiresAt });
+          } catch (error) {
+            log.warn(`[approval] Failed to emit approval_held for ${options.requestId}: ${error instanceof Error ? error.message : error}`);
+          }
+          try {
+            options.onHeld(expiresAt);
+          } catch (error) {
+            log.warn(`[approval] Failed to report held approval ${options.requestId}: ${error instanceof Error ? error.message : error}`);
+          }
+        }
+      }
+
+      resolve(false);
+    }, options.policy.timeoutMs);
+  });
+  if (timeout) clearTimeout(timeout);
+  return { approved, held, timedOut };
+}
+
 export const chatRoutes: FastifyPluginAsync = async (server) => {
   // ── Use shared agent state from server ──────────────────────────────
   const {
@@ -217,6 +302,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     userSystemPrompt,
     sessionHistories,
   } = server.agentState;
+  const approvalTimeoutPolicy = resolveApprovalTimeoutPolicy();
   // Read dynamically — may be updated to built-in proxy at runtime
   const getLitellmUrl = () => server.localConfig.litellmUrl;
 
@@ -1307,26 +1393,57 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               sessionId,
             });
 
-          // Wait for the client to approve or deny
-          const approved = await new Promise<boolean>((resolve) => {
-            server.agentState.pendingApprovals.set(requestId, {
-              resolve,
+          // Wait for the client to approve or deny. A configured hold timeout
+          // still cancels this live execution, but preserves the proposed call
+          // in the durable Approvals inbox for an explicit later decision.
+          const summary = typeof trustMeta?.description === 'string' ? trustMeta.description : describeToolUse(toolName, input);
+          const riskLevel = typeof trustMeta?.riskLevel === 'string' ? trustMeta.riskLevel : 'medium';
+          const approvalClass = typeof trustMeta?.approvalClass === 'string' ? trustMeta.approvalClass : 'elevated';
+          const { approved, held, timedOut } = await waitForApprovalDecision({
+            pendingApprovals: server.agentState.pendingApprovals,
+            cronStore: server.cronStore,
+            requestId,
+            toolName,
+            input,
+            heldAction: {
+              workspaceId: effectiveWorkspace || null,
+              toolName,
+              argsJson: JSON.stringify(input),
+              summary,
+              riskLevel,
+              approvalClass,
+            },
+            heldEvent: {
+              requestId,
               toolName,
               input,
-              timestamp: Date.now(),
-            });
-
-            // Auto-DENY after 5 minutes if no response — fail safe, not fail open
-            setTimeout(() => {
-              if (server.agentState.pendingApprovals.has(requestId)) {
-                server.agentState.pendingApprovals.delete(requestId);
-                log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
-                resolve(false);
-              }
-            }, 300_000);
+              sourceWorkspaceId: effectiveWorkspace || null,
+              held: true,
+              message: 'Moved to Approvals inbox',
+              ...trustMeta,
+            },
+            policy: approvalTimeoutPolicy,
+            sendEvent,
+            onHeld: (expiresAt) => {
+              log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
+              emitAuditEvent(server, {
+                workspaceId: effectiveWorkspace,
+                eventType: 'approval_held',
+                toolName,
+                input: JSON.stringify(input),
+                sessionId,
+              });
+              sendEvent('step', { content: `\u23f8 ${toolName} moved to Approvals inbox`, expiresAt });
+            },
           });
 
           if (!approved) {
+            if (held) {
+              return { cancel: true, reason: `Approval for ${toolName} moved to Approvals inbox` };
+            }
+            if (timedOut) {
+              log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — auto-denied for safety`);
+            }
             sendEvent('step', { content: `\u2716 ${toolName} denied by user` });
             emitAuditEvent(server, { workspaceId: effectiveWorkspace, eventType: 'approval_denied', toolName, sessionId, approved: false });
             return { cancel: true, reason: `User denied ${toolName}` };

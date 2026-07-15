@@ -17,6 +17,8 @@ const MAX_STDERR = 64 * 1024;
 const MAX_EVENT_TEXT = 8_000;
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1_000;
+const DEFAULT_STALL_AFTER_MS = 120_000;
+const MIN_STALL_AFTER_MS = 30_000;
 
 const ENV_ALLOWLIST = new Set([
   'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE',
@@ -40,6 +42,7 @@ export interface ExternalRunEvent {
   text?: string;
   sessionId?: string;
   pid?: number;
+  stalled?: boolean;
 }
 
 export interface ExternalToolRunRequest {
@@ -52,6 +55,7 @@ export interface ExternalToolRunRequest {
   prompt: string;
   access: ExternalToolAccess;
   timeoutMs?: number;
+  stallAfterMs?: number;
   /** Native session id for a resume attempt. */
   sessionId?: string;
   /** Required by managed-agent adapters such as OpenClaw. */
@@ -116,6 +120,11 @@ export async function runExternalTool(
     throw new Error(`Tool ${request.manifest.id} requires a managed workspace agent`);
   }
   const timeoutMs = Math.max(1_000, Math.min(request.timeoutMs ?? DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS));
+  const requestedStallAfterMs = Math.max(
+    MIN_STALL_AFTER_MS,
+    request.stallAfterMs ?? DEFAULT_STALL_AFTER_MS,
+  );
+  const stallAfterMs = requestedStallAfterMs < timeoutMs ? requestedStallAfterMs : undefined;
   const promptFile = task.promptTransport === 'temp-file'
     ? (deps.createPromptFile ?? defaultCreatePromptFile)(request.prompt)
     : undefined;
@@ -138,8 +147,12 @@ export async function runExternalTool(
   let abortRequested = request.signal?.aborted ?? false;
   let timedOut = false;
   let killRequested = false;
+  let lastEventAtMs = startedAt;
+  let stalledEpisode = false;
 
-  const emit = (type: ExternalRunEventType, text?: string, pid?: number) => {
+  const emit = (type: ExternalRunEventType, text?: string, pid?: number, stalled?: boolean) => {
+    const emittedAt = now();
+    if (stalled !== true) lastEventAtMs = emittedAt;
     request.onEvent?.({
       runId: request.runId,
       roomId: request.roomId,
@@ -147,10 +160,11 @@ export async function runExternalTool(
       toolId: request.manifest.id,
       seq: ++seq,
       type,
-      timestamp: new Date(now()).toISOString(),
+      timestamp: new Date(emittedAt).toISOString(),
       ...(text ? { text: truncate(redact(text, env), MAX_EVENT_TEXT) } : {}),
       ...(parseState.sessionId ? { sessionId: parseState.sessionId } : {}),
       ...(pid ? { pid } : {}),
+      ...(stalled !== undefined ? { stalled } : {}),
     });
   };
 
@@ -187,8 +201,27 @@ export async function runExternalTool(
     timedOut = true;
     void requestKill();
   }, timeoutMs);
+  const stallTimer = stallAfterMs === undefined ? undefined : setInterval(() => {
+    if (abortRequested || timedOut) return;
+    const idleMs = now() - lastEventAtMs;
+    if (!stalledEpisode && idleMs >= stallAfterMs) {
+      stalledEpisode = true;
+      emit('progress', `[stalled] no output for ${Math.floor(idleMs / 1_000)}s`, undefined, true);
+    }
+  }, Math.min(stallAfterMs, 1_000));
+  stallTimer?.unref();
+
+  const recordOutputActivity = () => {
+    const wasStalled = stalledEpisode;
+    lastEventAtMs = now();
+    if (wasStalled) {
+      stalledEpisode = false;
+      emit('progress', '[recovered] output resumed', undefined, false);
+    }
+  };
 
   child.stdout.on('data', (chunk) => {
+    recordOutputActivity();
     const text = chunk.toString();
     stdout = appendTail(stdout, text, MAX_STDOUT);
     stdoutRemainder += text;
@@ -197,6 +230,7 @@ export async function runExternalTool(
     for (const line of lines) parseLine(task.outputDialect, line, parseState, emit);
   });
   child.stderr.on('data', (chunk) => {
+    recordOutputActivity();
     const text = chunk.toString();
     stderr = appendTail(stderr, text, MAX_STDERR);
     const progress = stripAnsi(text).trim();
@@ -211,6 +245,7 @@ export async function runExternalTool(
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if (stallTimer) clearInterval(stallTimer);
       request.signal?.removeEventListener('abort', abortHandler);
       if (stdoutRemainder.trim()) parseLine(task.outputDialect, stdoutRemainder, parseState, emit);
       if (task.outputDialect === 'json' || task.outputDialect === 'openclaw-json') {

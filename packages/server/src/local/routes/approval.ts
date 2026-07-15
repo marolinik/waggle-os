@@ -44,8 +44,8 @@ export const approvalRoutes: FastifyPluginAsync = async (server) => {
         } catch { /* non-fatal: in-memory grant still works */ }
       }
 
-      pending.resolve(approved);
       server.agentState.pendingApprovals.delete(requestId);
+      pending.resolve(approved);
 
       return reply.send({ ok: true, requestId, approved, always: !!always });
     }
@@ -55,14 +55,25 @@ export const approvalRoutes: FastifyPluginAsync = async (server) => {
     // real tool via the deferred executor (idempotent + re-validated); deny
     // atomically claims it as 'denied'.
     const held = server.cronStore.getPendingAction(requestId);
-    if (!held || held.status !== 'held') {
+    if (!held) {
       return reply.status(404).send({ error: 'No pending approval with that ID' });
+    }
+    if (held.status !== 'held') {
+      return reply.status(409).send({ error: 'already_decided', status: held.status });
     }
     if (approved) {
       const result = await executeHeldAction(server, held);
+      if (result.error === 'already decided') {
+        const current = server.cronStore.getPendingAction(requestId);
+        return reply.status(409).send({ error: 'already_decided', status: current?.status ?? result.status });
+      }
       return reply.send({ ok: result.ok, requestId, approved: true, status: result.status, ...(result.error ? { error: result.error } : {}) });
     }
-    server.cronStore.claimPendingAction(requestId, 'denied', new Date().toISOString());
+    const claimed = server.cronStore.claimPendingAction(requestId, 'denied', new Date().toISOString());
+    if (!claimed) {
+      const current = server.cronStore.getPendingAction(requestId);
+      return reply.status(409).send({ error: 'already_decided', status: current?.status ?? held.status });
+    }
     return reply.send({ ok: true, requestId, approved: false, status: 'denied' });
   });
 

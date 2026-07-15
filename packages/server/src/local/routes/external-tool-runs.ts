@@ -661,8 +661,9 @@ function handleExternalEvent(
     const toolsUsed = event.type === 'tool'
       ? [...new Set([...(current?.metrics?.toolsUsed ?? []), event.text ?? 'tool'])]
       : current?.metrics?.toolsUsed;
+    const phase = event.stalled === undefined ? event.type : event.stalled ? 'stalled' : 'running';
     server.agentRunRegistry.update(runId, {
-      progress: { message: event.text ?? event.type, phase: event.type },
+      progress: { message: event.text ?? event.type, phase },
       ...(toolsUsed ? { metrics: { toolsUsed } } : {}),
     });
     publishDance(server, {

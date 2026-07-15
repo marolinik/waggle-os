@@ -93,13 +93,18 @@ describe('approval routes — held actions (L2 union)', () => {
     expect(res.statusCode).toBe(200);
     expect(resolve).toHaveBeenCalledWith(true);
     expect(pendingApprovals.has('live-1')).toBe(false);
+
+    const second = await server.inject({ method: 'POST', url: '/api/approval/live-1', payload: { approved: true } });
+    expect(second.statusCode).toBe(404);
+    expect(resolve).toHaveBeenCalledTimes(1);
   });
 
-  it('POST approve is idempotent — re-approving an executed held id is 404 (already decided)', async () => {
+  it('POST approve is idempotent — re-approving an executed held id is 409 (already decided)', async () => {
     hold();
     await server.inject({ method: 'POST', url: '/api/approval/pa-1', payload: { approved: true } });
     const second = await server.inject({ method: 'POST', url: '/api/approval/pa-1', payload: { approved: true } });
-    expect(second.statusCode).toBe(404); // no longer 'held'
+    expect(second.statusCode).toBe(409);
+    expect(second.json()).toEqual({ error: 'already_decided', status: 'executed' });
     expect(execSpy).toHaveBeenCalledTimes(1);
   });
 });
