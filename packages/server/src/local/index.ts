@@ -2038,6 +2038,7 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
                 // without mode keep the toolless completion path below.
                 const turn = await runChannelChatTurn({
                   port: fullConfig.port ?? 3333,
+                  sessionToken: server.agentState.wsSessionToken,
                   message: `[Scheduled task "${schedule.name}" for workspace "${target.name}"]\n\n${taskPrompt}`,
                   workspace: target.id,
                   session: `schedule-${schedule.id}`,
