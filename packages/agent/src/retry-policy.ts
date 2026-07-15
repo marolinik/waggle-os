@@ -60,7 +60,10 @@ export type RetryAction =
  *   - HTTP-date     → seconds until that date (clamped to non-negative)
  *   - anything else → the default backoff
  */
-function parseRetryAfterSeconds(headerValue: string | null): number {
+export function parseRetryAfterSeconds(
+  headerValue: string | null,
+  nowMs = Date.now(),
+): number {
   if (headerValue === null) return RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS;
 
   const asSeconds = parseInt(headerValue, 10);
@@ -68,7 +71,7 @@ function parseRetryAfterSeconds(headerValue: string | null): number {
 
   const asDateMs = Date.parse(headerValue);
   if (Number.isFinite(asDateMs)) {
-    return Math.max(0, Math.round((asDateMs - Date.now()) / 1000));
+    return Math.max(0, Math.round((asDateMs - nowMs) / 1000));
   }
 
   return RATE_LIMIT_RETRY_AFTER_DEFAULT_SECONDS;

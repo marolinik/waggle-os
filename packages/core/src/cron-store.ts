@@ -61,6 +61,14 @@ export interface CronExecutionRow {
   error: string | null;
 }
 
+export interface CronRunLeaseRow {
+  id: number;
+  schedule_id: number;
+  schedule_name: string | null;
+  started_at: string;
+  pid: number | null;
+}
+
 export interface NotificationRow {
   id: number;
   title: string;
@@ -141,6 +149,16 @@ CREATE TABLE IF NOT EXISTS cron_execution_history (
   FOREIGN KEY (schedule_id) REFERENCES cron_schedules(id)
 );
 CREATE INDEX IF NOT EXISTS idx_cron_history_schedule ON cron_execution_history (schedule_id, executed_at);
+`;
+
+export const CRON_RUN_LEASES_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS cron_run_leases (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  schedule_id INTEGER NOT NULL,
+  schedule_name TEXT,
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  pid INTEGER
+);
 `;
 
 // W5.10: Notification persistence table
@@ -226,6 +244,12 @@ export class CronStore {
     ).get();
     if (!histExists) {
       raw.exec(CRON_HISTORY_TABLE_SQL);
+    }
+    const leaseExists = raw.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='cron_run_leases'",
+    ).get();
+    if (!leaseExists) {
+      raw.exec(CRON_RUN_LEASES_TABLE_SQL);
     }
     // W5.10: Ensure notifications table
     const notifExists = raw.prepare(
@@ -366,15 +390,16 @@ export class CronStore {
 
   /** Record a cron job execution result. */
   recordExecution(scheduleId: number, scheduleName: string, opts: {
+    executedAt?: string;
     durationMs?: number;
     success: boolean;
     resultSummary?: string;
     error?: string;
   }): void {
     this.db.getDatabase().prepare(
-      `INSERT INTO cron_execution_history (schedule_id, schedule_name, duration_ms, success, result_summary, error)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    ).run(scheduleId, scheduleName, opts.durationMs ?? null, opts.success ? 1 : 0, opts.resultSummary ?? null, opts.error ?? null);
+      `INSERT INTO cron_execution_history (schedule_id, schedule_name, executed_at, duration_ms, success, result_summary, error)
+       VALUES (?, ?, COALESCE(?, datetime('now')), ?, ?, ?, ?)`,
+    ).run(scheduleId, scheduleName, opts.executedAt ?? null, opts.durationMs ?? null, opts.success ? 1 : 0, opts.resultSummary ?? null, opts.error ?? null);
   }
 
   /** #17: count today's (UTC) executions for a schedule — ai_task daily cap. */
@@ -392,6 +417,13 @@ export class CronStore {
     ).all(scheduleId, limit) as CronExecutionRow[];
   }
 
+  /** Get the most recent executions for boot-time failure-state recovery. */
+  getRecentExecutions(scheduleId: number, limit = 5): CronExecutionRow[] {
+    return this.db.getDatabase().prepare(
+      'SELECT * FROM cron_execution_history WHERE schedule_id = ? ORDER BY executed_at DESC, id DESC LIMIT ?',
+    ).all(scheduleId, limit) as CronExecutionRow[];
+  }
+
   /** Prune execution-history rows older than N days. recordExecution writes a
    *  row per tick (UX-Refactor Phase 3, Journey 16), so without retention the
    *  table grows unbounded (a per-minute job ≈ 525k rows/year). Mirrors
@@ -402,6 +434,35 @@ export class CronStore {
       "DELETE FROM cron_execution_history WHERE executed_at < datetime('now', ?)",
     ).run(`-${days} days`);
     return result.changes;
+  }
+
+  // ── Interrupted-run leases ────────────────────────────────────────
+
+  /** Acquire a durable lease before a scheduled job begins execution. */
+  acquireRunLease(scheduleId: number, name: string, pid: number): number {
+    const result = this.db.getDatabase().prepare(
+      'INSERT INTO cron_run_leases (schedule_id, schedule_name, pid) VALUES (?, ?, ?)',
+    ).run(scheduleId, name, pid);
+    return Number(result.lastInsertRowid);
+  }
+
+  /** Release a run lease after its scheduled job finishes. */
+  releaseRunLease(leaseId: number): void {
+    this.db.getDatabase().prepare(
+      'DELETE FROM cron_run_leases WHERE id = ?',
+    ).run(leaseId);
+  }
+
+  /** List leases left behind by an interrupted process. */
+  listStaleRunLeases(): CronRunLeaseRow[] {
+    return this.db.getDatabase().prepare(
+      'SELECT * FROM cron_run_leases ORDER BY started_at ASC, id ASC',
+    ).all() as CronRunLeaseRow[];
+  }
+
+  /** Clear all interrupted-run leases after boot recovery. */
+  clearRunLeases(): void {
+    this.db.getDatabase().prepare('DELETE FROM cron_run_leases').run();
   }
 
   // ── W5.10: Notification Persistence ────────────────────────────────

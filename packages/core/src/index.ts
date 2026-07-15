@@ -124,9 +124,9 @@ export {
   type AuditApprovalClass, type AuditInitiator, type AuditCapabilityType,
 } from './install-audit.js';
 export {
-  CronStore, CRON_SCHEDULES_TABLE_SQL, VALID_JOB_TYPES, cronExprError,
+  CronStore, CRON_SCHEDULES_TABLE_SQL, CRON_RUN_LEASES_TABLE_SQL, VALID_JOB_TYPES, cronExprError,
   type CronSchedule, type CreateScheduleInput, type CronJobType,
-  type CronExecutionRow,
+  type CronExecutionRow, type CronRunLeaseRow,
   type PendingActionRow, type PendingActionStatus, type SavePendingActionInput,
 } from './cron-store.js';
 export { VaultStore, type VaultEntry } from './vault.js';

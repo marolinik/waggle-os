@@ -37,6 +37,12 @@ function parseJobConfig(scheduleId: number, raw: string): Record<string, unknown
   }
 }
 
+function clearAutoDisabled(config: Record<string, unknown>): Record<string, unknown> {
+  const cleaned = { ...config };
+  delete cleaned.auto_disabled;
+  return cleaned;
+}
+
 /** Convert DB snake_case CronSchedule to API camelCase response. */
 function toResponse(s: CronSchedule) {
   return {
@@ -133,7 +139,17 @@ export const cronRoutes: FastifyPluginAsync = async (server) => {
     }
 
     try {
-      server.cronStore.update(id, request.body ?? {});
+      const changes = request.body ?? {};
+      const enabling = changes.enabled === true;
+      server.cronStore.update(id, enabling
+        ? {
+            ...changes,
+            jobConfig: clearAutoDisabled(
+              changes.jobConfig ?? parseJobConfig(existing.id, existing.job_config),
+            ),
+          }
+        : changes);
+      if (enabling) server.scheduler.resetFailure(id);
       const updated = server.cronStore.getById(id)!;
       return toResponse(updated);
     } catch (err) {
@@ -187,8 +203,12 @@ export const cronRoutes: FastifyPluginAsync = async (server) => {
     // against the enabled schedule row.
     const wasDisabled = existing.enabled !== 1;
     const schedule = wasDisabled
-      ? server.cronStore.update(id, { enabled: true })
+      ? server.cronStore.update(id, {
+          enabled: true,
+          jobConfig: clearAutoDisabled(parseJobConfig(existing.id, existing.job_config)),
+        })
       : existing;
+    if (wasDisabled) server.scheduler.resetFailure(id);
 
     try {
       // W5.11: Actually execute the job handler (not just mark as run)

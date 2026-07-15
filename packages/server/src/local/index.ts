@@ -2297,6 +2297,12 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     } catch (err) {
       log.warn(`[cron→telegram] config parse failed: ${err}`);
     }
+  }, notification => {
+    emitNotification(server, {
+      ...notification,
+      category: 'cron',
+      actionUrl: '/settings/mission-control',
+    });
   });
   scheduler.start();
   server.decorate('scheduler', scheduler);

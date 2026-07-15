@@ -22,6 +22,12 @@ export {
   type ChatMessage,
   type ChatResponse,
 } from './providers/openai-compat.js';
+export {
+  classifyRateLimitError,
+  planRateLimitResume,
+  type RateLimitAssessment,
+  type ResumePlan,
+} from './rate-limit-classifier.js';
 export { Workspace, type WorkspaceConfig } from './workspace.js';
 export {
   runAgentLoop,
