@@ -13,8 +13,9 @@ vi.mock('../src/local/lifecycle.js', () => ({
 
 import { buildLocalServer } from '../src/local/index.js';
 import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../src/local/lifecycle.js';
-import { resolveUsableModel } from '../src/local/model-availability.js';
+import { listOllamaChatModelIds, resolveUsableModel } from '../src/local/model-availability.js';
 import { PROVIDER_ENV_NAMES } from '../src/local/provider-env.js';
+import { startService } from '../src/local/service.js';
 import { injectWithAuth } from './test-utils.js';
 
 const mockGetStatus = getLiteLLMStatus as ReturnType<typeof vi.fn>;
@@ -308,6 +309,92 @@ describe('LiteLLM Management API', () => {
     expect(body.models).toEqual(['ollama/llama3.2:latest']);
   });
 
+  it('local inference status separates remote aliases from installed models', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'minimax-m2.7:cloud', remote_host: 'https://ollama.com:443' },
+            { name: 'gemma4:31b' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/version')) {
+        return new Response(JSON.stringify({ version: '0.12.0' }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    const res = await injectWithAuth(server, { method: 'GET', url: '/api/local-inference/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.offlineReady).toBe(true);
+    expect(body.setupRequired).toBe(false);
+    expect(body.totalLocalModels).toBe(1);
+    expect(body.primaryServer.models).toEqual(['gemma4:31b']);
+    expect(body.primaryServer.cloudModels).toEqual(['minimax-m2.7:cloud']);
+  });
+
+  it('local inference status reports setup required for cloud-only Ollama', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'minimax-m2.7:cloud' }] }), {
+          status: 200,
+        });
+      }
+      if (url.endsWith('/api/version')) {
+        return new Response(JSON.stringify({ version: '0.12.0' }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    const res = await injectWithAuth(server, { method: 'GET', url: '/api/local-inference/status' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.ollamaInstalled).toBe(true);
+    expect(body.offlineReady).toBe(false);
+    expect(body.setupRequired).toBe(true);
+    expect(body.totalLocalModels).toBe(0);
+    expect(body.primaryServer).toBeNull();
+    expect(body.servers[0].cloudModels).toEqual(['minimax-m2.7:cloud']);
+    expect(body.setupMessage).toMatch(/install|pull/i);
+  });
+
+  it('desktop startup stays degraded when Ollama exposes only a cloud alias', async () => {
+    const soloDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-cloud-only-startup-'));
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [{
+            name: 'minimax-m2.7:cloud',
+            remote_host: 'https://ollama.com:443',
+          }],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    const { server: soloServer } = await startService({
+      dataDir: soloDir,
+      port: 0,
+      litellmPort: 49_999,
+      skipLiteLLM: true,
+    });
+    try {
+      const body = (await soloServer.inject({ method: 'GET', url: '/health' })).json();
+      expect(body.status).toBe('degraded');
+      expect(body.llm).toMatchObject({ provider: 'anthropic-proxy', health: 'degraded' });
+      expect(soloServer.agentState.llmProvider.detail).toContain('no API key');
+      expect(soloServer.agentState.currentModel).not.toBe('ollama/minimax-m2.7:cloud');
+    } finally {
+      await soloServer.close();
+      fs.rmSync(soloDir, { recursive: true, force: true });
+    }
+  });
+
   it('GET /api/agent/model resolves a cloud default to a local chat model when no provider key exists', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
@@ -339,7 +426,7 @@ describe('LiteLLM Management API', () => {
     expect(body.model).toBe('ollama/llama3.2:latest');
   });
 
-  it('model resolver keeps the startup-selected Ollama model over a stale cloud default', async () => {
+  it('never exposes or selects a remote Ollama cloud alias as a local model', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith('/api/tags')) {
@@ -356,12 +443,32 @@ describe('LiteLLM Management API', () => {
       }
       return { ok: false, status: 503 } as Response;
     });
-    await injectWithAuth(server, {
+
+    await expect(listOllamaChatModelIds()).resolves.toEqual(['ollama/gemma4:31b']);
+    const selected = await injectWithAuth(server, {
       method: 'PUT',
       url: '/api/agent/model',
       payload: { model: 'ollama/minimax-m2.7:cloud' },
     });
 
-    await expect(resolveUsableModel(server, 'claude-sonnet-4-6')).resolves.toBe('ollama/minimax-m2.7:cloud');
+    expect(selected.statusCode).toBe(409);
+    expect(selected.json()).toMatchObject({ code: 'OLLAMA_MODEL_NOT_LOCAL' });
+    await expect(resolveUsableModel(server, 'ollama/minimax-m2.7:cloud'))
+      .rejects.toMatchObject({ code: 'OLLAMA_MODEL_NOT_LOCAL', statusCode: 409 });
+  });
+
+  it('rejects an exact Ollama tag that is not installed instead of choosing another tag', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return {
+          ok: true,
+          json: async () => ({ models: [{ name: 'gemma4:31b' }] }),
+        } as Response;
+      }
+      return { ok: false, status: 503 } as Response;
+    });
+
+    await expect(resolveUsableModel(server, 'ollama/llama3.2:latest'))
+      .rejects.toMatchObject({ code: 'OLLAMA_MODEL_NOT_LOCAL', statusCode: 409 });
   });
 });

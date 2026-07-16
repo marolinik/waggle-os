@@ -242,6 +242,14 @@ describe('Chat Streaming API', () => {
   // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
   it('routes an Ollama-selected model to the local Ollama endpoint, not LiteLLM (#4)', async () => {
     resetRateLimiter(server);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [{ name: 'llama3.2:latest' }] }), {
+          status: 200,
+        });
+      }
+      return new Response('', { status: 503 });
+    });
     let capturedUrl: string | undefined;
     let capturedModel: string | undefined;
     const originalRunner = server.agentRunner;

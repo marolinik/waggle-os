@@ -1,11 +1,25 @@
 import type { FastifyInstance } from 'fastify';
 import { ensureManagedLiteLLMModel } from './litellm-runtime-config.js';
 import { getProviderApiKey } from './provider-env.js';
-import { discoverProviderModels } from './provider-model-catalog.js';
+import { discoverProviderModels, isRemoteOllamaAlias } from './provider-model-catalog.js';
 
 interface OllamaRoutingModel {
   id: string;
   source: 'local' | 'cloud';
+}
+
+export class OllamaModelNotLocalError extends Error {
+  readonly statusCode = 409;
+  readonly code = 'OLLAMA_MODEL_NOT_LOCAL';
+
+  constructor(model: string) {
+    super(
+      `Ollama model "${model}" is not installed locally. `
+      + 'Pull an offline model in Local Inference, or select an installed local tag. '
+      + 'Ollama :cloud aliases require network access and never count as local.',
+    );
+    this.name = 'OllamaModelNotLocalError';
+  }
 }
 
 function providerForModel(model: string): string | null {
@@ -61,8 +75,11 @@ async function modelIsRoutable(
   model: string,
   provider: string | null,
 ): Promise<boolean> {
+  if (provider === 'ollama') {
+    return (await listOllamaChatModelIds()).includes(model);
+  }
   if (!providerIsReady(server, provider)) return false;
-  return provider === 'ollama' || ensureManagedLiteLLMModel(server, model);
+  return ensureManagedLiteLLMModel(server, model);
 }
 
 function isEmbeddingModel(modelId: string): boolean {
@@ -84,7 +101,7 @@ export async function fetchOllamaRoutingModels(): Promise<OllamaRoutingModel[]> 
       .filter((m) => typeof m.name === 'string' && m.name.length > 0)
       .map((m) => ({
         id: `ollama/${m.name}`,
-        source: typeof m.remote_host === 'string' && m.remote_host.length > 0 ? 'cloud' : 'local',
+        source: isRemoteOllamaAlias(m.name, m.remote_host) ? 'cloud' : 'local',
       }));
   } catch {
     return [];
@@ -96,7 +113,7 @@ export async function fetchOllamaRoutingModels(): Promise<OllamaRoutingModel[]> 
 export async function listOllamaChatModelIds(): Promise<string[]> {
   const models = await fetchOllamaRoutingModels();
   return models
-    .filter((m) => !isEmbeddingModel(m.id))
+    .filter((m) => m.source === 'local' && !isEmbeddingModel(m.id))
     .map((m) => m.id);
 }
 
@@ -134,6 +151,12 @@ export async function resolveUsableModel(
   const trimmed = preferredModel.trim();
   const preferredProvider = providerForModel(trimmed);
   const canonicalPreferred = canonicalModelId(trimmed, preferredProvider);
+  if (preferredProvider === 'ollama') {
+    if (await modelIsRoutable(server, canonicalPreferred, preferredProvider)) {
+      return canonicalPreferred;
+    }
+    throw new OllamaModelNotLocalError(canonicalPreferred);
+  }
   if (await modelIsRoutable(server, canonicalPreferred, preferredProvider)) {
     return canonicalPreferred;
   }
@@ -148,7 +171,7 @@ export async function resolveUsableModel(
     }
   }
 
-  const localModels = (await fetchOllamaRoutingModels()).filter((m) => !isEmbeddingModel(m.id));
-  return localModels[0]?.id
+  const localModels = await listOllamaChatModelIds();
+  return localModels[0]
     ?? canonicalPreferred;
 }

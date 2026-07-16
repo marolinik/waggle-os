@@ -14,6 +14,7 @@
 import type { FastifyInstance } from 'fastify';
 import { rankModels, OLLAMA_CATALOG } from '@waggle/agent';
 import { detectHardware } from '../hardware-detect.js';
+import { isRemoteOllamaAlias } from '../provider-model-catalog.js';
 
 // Cache the hardware scan: detectHardware() spawns a subprocess (nvidia-smi) on
 // non-Apple hosts, and these are unauthenticated, side-effect-free GET routes — so a
@@ -37,6 +38,7 @@ interface InferenceServerStatus {
   available: boolean;
   url: string;
   models: string[];
+  cloudModels: string[];
   version?: string;
 }
 
@@ -45,28 +47,34 @@ interface InferenceServerStatus {
 async function checkOllama(baseUrl: string): Promise<InferenceServerStatus> {
   try {
     const res = await fetch(`${baseUrl}/api/tags`, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return { type: 'ollama', available: false, url: baseUrl, models: [] };
-    const data = await res.json() as { models?: Array<{ name: string }> };
-    const models = (data.models ?? []).map(m => m.name);
+    if (!res.ok) return { type: 'ollama', available: false, url: baseUrl, models: [], cloudModels: [] };
+    const data = await res.json() as { models?: Array<{ name: string; remote_host?: string }> };
+    const entries = (data.models ?? []).filter((model) => typeof model.name === 'string' && model.name.length > 0);
+    const models = entries
+      .filter((model) => !isRemoteOllamaAlias(model.name, model.remote_host))
+      .map((model) => model.name);
+    const cloudModels = entries
+      .filter((model) => isRemoteOllamaAlias(model.name, model.remote_host))
+      .map((model) => model.name);
     let version: string | undefined;
     try {
       const vRes = await fetch(`${baseUrl}/api/version`, { signal: AbortSignal.timeout(2000) });
       if (vRes.ok) version = ((await vRes.json()) as { version?: string }).version;
     } catch { /* ignore */ }
-    return { type: 'ollama', available: true, url: baseUrl, models, version };
+    return { type: 'ollama', available: true, url: baseUrl, models, cloudModels, version };
   } catch {
-    return { type: 'ollama', available: false, url: baseUrl, models: [] };
+    return { type: 'ollama', available: false, url: baseUrl, models: [], cloudModels: [] };
   }
 }
 
 async function checkVllm(baseUrl: string): Promise<InferenceServerStatus> {
   try {
     const res = await fetch(`${baseUrl}/v1/models`, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return { type: 'vllm', available: false, url: baseUrl, models: [] };
+    if (!res.ok) return { type: 'vllm', available: false, url: baseUrl, models: [], cloudModels: [] };
     const data = await res.json() as { data?: Array<{ id: string }> };
-    return { type: 'vllm', available: true, url: baseUrl, models: (data.data ?? []).map(m => m.id) };
+    return { type: 'vllm', available: true, url: baseUrl, models: (data.data ?? []).map(m => m.id), cloudModels: [] };
   } catch {
-    return { type: 'vllm', available: false, url: baseUrl, models: [] };
+    return { type: 'vllm', available: false, url: baseUrl, models: [], cloudModels: [] };
   }
 }
 
@@ -97,13 +105,23 @@ export async function localInferenceRoutes(fastify: FastifyInstance) {
   fastify.get('/api/local-inference/status', async () => {
     const [ollama, vllm] = await Promise.all([checkOllama(OLLAMA_URL), checkVllm(VLLM_URL)]);
     const servers = [ollama, vllm].filter(s => s.available);
+    const localServers = servers.filter((server) => server.models.length > 0);
+    const totalLocalModels = localServers.reduce((acc, server) => acc + server.models.length, 0);
+    const offlineReady = totalLocalModels > 0;
     return {
       servers,
-      primaryServer: servers[0] ?? null,
+      primaryServer: localServers[0] ?? null,
       ollamaInstalled: ollama.available,
       ollamaUrl: OLLAMA_URL,
       vllmUrl: VLLM_URL,
-      totalLocalModels: servers.reduce((acc, s) => acc + s.models.length, 0),
+      totalLocalModels,
+      offlineReady,
+      setupRequired: !offlineReady,
+      setupMessage: offlineReady
+        ? null
+        : ollama.cloudModels.length > 0
+          ? 'Ollama is running, but only cloud aliases are available. Pull an offline model to enable local inference.'
+          : 'Install Ollama or start a local inference server, then pull an offline model.',
     };
   });
 

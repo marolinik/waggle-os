@@ -46,6 +46,11 @@ export interface OllamaProviderModel {
   sizeMB?: number;
 }
 
+/** Ollama cloud aliases are reachable through Ollama, but are not offline models. */
+export function isRemoteOllamaAlias(name: string, remoteHost?: string): boolean {
+  return Boolean(remoteHost?.trim()) || name.trim().toLowerCase().endsWith(':cloud');
+}
+
 /**
  * These are provider API locations, not model inventories. The endpoints are
  * deliberately kept separate from the UI so the catalog can grow without a
@@ -296,7 +301,7 @@ export async function fetchOllamaModels(): Promise<{ models: OllamaProviderModel
       models?: Array<{ name: string; size?: number; remote_host?: string }>;
     };
     const models = (body.models ?? []).map((model): OllamaProviderModel => {
-      const cloud = typeof model.remote_host === 'string' && model.remote_host.length > 0;
+      const cloud = isRemoteOllamaAlias(model.name, model.remote_host);
       const sizeMB = cloud ? 0 : Math.round((model.size ?? 0) / 1024 / 1024);
       return {
         id: `ollama/${model.name}`,
