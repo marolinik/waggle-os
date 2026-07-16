@@ -42,6 +42,24 @@ const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=t
 const FAILURE_COPY = /(?:Backend is offline|Chat request failed|Waggle is running in local mode|Model unavailable|Generation failed|LLM error|invalid tool call arguments|request timed out|Could not reach the AI model|API key is invalid|Something went wrong|\[TOOL_CALL\]|\[\/TOOL_CALL\])/i;
 const seenWorkspaceIds = new Set<string>();
 const seenSessionIds = new Set<string>();
+const CONTEXT_METRIC_KEYS = [
+  'agentLatencyMs',
+  'estimatedSystemPromptTokens',
+  'estimatedToolSchemaTokens',
+  'finalSystemPromptChars',
+  'packageMode',
+  'providerInputTokens',
+  'providerOutputTokens',
+  'selectorLatencyMs',
+  'timeToFirstTokenMs',
+  'toolCatalogCount',
+  'toolEligibleCount',
+  'toolOmittedCount',
+  'toolSelectedCount',
+  'totalServerLatencyMs',
+  'transmittedToolSchemaChars',
+] as const;
+type NumericContextMetricKey = Exclude<(typeof CONTEXT_METRIC_KEYS)[number], 'packageMode'>;
 
 interface WorkspaceRecord {
   id?: string;
@@ -94,6 +112,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function numeric(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function finiteContextMetric(
+  metrics: Record<string, unknown> | null,
+  key: NumericContextMetricKey,
+): number {
+  const value = metrics?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN;
 }
 
 function normalizeText(value: string): string {
@@ -402,6 +428,24 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           : [];
         const inputTokens = numeric(usage?.inputTokens ?? usage?.prompt_tokens ?? tokens?.input);
         const outputTokens = numeric(usage?.outputTokens ?? usage?.completion_tokens ?? tokens?.output);
+        const contextMetrics = asRecord(wire.done?.contextMetrics);
+        const toolCatalogCount = finiteContextMetric(contextMetrics, 'toolCatalogCount');
+        const toolEligibleCount = finiteContextMetric(contextMetrics, 'toolEligibleCount');
+        const toolSelectedCount = finiteContextMetric(contextMetrics, 'toolSelectedCount');
+        const toolOmittedCount = finiteContextMetric(contextMetrics, 'toolOmittedCount');
+        const transmittedToolSchemaChars = finiteContextMetric(contextMetrics, 'transmittedToolSchemaChars');
+        const estimatedToolSchemaTokens = finiteContextMetric(contextMetrics, 'estimatedToolSchemaTokens');
+        const finalSystemPromptChars = finiteContextMetric(contextMetrics, 'finalSystemPromptChars');
+        const estimatedSystemPromptTokens = finiteContextMetric(contextMetrics, 'estimatedSystemPromptTokens');
+        const selectorLatencyMs = finiteContextMetric(contextMetrics, 'selectorLatencyMs');
+        const timeToFirstTokenMs = finiteContextMetric(contextMetrics, 'timeToFirstTokenMs');
+        const agentLatencyMs = finiteContextMetric(contextMetrics, 'agentLatencyMs');
+        const totalServerLatencyMs = finiteContextMetric(contextMetrics, 'totalServerLatencyMs');
+        const providerInputTokens = finiteContextMetric(contextMetrics, 'providerInputTokens');
+        const providerOutputTokens = finiteContextMetric(contextMetrics, 'providerOutputTokens');
+        const packageMode = typeof contextMetrics?.packageMode === 'string'
+          ? contextMetrics.packageMode
+          : '';
         const toolEvents = wire.events.filter(event => event.event === 'tool' || event.event === 'tool_result');
 
         const historyResponse = responseText
@@ -508,7 +552,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         };
         const score = scorePersonaTrial(persona, evidence);
         const artifact = {
-          schemaVersion: 3,
+          schemaVersion: 4,
           runStartedAt,
           runCompletedAt: new Date().toISOString(),
           persona: {
@@ -539,6 +583,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             model: wire.done?.model ?? null,
             durationMs: wire.durationMs,
             tokens: { input: inputTokens, output: outputTokens },
+            contextMetrics,
             toolsUsed,
             toolEvents,
             sseEvents: wire.events,
@@ -601,6 +646,64 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         expect(memoryText.trim().length, 'memory-specific surface rendered substantive evidence').toBeGreaterThan(0);
         expect(sessionCount, 'workspace context recorded the fresh session').toBeGreaterThanOrEqual(1);
         expect(leakedSnippets, 'no cross-persona prompt leaked into persisted history').toEqual([]);
+        expect(
+          Object.keys(contextMetrics ?? {}).sort(),
+          'done.contextMetrics exposes exactly the approved aggregate fields',
+        ).toEqual([...CONTEXT_METRIC_KEYS].sort());
+        for (const [name, value] of [
+          ['toolCatalogCount', toolCatalogCount],
+          ['toolEligibleCount', toolEligibleCount],
+          ['toolSelectedCount', toolSelectedCount],
+          ['toolOmittedCount', toolOmittedCount],
+          ['transmittedToolSchemaChars', transmittedToolSchemaChars],
+          ['estimatedToolSchemaTokens', estimatedToolSchemaTokens],
+          ['finalSystemPromptChars', finalSystemPromptChars],
+          ['estimatedSystemPromptTokens', estimatedSystemPromptTokens],
+          ['providerInputTokens', providerInputTokens],
+          ['providerOutputTokens', providerOutputTokens],
+        ] as const) {
+          expect(Number.isInteger(value), `${name} is an integer`).toBe(true);
+        }
+        expect(toolCatalogCount, 'catalog count is non-negative').toBeGreaterThanOrEqual(0);
+        expect(toolEligibleCount, 'eligible count is non-negative').toBeGreaterThanOrEqual(0);
+        expect(toolSelectedCount, 'selected count may be zero but never negative').toBeGreaterThanOrEqual(0);
+        expect(toolOmittedCount, 'omitted count is non-negative').toBeGreaterThanOrEqual(0);
+        expect(toolCatalogCount, 'catalog includes every eligible tool').toBeGreaterThanOrEqual(toolEligibleCount);
+        expect(toolEligibleCount, 'eligible set includes every selected tool').toBeGreaterThanOrEqual(toolSelectedCount);
+        expect(toolOmittedCount, 'omitted count exactly reconciles eligible and selected tools')
+          .toBe(toolEligibleCount - toolSelectedCount);
+        expect(toolSelectedCount, 'selector respects the 14-tool cap').toBeLessThanOrEqual(14);
+        expect(transmittedToolSchemaChars, 'transmitted schema chars are non-negative').toBeGreaterThanOrEqual(0);
+        expect(transmittedToolSchemaChars, 'selector respects the 8000-character schema cap').toBeLessThanOrEqual(8_000);
+        expect(
+          transmittedToolSchemaChars === 0,
+          'tool schemas are omitted exactly when no tools are selected',
+        ).toBe(toolSelectedCount === 0);
+        expect(estimatedToolSchemaTokens, 'tool schema token estimate exactly matches chars / 4')
+          .toBe(Math.ceil(transmittedToolSchemaChars / 4));
+        expect(finalSystemPromptChars, 'final system prompt is non-empty').toBeGreaterThan(0);
+        expect(estimatedSystemPromptTokens, 'final system prompt token estimate is positive').toBeGreaterThan(0);
+        expect(estimatedSystemPromptTokens, 'system prompt token estimate exactly matches chars / 4')
+          .toBe(Math.ceil(finalSystemPromptChars / 4));
+        expect(typeof contextMetrics?.packageMode, 'prompt package mode is present').toBe('string');
+        expect(packageMode, 'production prompt package mode is non-empty').not.toBe('');
+        expect(packageMode, 'production turns never use the injected-runner package mode').not.toBe('custom');
+        for (const [name, value] of [
+          ['selectorLatencyMs', selectorLatencyMs],
+          ['timeToFirstTokenMs', timeToFirstTokenMs],
+          ['agentLatencyMs', agentLatencyMs],
+          ['totalServerLatencyMs', totalServerLatencyMs],
+        ] as const) {
+          expect(Number.isFinite(value), `${name} is finite`).toBe(true);
+          expect(value, `${name} is non-negative`).toBeGreaterThanOrEqual(0);
+        }
+        expect(selectorLatencyMs, 'selector completes before the first token').toBeLessThanOrEqual(timeToFirstTokenMs);
+        expect(timeToFirstTokenMs, 'first token arrives before server completion').toBeLessThanOrEqual(totalServerLatencyMs);
+        expect(agentLatencyMs, 'agent execution completes within total server latency').toBeLessThanOrEqual(totalServerLatencyMs);
+        expect(providerInputTokens, 'provider input tokens match parsed usage').toBe(inputTokens);
+        expect(providerOutputTokens, 'provider output tokens match parsed usage').toBe(outputTokens);
+        expect(providerInputTokens, 'provider input tokens are positive').toBeGreaterThan(0);
+        expect(providerOutputTokens, 'provider output tokens are positive').toBeGreaterThan(0);
         if (RUN_MODE.gating) {
           expect(
             score.passed,

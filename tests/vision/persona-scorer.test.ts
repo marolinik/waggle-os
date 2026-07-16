@@ -198,6 +198,64 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result.score).toBe(100);
   });
 
+  it('awards the live empty-workspace coder response the full criterion and a 100/100 trial', () => {
+    const coder = PERSONA_CASES.find(persona => persona.id === 'coder')!;
+    const response = [
+      'No files were found in the current workspace.',
+      'The next engineering step is to create the necessary project files.',
+    ].join('\n\n');
+    const toolName = 'list_workspace_files';
+    const result = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: coder.id,
+      toolsUsed: [toolName],
+      sseEvents: [
+        { event: 'tool', data: { name: toolName, input: {} } },
+        { event: 'tool_result', data: { name: toolName, result: 'No files found.', isError: false } },
+        { event: 'done', data: { content: response, toolsUsed: [toolName] } },
+      ],
+    }));
+
+    expect(result.checks.find(check => check.id === 'empty-result')).toMatchObject({
+      passed: true,
+      pointsAwarded: 10,
+      maxPoints: 10,
+    });
+    expect(result).toMatchObject({
+      score: 100,
+      rawScore: 100,
+      passed: true,
+      breakdown: {
+        taskFit: 50,
+        groundingSafety: 20,
+        persistenceIsolation: 20,
+        efficiency: 10,
+      },
+    });
+
+    const vagueResponse = [
+      'The current workspace may be empty, but I could not confirm whether files exist.',
+      'Recommended next engineering step: inspect the workspace.',
+    ].join('\n');
+    const vagueResult = scorePersonaTrial(coder, evidence({
+      prompt: coder.prompt,
+      response: vagueResponse,
+      persistedResponse: vagueResponse,
+      requestPersonaId: coder.id,
+      toolsUsed: [toolName],
+      sseEvents: [
+        { event: 'tool_result', data: { name: toolName, result: 'Unavailable', isError: false } },
+        { event: 'done', data: { content: vagueResponse, toolsUsed: [toolName] } },
+      ],
+    }));
+    expect(vagueResult.checks.find(check => check.id === 'empty-result')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+  });
+
   it('syntax-checks fenced Python without executing generated code', () => {
     const valid = [
       '```python',

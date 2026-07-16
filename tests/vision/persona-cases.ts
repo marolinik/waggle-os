@@ -166,7 +166,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [/(?:search_files|list_workspace_files|read_file)/i],
     responseRules: [
       { id: 'workspace-scope', description: 'Reports on the current workspace', kind: 'pattern', pattern: /workspace/i, points: 10 },
-      { id: 'empty-result', description: 'Accurately reports the fresh virtual workspace as empty', kind: 'pattern', pattern: /(?:empty|no files? (?:exist|found|present))/i, points: 10 },
+      { id: 'empty-result', description: 'Accurately reports the fresh virtual workspace as empty', kind: 'pattern', pattern: /(?:\b(?:current|fresh|virtual) workspace (?:is|was) empty\b|\bno files? (?:exist|(?:were )?found|(?:are )?present)\b)/i, points: 10 },
       { id: 'next-step', description: 'Recommends one next engineering step', kind: 'pattern', pattern: /(?:next (?:engineering )?step|recommended next step)/i, points: 10 },
       { id: 'bounded-claim', description: 'Does not claim parent or external repository contents', kind: 'notPattern', pattern: /(?:parent director(?:y|ies)|outside (?:this|the) workspace|repository contains|package\.json)/i, points: 10 },
       { id: 'concise', description: 'Keeps an empty-workspace report concise', kind: 'maxWords', maxWords: 300, points: 10 },
