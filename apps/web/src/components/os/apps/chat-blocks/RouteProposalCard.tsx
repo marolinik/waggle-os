@@ -216,9 +216,11 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
           )}
 
           {/* Cost line — verbatim from the API */}
-          <p className="text-[11px] text-muted-foreground mt-2" data-testid="route-proposal-cost-line">
-            {proposal.costLine}
-          </p>
+          {proposal.costLine !== null && (
+            <p className="text-[11px] text-muted-foreground mt-2" data-testid="route-proposal-cost-line">
+              {proposal.costLine}
+            </p>
+          )}
 
           {/* Actions / terminal states */}
           <div className="flex items-center gap-2 mt-2.5">

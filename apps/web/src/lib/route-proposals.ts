@@ -63,7 +63,8 @@ export interface RouteProposalPayload {
   /** null when no memory brief accompanies the dispatch (persona run, or brief blocked). */
   egress: RouteProposalEgress | null;
   /** Verbatim from the API — render as-is, never reworded. No dollar figures. */
-  costLine: string;
+  /** Null when no eligible executor was selected. */
+  costLine: string | null;
   /** B1 injection gate tripped: egress is null and only "Run without memory" is offered. */
   briefBlocked?: boolean;
   briefBlockedReason?: string;
