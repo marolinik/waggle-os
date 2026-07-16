@@ -31,6 +31,11 @@ export interface BeamLlmResult {
   latencyMs: number;
   /** null = OK; otherwise a short failure classification. */
   failureMode: string | null;
+  /** Prompt-caching economics (Anthropic via OpenRouter): tokens served from
+   *  cache (cheap) and tokens written to cache (surcharged). Absent when the
+   *  provider/route reports no cache usage. */
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
 }
 
 export interface BeamLlm {
@@ -138,7 +143,7 @@ ANSWER:`;
  *  negation/"never happened" rule is added. All other rules are verbatim v1.
  *  Pair with date-stamped `memories` ("[YYYY-MM-DD] role: ...") so the
  *  contradiction rule can surface each statement with its date. */
-export function buildAnswerGenerationPromptV2(question: string, memories: string[], outline?: string): string {
+export function buildAnswerGenerationPromptV2(question: string, memories: string[], outline?: string, beliefsBlock?: string): string {
   const memoriesText =
     memories.length === 0
       ? '(No memories available)'
@@ -146,6 +151,12 @@ export function buildAnswerGenerationPromptV2(question: string, memories: string
   // `outline` is a generic pre-labeled preamble: the CALLER builds the labeled
   // block(s) (timeline, standing directives, ...) and this just inserts them.
   const outlineBlock = outline ? `\n${outline}\n` : '';
+  // `beliefsBlock` is an ADDITIVE consolidated "current values" section built by
+  // the belief cell (real supersede/consolidation code). Placed BEFORE the raw
+  // turns so the model prefers the latest known value on a conflict, while the
+  // raw dated turns remain for detail. When absent the prompt is BYTE-IDENTICAL
+  // to the original v2 (both `beliefsSection` and `outlineBlock` collapse to '').
+  const beliefsSection = beliefsBlock ? `\n${beliefsBlock}\n` : '';
   return `You are an AI assistant with access to stored memories from prior conversations with a user.
 Use these memories to answer the following question as accurately and completely as possible.
 
@@ -162,7 +173,7 @@ IMPORTANT RULES:
 10. Do NOT invent or assume information that isn't in the memories.
 
 QUESTION: ${question}
-${outlineBlock}
+${beliefsSection}${outlineBlock}
 RETRIEVED MEMORIES:
 ${memoriesText}
 
@@ -281,6 +292,54 @@ RETRIEVED MEMORIES:
 ${memoriesText}
 
 ANSWER:`;
+}
+
+/** Answer-REPAIR prompt (E5 self-correction lever). Test-time, gold-blind second
+ *  pass: it sees ONLY the question, the SAME retrieved dated context the drafter
+ *  saw, and the draft answer — NO rubric, NO gold, NO nuggets. It rewrites the
+ *  draft into a more complete, better-grounded answer:
+ *    - fill coverage gaps (enumerate every relevant item/date/clause the context
+ *      supports that the draft omitted) — BEAM grades on nugget coverage;
+ *    - correct chronology / temporal anchors (event date, not mention date);
+ *    - strip any claim the context does not support (no new facts);
+ *    - PRESERVE correct abstentions — if the context genuinely lacks the answer,
+ *      keep the exact sentinel and do not invent to look complete.
+ *  Mirrors the V2 signature (optional outline + beliefsBlock) so the repair pass
+ *  is grounded in the identical context the drafter received. */
+export function buildRepairPrompt(
+  question: string,
+  memories: string[],
+  draftAnswer: string,
+  outline?: string,
+  beliefsBlock?: string,
+): string {
+  const memoriesText =
+    memories.length === 0
+      ? '(No memories available)'
+      : memories.map((m, i) => `${i + 1}. ${m}`).join('\n');
+  const outlineBlock = outline ? `\n${outline}\n` : '';
+  const beliefsSection = beliefsBlock ? `\n${beliefsBlock}\n` : '';
+  return `You are a meticulous reviewer improving a draft answer to a question. You are given the question, the stored memories (dated, from prior conversations with the user) that were available, and a DRAFT ANSWER written from those memories. Your job is to return a single IMPROVED ANSWER that is more complete and better grounded — nothing else.
+
+REPAIR RULES:
+1. Ground everything ONLY in the provided memories (and any consolidated values/timeline shown). Do NOT add any fact, name, date, number, or claim that is not supported by the provided context. You have no outside knowledge of this user.
+2. Improve COVERAGE: re-scan ALL memories and add every relevant item the draft missed. If the question asks for a summary, overview, account of a process/journey, or a list/ordering of events, be EXHAUSTIVE — enumerate every relevant topic, project, event, tool, version, number, date, cause, outcome, and sub-step the memories support. Do not drop minor items.
+3. Fix accuracy: correct any wrong or unsupported statement in the draft. For dates and durations, anchor on the date the event actually happened or is scheduled FOR (not the date it was merely mentioned); present events in chronological order.
+4. Handle contradictions honestly: if the memories contain conflicting statements relevant to the question, present each conflicting statement (with its date when shown) rather than silently picking one.
+5. Remove hallucinations: delete anything in the draft that the memories do not support.
+6. PRESERVE CORRECT ABSTENTION: if the memories genuinely do not contain the information asked, do NOT invent an answer to look more complete — return exactly: "I don't have enough information to answer this question." Conversely, if the memories DO support an answer but the draft wrongly abstained, replace the abstention with the supported answer.
+7. Keep everything in the draft that is already correct and supported; this is a revision, not a rewrite from scratch.
+8. Output ONLY the improved answer text — no preamble, no explanation of your changes, no mention of "the draft".
+
+QUESTION: ${question}
+${beliefsSection}${outlineBlock}
+RETRIEVED MEMORIES:
+${memoriesText}
+
+DRAFT ANSWER:
+${draftAnswer}
+
+IMPROVED ANSWER:`;
 }
 
 /** Fact-extraction prompt for event_ordering (mem0 `get_beam_fact_extraction_prompt`). */
@@ -551,10 +610,28 @@ export async function judgeQuestion(
   }
 
   const nuggetScores: NuggetScore[] = [];
+  let judgeFailures = 0;
   for (const nugget of input.rubric) {
     const ns = await judgeSingleNugget(llm, input.question, nugget, input.answer);
     llmResults.push(ns.result);
+    // A transport failure (http_429/timeout/etc.) or an empty completion means
+    // the JUDGE broke — not that the answer scored 0. Recording 0 here would
+    // silently corrupt the metric, so flag it and let the caller retry / hard-fail.
+    if (ns.result.failureMode || ns.result.text.trim() === '') judgeFailures++;
     nuggetScores.push({ nugget, score: ns.score, reason: ns.reason });
+  }
+
+  if (judgeFailures > 0) {
+    return {
+      judgement: {
+        score: 0,
+        judgment: 'ERROR',
+        nuggetScores,
+        judgeCalls: nuggetScores.length,
+        error: `judge transport failure on ${judgeFailures}/${nuggetScores.length} nuggets`,
+      },
+      llmResults,
+    };
   }
 
   const avg = nuggetScores.reduce((s, n) => s + n.score, 0) / nuggetScores.length;

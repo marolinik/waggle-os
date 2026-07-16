@@ -77,9 +77,14 @@ export const OPENAI_PRICING: Record<string, ModelPricing> = {
 };
 
 /** gpt-5 / o-series reasoning models reject `max_tokens` + non-default
- *  temperature, and spend completion budget on hidden reasoning tokens. */
+ *  temperature, and spend completion budget on hidden reasoning tokens. The
+ *  provider-prefixed form ("openai/gpt-5" via OpenRouter) must match too, or the
+ *  client wrongly uses the max_tokens path and gpt-5 truncates its JSON mid-
+ *  reasoning. gpt-5-chat is NOT a reasoning model, so exclude it explicitly. */
 function isReasoningModel(model: string): boolean {
-  return /^(gpt-5|o\d)/.test(model.toLowerCase());
+  const m = model.toLowerCase();
+  if (/(^|\/)gpt-5-chat/.test(m)) return false;
+  return /(^|\/)(gpt-5|o\d)/.test(m);
 }
 
 // ── Client ──────────────────────────────────────────────────────────────────
@@ -94,6 +99,11 @@ export interface BeamOpenAiClientOptions {
   pricing?: ModelPricing;
   timeoutMs?: number;
   maxRetries?: number;
+  /** Optional reasoning_effort for gpt-5/o-series (e.g. 'minimal' | 'low' |
+   *  'medium' | 'high'). Only sent for reasoning models; omitted by default so
+   *  existing callers are byte-identical. Extraction uses 'low' to cut hidden
+   *  reasoning tokens (latency + cost) on a mechanical task. */
+  reasoningEffort?: string;
 }
 
 export class BeamOpenAiClient implements BeamLlm {
@@ -103,6 +113,7 @@ export class BeamOpenAiClient implements BeamLlm {
   private readonly pricing: ModelPricing;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
+  private readonly reasoningEffort: string | null;
 
   constructor(opts: BeamOpenAiClientOptions) {
     this.model = opts.model;
@@ -111,9 +122,21 @@ export class BeamOpenAiClient implements BeamLlm {
     this.pricing = opts.pricing ?? OPENAI_PRICING[opts.model] ?? { inputPerMillion: 0, outputPerMillion: 0 };
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.reasoningEffort = opts.reasoningEffort ?? null;
   }
 
-  async chat(opts: { system: string; user: string; jsonMode?: boolean; maxTokens?: number }): Promise<BeamLlmResult> {
+  async chat(opts: {
+    system: string;
+    user: string;
+    jsonMode?: boolean;
+    maxTokens?: number;
+    /** Large, stable text prefix to mark for prompt caching (Anthropic via
+     *  OpenRouter). Placed FIRST in the system message with
+     *  cache_control:{type:'ephemeral'} so repeated calls sharing this prefix
+     *  (e.g. one conversation's ledger across its 20 questions) read it from
+     *  cache. Ignored (sent as a plain system block) by non-caching providers. */
+    cacheableSystem?: string;
+  }): Promise<BeamLlmResult> {
     const started = Date.now();
     let lastFailure = 'unknown';
     const reasoning = isReasoningModel(this.model);
@@ -130,15 +153,30 @@ export class BeamOpenAiClient implements BeamLlm {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
+        // System message: when a cacheable prefix is supplied, send the system
+        // content as an array of parts with cache_control on the (large, stable)
+        // prefix so Anthropic (via OpenRouter) serves it from cache on repeat
+        // calls. Otherwise a plain string (byte-identical to prior behaviour).
+        let systemContent: unknown;
+        if (opts.cacheableSystem) {
+          const parts: Array<Record<string, unknown>> = [
+            { type: 'text', text: opts.cacheableSystem, cache_control: { type: 'ephemeral' } },
+          ];
+          if (opts.system) parts.push({ type: 'text', text: opts.system });
+          systemContent = parts;
+        } else {
+          systemContent = opts.system;
+        }
         const body: Record<string, unknown> = {
           model: this.model,
           messages: [
-            { role: 'system', content: opts.system },
+            { role: 'system', content: systemContent },
             { role: 'user', content: opts.user },
           ],
         };
         if (reasoning) {
           body.max_completion_tokens = reasoningBudget;
+          if (this.reasoningEffort) body.reasoning_effort = this.reasoningEffort;
         } else {
           body.temperature = 0;
           body.max_tokens = opts.maxTokens ?? 800;
@@ -165,7 +203,13 @@ export class BeamOpenAiClient implements BeamLlm {
 
         const json = (await res.json()) as {
           choices?: Array<{ message?: { content?: string } }>;
-          usage?: { prompt_tokens?: number; completion_tokens?: number };
+          usage?: {
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            prompt_tokens_details?: { cached_tokens?: number };
+            cache_creation_input_tokens?: number;
+            cache_read_input_tokens?: number;
+          };
         };
         const text = json.choices?.[0]?.message?.content ?? '';
         // Retry-on-empty for reasoning models: HTTP-200 but no answer text means
@@ -183,10 +227,28 @@ export class BeamOpenAiClient implements BeamLlm {
         }
         const inputTokens = json.usage?.prompt_tokens ?? approxTokens(opts.system + opts.user);
         const outputTokens = json.usage?.completion_tokens ?? approxTokens(text);
+        // Prompt-caching accounting (Anthropic via OpenRouter). Providers report
+        // either Anthropic-native fields (cache_creation/cache_read_input_tokens)
+        // or the OpenAI-style prompt_tokens_details.cached_tokens (reads only).
+        const cacheCreationTokens = json.usage?.cache_creation_input_tokens ?? 0;
+        const cacheReadTokens =
+          json.usage?.cache_read_input_tokens ?? json.usage?.prompt_tokens_details?.cached_tokens ?? 0;
+        // `prompt_tokens` from Anthropic EXCLUDES cached-read tokens but INCLUDES
+        // cache-creation tokens; from OpenAI it INCLUDES cached tokens. Compute
+        // uncached input as prompt_tokens minus any cache portions already in it.
+        const inRate = this.pricing.inputPerMillion / 1_000_000;
+        const outRate = this.pricing.outputPerMillion / 1_000_000;
+        // Cache writes are surcharged 1.25x, reads discounted to 0.1x (Anthropic).
+        const uncachedInput = Math.max(0, inputTokens - cacheCreationTokens - (json.usage?.prompt_tokens_details?.cached_tokens ?? 0));
         const costUsd =
-          (inputTokens / 1_000_000) * this.pricing.inputPerMillion +
-          (outputTokens / 1_000_000) * this.pricing.outputPerMillion;
-        return { text, inputTokens, outputTokens, costUsd, latencyMs: Date.now() - started, failureMode: null };
+          uncachedInput * inRate +
+          cacheCreationTokens * inRate * 1.25 +
+          cacheReadTokens * inRate * 0.1 +
+          outputTokens * outRate;
+        return {
+          text, inputTokens, outputTokens, costUsd, latencyMs: Date.now() - started, failureMode: null,
+          cacheReadTokens, cacheCreationTokens,
+        };
       } catch (err) {
         const name = (err as Error).name;
         lastFailure = name === 'AbortError' ? 'timeout' : `fetch_error_${name}`;
@@ -209,6 +271,9 @@ export function createBeamOpenAiClient(opts: {
   envPath?: string;
   baseUrl?: string;
   pricing?: ModelPricing;
+  timeoutMs?: number;
+  maxRetries?: number;
+  reasoningEffort?: string;
 }): BeamOpenAiClient {
   loadDotEnv(opts.envPath);
   const apiKey = process.env.OPENAI_API_KEY;
@@ -218,7 +283,10 @@ export function createBeamOpenAiClient(opts: {
       'Set it in waggle-os/.env or export it before running.',
     );
   }
-  return new BeamOpenAiClient({ model: opts.model, apiKey, baseUrl: opts.baseUrl, pricing: opts.pricing });
+  return new BeamOpenAiClient({
+    model: opts.model, apiKey, baseUrl: opts.baseUrl, pricing: opts.pricing,
+    timeoutMs: opts.timeoutMs, maxRetries: opts.maxRetries, reasoningEffort: opts.reasoningEffort,
+  });
 }
 
 function approxTokens(s: string): number {
