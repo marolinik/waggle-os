@@ -33,7 +33,10 @@ const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|re
 // Bash command patterns that are safe (read-only / informational)
 const SAFE_BASH_PATTERNS = [
   /^(date|whoami|hostname|pwd|uname|id|uptime)$/i,
-  /^(node|python|python3|npm|npx|pip|git)\s+--version$/i,
+  /^(ls|dir)(?:\s+-[al]+)?$/i,
+  /^git\s+(status|log|diff|branch|remote|show|tag)(?:\s+--?[a-z-]+)*$/i,
+  /^(node|python|python3|npm|npx|pip)\s+--version\b/i,
+  /^(df|du|free|top|ps|netstat|lsof)\b/i,
 ];
 
 // Bash command patterns that are destructive (always confirm)
