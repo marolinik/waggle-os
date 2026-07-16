@@ -295,6 +295,88 @@ describe('LauncherApp · captured tasks', () => {
     expect(screen.getByRole('button', { name: /^launch$/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /run task/i })).not.toBeInTheDocument();
   });
+
+  it('launches Hermes Desktop but excludes it and a broken CLI from captured teams', async () => {
+    mocks.adapter.detectTools.mockResolvedValue({
+      platform: 'win32',
+      detectedAt: '2026-07-17T00:00:00.000Z',
+      tools: [
+        {
+          id: 'codex',
+          displayName: 'Codex CLI',
+          installed: true,
+          installedPath: 'C:\\tools\\codex.exe',
+          version: '0.144.1',
+          hooksInstalled: true,
+          hookPointerPath: 'C:\\Users\\test\\.codex\\hooks.json',
+          launchable: true,
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: true,
+            structuredProgress: true,
+            resumable: true,
+            liveWaggleDance: false,
+          },
+          permissionModes: ['read-only', 'workspace-write', 'native'],
+        },
+        {
+          id: 'hermes',
+          displayName: 'Hermes Agent CLI',
+          installed: true,
+          installedPath: 'C:\\Users\\test\\AppData\\Local\\hermes\\bin\\hermes.cmd',
+          version: null,
+          hooksInstalled: false,
+          hookPointerPath: null,
+          launchable: false,
+          diagnostic: 'Hermes failed its --version health check.',
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: true,
+            structuredProgress: false,
+            resumable: true,
+            liveWaggleDance: false,
+          },
+          permissionModes: ['native'],
+        },
+        {
+          id: 'hermes-desktop',
+          displayName: 'Hermes Desktop',
+          installed: true,
+          installedPath: 'C:\\Users\\test\\AppData\\Local\\hermes\\Hermes.exe',
+          version: null,
+          hooksInstalled: false,
+          hookPointerPath: null,
+          launchable: true,
+          hookCapable: false,
+          capabilities: {
+            interactiveLaunch: true,
+            headlessTask: false,
+            structuredProgress: false,
+            resumable: false,
+            liveWaggleDance: false,
+          },
+          permissionModes: [],
+        },
+      ],
+    });
+
+    render(<LauncherApp workspaces={[{ id: 'ws-a', name: 'Alpha' }]} />);
+
+    const desktopCard = await screen.findByTestId('launcher-tool-hermes-desktop');
+    expect(within(desktopCard).getByRole('button', { name: /^launch$/i })).toBeInTheDocument();
+    expect(within(desktopCard).queryByRole('button', { name: /run task/i })).not.toBeInTheDocument();
+    expect(within(desktopCard).queryByRole('button', { name: /install hooks/i })).not.toBeInTheDocument();
+    expect(within(desktopCard).getByText(/launch only/i)).toBeInTheDocument();
+
+    const cliCard = screen.getByTestId('launcher-tool-hermes');
+    expect(within(cliCard).queryByRole('button', { name: /^launch$/i })).not.toBeInTheDocument();
+    expect(within(cliCard).queryByRole('button', { name: /run task/i })).not.toBeInTheDocument();
+    expect(within(cliCard).getByText(/failed its --version health check/i)).toBeInTheDocument();
+
+    fireEvent.click(within(screen.getByTestId('launcher-tool-codex')).getByRole('button', { name: /run task/i }));
+    expect(screen.queryByRole('checkbox', { name: 'Hermes Agent CLI' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Hermes Desktop' })).not.toBeInTheDocument();
+  });
 });
 
 describe('LauncherApp · hook cohort (#3)', () => {
