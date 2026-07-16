@@ -171,6 +171,22 @@ export class DreamJournal {
     const target = path.join(this.dir, `${day.date}.json`);
     const tmp = `${target}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, JSON.stringify(day, null, 2), 'utf8');
-    fs.renameSync(tmp, target);
+
+    // Windows antivirus/indexers can briefly lock either path and make renameSync report EPERM.
+    const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        fs.renameSync(tmp, target);
+        return;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== 'EPERM' && code !== 'EACCES' && code !== 'EBUSY') throw error;
+        if (attempt < 4) Atomics.wait(waitBuffer, 0, 0, 25 * attempt);
+      }
+    }
+
+    // Last-resort fallback loses atomicity but preserves data.
+    fs.copyFileSync(tmp, target);
+    fs.rmSync(tmp, { force: true });
   }
 }

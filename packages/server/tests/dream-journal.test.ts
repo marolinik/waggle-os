@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DreamJournal, QUIET_NIGHT_SUMMARY, composeSummary, localDateString,
 } from '../src/local/dream-journal.js';
@@ -20,6 +20,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -84,6 +85,19 @@ describe('DreamJournal record + persistence', () => {
     const again = new DreamJournal(dir).read(day.date);
     expect(again?.events).toHaveLength(1);
     expect(again?.summary).toBe(day.summary);
+  });
+
+  it('retries transient rename failures before persisting', () => {
+    const rename = vi.spyOn(fs, 'renameSync')
+      .mockImplementationOnce(() => { throw Object.assign(new Error('locked'), { code: 'EPERM' }); })
+      .mockImplementationOnce(() => { throw Object.assign(new Error('locked'), { code: 'EPERM' }); });
+    const j = new DreamJournal(dir);
+
+    expect(() => {
+      j.record('index_reconcile', { ftsFixed: 1, vecFixed: 0 }, new Date('2026-07-09T03:00:00'));
+    }).not.toThrow();
+    expect(rename).toHaveBeenCalledTimes(3);
+    expect(new DreamJournal(dir).read('2026-07-09')?.events).toHaveLength(1);
   });
 
   it('invalidates a stale narrative when new events arrive', () => {
