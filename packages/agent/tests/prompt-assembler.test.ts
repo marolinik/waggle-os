@@ -96,6 +96,16 @@ describe('PromptAssembler.assemble', () => {
     expect(out.debug.sectionsIncluded).toContain('Persona');
   });
 
+  it('packages the persona operating instructions exactly once', () => {
+    const marker = 'PERSONA_OPERATING_RAIL_UNIQUE';
+    const out = assembler.assemble(baseInput({
+      persona: persona({ systemPrompt: `${marker}\nAlways ground claims in evidence.` }),
+    }));
+
+    expect(out.system).toContain(marker);
+    expect(out.system.match(new RegExp(marker, 'g'))).toHaveLength(1);
+  });
+
   it('small tier caps State frames at 3', () => {
     const frames: MemoryFrame[] = [];
     for (let i = 0; i < 10; i++) {

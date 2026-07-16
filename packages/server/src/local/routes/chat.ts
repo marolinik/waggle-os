@@ -15,7 +15,7 @@ import { emitWaggleSignal } from './waggle-signals.js';
 import { emitAuditEvent } from './events.js';
 import { getOptimizerService } from '../services/optimizer-service.js';
 import { validateOrigin } from '../cors-config.js';
-import { listPersonas, composePersonaPrompt, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
+import { listPersonas, BEHAVIORAL_SPEC, isEnabled, detectTaskShape, type AssembledPrompt } from '@waggle/agent';
 
 /**
  * Persona resolver that includes built-ins AND on-disk custom personas
@@ -38,6 +38,12 @@ import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } f
 import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse } from './chat-helpers.js';
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
+import {
+  behavioralRulesForPromptPackage,
+  composeChatPromptTail,
+  selectChatPromptPackageMode,
+  type ChatPromptPackageMode,
+} from './chat-prompt-packaging.js';
 import { getGovernancePermissions } from './chat-governance.js';
 import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
@@ -134,7 +140,8 @@ export function resolveChatAncestry(
 }
 
 export function isExplicitGatedToolRequest(message: string): boolean {
-  return /\b(write|read|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|plan|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|cross-workspace|other workspace)\b/i.test(message)
+  return /\b(write|read|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|plan|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
+    || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message);
 }
@@ -356,7 +363,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
   });
 
   // C3: Cache the base system prompt per session to avoid rebuilding on every message
-  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined }>();
+  const systemPromptCache = new Map<string, { prompt: string; workspace: string | undefined; workspaceId: string | undefined; skillCount: number; personaId: string | null; historyLength: number | undefined; packageMode: ChatPromptPackageMode }>();
 
   // Profile cache (review Major #4): was fs.readFileSync on every buildSystemPrompt call —
   // blocks the Node event loop on every concurrent SSE request. Load once per mtime change,
@@ -418,12 +425,13 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
      * FR #4: when PROMPT_ASSEMBLER is on, the caller pre-fetches a structured
      * AssembledPrompt via `orch.buildAssembledPrompt(query, persona, opts)`.
      * If provided, its `system` replaces the basic `orch.buildSystemPrompt()`
-     * call below — the rest of the wrapper (profile, skills, workspaceNow,
-     * behavioralSpec rules, persona) still layers on top because the assembler
-     * does not include those. Caching is skipped when assembled is provided
-     * because memory recall results vary per turn.
+     * call below. The wrapper adds only context that is not already represented
+     * by the assembler, so persona and response-shape instructions stay singular.
+     * Caching is skipped when assembled is provided because memory recall results
+     * vary per turn.
      */
     assembled?: AssembledPrompt | null,
+    packageMode: ChatPromptPackageMode = 'full',
   ): string {
     // Resolve the active persona: per-window override > workspace default.
     const wsConfig = workspaceId ? server.workspaceManager?.get(workspaceId) : null;
@@ -435,7 +443,7 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     const cacheKey = sessionId ?? 'default';
     if (!assembled) {
       const cached = systemPromptCache.get(cacheKey);
-      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength) {
+      if (cached && cached.workspace === workspacePath && cached.workspaceId === workspaceId && cached.skillCount === skills.length && cached.personaId === activePersonaId && cached.historyLength === historyLength && cached.packageMode === packageMode) {
         return cached.prompt;
       }
     }
@@ -453,9 +461,8 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
     // Orchestrator's built prompt (identity + self-awareness + preloaded context).
     // FR #4: when PromptAssembler is on, swap in the structured assembled prompt
     // — adds Identity + Persona + State + Recent + Memory sections via the
-    // sixth-layer assembler. The remaining wrapper layers (profile, skills,
-    // workspaceNow, behavioralSpec, persona-via-composePersonaPrompt) still
-    // run below because the assembler does not include those.
+    // sixth-layer assembler. Wrapper-only profile, runtime, workspace, active
+    // behavioral, and correction context is layered below.
     // AI-OS #6 — supply the durable "why" (project ← workspace name) before the
     // orchestrator renders its system prompt. Empty ancestry self-suppresses.
     orch.setGoalAncestry(resolveChatAncestry(server, workspaceId));
@@ -496,7 +503,20 @@ export const chatRoutes: FastifyPluginAsync = async (server) => {
       }
     } catch { /* profile shape unexpected — continue without */ }
 
-    prompt += `
+    if (packageMode === 'compact') {
+      prompt += `
+
+# Runtime Context
+- Date: ${dateStr}
+- Time: ${timeStr}
+- Platform: ${process.platform} (${process.arch})
+- Working directory: ${workspacePath ?? 'not set'}
+${sessionId ? `- Session: ${sessionId}` : ''}
+${historyLength && historyLength > 0 ? `- Continuing conversation: ${historyLength} previous messages are in context.` : '- New conversation.'}
+${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId}` : ''}
+`;
+    } else {
+      prompt += `
 
 # Who You Are
 
@@ -522,17 +542,18 @@ ${sessionId ? `- Session: ${sessionId}` : ''}
 ${historyLength && historyLength > 0 ? `- This is a continuing conversation (${historyLength} previous messages in context). You can see the full conversation history above.` : '- This is a new conversation. Search memory (search_memory) to recall what happened in previous sessions.'}
 ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailor responses to this domain.` : ''}
 `;
+    }
 
     // Behavioral rules from the ACTIVE spec — baseline with any deployed
     // self-evolution overrides applied. Falls back to the compiled
     // BEHAVIORAL_SPEC when the server hasn't decorated activeBehavioralSpec
     // (legacy test harness).
     const activeSpec = server.activeBehavioralSpec ?? BEHAVIORAL_SPEC;
-    prompt += '\n' + activeSpec.rules;
+    prompt += '\n' + behavioralRulesForPromptPackage(activeSpec, packageMode);
 
     // Token monitoring
     const estimatedTokens = Math.ceil(prompt.length / 4);
-    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (behavioral-spec v${activeSpec.version})`);
+    log.info(`[Orchestrator] System prompt: ~${estimatedTokens} tokens (${packageMode}, behavioral-spec v${activeSpec.version})`);
     if (estimatedTokens > 12000) {
       log.warn(`[Orchestrator] System prompt exceeds 12K tokens (${estimatedTokens}). Consider trimming.`);
     }
@@ -541,7 +562,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Dead code removed — the old 250-line inline spec lived here
 
     // Append loaded skills with active integration instructions
-    prompt += buildSkillPromptSection(skills);
+    if (packageMode === 'full') {
+      prompt += buildSkillPromptSection(skills);
+    }
 
     // Workspace Now — inject structured context so the agent is grounded on first turn
     if (workspaceId) {
@@ -580,29 +603,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
     } catch { /* non-blocking */ }
 
-    // W1.3: Apply active persona instructions (extends, not replaces, core prompt)
-    // W7.3: Pass workspace tone to composePersonaPrompt
+    // W1.3/W7.3: add persona only on the legacy path; assembler-owned persona
+    // content stays singular. DOCX and workspace-tone guidance always applies.
     const workspaceTone = wsConfig?.tone;
-    if (activePersonaId) {
-      const persona = resolvePersona(activePersonaId);
-      prompt = composePersonaPrompt(prompt, persona, undefined, workspaceTone);
-    } else if (workspaceTone) {
-      // Even without a persona, apply tone if workspace has one set
-      prompt = composePersonaPrompt(prompt, null, undefined, workspaceTone);
-    }
-
-    // FR #4: append the assembler's task-shape responseScaffold as a final
-    // response-shape note. The scaffold guides the model toward the format
-    // the task type calls for ("Cite source. Answer." etc.). Empty when the
-    // task shape has low confidence or the tier is frontier.
-    if (assembled?.responseScaffold) {
-      prompt += '\n\n## Response shape\n' + assembled.responseScaffold;
-    }
+    const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+    prompt = composeChatPromptTail(prompt, {
+      persona: activePersona,
+      workspaceTone,
+      assembled: assembled ?? null,
+    });
 
     // C3: Cache the built prompt — only when there's no per-turn assembler
     // input. Caching an assembled prompt would replay stale memory recall.
     if (!assembled) {
-      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength });
+      systemPromptCache.set(cacheKey, { prompt, workspace: workspacePath, workspaceId, skillCount: skills.length, personaId: activePersonaId, historyLength, packageMode });
     }
 
     return prompt;
@@ -1246,17 +1260,17 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // The assembler runs sixth-layer prompt packaging (Identity + Persona +
         // memory sections + task-shape scaffold). Failures fall back gracefully
         // to the static system prompt — never block a chat turn on assembler errors.
+        const turnTaskShape = detectTaskShape(agentMessage);
         let assembled: AssembledPrompt | null = null;
         if (!hasCustomRunner && isEnabled('PROMPT_ASSEMBLER')) {
           try {
             const wsConfigForAssembler = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
             const personaIdForAssembler = personaOverride ?? wsConfigForAssembler?.personaId ?? null;
             const personaForAssembler = personaIdForAssembler ? resolvePersona(personaIdForAssembler) : null;
-            const taskShape = detectTaskShape(agentMessage);
-            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape, turnId, recalledText: recallTextForAssembler });
+            assembled = await sessionOrch.buildAssembledPrompt(agentMessage, personaForAssembler, { taskShape: turnTaskShape, turnId, recalledText: recallTextForAssembler });
             log.info(
               `[prompt-assembler] applied turn=${turnId.slice(0, 8)} `
-              + `shape=${taskShape.type ?? 'none'} conf=${taskShape.confidence.toFixed(2)} `
+              + `shape=${turnTaskShape.type ?? 'none'} conf=${turnTaskShape.confidence.toFixed(2)} `
               + `tier=${assembled.debug.tier} sections=${assembled.debug.sectionsIncluded.length} `
               + `frames=${assembled.debug.framesUsed} chars=${assembled.debug.totalChars}`
             );
@@ -1269,13 +1283,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // W4.5 (plan bug #9-1, double-inject): when the assembler ran, the
         // recall block is already INSIDE the assembled prompt — appending
         // recalledContext again injected every recalled memory twice.
-        const systemPrompt = hasCustomRunner
-          ? 'You are a helpful AI assistant.'
-          : ambiguityPrefix
-            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled)
-            + templateContext
-            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel)
-            + (assembled ? '' : recalledContext);
+        let systemPrompt = hasCustomRunner ? 'You are a helpful AI assistant.' : '';
 
         // Register a per-request pre:tool hook for confirmation gates
         // This fires during the agent loop and pauses until user approves/denies
@@ -1734,6 +1742,30 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           });
           effectiveTools = selection.tools;
           log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
+        }
+
+        // Package the prompt only after the executable tool set is final. A
+        // genuinely conversational turn can stay compact; every tool-bearing,
+        // agentic, sensitive, or complex turn retains the full operating spec.
+        if (!hasCustomRunner) {
+          const explicitCapabilityRequest = isExplicitGatedToolRequest(agentMessage)
+            || isExplicitMemoryRecallRequest(agentMessage)
+            || isExplicitMemorySaveRequest(agentMessage)
+            || isExplicitExternalResearchRequest(agentMessage);
+          const packageMode = selectChatPromptPackageMode({
+            message: agentMessage,
+            selectedToolCount: effectiveTools.length,
+            autonomyLevel,
+            isAutomatedTurn,
+            explicitCapabilityRequest,
+            taskComplexity: turnTaskShape.complexity,
+          });
+          systemPrompt = ambiguityPrefix
+            + buildSystemPrompt(sessionOrch, workspacePath, sessionId, history.length, effectiveWorkspace, personaOverride, assembled, packageMode)
+            + templateContext
+            + conversationalToolPolicyPrompt(agentMessage, autonomyLevel)
+            + (assembled ? '' : recalledContext);
+          log.info(`[chat] prompt package: mode=${packageMode}, chars=${systemPrompt.length}, tools=${effectiveTools.length}`);
         }
 
         // Build routing suggestions from the exact executable/serialized set.

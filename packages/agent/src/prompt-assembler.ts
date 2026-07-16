@@ -289,6 +289,10 @@ function renderPersona(persona: AgentPersona): string {
   const lines = [`## Persona: ${persona.name}`];
   if (persona.tagline) lines.push(persona.tagline);
   lines.push(persona.description);
+  const operatingInstructions = persona.systemPrompt.trim();
+  if (operatingInstructions) {
+    lines.push(`### Persona operating instructions\n${operatingInstructions}`);
+  }
   return lines.join('\n');
 }
 
