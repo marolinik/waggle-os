@@ -214,6 +214,8 @@ describe('Tauri Production Configuration', () => {
     expect(content).toContain('esbuild');
     expect(content).toContain('service.ts');
     expect(content).toContain('resources/service.js');
+    expect(content).toContain('sourcemap: false');
+    expect(content).toContain('fs.rmSync(sourceMapFile, { force: true })');
   });
 
   it('D12: the bundled sidecar is generated at build time, never tracked', () => {
@@ -226,7 +228,7 @@ describe('Tauri Production Configuration', () => {
 
     const gitignore = fs.readFileSync(path.join(ROOT, '.gitignore'), 'utf-8');
     expect(gitignore).toContain('app/src-tauri/resources/service.js');
-    expect(gitignore).toContain('app/src-tauri/resources/service.js.map');
+    expect(gitignore).not.toContain('app/src-tauri/resources/service.js.map');
   });
 
   it('bundle-node defaults to the Node version that stages native deps', () => {
@@ -246,7 +248,7 @@ describe('Tauri Production Configuration', () => {
   });
 
   it.runIf(process.platform === 'win32')(
-    'sidecar resource preflight rejects each missing Windows native runtime',
+    'sidecar resource preflight rejects missing Windows runtimes and sidecar source artifacts',
     () => {
       const fixtureRoot = fs.mkdtempSync(
         path.join(os.tmpdir(), 'waggle-sidecar-preflight-'),
@@ -285,6 +287,7 @@ describe('Tauri Production Configuration', () => {
           fixtureChecker,
         );
         fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
+        writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
 
         for (const entry of requiredNativeFiles) {
           writeFixtureFile(path.join(fixtureResources, 'native'), entry);
@@ -317,6 +320,27 @@ describe('Tauri Production Configuration', () => {
 
           fs.writeFileSync(target, '', 'utf-8');
         }
+
+        writeFixtureFile(
+          fixtureResources,
+          'service.js.map',
+          JSON.stringify({ sourcesContent: ['private TypeScript source'] }),
+        );
+        const mapResult = runChecker();
+        expect(mapResult.status).toBe(1);
+        expect(mapResult.stderr).toContain('resources/service.js.map must not be packaged');
+        fs.rmSync(path.join(fixtureResources, 'service.js.map'));
+
+        fs.writeFileSync(
+          path.join(fixtureResources, 'service.js'),
+          'console.log("sidecar");\n//# sourceMappingURL=data:application/json;base64,e30=\n',
+          'utf-8',
+        );
+        const inlineMapResult = runChecker();
+        expect(inlineMapResult.status).toBe(1);
+        expect(inlineMapResult.stderr).toContain(
+          'resources/service.js contains a sourceMappingURL directive',
+        );
       } finally {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }

@@ -24,6 +24,26 @@ const root = path.resolve(__dirname, '..');
 const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
 
 const missing = [];
+const unsafe = [];
+
+const servicePath = path.join(resourcesDir, 'service.js');
+if (!fs.existsSync(servicePath)) {
+  missing.push('resources/service.js (run: node scripts/build-sidecar.mjs)');
+} else {
+  const service = fs.readFileSync(servicePath, 'utf8');
+  if (/(?:\/\/|\/\*)[#@]\s*sourceMappingURL\s*=/.test(service)) {
+    unsafe.push('resources/service.js contains a sourceMappingURL directive');
+  }
+}
+
+const sourceArtifacts = fs.existsSync(resourcesDir)
+  ? fs.readdirSync(resourcesDir, { withFileTypes: true })
+    .filter((entry) => /\.(?:map|tsx?)$/i.test(entry.name))
+    .map((entry) => entry.name)
+  : [];
+for (const artifact of sourceArtifacts) {
+  unsafe.push(`resources/${artifact} must not be packaged`);
+}
 
 const nodeBinary = process.platform === 'win32' ? 'node.exe' : 'node';
 const nodePath = path.join(resourcesDir, nodeBinary);
@@ -98,9 +118,10 @@ for (const entry of hookRuntimeEntries) {
   }
 }
 
-if (missing.length > 0) {
-  console.error('[check-sidecar-resources] FATAL — sidecar runtime artifacts missing:');
+if (missing.length > 0 || unsafe.length > 0) {
+  console.error('[check-sidecar-resources] FATAL — sidecar resources are not release-safe:');
   for (const m of missing) console.error(`  - ${m}`);
+  for (const item of unsafe) console.error(`  - ${item}`);
   console.error(
     '[check-sidecar-resources] Stage them with the bundle scripts (set TARGET_ARCH for\n' +
     'cross-arch builds) or use the npm tauri:build* scripts / CI, which run them for you.',

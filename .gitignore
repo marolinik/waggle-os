@@ -198,7 +198,6 @@ app/src-tauri/resources/native/
 # hook). A committed copy goes stale silently — a binary shipping an old server
 # is a release-stopping defect class (UX-Refactor P4 ruling).
 app/src-tauri/resources/service.js
-app/src-tauri/resources/service.js.map
 
 # Editor directories and files
 .vscode/*
