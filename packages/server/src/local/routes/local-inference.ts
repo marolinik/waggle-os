@@ -50,6 +50,14 @@ interface InferenceServerStatus {
   version?: string;
 }
 
+const OLLAMA_MODEL_REF = /^[a-zA-Z0-9][a-zA-Z0-9._/-]*(?::[a-zA-Z0-9][a-zA-Z0-9._-]*)?$/;
+
+function isValidOllamaModelRef(model: string): boolean {
+  if (model.length > 200 || !OLLAMA_MODEL_REF.test(model)) return false;
+  const repository = model.split(':', 1)[0] ?? '';
+  return repository.split('/').every((segment) => segment.length > 0 && segment !== '.' && segment !== '..');
+}
+
 export interface LocalInferenceRuntimeController {
   getStatus(): ManagedOllamaStatus;
   ensureReady(): Promise<ManagedOllamaReadyResult>;
@@ -213,22 +221,73 @@ export async function localInferenceRoutes(
 
   // POST /api/local-inference/pull
   fastify.post<{ Body: { model: string } }>('/api/local-inference/pull', async (request, reply) => {
-    const { model } = request.body;
-    if (!model) return reply.code(400).send({ error: 'model is required' });
+    const model = request.body?.model?.trim();
+    if (!model) return reply.code(400).send({ error: 'model is required', code: 'MODEL_REQUIRED' });
+    if (!isValidOllamaModelRef(model)) {
+      return reply.code(400).send({ error: 'model must be a valid Ollama model reference', code: 'INVALID_MODEL_REF' });
+    }
+    if (isRemoteOllamaAlias(model)) {
+      return reply.code(400).send({
+        error: 'Ollama cloud aliases are not offline models. Choose a downloadable local model.',
+        code: 'REMOTE_MODEL_NOT_LOCAL',
+      });
+    }
     try {
       const res = await fetch(`${OLLAMA_URL}/api/pull`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: model, stream: false }),
-        signal: AbortSignal.timeout(600000),
+        signal: AbortSignal.timeout(45 * 60_000),
       });
       if (!res.ok) {
         const text = await res.text();
         return reply.code(502).send({ error: `Ollama pull failed: ${text}` });
       }
-      return { ok: true, model, status: await res.json() };
-    } catch {
-      return reply.code(502).send({ error: `Ollama not reachable at ${OLLAMA_URL}` });
+      const pullStatus = await res.json();
+      const installed = await probeOllama(OLLAMA_URL);
+      const installedModel = installed.models.find((name) => name === model || name === `${model}:latest`);
+      if (!installedModel) {
+        return reply.code(502).send({
+          error: `Ollama completed the pull but did not advertise "${model}" as a local model`,
+          code: 'MODEL_NOT_ADVERTISED_LOCAL',
+        });
+      }
+
+      const probe = await fetch(`${OLLAMA_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: installedModel,
+          prompt: 'Reply with the single word OK.',
+          stream: false,
+          think: false,
+          options: { temperature: 0, num_predict: 8 },
+        }),
+        signal: AbortSignal.timeout(5 * 60_000),
+      });
+      const generation = probe.ok
+        ? await probe.json() as { response?: string; done?: boolean }
+        : null;
+      if (!generation || generation.done !== true || !generation.response?.trim()) {
+        return reply.code(502).send({
+          error: `Model "${installedModel}" was installed but failed its local generation probe`,
+          code: 'MODEL_GENERATION_PROBE_FAILED',
+          installed: true,
+          model: installedModel,
+        });
+      }
+      return {
+        ok: true,
+        model: installedModel,
+        status: pullStatus,
+        verifiedGeneration: true,
+        sample: generation.response.trim().slice(0, 40),
+      };
+    } catch (error) {
+      return reply.code(502).send({
+        error: error instanceof Error ? error.message : `Ollama not reachable at ${OLLAMA_URL}`,
+        code: 'LOCAL_MODEL_SETUP_FAILED',
+      });
     }
   });
 }

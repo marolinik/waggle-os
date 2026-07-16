@@ -64,6 +64,31 @@ export interface AgentGroupRunResult {
   message?: string;
 }
 
+export interface ManagedLocalRuntimeStatus {
+  source: 'waggle-managed';
+  supported: boolean;
+  installed: boolean;
+  running: boolean;
+  targetVersion: string | null;
+  version: string | null;
+  artifactSizeBytes: number | null;
+  downloadRequired: boolean;
+  dockerRequired: false;
+  reason?: string;
+}
+
+export interface LocalInferenceStatus {
+  servers: Array<Record<string, unknown>>;
+  ollamaInstalled: boolean;
+  ollamaRunning: boolean;
+  totalLocalModels: number;
+  offlineReady: boolean;
+  dockerRequired: false;
+  managedRuntime: ManagedLocalRuntimeStatus;
+  setupRequired: boolean;
+  setupMessage: string | null;
+}
+
 /**
  * CC Sesija A §2.2 — map adapter `MemoryFrame.importance` (number 1-4) to the
  * Tauri command's string enum. Inverse of IMPORTANCE_MAP.
@@ -1202,13 +1227,32 @@ class LocalAdapter {
     return res.json();
   }
 
-  async getLocalInferenceStatus(): Promise<{ servers: Array<Record<string, unknown>>; ollamaInstalled: boolean; totalLocalModels: number }> {
+  async getLocalInferenceStatus(): Promise<LocalInferenceStatus> {
     const res = await this.fetch('/api/local-inference/status');
     return res.json();
   }
 
-  async pullLocalModel(model: string): Promise<{ ok: boolean }> {
-    const res = await this.fetch('/api/local-inference/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) });
+  async bootstrapLocalRuntime(): Promise<{
+    ok: boolean;
+    installedNow: boolean;
+    startedNow: boolean;
+    endpoint: string;
+    dockerRequired: false;
+  }> {
+    const res = await this.fetch(
+      '/api/local-inference/bootstrap',
+      { method: 'POST' },
+      45 * 60_000,
+    );
+    return res.json();
+  }
+
+  async pullLocalModel(model: string): Promise<{ ok: boolean; model: string; verifiedGeneration: boolean }> {
+    const res = await this.fetch(
+      '/api/local-inference/pull',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model }) },
+      50 * 60_000,
+    );
     return res.json();
   }
 

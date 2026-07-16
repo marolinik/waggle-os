@@ -154,3 +154,125 @@ describe('local-inference route — Waggle-managed runtime', () => {
     await server.close();
   });
 });
+
+describe('local-inference route — verified model installation', () => {
+  async function buildPullServer(models: string[]) {
+    const server = Fastify({ logger: false });
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => ({ ...managedStatus(), installed: true, running: true, downloadRequired: false }),
+        ensureReady: vi.fn(),
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => ({
+        type: 'ollama',
+        available: true,
+        url: 'http://127.0.0.1:11434',
+        models,
+        cloudModels: [],
+        version: 'test-1.0.0',
+      }),
+      vllmProbe: async () => unavailableVllm,
+    });
+    return server;
+  }
+
+  it('rejects cloud aliases and malformed refs before any download', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const server = await buildPullServer([]);
+    try {
+      const missing = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+      });
+      expect(missing.statusCode).toBe(400);
+      expect(missing.json().code).toBe('MODEL_REQUIRED');
+
+      const cloud = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+        payload: { model: 'minimax-m2.7:cloud' },
+      });
+      expect(cloud.statusCode).toBe(400);
+      expect(cloud.json().code).toBe('REMOTE_MODEL_NOT_LOCAL');
+
+      const malformed = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+        payload: { model: 'trusted/../../escape' },
+      });
+      expect(malformed.statusCode).toBe(400);
+      expect(malformed.json().code).toBe('INVALID_MODEL_REF');
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      await server.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports ready only after the pulled local model produces a real token', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ response: 'OK', done: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = await buildPullServer(['qwen3:1.7b']);
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+        payload: { model: 'qwen3:1.7b' },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        ok: true,
+        model: 'qwen3:1.7b',
+        verifiedGeneration: true,
+        sample: 'OK',
+      });
+      expect(fetchMock).toHaveBeenNthCalledWith(2,
+        'http://127.0.0.1:11434/api/generate',
+        expect.objectContaining({ method: 'POST' }),
+      );
+      expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+        model: 'qwen3:1.7b',
+        stream: false,
+        think: false,
+        options: { temperature: 0, num_predict: 8 },
+      });
+    } finally {
+      await server.close();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not claim readiness when an installed model fails generation', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'success' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('model failed to load', { status: 500 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const server = await buildPullServer(['qwen3:1.7b']);
+    try {
+      const response = await server.inject({
+        method: 'POST',
+        url: '/api/local-inference/pull',
+        payload: { model: 'qwen3:1.7b' },
+      });
+      expect(response.statusCode).toBe(502);
+      expect(response.json()).toMatchObject({
+        code: 'MODEL_GENERATION_PROBE_FAILED',
+        installed: true,
+        model: 'qwen3:1.7b',
+      });
+    } finally {
+      await server.close();
+      vi.unstubAllGlobals();
+    }
+  });
+});

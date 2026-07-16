@@ -41,7 +41,32 @@ interface ModelGateProps {
 interface LocalStatus {
   servers: Array<Record<string, unknown>>;
   ollamaInstalled: boolean;
+  ollamaRunning?: boolean;
   totalLocalModels: number;
+  dockerRequired?: false;
+  managedRuntime?: {
+    supported: boolean;
+    installed: boolean;
+    running: boolean;
+    targetVersion: string | null;
+    version: string | null;
+    artifactSizeBytes: number | null;
+    downloadRequired: boolean;
+    dockerRequired: false;
+    reason?: string;
+  };
+}
+
+interface LocalModelRecommendation {
+  name: string;
+  fitLevel?: string;
+  estimatedTps?: number;
+  runMode?: string;
+}
+
+function formatDownloadSize(bytes: number | null | undefined): string | null {
+  if (!bytes || bytes <= 0) return null;
+  return `${(bytes / (1024 ** 3)).toFixed(1)} GB`;
 }
 
 type ValidateState =
@@ -98,6 +123,9 @@ export function ModelGate({
 
   // Local models
   const [local, setLocal] = useState<LocalStatus | null>(null);
+  const [recommendedLocal, setRecommendedLocal] = useState<LocalModelRecommendation | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(false);
+  const [runtimeMsg, setRuntimeMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [pullName, setPullName] = useState('');
   const [pulling, setPulling] = useState(false);
   const [pullMsg, setPullMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -107,6 +135,26 @@ export function ModelGate({
       setLocal(await adapter.getLocalInferenceStatus());
     } catch {
       setLocal({ servers: [], ollamaInstalled: false, totalLocalModels: 0 });
+    }
+    try {
+      const result = await adapter.getLocalInferenceModels('general');
+      const candidate = result.models.find((model) => (
+        typeof model.name === 'string'
+        && model.fitLevel !== 'too_tight'
+        && model.runMode !== 'no_fit'
+      ));
+      const recommendation: LocalModelRecommendation | null = candidate && typeof candidate.name === 'string'
+        ? {
+            name: candidate.name,
+            ...(typeof candidate.fitLevel === 'string' ? { fitLevel: candidate.fitLevel } : {}),
+            ...(typeof candidate.estimatedTps === 'number' ? { estimatedTps: candidate.estimatedTps } : {}),
+            ...(typeof candidate.runMode === 'string' ? { runMode: candidate.runMode } : {}),
+          }
+        : null;
+      setRecommendedLocal(recommendation ?? null);
+      if (recommendation?.name) setPullName((current) => current || recommendation.name);
+    } catch {
+      setRecommendedLocal(null);
     }
   }, []);
   useEffect(() => { void refreshLocal(); }, [refreshLocal]);
@@ -343,18 +391,52 @@ export function ModelGate({
     setPullMsg(null);
     try {
       const res = await adapter.pullLocalModel(name);
-      if (res?.ok) {
-        setPullMsg({ kind: 'ok', text: `Pulled "${name}".` });
+      if (res?.ok && res.verifiedGeneration) {
+        let selectedAsDefault = true;
+        try {
+          await adapter.saveSettings({ defaultModel: `ollama/${res.model}` });
+        } catch {
+          selectedAsDefault = false;
+        }
+        setPullMsg({
+          kind: selectedAsDefault ? 'ok' : 'err',
+          text: selectedAsDefault
+            ? `Installed and verified "${res.model}". It is now your default local model.`
+            : `Installed and verified "${res.model}", but Waggle could not select it as the default.`,
+        });
         setPullName('');
         await refreshLocal();
-        onModelReady?.();
+        if (selectedAsDefault) onModelReady?.();
       } else {
-        setPullMsg({ kind: 'err', text: `Could not pull "${name}".` });
+        setPullMsg({ kind: 'err', text: `Could not install and verify "${name}".` });
       }
-    } catch {
-      setPullMsg({ kind: 'err', text: `Could not pull "${name}" — is Ollama running?` });
+    } catch (error) {
+      setPullMsg({
+        kind: 'err',
+        text: error instanceof Error ? error.message : `Could not install and verify "${name}".`,
+      });
     } finally {
       setPulling(false);
+    }
+  };
+
+  const handleBootstrap = async () => {
+    setBootstrapping(true);
+    setRuntimeMsg(null);
+    try {
+      await adapter.bootstrapLocalRuntime();
+      await refreshLocal();
+      setRuntimeMsg({
+        kind: 'ok',
+        text: 'Private runtime ready. Download the recommended model to finish local setup.',
+      });
+    } catch (error) {
+      setRuntimeMsg({
+        kind: 'err',
+        text: error instanceof Error ? error.message : 'Could not install the private runtime.',
+      });
+    } finally {
+      setBootstrapping(false);
     }
   };
 
@@ -672,42 +754,96 @@ export function ModelGate({
       {tab === 'local' && (
         <div className="space-y-3" role="tabpanel">
           <p className="text-sm text-muted-foreground">
-            {local?.ollamaInstalled
-              ? `Ollama detected — ${local.totalLocalModels} model${local.totalLocalModels === 1 ? '' : 's'} installed.`
-              : 'No local runtime detected. Install Ollama to run models privately on your machine.'}
+            {(local?.ollamaRunning ?? local?.ollamaInstalled)
+              ? `Private runtime running — ${local?.totalLocalModels ?? 0} model${local?.totalLocalModels === 1 ? '' : 's'} installed.`
+              : local?.managedRuntime?.installed
+                ? 'Private runtime installed but not running. Start it here to use local models.'
+                : local?.managedRuntime?.supported
+                  ? 'No local runtime yet. Waggle can install and manage it for you.'
+                  : local?.managedRuntime?.reason ?? 'Managed runtime status is unavailable. Retry the check before local setup.'}
           </p>
-          <div className="space-y-2 rounded-lg border border-border bg-card/60 p-3">
-            <label htmlFor="model-gate-pull" className="block text-sm font-medium text-foreground">
-              Pull a model
-            </label>
-            <Input
-              id="model-gate-pull"
-              name="modelPullName"
-              autoComplete="off"
-              value={pullName}
-              onChange={(e) => setPullName(e.target.value)}
-              placeholder="e.g. llama3.2"
-            />
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handlePull}
-                disabled={pulling || !pullName.trim()}
-                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-              >
-                {pulling && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
-                {pulling ? 'Pulling…' : 'Pull'}
-              </button>
+          {!(local?.ollamaRunning ?? local?.ollamaInstalled) && local?.managedRuntime?.supported && (
+            <div className="space-y-2 rounded-lg border border-border bg-card/60 p-3">
+              <div className="flex items-start gap-2">
+                <Cpu className="mt-0.5 size-4 shrink-0 text-honey" aria-hidden />
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {local.managedRuntime.installed ? 'Start private runtime' : 'Install private runtime'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {local.managedRuntime.installed
+                      ? 'Starts Waggle’s verified local runtime on this device.'
+                      : `Downloads the checksum-verified official runtime${formatDownloadSize(local.managedRuntime.artifactSizeBytes) ? ` (${formatDownloadSize(local.managedRuntime.artifactSizeBytes)})` : ''}. No Docker, administrator access, or system Ollama install required.`}
+                  </p>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleBootstrap}
+                  disabled={bootstrapping}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {bootstrapping && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+                  {bootstrapping
+                    ? 'Installing private runtime…'
+                    : local.managedRuntime.installed ? 'Start runtime' : 'Install runtime'}
+                </button>
+              </div>
             </div>
-            {pullMsg && (
-              <p
-                role={pullMsg.kind === 'err' ? 'alert' : 'status'}
-                className={`text-sm ${pullMsg.kind === 'err' ? 'text-destructive' : 'text-honey'}`}
-              >
-                {pullMsg.text}
+          )}
+          {runtimeMsg && (
+            <p
+              role={runtimeMsg.kind === 'err' ? 'alert' : 'status'}
+              className={`text-sm ${runtimeMsg.kind === 'err' ? 'text-destructive' : 'text-honey'}`}
+            >
+              {runtimeMsg.text}
+            </p>
+          )}
+          {(local?.ollamaRunning ?? local?.ollamaInstalled) && (
+            <div className="space-y-2 rounded-lg border border-border bg-card/60 p-3">
+              <label htmlFor="model-gate-pull" className="block text-sm font-medium text-foreground">
+                Download and verify a model
+              </label>
+              {recommendedLocal && (
+                <p className="text-xs text-muted-foreground">
+                  Recommended for this device: <span className="font-medium text-foreground">{recommendedLocal.name}</span>
+                  {recommendedLocal.fitLevel ? ` · ${recommendedLocal.fitLevel.replace('_', ' ')} fit` : ''}
+                  {typeof recommendedLocal.estimatedTps === 'number' ? ` · ~${recommendedLocal.estimatedTps} tok/s` : ''}
+                </p>
+              )}
+              <Input
+                id="model-gate-pull"
+                name="modelPullName"
+                autoComplete="off"
+                value={pullName}
+                onChange={(e) => setPullName(e.target.value)}
+                placeholder="e.g. llama3.2:3b"
+              />
+              <p className="text-xs text-muted-foreground">
+                Model weights are downloaded to Waggle’s private data directory. By continuing, you accept the model publisher’s upstream license.
               </p>
-            )}
-          </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handlePull}
+                  disabled={pulling || !pullName.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                >
+                  {pulling && <Loader2 className="size-3.5 animate-spin" aria-hidden />}
+                  {pulling ? 'Downloading and verifying…' : 'Install model'}
+                </button>
+              </div>
+              {pullMsg && (
+                <p
+                  role={pullMsg.kind === 'err' ? 'alert' : 'status'}
+                  className={`text-sm ${pullMsg.kind === 'err' ? 'text-destructive' : 'text-honey'}`}
+                >
+                  {pullMsg.text}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
