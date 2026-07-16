@@ -2893,7 +2893,11 @@ Return ONLY the improved system prompt text. No commentary, no markdown fences, 
     const llm = { ...server.agentState.llmProvider };
 
     // P0-3: If provider is anthropic-proxy and claims healthy, validate the key actually works
-    if (llm.provider === 'anthropic-proxy' && llm.health === 'healthy') {
+    if (
+      llm.provider === 'anthropic-proxy'
+      && llm.health === 'healthy'
+      && llm.detail.startsWith('Built-in Anthropic proxy')
+    ) {
       const keyValid = freshAnthropicValidation();
       if (keyValid === false) {
         llm.health = 'degraded';

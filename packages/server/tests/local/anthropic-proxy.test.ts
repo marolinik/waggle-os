@@ -1,7 +1,7 @@
 /**
- * Anthropic Proxy Route Tests (PRQ-043)
+ * Built-in Provider Proxy Route Tests (PRQ-043)
  *
- * Tests the built-in OpenAI-to-Anthropic translation proxy:
+ * Tests Anthropic translation and direct OpenAI-compatible provider routing:
  *   GET  /v1/health/liveliness           — health check
  *   POST /v1/chat/completions            — translate OpenAI format to Anthropic (non-streaming)
  *
@@ -16,6 +16,7 @@ import { anthropicProxyRoutes } from '../../src/local/routes/anthropic-proxy.js'
 
 function createTestServer(options: {
   vaultApiKey?: string;
+  vaultProviders?: Record<string, { value: string; metadata?: Record<string, unknown> }>;
   envApiKey?: string;
   configApiKey?: string;
   dataDir?: string;
@@ -23,9 +24,12 @@ function createTestServer(options: {
   const server = Fastify({ logger: false });
 
   // Mock vault
-  if (options.vaultApiKey) {
+  if (options.vaultApiKey || options.vaultProviders) {
     server.decorate('vault', {
-      get: (name: string) => name === 'anthropic' ? { value: options.vaultApiKey } : null,
+      get: (name: string) => {
+        if (name === 'anthropic' && options.vaultApiKey) return { value: options.vaultApiKey };
+        return options.vaultProviders?.[name] ?? null;
+      },
     });
   } else {
     server.decorate('vault', null);
@@ -321,43 +325,140 @@ describe('Anthropic Proxy Routes', () => {
     });
   });
 
-  describe('non-Anthropic model guard', () => {
-    it('rejects non-Claude models with 400 and never calls the Anthropic API', async () => {
-      process.env.ANTHROPIC_API_KEY = 'test-key-model-guard';
-      server = createTestServer();
+  describe('Docker-independent provider routing', () => {
+    it('forwards OpenAI-compatible models directly without LiteLLM', async () => {
+      server = createTestServer({
+        vaultProviders: { openai: { value: 'openai-vault-key' } },
+      });
 
-      const outboundCalls: string[] = [];
-      globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
-        outboundCalls.push(String(url));
-        return { ok: true, status: 200, json: async () => ({}) };
-      }) as unknown as typeof globalThis.fetch;
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'Direct route works.' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 3, completion_tokens: 4, total_tokens: 7 },
+        model: 'gpt-5.4',
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
 
-      const nonAnthropicModels = [
-        'alibaba/qwen3.7-max-2026-06-08',
-        'gpt-4o',
-        'openrouter/moonshotai/kimi-k2.5',
-        'gemini/gemini-2.5-pro',
-      ];
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openai/gpt-5.4',
+          messages: [{ role: 'user', content: 'test' }],
+          tools: [{
+            type: 'function',
+            function: { name: 'read_file', description: 'Read', parameters: { type: 'object' } },
+          }],
+          stream: false,
+        },
+      });
 
-      for (const model of nonAnthropicModels) {
-        const res = await server.inject({
-          method: 'POST',
-          url: '/v1/chat/completions',
-          payload: {
-            model,
-            messages: [{ role: 'user', content: 'test' }],
-            stream: false,
+      expect(res.statusCode).toBe(200);
+      expect(res.json().choices[0].message.content).toBe('Direct route works.');
+      const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+      expect(String(url)).toBe('https://api.openai.com/v1/chat/completions');
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer openai-vault-key');
+      const outbound = JSON.parse(String(init?.body));
+      expect(outbound.model).toBe('gpt-5.4');
+      expect(outbound.tools[0].function.name).toBe('read_file');
+    });
+
+    it('preserves nested OpenRouter model ids and honors a configured compatible base URL', async () => {
+      server = createTestServer({
+        vaultProviders: {
+          openrouter: {
+            value: 'openrouter-vault-key',
+            metadata: { baseUrl: 'https://router.example.test/api/v1' },
           },
-        });
+        },
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
 
-        expect(res.statusCode).toBe(400);
-        const body = res.json();
-        expect(body.error.message).toContain(model);
-        expect(body.error.message).toMatch(/Claude/);
-      }
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'openrouter/anthropic/claude-opus-4.8',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
 
-      // Guard must fire BEFORE any outbound Anthropic request.
-      expect(outboundCalls).toHaveLength(0);
+      expect(res.statusCode).toBe(200);
+      const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+      expect(String(url)).toBe('https://router.example.test/api/v1/chat/completions');
+      expect(JSON.parse(String(init?.body)).model).toBe('anthropic/claude-opus-4.8');
+    });
+
+    it('uses the Gemini OpenAI-compatibility endpoint with bearer auth', async () => {
+      server = createTestServer({
+        vaultProviders: { google: { value: 'gemini-vault-key' } },
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+        choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'google/gemini-3.5-flash',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const [url, init] = vi.mocked(globalThis.fetch).mock.calls[0];
+      expect(String(url)).toBe(
+        'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+      );
+      expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer gemini-vault-key');
+      expect(JSON.parse(String(init?.body)).model).toBe('gemini-3.5-flash');
+    });
+
+    it('passes through provider SSE without buffering it into JSON', async () => {
+      server = createTestServer({
+        vaultProviders: { deepseek: { value: 'deepseek-vault-key' } },
+      });
+      const upstream = 'data: {"choices":[{"delta":{"content":"Hi"}}]}\n\ndata: [DONE]\n\n';
+      globalThis.fetch = vi.fn(async () => new Response(upstream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'deepseek/deepseek-chat',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: true,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.headers['content-type']).toContain('text/event-stream');
+      expect(res.body).toBe(upstream);
+    });
+
+    it('rejects unknown providers before making an outbound request', async () => {
+      server = createTestServer();
+      globalThis.fetch = vi.fn();
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model: 'unknown-provider/new-model',
+          messages: [{ role: 'user', content: 'test' }],
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.message).toContain('unknown-provider/new-model');
+      expect(globalThis.fetch).not.toHaveBeenCalled();
     });
 
     it('still forwards Claude models (with and without provider prefix)', async () => {
@@ -380,7 +481,7 @@ describe('Anthropic Proxy Routes', () => {
         };
       }) as unknown as typeof globalThis.fetch;
 
-      for (const model of ['claude-fable-5', 'anthropic/claude-sonnet-5', 'openrouter/anthropic/claude-opus-4.8']) {
+      for (const model of ['claude-fable-5', 'anthropic/claude-sonnet-5']) {
         const res = await server.inject({
           method: 'POST',
           url: '/v1/chat/completions',
@@ -393,7 +494,7 @@ describe('Anthropic Proxy Routes', () => {
         expect(res.statusCode).toBe(200);
       }
 
-      expect(captures).toEqual(['claude-fable-5', 'claude-sonnet-5', 'claude-opus-4-8']);
+      expect(captures).toEqual(['claude-fable-5', 'claude-sonnet-5']);
     });
   });
 });

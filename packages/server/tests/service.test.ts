@@ -5,6 +5,7 @@ import os from 'node:os';
 import { MindDB } from '@waggle/core';
 import { startService } from '../src/local/service.js';
 import { getLiteLLMStatus } from '../src/local/lifecycle.js';
+import { PROVIDER_ENV_NAMES } from '../src/local/provider-env.js';
 import type { FastifyInstance } from 'fastify';
 
 function makeTmpDir(): string {
@@ -13,6 +14,12 @@ function makeTmpDir(): string {
 
 function randomPort(): number {
   return 3333 + Math.floor(Math.random() * 1000);
+}
+
+function clearProviderEnv(): void {
+  for (const envName of new Set(Object.values(PROVIDER_ENV_NAMES).flat())) {
+    vi.stubEnv(envName, '');
+  }
 }
 
 describe('Agent Service', () => {
@@ -107,7 +114,7 @@ describe('Agent Service', () => {
     const port = randomPort();
     const litellmPort = randomPort();
 
-    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    clearProviderEnv();
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith('/health/liveliness')) {
@@ -137,6 +144,38 @@ describe('Agent Service', () => {
     expect(body.llm.provider).toBe('ollama');
     expect(body.llm.health).toBe('healthy');
     expect(body.defaultModel).toBe('ollama/llama3.2:latest');
+  });
+
+  it('reports the built-in provider proxy healthy with a non-Anthropic key and no LiteLLM', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const litellmPort = randomPort();
+
+    clearProviderEnv();
+    vi.stubEnv('OPENAI_API_KEY', 'openai-solo-test-key');
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/health/liveliness') || url.endsWith('/api/tags')) {
+        return { ok: false, status: 503 } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    });
+
+    const { server } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+
+    const res = await server.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      status: 'ok',
+      llm: {
+        provider: 'anthropic-proxy',
+        health: 'healthy',
+      },
+    });
+    expect(server.agentState.llmProvider.detail).toContain('provider proxy');
+    expect(server.localConfig.manageLiteLLM).toBe(false);
   });
 
   it('server gracefully shuts down on close', async () => {

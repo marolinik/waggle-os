@@ -17,8 +17,10 @@ import {
   writeWipeReceipt,
 } from './data-erase-helpers.js';
 import {
+  getProviderApiKey,
   hydrateProviderEnvFromVault,
   migrateLegacyProviderKeysToVault,
+  PROVIDER_ENV_NAMES,
 } from './provider-env.js';
 import { prepareLiteLLMRuntimeConfig } from './litellm-runtime-config.js';
 
@@ -96,28 +98,35 @@ export function checkPortAvailable(port: number): Promise<boolean> {
   });
 }
 
-/**
- * Check if an Anthropic API key is available (env, vault, or config file).
- * P0-3 fix: Also checks vault to match getAnthropicKey() in anthropic-proxy.ts.
- */
-function hasAnthropicKey(dataDir: string, server?: FastifyInstance): boolean {
-  // Vault first — encrypted storage is the canonical secret store
-  if (server && server.vault) {
+/** Identify configured providers routable by the built-in compatibility proxy. */
+function getConfiguredProviderIds(dataDir: string, server?: FastifyInstance): string[] {
+  const configured = new Set<string>();
+  for (const providerId of Object.keys(PROVIDER_ENV_NAMES)) {
     try {
-      const entry = server.vault.get('anthropic');
-      if (entry?.value) return true;
+      if (server?.vault && getProviderApiKey(providerId, server.vault)) {
+        configured.add(providerId);
+        continue;
+      }
     } catch { /* vault read failed */ }
+    if (PROVIDER_ENV_NAMES[providerId].some((name) => Boolean(process.env[name]))) {
+      configured.add(providerId);
+    }
   }
-  // Legacy fallbacks
-  if (process.env.ANTHROPIC_API_KEY) return true;
+
+  // buildLocalServer migrates legacy plaintext keys into Vault. Keep this
+  // fallback so a partial migration cannot hide an otherwise usable route.
   try {
     const configPath = path.join(dataDir, 'config.json');
     if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return !!config?.providers?.anthropic?.apiKey;
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as {
+        providers?: Record<string, { apiKey?: string }>;
+      };
+      for (const [providerId, provider] of Object.entries(config.providers ?? {})) {
+        if (PROVIDER_ENV_NAMES[providerId] && provider.apiKey) configured.add(providerId);
+      }
     }
   } catch { /* ignore */ }
-  return false;
+  return [...configured];
 }
 
 /**
@@ -277,16 +286,18 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     providerDetail = `LiteLLM on port ${litellmPort}`;
     log.info(`LLM provider: LiteLLM (http://localhost:${litellmPort})`);
   } else {
-    // Fall back to built-in Anthropic proxy
+    // Fall back to the in-process provider proxy (no Python/Docker required).
     const selfUrl = `http://127.0.0.1:${port}/v1`;
     server.agentState.litellmApiKey = server.agentState.wsSessionToken;
     server.localConfig.litellmUrl = selfUrl;
     providerName = 'anthropic-proxy';
 
-    const hasKey = hasAnthropicKey(dataDir, server);
-    if (hasKey) {
+    const configuredProviders = getConfiguredProviderIds(dataDir, server);
+    if (configuredProviders.length > 0) {
       providerHealth = 'healthy';
-      providerDetail = 'Built-in Anthropic proxy (API key configured)';
+      providerDetail = configuredProviders.length === 1 && configuredProviders[0] === 'anthropic'
+        ? 'Built-in Anthropic proxy (API key configured)'
+        : `Built-in provider proxy (${configuredProviders.join(', ')})`;
     } else {
       const localModels = await listOllamaChatModelIds();
       if (localModels.length > 0) {
@@ -296,14 +307,14 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
         server.agentState.currentModel = localModels[0];
       } else {
         providerHealth = 'degraded';
-      providerDetail = 'Built-in Anthropic proxy (no API key — configure in Settings > API Keys)';
+      providerDetail = 'Built-in provider proxy (no API key — configure in Settings > API Keys)';
       }
     }
 
     if (litellm.status !== 'running' && litellm.status !== 'started') {
-      log.info(`LiteLLM unavailable (${litellm.status}), using built-in Anthropic proxy`);
+      log.info(`LiteLLM unavailable (${litellm.status}), using built-in provider proxy`);
     } else {
-      log.info(`LiteLLM not reachable, using built-in Anthropic proxy`);
+      log.info(`LiteLLM not reachable, using built-in provider proxy`);
     }
     log.info(`LLM provider: ${providerDetail}`);
   }
