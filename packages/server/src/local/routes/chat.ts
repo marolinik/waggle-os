@@ -825,6 +825,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // can persist the raw user turn even when generation fails. Memory capture
     // must not be contingent on LLM success ("remembers everything").
     let activeSessionOrch: Orchestrator | undefined;
+    // Turn-scoped pin for the shared orchestrator's workspace mind (default/
+    // no-workspace chats). Hoisted so the outer finally can release it.
+    let pinnedSharedMindId: string | null = null;
     const activeSessionId = session ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
     let activeHistory: Array<{ role: string; content: string }> | undefined;
@@ -934,6 +937,26 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           log.warn(`[session] Failed to create workspace session for "${effectiveWorkspace}": ${(err as Error).message}`);
         }
       }
+      // Pin the shared orchestrator's workspace mind for this turn. The named-
+      // workspace path above pins via WorkspaceSession (1f7186a0), but the
+      // default path kept the boot-time handle unpinned — a >20-workspace
+      // fan-out mid-turn could evict and close it across the LLM await
+      // ("The database connection is not open"). acquire() also reopens a
+      // handle that was already closed out-of-band, so re-bind it.
+      if (!wsSession && !hasCustomRunner) {
+        const sharedWsId = server.agentState.activeWorkspaceId;
+        if (sharedWsId && server.mindCache) {
+          try {
+            const freshMind = server.mindCache.acquire(sharedWsId);
+            pinnedSharedMindId = sharedWsId;
+            orchestrator.setWorkspaceMind(freshMind);
+          } catch (err) {
+            // Best-effort: an unpinned turn is the pre-fix behavior.
+            log.warn(`[chat] Could not pin shared workspace mind "${sharedWsId}": ${(err as Error).message}`);
+          }
+        }
+      }
+
       // #3 (launch-blocker): expose the resolved orchestrator to the outer
       // catch so a failed generation still persists the raw user turn.
       activeSessionOrch = sessionOrch;
@@ -946,8 +969,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       let litellmAvailable = hasCustomRunner; // trust injected runners
       if (!hasCustomRunner) {
         const llmStatus = server.agentState.llmProvider;
-        if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama') && llmStatus.health === 'healthy') {
-          // Built-in proxy with a valid API key — skip HTTP probe
+        if ((llmStatus.provider === 'anthropic-proxy' || llmStatus.provider === 'ollama' || llmStatus.provider === 'litellm') && llmStatus.health === 'healthy') {
+          // Healthy tracked provider — skip HTTP probe. For litellm the
+          // per-request 3s probe raced concurrent completions (uvicorn busy
+          // serving LLM calls), randomly dropping healthy turns into echo mode;
+          // the health monitor already tracks child liveness.
           litellmAvailable = true;
         } else {
           try {
@@ -2334,6 +2360,10 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
       }
     } finally {
+      // Un-pin the shared orchestrator's workspace mind (see acquire above).
+      if (pinnedSharedMindId) {
+        try { server.mindCache.release(pinnedSharedMindId); } catch { /* cache already torn down */ }
+      }
       // SEC: drop the request-scoped spawn security context. It must not leak
       // into a later run, which could otherwise apply a stale workspace's
       // governance / persona restrictions to a freshly spawned sub-agent.

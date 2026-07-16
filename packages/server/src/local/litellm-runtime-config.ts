@@ -120,8 +120,11 @@ export async function prepareLiteLLMRuntimeConfig(
     const apiKey = getProviderApiKey(providerId, vault);
     if (!apiKey) return;
     // Keep aliases such as GEMINI_API_KEY / GOOGLE_API_KEY aligned so the
-    // generated config's canonical env reference always resolves.
-    applyProviderKeyToEnv(providerId, apiKey, false);
+    // generated config's canonical env reference always resolves. Overwrite:
+    // getProviderApiKey resolves vault-first, and a stale machine-level env
+    // var (which node --env-file never overrides) would otherwise poison the
+    // child's os.environ/* key references while discovery used the vault key.
+    applyProviderKeyToEnv(providerId, apiKey, true);
     const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
     if (baseUrl) customBaseUrls.set(providerId, baseUrl);
     const result = await discoverProviderModels(providerId, apiKey, baseUrl, discoveryOptions);
