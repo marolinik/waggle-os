@@ -1831,6 +1831,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         );
 
         // Build agent loop config — with windowed conversation history + hooks
+        let bufferedAgentTokens: string[] = [];
+
         const agentConfig: AgentLoopConfig = {
           litellmUrl: getLitellmUrl(),
           litellmApiKey: server.agentState.litellmApiKey,
@@ -1847,7 +1849,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
           onToken: (token: string) => {
-            sendEvent('token', { content: token });
+            if (firstTokenAt === null) firstTokenAt = performance.now();
+            bufferedAgentTokens.push(token);
           },
           onGiveUp: (giveUpMessage: string) => {
             // Steal #9 T3 — the tiered loop-guard aborted the run after a
@@ -2023,6 +2026,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             : undefined,
         };
 
+        const runAgentAttempt = async (config: typeof runConfig) => {
+          bufferedAgentTokens = [];
+          return agentRunner(config);
+        };
+
         // SEC: publish the request-scoped security context so sub-agents /
         // workflow workers spawned during this run inherit the SAME approval
         // gate, governance denylist, and persona allowlist as the main loop.
@@ -2053,7 +2061,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const agentStartedAt = performance.now();
         let agentLatencyMs = 0;
         try {
-          result = await agentRunner(runConfig);
+          result = await runAgentAttempt(runConfig);
           // Report success to credential pool
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
@@ -2068,7 +2076,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               const nextKey = credPool.getKey();
               if (nextKey) {
                 sendEvent('step', { content: `API key rotated — retrying with next credential` });
-                result = await agentRunner({ ...runConfig, litellmApiKey: nextKey });
+                result = await runAgentAttempt({ ...runConfig, litellmApiKey: nextKey });
                 credPool.reportSuccess(nextKey);
               } else {
                 throw primaryErr;
@@ -2079,7 +2087,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               resolvedModel = fallbackModel;
               // #4: the fallback is a LiteLLM/cloud model — reset litellmUrl in
               // case the original was an Ollama model routed to the local endpoint.
-              result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
+              result = await runAgentAttempt({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
             } else {
               throw primaryErr;
             }
@@ -2088,7 +2096,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             resolvedModel = fallbackModel;
             // #4: reset litellmUrl — the fallback is a LiteLLM/cloud model even
             // if the original selection was a local Ollama model.
-            result = await agentRunner({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
+            result = await runAgentAttempt({ ...runConfig, model: resolvedModel, litellmUrl: getLitellmUrl() });
           } else {
             throw primaryErr;
           }
@@ -2356,6 +2364,19 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             finalContent += `\n\n---\n*Note: ${items} ${one ? 'is' : 'are'} not in your saved memory — please treat ${one ? 'it' : 'them'} as an assumption, not a recalled fact.*`;
           }
         }
+
+        // The agent loop streams every model turn, including provisional prose
+        // before tools, retries, and completion-gate corrections. Reconcile at
+        // the HTTP boundary so token events contain only the exact content in
+        // the authoritative done event. Preserve the original chunking when it
+        // already matches the fully post-processed response.
+        const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
+          ? bufferedAgentTokens
+          : finalContent ? [finalContent] : [];
+        for (const token of finalTokenChunks) {
+          sendEvent('token', { content: token });
+        }
+        bufferedAgentTokens = [];
 
         // Add assistant response to history (maintains context for next turn) and persist
         history.push({ role: 'assistant', content: finalContent });
