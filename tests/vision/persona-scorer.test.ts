@@ -3,6 +3,7 @@ import {
   ACCEPTANCE_PERSONA_IDS,
   PERSONA_CASES,
   parsePersonaRepeats,
+  resolvePersonaRunMode,
   type PersonaAcceptanceCase,
 } from './persona-cases';
 import {
@@ -19,6 +20,7 @@ const syntheticCase: PersonaAcceptanceCase = {
   readOnly: true,
   maxDurationMs: 10_000,
   maxInputTokens: 2_000,
+  maxOutputTokens: 1_000,
   requiredToolPatterns: [],
   responseRules: [
     { id: 'alpha', description: 'alpha', kind: 'pattern', pattern: /alpha/i, points: 10 },
@@ -30,9 +32,10 @@ const syntheticCase: PersonaAcceptanceCase = {
 };
 
 function evidence(overrides: Partial<PersonaTrialEvidence> = {}): PersonaTrialEvidence {
+  const prompt = overrides.prompt ?? syntheticCase.prompt;
   const response = overrides.response ?? 'alpha beta gamma delta epsilon';
   return {
-    prompt: syntheticCase.prompt,
+    prompt,
     response,
     persistedResponse: response,
     sseEvents: [{ event: 'done', data: { content: response, toolsUsed: [] } }],
@@ -42,6 +45,16 @@ function evidence(overrides: Partial<PersonaTrialEvidence> = {}): PersonaTrialEv
     outputTokens: 50,
     personaPersisted: true,
     requestPersonaId: syntheticCase.id,
+    expectedWorkspaceId: 'ws-acceptance',
+    requestWorkspaceId: 'ws-acceptance',
+    requestSessionId: 'session-acceptance',
+    persistedSessionId: 'session-acceptance',
+    persistedPrompt: prompt,
+    persistedMessageCount: 2,
+    tokenStreamResponse: response,
+    doneEventCount: 1,
+    renderedAssistantResponse: response,
+    memoryEvidencePresent: true,
     workspaceLeak: false,
     completed: true,
     timedOut: false,
@@ -75,12 +88,15 @@ describe('canonical persona acceptance matrix', () => {
     }
   });
 
-  it('defaults to three repeats and accepts a bounded positive override', () => {
+  it('locks acceptance to three repeats and permits overrides only in explicit non-gating debug mode', () => {
     expect(parsePersonaRepeats(undefined)).toBe(3);
     expect(parsePersonaRepeats('5')).toBe(5);
     expect(parsePersonaRepeats('0')).toBe(3);
     expect(parsePersonaRepeats('not-a-number')).toBe(3);
     expect(parsePersonaRepeats('99')).toBe(10);
+    expect(resolvePersonaRunMode(undefined, undefined)).toEqual({ gating: true, repeats: 3 });
+    expect(resolvePersonaRunMode('1', '1')).toEqual({ gating: false, repeats: 1 });
+    expect(() => resolvePersonaRunMode(undefined, '1')).toThrow(/non-gating debug/i);
   });
 });
 
@@ -98,21 +114,23 @@ describe('deterministic 100-point persona scorer', () => {
     });
   });
 
-  it('passes at exactly 95 and fails below the acceptance threshold', () => {
-    const atThreshold = scorePersonaTrial(
+  it('fails when any declared duration, input-token, or output-token ceiling is exceeded', () => {
+    const overDuration = scorePersonaTrial(
       syntheticCase,
       evidence({ durationMs: syntheticCase.maxDurationMs + 1 }),
     );
-    const belowThreshold = scorePersonaTrial(
+    const overInput = scorePersonaTrial(
       syntheticCase,
-      evidence({
-        durationMs: syntheticCase.maxDurationMs + 1,
-        inputTokens: syntheticCase.maxInputTokens + 1,
-      }),
+      evidence({ inputTokens: syntheticCase.maxInputTokens + 1 }),
+    );
+    const overOutput = scorePersonaTrial(
+      syntheticCase,
+      evidence({ outputTokens: syntheticCase.maxOutputTokens + 1 }),
     );
 
-    expect(atThreshold).toMatchObject({ score: 95, passed: true });
-    expect(belowThreshold).toMatchObject({ score: 90, passed: false });
+    expect(overDuration).toMatchObject({ score: 90, passed: false });
+    expect(overInput).toMatchObject({ score: 90, passed: false });
+    expect(overOutput).toMatchObject({ score: 90, passed: false });
   });
 
   it('is deterministic and does not accept a model-judge score as pass evidence', () => {
@@ -143,6 +161,13 @@ describe('deterministic 100-point persona scorer', () => {
       }),
     ],
     ['workspace_leak', evidence({ workspaceLeak: true })],
+    ['persona_mismatch', evidence({ requestPersonaId: null })],
+    ['session_mismatch', evidence({ persistedSessionId: 'different-session' })],
+    ['persistence_mismatch', evidence({ persistedPrompt: 'different prompt' })],
+    ['sse_integrity', evidence({ doneEventCount: 2 })],
+    ['sse_integrity', evidence({ tokenStreamResponse: 'partial response' })],
+    ['ui_journey_mismatch', evidence({ renderedAssistantResponse: 'partial response' })],
+    ['ui_journey_mismatch', evidence({ memoryEvidencePresent: false })],
     [
       'false_tool_claim',
       evidence({ response: 'alpha beta gamma delta epsilon. I used the `web_search` tool.' }),

@@ -630,6 +630,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       workspaceId?: string;
       model?: string;
       session?: string;
+      /** Browser client alias retained alongside the legacy `session` key. */
+      sessionId?: string;
       workspacePath?: string;
       persona?: string;
       /**
@@ -680,11 +682,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // over the workspace's default persona for this single request only.
     const {
       message, workspace: _ws, workspaceId: _wsId, model, session,
+      sessionId: sessionIdAlias,
       workspacePath: explicitWorkspacePath, persona: personaOverride,
       autonomy: autonomyRaw, retry: retryTurn, proposeHeld: proposeHeldTurn,
       origin, channel: channelMeta,
     } = request.body ?? {};
     const workspace = _ws ?? _wsId;
+    const requestedSessionId = session ?? sessionIdAlias;
 
     // #13: automated turns skip the post-response memory write-back seams
     // below. `proposeHeld` is belt-and-braces — the shipped idle-watcher
@@ -738,14 +742,20 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
 
     // R6-001: path-traversal guard on the session-persistence path segments.
-    // `workspace` and `session` come straight from the request body and are
+    // `workspace` and the resolved session alias come straight from the request body and are
     // joined into dataDir/workspaces/<workspace>/sessions/<session>.jsonl by
     // chat-persistence (persistMessage / loadSessionMessages). A crafted
     // "../evil" segment would escape the sessions dir on both write and read.
     // Reuse the shared guard; runs BEFORE reply.hijack() so the thrown
     // {statusCode:400} is converted to a 400 by Fastify's default error handler.
     if (workspace) assertSafeSegment(workspace, 'workspace');
-    if (session) assertSafeSegment(session, 'session');
+    if (session && sessionIdAlias && session !== sessionIdAlias) {
+      return reply.status(400).send({
+        error: 'session and sessionId must match when both are provided',
+        code: 'SESSION_ID_CONFLICT',
+      });
+    }
+    if (requestedSessionId) assertSafeSegment(requestedSessionId, 'session');
 
     // Security: scan for prompt injection patterns
     const injectionResult = scanForInjection(message, 'user_input');
@@ -846,7 +856,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     // Turn-scoped pin for the shared orchestrator's workspace mind (default/
     // no-workspace chats). Hoisted so the outer finally can release it.
     let pinnedSharedMindId: string | null = null;
-    const activeSessionId = session ?? workspace ?? 'default';
+    const activeSessionId = requestedSessionId ?? workspace ?? 'default';
     const activeWorkspaceId = workspace ?? 'default';
     let activeHistory: Array<{ role: string; content: string }> | undefined;
 

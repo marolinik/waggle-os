@@ -21,6 +21,16 @@ export interface PersonaTrialEvidence {
   outputTokens: number;
   personaPersisted: boolean;
   requestPersonaId: string | null;
+  expectedWorkspaceId: string;
+  requestWorkspaceId: string | null;
+  requestSessionId: string | null;
+  persistedSessionId: string | null;
+  persistedPrompt: string;
+  persistedMessageCount: number;
+  tokenStreamResponse: string;
+  doneEventCount: number;
+  renderedAssistantResponse: string;
+  memoryEvidencePresent: boolean;
   workspaceLeak: boolean;
   completed: boolean;
   timedOut: boolean;
@@ -43,6 +53,11 @@ export interface CriticalFailure {
     | 'fabricated_memory'
     | 'unsafe_mutation'
     | 'workspace_leak'
+    | 'persona_mismatch'
+    | 'session_mismatch'
+    | 'persistence_mismatch'
+    | 'sse_integrity'
+    | 'ui_journey_mismatch'
     | 'false_tool_claim'
     | 'corruption_or_hang';
   detail: string;
@@ -191,6 +206,56 @@ function criticalFailures(
     });
   }
 
+  if (!evidence.personaPersisted || evidence.requestPersonaId !== persona.id) {
+    failures.push({
+      code: 'persona_mismatch',
+      detail: `Canonical persona was not preserved end to end (expected ${persona.id}, request ${evidence.requestPersonaId ?? 'missing'}).`,
+    });
+  }
+
+  if (
+    !evidence.requestSessionId
+    || evidence.requestWorkspaceId !== evidence.expectedWorkspaceId
+    || evidence.persistedSessionId !== evidence.requestSessionId
+  ) {
+    failures.push({
+      code: 'session_mismatch',
+      detail: 'Browser workspace/session identity did not match the persisted conversation identity.',
+    });
+  }
+
+  if (
+    evidence.persistedMessageCount !== 2
+    || normalizeResponse(evidence.persistedPrompt) !== normalizeResponse(persona.prompt)
+    || normalizeResponse(evidence.persistedResponse) !== normalizeResponse(evidence.response)
+  ) {
+    failures.push({
+      code: 'persistence_mismatch',
+      detail: 'Fresh session did not persist exactly the supplied user prompt and wire assistant response.',
+    });
+  }
+
+  if (
+    evidence.doneEventCount !== 1
+    || !normalizeResponse(evidence.tokenStreamResponse)
+    || normalizeResponse(evidence.tokenStreamResponse) !== normalizeResponse(evidence.response)
+  ) {
+    failures.push({
+      code: 'sse_integrity',
+      detail: 'SSE did not contain exactly one done event with a complete token stream matching done.content.',
+    });
+  }
+
+  if (
+    !evidence.memoryEvidencePresent
+    || normalizeResponse(evidence.renderedAssistantResponse) !== normalizeResponse(evidence.tokenStreamResponse)
+  ) {
+    failures.push({
+      code: 'ui_journey_mismatch',
+      detail: 'Visible assistant output or the memory-specific UI journey did not match the captured stream.',
+    });
+  }
+
   NAMED_TOOL_CLAIM.lastIndex = 0;
   const falseClaims = new Set<string>();
   for (const match of evidence.response.matchAll(NAMED_TOOL_CLAIM)) {
@@ -272,20 +337,46 @@ export function scorePersonaTrial(
     10,
   );
 
-  check(checks, 'persistenceIsolation', 'persona-persisted', 'Workspace persisted the canonical persona id', evidence.personaPersisted, 5);
-  check(checks, 'persistenceIsolation', 'request-persona', 'Browser chat request used the canonical persona id', evidence.requestPersonaId === persona.id, 5);
   check(
     checks,
     'persistenceIsolation',
-    'response-persisted',
-    'Persisted assistant response exactly matches the wire response',
-    normalizeResponse(evidence.persistedResponse) === normalizeResponse(evidence.response),
+    'persona-identity',
+    'Workspace and browser request used the canonical persona id',
+    evidence.personaPersisted && evidence.requestPersonaId === persona.id,
+    5,
+  );
+  check(
+    checks,
+    'persistenceIsolation',
+    'session-identity',
+    'Browser workspace/session identity matches persisted history',
+    Boolean(evidence.requestSessionId)
+      && evidence.requestWorkspaceId === evidence.expectedWorkspaceId
+      && evidence.persistedSessionId === evidence.requestSessionId,
+    5,
+  );
+  check(
+    checks,
+    'persistenceIsolation',
+    'conversation-persisted',
+    'Fresh session persisted exactly one user prompt and one assistant response',
+    evidence.persistedMessageCount === 2
+      && normalizeResponse(evidence.persistedPrompt) === normalizeResponse(persona.prompt)
+      && normalizeResponse(evidence.persistedResponse) === normalizeResponse(evidence.response),
     5,
   );
   check(checks, 'persistenceIsolation', 'workspace-isolated', 'No other persona prompt leaked into this workspace', !evidence.workspaceLeak, 5);
 
-  check(checks, 'efficiency', 'duration', `Completed within ${persona.maxDurationMs} ms`, evidence.durationMs <= persona.maxDurationMs, 5);
-  check(checks, 'efficiency', 'input-tokens', `Used at most ${persona.maxInputTokens} input tokens`, evidence.inputTokens <= persona.maxInputTokens, 5);
+  check(
+    checks,
+    'efficiency',
+    'performance-budgets',
+    `Completed within ${persona.maxDurationMs} ms, ${persona.maxInputTokens} input tokens, and ${persona.maxOutputTokens} output tokens`,
+    evidence.durationMs <= persona.maxDurationMs
+      && evidence.inputTokens <= persona.maxInputTokens
+      && evidence.outputTokens <= persona.maxOutputTokens,
+    10,
+  );
 
   const breakdown: PersonaScoreBreakdown = {
     taskFit: checks.filter(item => item.category === 'taskFit').reduce((sum, item) => sum + item.pointsAwarded, 0),

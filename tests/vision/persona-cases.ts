@@ -39,6 +39,7 @@ export interface PersonaAcceptanceCase {
   readOnly: true;
   maxDurationMs: number;
   maxInputTokens: number;
+  maxOutputTokens: number;
   /** At least one successful tool must match every listed pattern. */
   requiredToolPatterns: readonly RegExp[];
   responseRules: readonly PersonaResponseRule[];
@@ -59,6 +60,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 45_000,
     maxInputTokens: 15_000,
+    maxOutputTokens: 2_500,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'all-priorities', description: 'Addresses all three supplied priorities', kind: 'allPatterns', patterns: [/customer/i, /onboarding/i, /memory (?:bug|issue)/i], points: 10 },
@@ -75,6 +77,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 120_000,
     maxInputTokens: 60_000,
+    maxOutputTokens: 6_000,
     requiredToolPatterns: [/(?:search|fetch|browse)/i],
     responseRules: [
       { id: 'primary-sources', description: 'Cites at least two distinct primary-source URLs', kind: 'primaryUrls', minimum: 2, allowedDomains: primaryResearchDomains, points: 10 },
@@ -91,6 +94,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 30_000,
     maxInputTokens: 12_000,
+    maxOutputTokens: 1_500,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'word-limit', description: 'Stays within 120 words', kind: 'maxWords', maxWords: 120, points: 10 },
@@ -107,6 +111,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 45_000,
     maxInputTokens: 18_000,
+    maxOutputTokens: 3_500,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'milestones', description: 'Defines milestones', kind: 'pattern', pattern: /milestones?/i, points: 10 },
@@ -123,6 +128,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 30_000,
     maxInputTokens: 12_000,
+    maxOutputTokens: 2_000,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'duration-blocks', description: 'Uses time blocks for a 30-minute meeting', kind: 'allPatterns', patterns: [/30[- ]minute/i, /(?:\d{1,2}:\d{2}|\d+\s*(?:min|minutes))/i], points: 10 },
@@ -139,6 +145,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 30_000,
     maxInputTokens: 12_000,
+    maxOutputTokens: 2_000,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'runway', description: 'Calculates four months of runway', kind: 'pattern', pattern: /\b4(?:\.0)?\s+months?\b/i, points: 10 },
@@ -155,6 +162,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 45_000,
     maxInputTokens: 20_000,
+    maxOutputTokens: 2_500,
     requiredToolPatterns: [/(?:search_files|list_workspace_files|read_file)/i],
     responseRules: [
       { id: 'workspace-scope', description: 'Reports on the current workspace', kind: 'pattern', pattern: /workspace/i, points: 10 },
@@ -171,6 +179,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 60_000,
     maxInputTokens: 25_000,
+    maxOutputTokens: 4_500,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'schema', description: 'Includes a concrete SQLite schema', kind: 'pattern', pattern: /CREATE\s+TABLE/i, points: 10 },
@@ -187,6 +196,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 30_000,
     maxInputTokens: 12_000,
+    maxOutputTokens: 2_500,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'verdict', description: 'Issues an insufficient-evidence/not-ready verdict', kind: 'allPatterns', patterns: [/VERDICT/i, /(?:insufficient evidence|not production[- ]ready|cannot conclude)/i], points: 10 },
@@ -203,6 +213,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     readOnly: true,
     maxDurationMs: 45_000,
     maxInputTokens: 18_000,
+    maxOutputTokens: 3_000,
     requiredToolPatterns: [],
     responseRules: [
       { id: 'two-lanes', description: 'Defines researcher and coder lanes', kind: 'allPatterns', patterns: [/researcher lane/i, /coder lane/i], points: 10 },
@@ -219,4 +230,26 @@ export function parsePersonaRepeats(raw: string | undefined): number {
   const parsed = Number.parseInt(raw ?? '', 10);
   if (!Number.isFinite(parsed) || parsed < 1) return 3;
   return Math.min(parsed, 10);
+}
+
+export interface PersonaRunMode {
+  gating: boolean;
+  repeats: number;
+}
+
+/** Acceptance is always 10 x 3. Smaller runs require an explicit debug label. */
+export function resolvePersonaRunMode(
+  nonGatingDebugRaw: string | undefined,
+  repeatsRaw: string | undefined,
+): PersonaRunMode {
+  const nonGatingDebug = nonGatingDebugRaw === '1';
+  if (repeatsRaw !== undefined && !nonGatingDebug) {
+    throw new Error(
+      'WAGGLE_PERSONA_REPEATS is allowed only in non-gating debug mode with WAGGLE_PERSONA_NON_GATING_DEBUG=1; acceptance is locked to 3 repeats.',
+    );
+  }
+  return {
+    gating: !nonGatingDebug,
+    repeats: nonGatingDebug ? parsePersonaRepeats(repeatsRaw) : 3,
+  };
 }
