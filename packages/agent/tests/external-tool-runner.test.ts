@@ -80,10 +80,11 @@ describe('runExternalTool', () => {
 
     const result = await promise;
     expect(captured?.args).toEqual([
-      '-p', '--safe-mode', '--disable-slash-commands', '--no-session-persistence',
-      '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format',
+      '-p', '--safe-mode', '--disable-slash-commands',
+      '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format',
       'stream-json', '--verbose', '--permission-mode', 'plan',
     ]);
+    expect(captured?.args).not.toContain('--no-session-persistence');
     expect(child.stdin.value).toBe(baseRequest('claude-code').prompt);
     expect(result).toMatchObject({ status: 'completed', summary: 'Claude finished', sessionId: 'claude-session' });
     expect(events).toContain('tool');
@@ -91,6 +92,87 @@ describe('runExternalTool', () => {
     expect(captured?.env.SUPER_SECRET).toBeUndefined();
     expect(captured?.env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(captured?.env.WAGGLE_RUN_ID).toBe('run-1');
+  });
+
+  it('retains Claude assistant text while surfacing a zero-exit budget failure', async () => {
+    const child = new FakeChild();
+    const events: ExternalRunEvent[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      onEvent: (event) => events.push(event),
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => {
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"system","session_id":"claude-budget-session"}\n');
+          child.stdout.emit('data', '{"type":"assistant","message":{"content":[{"type":"text","text":"OK"}]}}\n');
+          child.stdout.emit('data', '{"type":"result","subtype":"error_max_budget_usd","is_error":false}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    const result = await promise;
+    expect(result).toMatchObject({
+      status: 'failed',
+      summary: 'OK',
+      error: 'error_max_budget_usd',
+      sessionId: 'claude-budget-session',
+    });
+    expect(result.summary).not.toContain('"type":"system"');
+    expect(events.at(-1)).toMatchObject({ type: 'failed', text: 'error_max_budget_usd' });
+  });
+
+  it('fails an empty Claude structured result without exposing protocol JSON', async () => {
+    const child = new FakeChild();
+    const promise = runExternalTool(baseRequest('claude-code'), {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: () => {
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"system","session_id":"empty-session"}\n');
+          child.stdout.emit('data', '{"type":"result","subtype":"success","is_error":false}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    const result = await promise;
+    expect(result).toMatchObject({
+      status: 'failed',
+      summary: 'Claude Code completed without a final response',
+      error: 'Claude Code completed without a final response',
+      sessionId: 'empty-session',
+    });
+    expect(result.summary).not.toContain('"type":"system"');
+    expect(result.stdoutTail).toContain('"type":"system"');
+  });
+
+  it('resumes the persisted Claude session without weakening safe mode', async () => {
+    const child = new FakeChild();
+    let args: string[] = [];
+    const promise = runExternalTool({
+      ...baseRequest('claude-code'),
+      sessionId: 'claude-session',
+    }, {
+      resolveWorkspacePath: () => '/workspace',
+      spawnProcess: (_binary, value) => {
+        args = value;
+        queueMicrotask(() => {
+          child.stdout.emit('data', '{"type":"result","result":"Resumed","is_error":false}\n');
+          child.emit('exit', 0);
+        });
+        return child;
+      },
+    });
+
+    await expect(promise).resolves.toMatchObject({ status: 'completed', summary: 'Resumed' });
+    expect(args).toEqual([
+      '-p', '--safe-mode', '--disable-slash-commands', '--resume', 'claude-session',
+      '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format',
+      'stream-json', '--verbose', '--permission-mode', 'plan',
+    ]);
   });
 
   it('runs Codex through exec with an explicit workspace sandbox', async () => {

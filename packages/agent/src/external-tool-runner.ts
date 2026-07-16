@@ -65,6 +65,7 @@ export interface ExternalToolRunResult {
   status: 'completed' | 'failed' | 'cancelled' | 'timed_out';
   exitCode: number | null;
   summary: string;
+  error?: string;
   sessionId?: string;
   stdoutTail: string;
   stderrTail: string;
@@ -249,23 +250,50 @@ export async function runExternalTool(
       }
       promptFile?.cleanup();
 
+      if (
+        task.outputDialect === 'claude-stream-json' &&
+        exitCode === 0 &&
+        !timedOut &&
+        !abortRequested &&
+        !spawnError &&
+        !parseState.finalText &&
+        !parseState.error
+      ) {
+        parseState.error = 'Claude Code completed without a final response';
+      }
+
       const cleanStdout = redact(stdout, env);
       const cleanStderr = redact(stderr, env);
-      const summary = truncate(
-        stripAnsi(
-          redact(parseState.finalText, env) ||
-          (cleanStdout.trim() || cleanStderr.trim() || spawnError?.message || ''),
-        ).trim(),
-        MAX_STDOUT,
-      );
       let status: ExternalToolRunResult['status'];
       if (timedOut) status = 'timed_out';
       else if (abortRequested) status = 'cancelled';
       else if (spawnError || exitCode !== 0 || parseState.error) status = 'failed';
       else status = 'completed';
-      emit(status, status === 'completed' ? summary : (parseState.error || spawnError?.message || cleanStderr || summary));
+      const terminalError = status === 'failed'
+        ? truncate(stripAnsi(
+          (parseState.error ? redact(parseState.error, env) : '') ||
+          (spawnError ? redact(spawnError.message, env) : '') ||
+          cleanStderr.trim() ||
+          (exitCode !== null && exitCode !== 0
+            ? `${request.manifest.displayName} exited with code ${exitCode}`
+            : ''),
+        ).trim(), MAX_STDERR)
+        : undefined;
+      const stdoutFallback = task.outputDialect === 'claude-stream-json' ? '' : cleanStdout.trim();
+      const summary = truncate(
+        stripAnsi(
+          redact(parseState.finalText, env) ||
+          stdoutFallback ||
+          cleanStderr.trim() ||
+          terminalError ||
+          '',
+        ).trim(),
+        MAX_STDOUT,
+      );
+      emit(status, status === 'completed' ? summary : (terminalError || summary));
       resolve({
         ...terminalResult(status, exitCode, summary, cleanStdout, cleanStderr, now() - startedAt),
+        ...(terminalError ? { error: terminalError } : {}),
         ...(parseState.sessionId ? { sessionId: parseState.sessionId } : {}),
       });
     };
@@ -407,17 +435,26 @@ function parseJsonValue(
 
   if (dialect === 'claude-stream-json') {
     if (type === 'result') {
-      state.finalText = stringValue(record.result) ?? state.finalText;
-      if (record.is_error === true) state.error = state.finalText || 'Claude Code reported an error';
+      const result = stringValue(record.result);
+      const subtype = stringValue(record.subtype);
+      if (result) state.finalText = result;
+      if (record.is_error === true || subtype?.startsWith('error_')) {
+        state.error = stringValue(record.error) || result || subtype || 'Claude Code reported an error';
+      }
       return;
     }
     const blocks = ((record.message as Record<string, unknown> | undefined)?.content ?? record.content) as unknown;
+    const assistantText: string[] = [];
     for (const block of Array.isArray(blocks) ? blocks : []) {
       if (!block || typeof block !== 'object') continue;
       const item = block as Record<string, unknown>;
-      if (item.type === 'text' && typeof item.text === 'string') emit('message', item.text);
+      if (item.type === 'text' && typeof item.text === 'string') {
+        assistantText.push(item.text);
+        emit('message', item.text);
+      }
       if (item.type === 'tool_use') emit('tool', String(item.name ?? 'tool'));
     }
+    if (assistantText.length > 0) state.finalText = assistantText.join('\n');
     return;
   }
   if (dialect === 'codex-jsonl') {

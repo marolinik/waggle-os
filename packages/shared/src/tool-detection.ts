@@ -113,8 +113,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     hookPointer: '.claude/hive-mind-install.json', detect: { kind: 'path', binaryName: 'claude' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: true, structuredProgress: true, resumable: true, liveWaggleDance: false },
     task: {
-      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--no-session-persistence', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
-      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '0.25', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      argvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
+      resumeArgvTemplate: ['-p', '--safe-mode', '--disable-slash-commands', '--resume', '{sessionId}', '--max-budget-usd', '1.00', '--input-format', 'text', '--output-format', 'stream-json', '--verbose', '{accessArgs}'],
       accessArgs: {
         'read-only': ['--permission-mode', 'plan'],
         'workspace-write': ['--permission-mode', 'acceptEdits'],

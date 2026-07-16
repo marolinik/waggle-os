@@ -596,7 +596,7 @@ async function executeExternalRun(
     if (status === 'completed') {
       server.executorRegistry?.noteHealthy(manifest.id);
     } else if (status === 'failed') {
-      const assessment = classifyRateLimitError(result.stderrTail || result.summary, Date.now());
+      const assessment = classifyRateLimitError(result.error || result.stderrTail || result.summary, Date.now());
       if (assessment.isRateLimit) {
         server.executorRegistry?.noteRateLimit(manifest.id, assessment.resetAtMs);
       }
@@ -607,7 +607,7 @@ async function executeExternalRun(
         summary: result.summary,
         sessionId: result.sessionId,
         exitCode: result.exitCode,
-        ...(status === 'failed' ? { error: result.stderrTail || result.summary || `${manifest.displayName} failed` } : {}),
+        ...(status === 'failed' ? { error: result.error || result.stderrTail || result.summary || `${manifest.displayName} failed` } : {}),
       },
       progress: null,
     });
