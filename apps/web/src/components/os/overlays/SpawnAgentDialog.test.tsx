@@ -166,6 +166,15 @@ describe('SpawnAgentDialog durable launch', () => {
     expect(onSpawned).toHaveBeenCalledWith(spawned);
   });
 
+  it('populates models from keyed provider catalogs when getModels rejects', async () => {
+    mocks.adapter.getModels.mockRejectedValueOnce(new Error('LiteLLM models request timed out'));
+    mocks.adapter.getModel.mockResolvedValueOnce('unconfigured/runtime-model');
+    renderDialog();
+
+    const modelList = await screen.findByTestId('spawn-models-list');
+    expect(modelList).toContainElement(screen.getByTitle('anthropic/claude-3-5-sonnet'));
+  });
+
   it('blocks launch and explains how to configure a model when no provider is ready', async () => {
     mocks.adapter.getModels.mockResolvedValue([]);
     mocks.adapter.getModel.mockResolvedValue('anthropic/claude-3-5-sonnet');

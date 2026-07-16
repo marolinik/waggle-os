@@ -59,7 +59,8 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
     const wsModel = activeWs?.model;
     try {
       const [m, p, providers] = await Promise.all([
-        adapter.getModels(),
+        // Tier-1 rejection must fall through to tiers 2/3 (live CPU-saturation timeout, 2026-07-16).
+        adapter.getModels().catch(() => [] as string[]),
         adapter.getModelPricing().catch(() => [] as ModelPricing[]),
         adapter.getProviders().catch(() => ({ providers: [], search: [], activeSearch: '' } as Awaited<ReturnType<typeof adapter.getProviders>>)),
       ]);
@@ -95,6 +96,9 @@ const SpawnAgentDialog = ({ open, onClose, workspaces, activeWorkspaceId, onWork
           .filter((id): id is string => typeof id === 'string' && id.length > 0);
         const deduped = Array.from(new Set(fromProviders));
         if (deduped.length > 0) modelList = deduped;
+      }
+      if (modelList.length === 0 && providers.providers.some((p) => p.hasKey)) {
+        setModelsError('Model list unavailable right now — retry, or check provider keys in Settings.');
       }
       setModels(modelList);
       setPricing(p);
