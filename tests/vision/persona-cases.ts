@@ -88,8 +88,11 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       {
         id: 'fact-inference',
         description: 'Separates sourced facts from inference',
-        kind: 'pattern',
-        pattern: /(?:(?:\*\*Facts?(?:[ \t:][^*\r\n]{0,80})?\*\*|(?:^|\n)#{1,6}\s*facts?\b)[\s\S]*?(?:\*\*Inference(?:[ \t:][^*\r\n]{0,80})?\*\*|(?:^|\n)#{1,6}\s*inference\b)|(?:\*\*Inference(?:[ \t:][^*\r\n]{0,80})?\*\*|(?:^|\n)#{1,6}\s*inference\b)[\s\S]*?(?:\*\*Facts?(?:[ \t:][^*\r\n]{0,80})?\*\*|(?:^|\n)#{1,6}\s*facts?\b)|\bFacts?\s*:[\s\S]*?\bInference\b|\bInference\b[\s\S]*?\bFacts?\s*:|\|[^\n|]*(?:feature|criterion)[^\n|]*\|[^\n|]*sqlite[^\n|]*\|[^\n|]*(?:postgres|pgvector)[^\n|]*\|[^\n|]*inference[^\n|]*\|)/im,
+        kind: 'allPatterns',
+        patterns: [
+          /(?:(?:^|\n)#{1,6}\s*(?:key\s+)?facts?\b|\*\*[^*\r\n]{0,80}\bfacts?(?:\s*\/\s*inference)?\b[^*\r\n]{0,80}\*\*|\(\s*facts?(?:\s*\/\s*inference)?\b[^)]{0,200}\)|\bfacts?\s*(?:\/\s*inference\s*)?[:)])/im,
+          /(?:(?:^|\n)#{1,6}\s*(?:key\s+)?inferences?\b|\*\*[^*\r\n]{0,80}\binferences?(?:\s*\/\s*fact)?\b[^*\r\n]{0,80}\*\*|\(\s*inferences?(?:\s*\/\s*fact)?\b[^)]{0,200}\)|\binferences?\s*(?:\/\s*fact\s*)?[:)])/im,
+        ],
         points: 10,
       },
       { id: 'source-quality', description: 'Avoids known secondary AI-synthesized sources', kind: 'notPattern', pattern: /(?:grokipedia|deepwiki)/i, points: 10 },

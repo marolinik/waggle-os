@@ -317,12 +317,15 @@ describe('deterministic 100-point persona scorer', () => {
   it('recognizes explicit inline fact and inference markers', () => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const rule = researcher.responseRules.find(candidate => candidate.id === 'fact-inference');
-    expect(rule?.kind).toBe('pattern');
-    if (!rule || rule.kind !== 'pattern') throw new Error('missing fact-inference rule');
+    expect(rule?.kind).toBe('allPatterns');
+    if (!rule || rule.kind !== 'allPatterns') throw new Error('missing fact-inference rule');
 
-    expect(rule.pattern.test(
+    expect(rule.patterns.every(pattern => pattern.test(
       'SQLite is embedded (Fact: official repository). PostgreSQL adds a service boundary (Inference based on its client-server architecture).',
-    )).toBe(true);
+    ))).toBe(true);
+    expect(rule.patterns.every(pattern => pattern.test(
+      '### Key Facts from Primary Sources:\nSQLite is embedded.\n**Reduced Overhead (Inference):** A separate service adds operational cost.',
+    ))).toBe(true);
   });
 
   it('does not accept lookalike hostnames as primary-source evidence', () => {
