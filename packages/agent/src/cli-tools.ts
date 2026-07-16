@@ -11,8 +11,78 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolDefinition } from './tools.js';
+import {
+  resolveToolCommandInvocation,
+  resolveToolCommandInvocationFromPath,
+  type ToolCommandInvocation,
+} from './tool-command.js';
+import { createSanitizedEnv, terminateProcessTree } from './system-tools-helpers.js';
 
 const execFileAsync = promisify(execFile);
+
+async function execCliInvocation(
+  invocation: ToolCommandInvocation,
+  env: NodeJS.ProcessEnv,
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
+  const pending = execFileAsync(invocation.binary, invocation.args, {
+    env,
+    maxBuffer: 1024 * 1024,
+    // Our timer terminates the full process tree. Keep a later native timeout
+    // only as a final fail-safe if platform tree termination itself stalls.
+    timeout: timeoutMs + 2_000,
+    windowsHide: true,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
+  });
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    terminateProcessTree(pending.child);
+  }, timeoutMs);
+
+  try {
+    return await pending;
+  } catch (err) {
+    const execErr = err as { code?: string; stdout?: string; stderr?: string };
+    if (execErr.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+      terminateProcessTree(pending.child);
+    }
+    if (timedOut) {
+      throw Object.assign(new Error(`Killed after ${timeoutMs / 1000}s timeout`), {
+        killed: true,
+        stdout: execErr.stdout ?? '',
+        stderr: execErr.stderr ?? '',
+      });
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function execCliFile(
+  program: string,
+  args: string[],
+  timeoutMs: number,
+): Promise<{ stdout: string; stderr: string }> {
+  const env = createSanitizedEnv();
+  const direct = resolveToolCommandInvocation(program, args, process.platform, { env });
+  try {
+    return await execCliInvocation(direct, env, timeoutMs);
+  } catch (err) {
+    const code = (err as { code?: string }).code;
+    if (process.platform !== 'win32' || code !== 'ENOENT') throw err;
+
+    const resolved = await resolveToolCommandInvocationFromPath(
+      program,
+      args,
+      process.platform,
+      { env },
+    );
+    if (resolved.binary === direct.binary && resolved.args === direct.args) throw err;
+    return execCliInvocation(resolved, env, timeoutMs);
+  }
+}
 
 /** Well-known CLIs to detect on the system */
 const KNOWN_CLIS = [
@@ -69,22 +139,35 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         const allowlist = getAllowlist();
         const allowSet = new Set(allowlist.map(s => s.toLowerCase()));
 
-        // Probe every known CLI in parallel. Sequentially this was up to
-        // KNOWN_CLIS.length × 5s (~130s) — far over the 30s test budget on CI
-        // runners (where most of these CLIs are present), which made the
-        // cli_discover test flaky. Promise.all bounds wall-time to the slowest
-        // single probe (~5s) and preserves KNOWN_CLIS order in the output.
+        // Probe every known CLI in parallel and cap version reads at 2s.
+        // Windows keeps path-confirmed tools in the result even when their
+        // version command is slow, while preserving KNOWN_CLIS output order.
         const settled = await Promise.all(
           KNOWN_CLIS.map(async (cli): Promise<CliResult | null> => {
+            const args = cli.versionFlag.split(' ');
+            const env = createSanitizedEnv();
+            const invocation = await resolveToolCommandInvocationFromPath(
+              cli.name,
+              args,
+              process.platform,
+              { env, fallbackToWhere: false },
+            );
+            const resolvedFromPath = invocation.binary !== cli.name;
             try {
-              const args = cli.versionFlag.split(' ');
-              const { stdout } = await execFileAsync(cli.name, args, { timeout: 5000 });
+              const { stdout, stderr } = await execCliInvocation(invocation, env, 2_000);
               return {
                 name: cli.name,
-                version: stdout.trim().split('\n')[0],
+                version: (stdout || stderr).trim().split(/\r?\n/)[0],
                 allowed: allowSet.has('*') || allowSet.has(cli.name),
               };
             } catch {
+              if (process.platform === 'win32' && resolvedFromPath) {
+                return {
+                  name: cli.name,
+                  version: 'Installed (version probe unavailable)',
+                  allowed: allowSet.has('*') || allowSet.has(cli.name),
+                };
+              }
               return null; // CLI not found — skip
             }
           }),
@@ -112,8 +195,11 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
       },
       execute: async (params: Record<string, unknown>) => {
         const program = String(params.program ?? '').trim();
-        const args = (params.args as string[]) ?? [];
-        const timeoutSec = Math.min(Number(params.timeout) || 30, 120);
+        const args = Array.isArray(params.args) ? params.args.map(String) : [];
+        const requestedTimeout = Number(params.timeout);
+        const timeoutSec = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+          ? Math.min(requestedTimeout, 120)
+          : 30;
         const allowlist = getAllowlist();
         const allowSet = new Set(allowlist.map(s => s.toLowerCase()));
 
@@ -138,10 +224,7 @@ export function createCliTools(config: CliToolsConfig): ToolDefinition[] {
         });
 
         try {
-          const { stdout, stderr } = await execFileAsync(program, args, {
-            timeout: timeoutSec * 1000,
-            maxBuffer: 1024 * 1024, // 1 MB
-          });
+          const { stdout, stderr } = await execCliFile(program, args, timeoutSec * 1000);
 
           return JSON.stringify({
             success: true,

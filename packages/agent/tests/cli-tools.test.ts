@@ -1,5 +1,49 @@
 import { describe, it, expect, vi } from 'vitest';
+import { existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createCliTools } from '../src/cli-tools.js';
+import { resolveToolCommandInvocationFromPath } from '../src/tool-command.js';
+
+describe('Windows CLI command resolution', () => {
+  it('resolves npm 11 shims without cmd.exe and isolates the lookup environment', async () => {
+    let lookupEnv: NodeJS.ProcessEnv | undefined;
+    const invocation = await resolveToolCommandInvocationFromPath(
+      'npx',
+      ['arg&still-literal', '%PATH%'],
+      'win32',
+      {
+        env: {
+          Path: 'C:\\Node',
+          PATHEXT: '.EXE;.CMD',
+          SystemRoot: 'C:\\Windows',
+          WAGGLE_PHASE2_AMBIENT_SECRET: 'must-not-leak',
+        },
+        pathLookup: async (_binary, env) => {
+          lookupEnv = env;
+          return ['C:\\Node\\npx', 'C:\\Node\\npx.cmd'];
+        },
+        readTextFile: () => [
+          '@ECHO OFF',
+          'SET "NPX_CLI_JS=%~dp0\\node_modules\\npm\\bin\\npx-cli.js"',
+          '"%NODE_EXE%" "%NPX_CLI_JS%" %*',
+        ].join('\n'),
+        fileExists: (path) => path === 'C:\\Node\\node.exe',
+      },
+    );
+
+    expect(invocation).toEqual({
+      binary: 'C:\\Node\\node.exe',
+      args: [
+        'C:\\Node\\node_modules\\npm\\bin\\npx-cli.js',
+        'arg&still-literal',
+        '%PATH%',
+      ],
+    });
+    expect(lookupEnv?.WAGGLE_PHASE2_AMBIENT_SECRET).toBeUndefined();
+    expect(Object.keys(lookupEnv ?? {}).sort()).toEqual(['PATH', 'PATHEXT', 'SYSTEMROOT']);
+  });
+});
 
 describe('cli_discover', () => {
   it('scans PATH and returns available CLIs', async () => {
@@ -35,6 +79,15 @@ describe('cli_discover', () => {
     const nodeProg = result.programs.find((p: { name: string }) => p.name === 'node');
     expect(nodeProg?.version).toBeTruthy();
     expect(nodeProg?.version.length).toBeGreaterThan(0);
+  });
+
+  it.runIf(process.platform === 'win32')('discovers npm and npx Windows command shims', async () => {
+    const tools = createCliTools({ allowlist: [] });
+    const discover = tools.find(t => t.name === 'cli_discover')!;
+    const result = JSON.parse(await discover.execute({}));
+
+    expect(result.programs.some((p: { name: string }) => p.name === 'npm')).toBe(true);
+    expect(result.programs.some((p: { name: string }) => p.name === 'npx')).toBe(true);
   });
 });
 
@@ -106,6 +159,19 @@ describe('cli_execute', () => {
     expect(result.error).toBeTruthy();
   });
 
+  it('normalizes a negative timeout instead of killing immediately', async () => {
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    const result = JSON.parse(await execute.execute({
+      program: 'node',
+      args: ['--version'],
+      timeout: -1,
+    }));
+
+    expect(result.success).toBe(true);
+  });
+
   it('logs execution to audit trail', async () => {
     const auditLog = vi.fn();
     const tools = createCliTools({ allowlist: ['node'], auditLog });
@@ -143,5 +209,61 @@ describe('cli_execute', () => {
     allowlist = ['node'];
     const allowed = JSON.parse(await execute.execute({ program: 'node', args: ['--version'] }));
     expect(allowed.success).toBe(true);
+  });
+
+  it.runIf(process.platform === 'win32')('executes an allowed npm Windows command shim', async () => {
+    const tools = createCliTools({ allowlist: ['npm'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    const result = JSON.parse(await execute.execute({ program: 'npm', args: ['--version'] }));
+
+    expect(result.success).toBe(true);
+    expect(result.stdout).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it('does not expose ambient secrets to allowed CLI processes', async () => {
+    const previous = process.env.WAGGLE_PHASE2_AMBIENT_SECRET;
+    process.env.WAGGLE_PHASE2_AMBIENT_SECRET = 'must-not-leak';
+    try {
+      const tools = createCliTools({ allowlist: ['node'] });
+      const execute = tools.find(t => t.name === 'cli_execute')!;
+      const result = JSON.parse(await execute.execute({
+        program: 'node',
+        args: ['-e', 'console.log(process.env.WAGGLE_PHASE2_AMBIENT_SECRET ?? "absent")'],
+      }));
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe('absent');
+    } finally {
+      if (previous === undefined) delete process.env.WAGGLE_PHASE2_AMBIENT_SECRET;
+      else process.env.WAGGLE_PHASE2_AMBIENT_SECRET = previous;
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('terminates descendants when an allowed CLI times out', async () => {
+    const marker = join(tmpdir(), `waggle-cli-orphan-${process.pid}-${Date.now()}.txt`);
+    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), 1200)`;
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { detached: true, stdio: 'ignore' })`,
+      'child.unref()',
+      'setInterval(() => {}, 1000)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const result = JSON.parse(await execute.execute({
+        program: 'node',
+        args: ['-e', parentScript],
+        timeout: 0.3,
+      }));
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('timeout');
+      await new Promise(resolve => setTimeout(resolve, 1650));
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(marker, { force: true });
+    }
   });
 });
