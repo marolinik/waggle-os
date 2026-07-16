@@ -553,7 +553,7 @@ describe('LauncherApp · hook cohort (#3)', () => {
     expect(screen.queryByText('Install pointer')).not.toBeInTheDocument();
   });
 
-  it('explains that Claude Desktop is launch-only because hooks are not supported yet', async () => {
+  it('offers Claude Desktop launch and hook management from the shared manifest', async () => {
     mocks.adapter.detectTools.mockResolvedValue({
       platform: 'darwin',
       detectedAt: '2026-07-08T00:00:00.000Z',
@@ -574,9 +574,9 @@ describe('LauncherApp · hook cohort (#3)', () => {
 
     expect(await screen.findByText('Claude Desktop')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^launch$/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /install hooks/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /^verify$/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/launch only/i)).toBeInTheDocument();
-    expect(screen.getByText(/hooks are not supported for Claude Desktop yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /install hooks/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^verify$/i })).toBeInTheDocument();
+    expect(screen.queryByText(/launch only/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/hooks are not supported for Claude Desktop yet/i)).not.toBeInTheDocument();
   });
 });
