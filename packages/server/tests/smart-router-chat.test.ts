@@ -4,7 +4,7 @@ import path from 'node:path';
 import { WaggleConfig } from '@waggle/core';
 import type { AgentLoopConfig, AgentResponse } from '@waggle/agent';
 import type { FastifyInstance } from 'fastify';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildLocalServer } from '../src/local/index.js';
 import { injectWithAuth, resetRateLimiter } from './test-utils.js';
 
@@ -37,6 +37,21 @@ describe('chat smart-router integration', () => {
   beforeEach(() => {
     capturedModel = undefined;
     resetRateLimiter(server);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/tags')) {
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'primary-test-model' },
+            { name: 'budget-test-model' },
+          ],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   afterAll(async () => {
