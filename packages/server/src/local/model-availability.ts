@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { ensureManagedLiteLLMModel } from './litellm-runtime-config.js';
 import { getProviderApiKey } from './provider-env.js';
-import { discoverProviderModels, isRemoteOllamaAlias } from './provider-model-catalog.js';
+import {
+  discoverProviderModels,
+  isRemoteOllamaAlias,
+  PROVIDER_MODEL_CATALOGS,
+} from './provider-model-catalog.js';
 
 interface OllamaRoutingModel {
   id: string;
@@ -87,6 +91,31 @@ function isEmbeddingModel(modelId: string): boolean {
   return leaf.includes('embed') || leaf.includes('embedding') || leaf.startsWith('nomic-');
 }
 
+async function findRoutableCloudFallback(server: FastifyInstance): Promise<string | null> {
+  // Object declaration order is the deterministic provider precedence. Catalogs
+  // are fetched concurrently, while Promise.all preserves that input order.
+  const catalogs = await Promise.all(
+    Object.keys(PROVIDER_MODEL_CATALOGS).map(async (provider) => {
+      const apiKey = getProviderApiKey(provider, server.vault);
+      if (!apiKey) return { provider, models: [] as string[] };
+      const entry = server.vault?.get(provider);
+      const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
+      const catalog = await discoverProviderModels(provider, apiKey, baseUrl);
+      return {
+        provider,
+        models: catalog.models.map((model) => model.id).filter((model) => !isEmbeddingModel(model)),
+      };
+    }),
+  );
+
+  for (const { provider, models } of catalogs) {
+    for (const model of models) {
+      if (await modelIsRoutable(server, model, provider)) return model;
+    }
+  }
+  return null;
+}
+
 export async function fetchOllamaRoutingModels(): Promise<OllamaRoutingModel[]> {
   const endpoint = process.env.OLLAMA_HOST?.replace(/\/+$/, '') ?? 'http://localhost:11434';
   const controller = new AbortController();
@@ -170,6 +199,9 @@ export async function resolveUsableModel(
       return canonicalCurrent;
     }
   }
+
+  const cloudFallback = await findRoutableCloudFallback(server);
+  if (cloudFallback) return cloudFallback;
 
   const localModels = await listOllamaChatModelIds();
   return localModels[0]

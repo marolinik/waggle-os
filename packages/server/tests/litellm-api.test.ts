@@ -66,6 +66,8 @@ describe('LiteLLM Management API', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     server.vault.delete('openai');
+    server.vault.delete('google');
+    server.vault.delete('openrouter');
   });
 
   // --- GET /api/litellm/status ---
@@ -424,6 +426,60 @@ describe('LiteLLM Management API', () => {
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.model).toBe('ollama/llama3.2:latest');
+  });
+
+  it('prefers a deterministic credentialed cloud fallback over an unrelated host Ollama model', async () => {
+    const runtimePath = path.join(dataDir, 'litellm.runtime.json');
+    const priorRuntime = fs.existsSync(runtimePath) ? fs.readFileSync(runtimePath, 'utf-8') : null;
+    const priorCurrentModel = server.agentState.currentModel;
+    server.agentState.currentModel = 'claude-sonnet-4-6';
+    server.vault.set('google', 'google-cloud-fallback-test-key');
+    server.vault.set('openrouter', 'openrouter-cloud-fallback-test-key');
+    fs.writeFileSync(runtimePath, JSON.stringify({
+      model_list: [
+        { model_name: 'google/gemini-2.5-flash' },
+        { model_name: 'openrouter/openai/gpt-5.3-codex' },
+      ],
+    }), 'utf-8');
+
+    const discoveredProviders: string[] = [];
+    let ollamaRequests = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.startsWith('https://generativelanguage.googleapis.com/')) {
+        discoveredProviders.push('google');
+        return new Response(JSON.stringify({
+          models: [
+            { name: 'models/text-embedding-004' },
+            { name: 'models/gemini-2.5-flash' },
+          ],
+        }), { status: 200 });
+      }
+      if (url.startsWith('https://openrouter.ai/')) {
+        discoveredProviders.push('openrouter');
+        return new Response(JSON.stringify({
+          data: [{ id: 'openai/gpt-5.3-codex' }],
+        }), { status: 200 });
+      }
+      if (url.endsWith('/api/tags')) {
+        ollamaRequests += 1;
+        return new Response(JSON.stringify({
+          models: [{ name: 'minicpm5-fable:1b' }],
+        }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, 'claude-sonnet-4-6'))
+        .resolves.toBe('google/gemini-2.5-flash');
+      expect(discoveredProviders.sort()).toEqual(['google', 'openrouter']);
+      expect(ollamaRequests).toBe(0);
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      if (priorRuntime === null) fs.rmSync(runtimePath, { force: true });
+      else fs.writeFileSync(runtimePath, priorRuntime, 'utf-8');
+    }
   });
 
   it('never exposes or selects a remote Ollama cloud alias as a local model', async () => {
