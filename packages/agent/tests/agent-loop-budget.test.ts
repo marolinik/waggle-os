@@ -53,11 +53,15 @@ describe('agent run budget policy', () => {
       selectedToolNames: ['web_search', 'web_fetch'],
     });
 
-    expect(policy.maxToolRounds).toBe(12);
-    expect(policy.maxTurns).toBe(13);
-    expect(policy.maxTokenBudget).toBe(100_000);
-    expect(policy.synthesisReserveTokens).toBeGreaterThan(0);
-    expect(policy.toolContextBudget.maxSingleResultChars).toBeLessThanOrEqual(4_000);
+    expect(policy.maxToolRounds).toBe(6);
+    expect(policy.maxTurns).toBe(7);
+    expect(policy.maxTokenBudget).toBe(52_000);
+    expect(policy.synthesisReserveTokens).toBe(24_000);
+    expect(policy.toolContextBudget).toEqual({
+      maxSingleResultChars: 3_000,
+      recentResultCount: 1,
+      historicalResultChars: 400,
+    });
   });
 
   it('keeps calculator, complex multi-step, and document workflows functional', () => {
@@ -117,7 +121,7 @@ describe('model-facing tool context', () => {
 });
 
 describe('bounded agent loop synthesis', () => {
-  it('keeps a deterministic nine-web-call research run below 100k cumulative input', async () => {
+  it('forces a deterministic long research run to synthesize below 60k cumulative input', async () => {
     const requestBodies: Array<Record<string, unknown>> = [];
     let modelCall = 0;
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
@@ -125,6 +129,9 @@ describe('bounded agent loop synthesis', () => {
       requestBodies.push(body);
       const messages = body.messages as Array<Record<string, unknown>>;
       const promptTokens = Math.ceil(JSON.stringify(messages).length / 4);
+      if (!body.tools) {
+        return jsonResponse({ role: 'assistant', content: 'Synthesis grounded in the collected sources.' }, promptTokens);
+      }
       const current = modelCall++;
       if (current < 9) {
         return jsonResponse({
@@ -152,20 +159,20 @@ describe('bounded agent loop synthesis', () => {
 
     const result = await runAgentLoop(researchConfig(fetchFn, webFetch));
 
-    expect(webFetch.execute).toHaveBeenCalledTimes(9);
-    expect(fetchFn).toHaveBeenCalledTimes(10);
+    expect(webFetch.execute).toHaveBeenCalledTimes(3);
+    expect(fetchFn).toHaveBeenCalledTimes(4);
     expect(result.content).toBe('Synthesis grounded in the collected sources.');
-    expect(result.usage.inputTokens).toBeLessThanOrEqual(100_000);
+    expect(result.usage.inputTokens).toBeLessThanOrEqual(60_000);
     const finalMessages = requestBodies.at(-1)!.messages as Array<{ role: string; content: string; tool_call_id?: string }>;
     const toolResults = finalMessages.filter(message => message.role === 'tool');
-    expect(toolResults).toHaveLength(9);
-    expect(toolResults.every(message => message.content.length <= 4_000)).toBe(true);
+    expect(toolResults).toHaveLength(3);
+    expect(toolResults.every(message => message.content.length <= 3_000)).toBe(true);
     expect(toolResults.map(message => message.tool_call_id)).toEqual(
-      Array.from({ length: 9 }, (_, index) => `call_${index}`),
+      Array.from({ length: 3 }, (_, index) => `call_${index}`),
     );
   });
 
-  it('forces synthesis after twelve normal research rounds without a max-turn failure', async () => {
+  it('forces synthesis after six normal research rounds without a max-turn failure', async () => {
     let toolCall = 0;
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { tools?: unknown[] };
@@ -198,15 +205,18 @@ describe('bounded agent loop synthesis', () => {
       execute: vi.fn(async args => `Evidence from ${String(args.url)}`),
     };
 
-    const result = await runAgentLoop(researchConfig(fetchFn, webFetch));
+    const result = await runAgentLoop({
+      ...researchConfig(fetchFn, webFetch),
+      maxTokenBudget: 1_000_000,
+    });
 
-    expect(webFetch.execute).toHaveBeenCalledTimes(12);
-    expect(fetchFn).toHaveBeenCalledTimes(13);
+    expect(webFetch.execute).toHaveBeenCalledTimes(6);
+    expect(fetchFn).toHaveBeenCalledTimes(7);
     expect(result.content).toBe('Final evidence synthesis.');
     expect(result.content).not.toMatch(/max(?:imum)? tool turns/i);
   });
 
-  it('uses the token reserve to synthesize before cumulative input crosses 100k', async () => {
+  it('uses the token reserve to synthesize before cumulative input crosses 60k', async () => {
     let toolCall = 0;
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { tools?: unknown[] };
@@ -233,9 +243,9 @@ describe('bounded agent loop synthesis', () => {
 
     const result = await runAgentLoop(researchConfig(fetchFn, webFetch));
 
-    expect(webFetch.execute).toHaveBeenCalledTimes(3);
-    expect(fetchFn).toHaveBeenCalledTimes(4);
+    expect(webFetch.execute).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(result.content).toBe('Budget-aware synthesis.');
-    expect(result.usage.inputTokens).toBe(92_000);
+    expect(result.usage.inputTokens).toBe(36_000);
   });
 });

@@ -347,19 +347,25 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       forceSynthesis('tool-round-limit');
     }
     const usedBeforeRequest = totalInputTokens + totalOutputTokens;
+    let requestMessages = compactToolContextForModel(messages, toolContextBudget);
+    const estimatedNextRequestTokens = Math.ceil((
+      JSON.stringify(requestMessages).length
+      + (!synthesisForced && openaiTools.length > 0 ? JSON.stringify(openaiTools).length : 0)
+    ) / 4);
     if (
       !synthesisForced
       && toolRoundCount > 0
       && config.maxTokenBudget
       && synthesisReserveTokens
-      && usedBeforeRequest + synthesisReserveTokens >= config.maxTokenBudget
+      && usedBeforeRequest + estimatedNextRequestTokens + synthesisReserveTokens >= config.maxTokenBudget
     ) {
       forceSynthesis('token-reserve');
+      requestMessages = compactToolContextForModel(messages, toolContextBudget);
     }
 
     const body: Record<string, unknown> = {
       model,
-      messages: compactToolContextForModel(messages, toolContextBudget),
+      messages: requestMessages,
     };
     if (openaiTools.length > 0 && !synthesisForced) {
       body.tools = openaiTools;

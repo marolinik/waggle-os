@@ -49,8 +49,8 @@ const DOCUMENT_TOOLS = new Set([
 const RESEARCH_SHAPES = new Set<TaskShapeType>(['research', 'compare']);
 
 /**
- * Evidence-backed per-turn policy. Research is capped at the observed useful
- * envelope (12 evidence rounds, 100k cumulative tokens) while write-heavy and
+ * Evidence-backed per-turn policy. Research reserves enough room for a final
+ * synthesis while staying inside the live acceptance envelope; write-heavy and
  * complex execution workflows retain a larger bounded envelope.
  */
 export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudgetPolicy {
@@ -71,14 +71,14 @@ export function selectAgentRunBudget(input: AgentRunBudgetInput): AgentRunBudget
 
   if (RESEARCH_SHAPES.has(input.taskShape)) {
     return {
-      maxTurns: 13,
-      maxToolRounds: 12,
-      maxTokenBudget: 100_000,
-      synthesisReserveTokens: 18_000,
+      maxTurns: 7,
+      maxToolRounds: 6,
+      maxTokenBudget: 52_000,
+      synthesisReserveTokens: 24_000,
       toolContextBudget: {
-        maxSingleResultChars: 4_000,
-        recentResultCount: 2,
-        historicalResultChars: 500,
+        maxSingleResultChars: 3_000,
+        recentResultCount: 1,
+        historicalResultChars: 400,
       },
     };
   }
