@@ -314,6 +314,17 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, passed: true });
   });
 
+  it('recognizes explicit inline fact and inference markers', () => {
+    const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
+    const rule = researcher.responseRules.find(candidate => candidate.id === 'fact-inference');
+    expect(rule?.kind).toBe('pattern');
+    if (!rule || rule.kind !== 'pattern') throw new Error('missing fact-inference rule');
+
+    expect(rule.pattern.test(
+      'SQLite is embedded (Fact: official repository). PostgreSQL adds a service boundary (Inference based on its client-server architecture).',
+    )).toBe(true);
+  });
+
   it('does not accept lookalike hostnames as primary-source evidence', () => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const response = [
