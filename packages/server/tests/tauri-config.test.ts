@@ -6,7 +6,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
 const TAURI_DIR = path.join(ROOT, 'app', 'src-tauri');
@@ -186,6 +188,19 @@ describe('Tauri Production Configuration', () => {
     expect(nsis).toContain('NSIS_HOOK_PREINSTALL');
     expect(nsis).toContain('Desktop shortcut');
     expect(nsis).toContain('Start Menu');
+    expect(nsis).toMatch(/\/SD\s+IDNO\s+IDYES\s+removeData\s+IDNO\s+skipData/);
+  });
+
+  it('pilot-signed Windows build consumes the generated Tauri override', () => {
+    const manifest = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'app', 'package.json'), 'utf-8'),
+    );
+    const signedBuild = manifest.scripts?.['tauri:build:win:pilot-signed'];
+
+    expect(signedBuild).toContain('npm run tauri:sign:pilot:win:apply');
+    expect(signedBuild).toContain(
+      'npm run tauri:build:win -- --config src-tauri/tauri.build-override.conf.json',
+    );
   });
 
   it('icon.ico exists', () => {
@@ -229,6 +244,85 @@ describe('Tauri Production Configuration', () => {
     expect(script).toContain('process.versions.modules');
     expect(script).toContain('execFileSync(nodePath');
   });
+
+  it.runIf(process.platform === 'win32')(
+    'sidecar resource preflight rejects each missing Windows native runtime',
+    () => {
+      const fixtureRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'waggle-sidecar-preflight-'),
+      );
+      const fixtureScripts = path.join(fixtureRoot, 'scripts');
+      const fixtureResources = path.join(fixtureRoot, 'app', 'src-tauri', 'resources');
+      const fixtureChecker = path.join(fixtureScripts, 'check-sidecar-resources.mjs');
+      const requiredNativeFiles = [
+        'better_sqlite3.node',
+        'vec0.dll',
+        'onnxruntime/onnxruntime_binding.node',
+      ];
+      const stagedRuntimeFiles = [
+        'better-sqlite3/package.json',
+        '@waggle/hive-mind-cli/dist/index.js',
+        '@waggle/hive-mind-hooks-claude-code/dist/bin/claude-code-hooks-cli.js',
+        '@waggle/hive-mind-hooks-claude-desktop/dist/bin/claude-desktop-hooks.js',
+        '@waggle/hive-mind-hooks-codex/dist/bin/codex-hooks.js',
+        '@waggle/hive-mind-hooks-codex-desktop/dist/bin/codex-desktop-hooks.js',
+        '@waggle/hive-mind-hooks-cursor/dist/bin/cursor-hooks.js',
+        '@waggle/hive-mind-hooks-hermes/dist/bin/hermes-hooks.js',
+        '@waggle/hive-mind-hooks-openclaw/dist/bin/openclaw-hooks.js',
+      ];
+      const writeFixtureFile = (base: string, relative: string, content = '') => {
+        const target = path.join(base, ...relative.split('/'));
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, content, 'utf-8');
+        return target;
+      };
+
+      try {
+        fs.mkdirSync(fixtureScripts, { recursive: true });
+        fs.mkdirSync(fixtureResources, { recursive: true });
+        fs.copyFileSync(
+          path.join(ROOT, 'scripts', 'check-sidecar-resources.mjs'),
+          fixtureChecker,
+        );
+        fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
+
+        for (const entry of requiredNativeFiles) {
+          writeFixtureFile(path.join(fixtureResources, 'native'), entry);
+        }
+        for (const entry of stagedRuntimeFiles) {
+          writeFixtureFile(
+            path.join(fixtureResources, 'node_modules'),
+            entry,
+            entry.endsWith('package.json') ? '{}' : '',
+          );
+        }
+
+        const runChecker = () => spawnSync(process.execPath, [fixtureChecker], {
+          encoding: 'utf-8',
+        });
+
+        expect(runChecker().status).toBe(0);
+
+        for (const entry of requiredNativeFiles) {
+          const target = path.join(
+            fixtureResources,
+            'native',
+            ...entry.split('/'),
+          );
+          fs.rmSync(target);
+
+          const result = runChecker();
+          expect(result.status).toBe(1);
+          expect(result.stderr).toContain(`resources/native/${entry}`);
+
+          fs.writeFileSync(target, '', 'utf-8');
+        }
+      } finally {
+        fs.rmSync(fixtureRoot, { recursive: true, force: true });
+      }
+    },
+    15_000,
+  );
 
   it('staged sidecar resources have Windows MSI codepage-safe relative paths', () => {
     // WiX 3 links the en-US MSI with codepage 1252. Dependency test fixtures

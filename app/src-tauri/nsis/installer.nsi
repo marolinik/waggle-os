@@ -55,7 +55,7 @@ InstallDir "${DEFAULT_INSTALL_DIR}"
      $PROFILE\.waggle$\r$\n$\r$\n\
      Do you want to remove this data as well?$\r$\n$\r$\n\
      Choose $\"Yes$\" to delete all data, or $\"No$\" to keep it for future use." \
-    IDYES removeData IDNO skipData
+    /SD IDNO IDYES removeData IDNO skipData
 
   removeData:
     RMDir /r "$PROFILE\.waggle"

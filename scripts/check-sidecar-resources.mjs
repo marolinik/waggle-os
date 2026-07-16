@@ -51,7 +51,20 @@ const nativeDir = path.join(resourcesDir, 'native');
 const nativeEntries = fs.existsSync(nativeDir)
   ? fs.readdirSync(nativeDir).filter((e) => e !== '.gitkeep' && e !== 'onnxruntime')
   : [];
-if (nativeEntries.length === 0) {
+const requiredWindowsNativeFiles = [
+  'better_sqlite3.node',
+  'vec0.dll',
+  'onnxruntime/onnxruntime_binding.node',
+];
+if (process.platform === 'win32') {
+  for (const entry of requiredWindowsNativeFiles) {
+    if (!fs.existsSync(path.join(nativeDir, ...entry.split('/')))) {
+      missing.push(
+        `resources/native/${entry} (run: node scripts/bundle-native-deps.mjs)`,
+      );
+    }
+  }
+} else if (nativeEntries.length === 0) {
   missing.push('resources/native/* (run: node scripts/bundle-native-deps.mjs)');
 }
 
