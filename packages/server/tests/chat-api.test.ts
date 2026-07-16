@@ -92,7 +92,7 @@ describe('Chat Streaming API', () => {
       url: '/api/chat',
       payload: { message: 'Hello' },
     });
-    expect(res.headers['content-type']).toBe('text/event-stream');
+    expect(res.headers['content-type']).toBe('text/event-stream; charset=utf-8');
     expect(res.headers['cache-control']).toBe('no-cache');
     expect(res.headers['connection']).toBe('keep-alive');
   });
