@@ -15,6 +15,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import Fastify from 'fastify';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import { MarketplaceDB } from '@waggle/marketplace';
 import type { MarketplacePackage } from '@waggle/marketplace';
 import { marketplaceRoutes } from '../../src/local/routes/marketplace.js';
@@ -28,6 +29,16 @@ function getRepoRoot(): string {
 function getMarketplaceDbPath(): string | null {
   const dbPath = path.join(getRepoRoot(), 'packages', 'marketplace', 'marketplace.db');
   return fs.existsSync(dbPath) ? dbPath : null;
+}
+
+function openSeedCopy(prefix = 'waggle-sync-seed-'): { db: MarketplaceDB; cleanup: () => void } | null {
+  const bundled = getMarketplaceDbPath();
+  if (!bundled) return null;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const dbPath = path.join(tmpDir, 'marketplace.db');
+  fs.copyFileSync(bundled, dbPath);
+  const db = new MarketplaceDB(dbPath);
+  return { db, cleanup: () => { db.close(); fs.rmSync(tmpDir, { recursive: true, force: true }); } };
 }
 
 // ── Module Export ────────────────────────────────────────────────────
@@ -44,15 +55,18 @@ describe('Marketplace Routes Module', () => {
 
 describe('GET /api/marketplace/search', () => {
   let db: MarketplaceDB;
+  let cleanup: (() => void) | undefined;
   const dbPath = getMarketplaceDbPath();
 
   beforeAll(() => {
-    if (!dbPath) return;
-    db = new MarketplaceDB(dbPath);
+    const seed = openSeedCopy();
+    if (!seed) return;
+    db = seed.db;
+    cleanup = seed.cleanup;
   });
 
   afterAll(() => {
-    if (db) db.close();
+    cleanup?.();
   });
 
   it('returns packages when searching without query', () => {
@@ -130,15 +144,18 @@ describe('GET /api/marketplace/plugins', () => {
 
 describe('GET /api/marketplace/packs', () => {
   let db: MarketplaceDB;
+  let cleanup: (() => void) | undefined;
   const dbPath = getMarketplaceDbPath();
 
   beforeAll(() => {
-    if (!dbPath) return;
-    db = new MarketplaceDB(dbPath);
+    const seed = openSeedCopy();
+    if (!seed) return;
+    db = seed.db;
+    cleanup = seed.cleanup;
   });
 
   afterAll(() => {
-    if (db) db.close();
+    cleanup?.();
   });
 
   it('returns pack list', () => {
@@ -162,15 +179,18 @@ describe('GET /api/marketplace/packs', () => {
 
 describe('GET /api/marketplace/packs/:slug', () => {
   let db: MarketplaceDB;
+  let cleanup: (() => void) | undefined;
   const dbPath = getMarketplaceDbPath();
 
   beforeAll(() => {
-    if (!dbPath) return;
-    db = new MarketplaceDB(dbPath);
+    const seed = openSeedCopy();
+    if (!seed) return;
+    db = seed.db;
+    cleanup = seed.cleanup;
   });
 
   afterAll(() => {
-    if (db) db.close();
+    cleanup?.();
   });
 
   it('returns pack detail with packages for a valid slug', () => {
@@ -198,15 +218,18 @@ describe('GET /api/marketplace/packs/:slug', () => {
 
 describe('GET /api/marketplace/installed', () => {
   let db: MarketplaceDB;
+  let cleanup: (() => void) | undefined;
   const dbPath = getMarketplaceDbPath();
 
   beforeAll(() => {
-    if (!dbPath) return;
-    db = new MarketplaceDB(dbPath);
+    const seed = openSeedCopy();
+    if (!seed) return;
+    db = seed.db;
+    cleanup = seed.cleanup;
   });
 
   afterAll(() => {
-    if (db) db.close();
+    cleanup?.();
   });
 
   it('returns an array of installations (may be empty)', () => {
@@ -264,15 +287,18 @@ describe('POST /api/marketplace/security-check', () => {
 
 describe('GET /api/marketplace/sources', () => {
   let db: MarketplaceDB;
+  let cleanup: (() => void) | undefined;
   const dbPath = getMarketplaceDbPath();
 
   beforeAll(() => {
-    if (!dbPath) return;
-    db = new MarketplaceDB(dbPath);
+    const seed = openSeedCopy();
+    if (!seed) return;
+    db = seed.db;
+    cleanup = seed.cleanup;
   });
 
   afterAll(() => {
-    if (db) db.close();
+    cleanup?.();
   });
 
   it('returns marketplace sources', () => {
@@ -306,21 +332,23 @@ describe('Marketplace DB Seed', () => {
   });
 
   it('marketplace.db has expected table structure', () => {
-    const dbPath = getMarketplaceDbPath();
-    if (!dbPath) return;
+    const seed = openSeedCopy();
+    if (!seed) return;
 
-    const db = new MarketplaceDB(dbPath);
-    // Verify all key operations work (tables exist)
-    const search = db.search({ limit: 1 });
-    expect(search.total).toBeGreaterThan(0);
+    try {
+      const db = seed.db;
+      // Verify all key operations work (tables exist)
+      const search = db.search({ limit: 1 });
+      expect(search.total).toBeGreaterThan(0);
 
-    const packs = db.listPacks();
-    expect(packs.length).toBeGreaterThan(0);
+      const packs = db.listPacks();
+      expect(packs.length).toBeGreaterThan(0);
 
-    const sources = db.listSources();
-    expect(sources.length).toBeGreaterThan(0);
-
-    db.close();
+      const sources = db.listSources();
+      expect(sources.length).toBeGreaterThan(0);
+    } finally {
+      seed.cleanup();
+    }
   });
 
   it('server index.ts seeds marketplace.db to data dir', () => {

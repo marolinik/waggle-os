@@ -24,6 +24,16 @@ function getMarketplaceDbPath(): string | null {
   return fs.existsSync(dbPath) ? dbPath : null;
 }
 
+function openSeedCopy(prefix = 'waggle-sync-seed-'): { db: MarketplaceDB; cleanup: () => void } | null {
+  const bundled = getMarketplaceDbPath();
+  if (!bundled) return null;
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const dbPath = path.join(tmpDir, 'marketplace.db');
+  fs.copyFileSync(bundled, dbPath);
+  const db = new MarketplaceDB(dbPath);
+  return { db, cleanup: () => { db.close(); fs.rmSync(tmpDir, { recursive: true, force: true }); } };
+}
+
 async function syncHermetically(sync: MarketplaceSync, options?: SyncOptions) {
   const fetchMock = vi.fn().mockResolvedValue({
     ok: false,
@@ -64,75 +74,81 @@ describe('POST /api/marketplace/sync', () => {
   });
 
   it('MarketplaceSync.syncAll returns result format', { timeout: 60_000 }, async () => {
-    const dbPath = getMarketplaceDbPath();
-    if (!dbPath) return;
+    const seed = openSeedCopy();
+    if (!seed) return;
+    const db = seed.db;
 
-    const db = new MarketplaceDB(dbPath);
-    const sync = new MarketplaceSync(db);
+    try {
+      const sync = new MarketplaceSync(db);
 
-    // syncAll will try to reach external APIs — which will fail in CI/local.
-    // The adapter return shape is verified through the hermetic boundary below.
-    const results = await syncHermetically(sync);
+      // syncAll will try to reach external APIs — which will fail in CI/local.
+      // The adapter return shape is verified through the hermetic boundary below.
+      const results = await syncHermetically(sync);
 
-    expect(Array.isArray(results)).toBe(true);
-    for (const result of results) {
-      expect(result).toHaveProperty('source');
-      expect(result).toHaveProperty('added');
-      expect(result).toHaveProperty('updated');
-      expect(result).toHaveProperty('removed');
-      expect(result).toHaveProperty('errors');
-      expect(typeof result.source).toBe('string');
-      expect(typeof result.added).toBe('number');
-      expect(typeof result.updated).toBe('number');
-      expect(typeof result.removed).toBe('number');
-      expect(Array.isArray(result.errors)).toBe(true);
+      expect(Array.isArray(results)).toBe(true);
+      for (const result of results) {
+        expect(result).toHaveProperty('source');
+        expect(result).toHaveProperty('added');
+        expect(result).toHaveProperty('updated');
+        expect(result).toHaveProperty('removed');
+        expect(result).toHaveProperty('errors');
+        expect(typeof result.source).toBe('string');
+        expect(typeof result.added).toBe('number');
+        expect(typeof result.updated).toBe('number');
+        expect(typeof result.removed).toBe('number');
+        expect(Array.isArray(result.errors)).toBe(true);
+      }
+    } finally {
+      seed.cleanup();
     }
-
-    db.close();
   });
 
   it('sync with no reachable sources returns graceful errors', async () => {
-    const dbPath = getMarketplaceDbPath();
-    if (!dbPath) return;
+    const seed = openSeedCopy();
+    if (!seed) return;
+    const db = seed.db;
 
-    const db = new MarketplaceDB(dbPath);
-    const sync = new MarketplaceSync(db);
+    try {
+      const sync = new MarketplaceSync(db);
 
-    // All sources point to external APIs that won't be reachable in test
-    const results = await syncHermetically(sync);
+      // All sources point to external APIs that won't be reachable in test
+      const results = await syncHermetically(sync);
 
-    // Should NOT throw — errors are captured per-source
-    expect(Array.isArray(results)).toBe(true);
+      // Should NOT throw — errors are captured per-source
+      expect(Array.isArray(results)).toBe(true);
 
-    // Most sources will have errors since external APIs are unreachable
-    const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
-    // At least some sources should have errors (unless all are somehow reachable)
-    // We don't assert totalErrors > 0 because some sources might succeed
-    expect(totalErrors).toBeGreaterThanOrEqual(0);
-
-    db.close();
+      // Most sources will have errors since external APIs are unreachable
+      const totalErrors = results.reduce((sum, r) => sum + r.errors.length, 0);
+      // At least some sources should have errors (unless all are somehow reachable)
+      // We don't assert totalErrors > 0 because some sources might succeed
+      expect(totalErrors).toBeGreaterThanOrEqual(0);
+    } finally {
+      seed.cleanup();
+    }
   });
 
   it('sync aggregates results from multiple sources', async () => {
-    const dbPath = getMarketplaceDbPath();
-    if (!dbPath) return;
+    const seed = openSeedCopy();
+    if (!seed) return;
+    const db = seed.db;
 
-    const db = new MarketplaceDB(dbPath);
-    const sources = db.listSources();
-    const sync = new MarketplaceSync(db);
+    try {
+      const sources = db.listSources();
+      const sync = new MarketplaceSync(db);
 
-    const results = await syncHermetically(sync);
+      const results = await syncHermetically(sync);
 
-    // Should have one result per source
-    expect(results.length).toBe(sources.length);
+      // Should have one result per source
+      expect(results.length).toBe(sources.length);
 
-    // Each result's source should match a known source name
-    const sourceNames = sources.map(s => s.name);
-    for (const result of results) {
-      expect(sourceNames).toContain(result.source);
+      // Each result's source should match a known source name
+      const sourceNames = sources.map(s => s.name);
+      for (const result of results) {
+        expect(sourceNames).toContain(result.source);
+      }
+    } finally {
+      seed.cleanup();
     }
-
-    db.close();
   });
 
   it('manual sync is a no-network no-op when marketplace sync is disabled', async () => {
@@ -214,26 +230,28 @@ describe('Marketplace sync cron job', () => {
 
 describe('Sync result aggregation', () => {
   it('sync results can be aggregated into endpoint response format', async () => {
-    const dbPath = getMarketplaceDbPath();
-    if (!dbPath) return;
+    const seed = openSeedCopy();
+    if (!seed) return;
+    const db = seed.db;
 
-    const db = new MarketplaceDB(dbPath);
-    const sync = new MarketplaceSync(db);
-    const results = await syncHermetically(sync);
+    try {
+      const sync = new MarketplaceSync(db);
+      const results = await syncHermetically(sync);
 
-    // Simulate the endpoint aggregation logic
-    const sourcesChecked = results.length;
-    const packagesAdded = results.reduce((sum, r) => sum + r.added, 0);
-    const packagesUpdated = results.reduce((sum, r) => sum + r.updated, 0);
-    const errors = results.flatMap(r => r.errors.map(e => `[${r.source}] ${e}`));
+      // Simulate the endpoint aggregation logic
+      const sourcesChecked = results.length;
+      const packagesAdded = results.reduce((sum, r) => sum + r.added, 0);
+      const packagesUpdated = results.reduce((sum, r) => sum + r.updated, 0);
+      const errors = results.flatMap(r => r.errors.map(e => `[${r.source}] ${e}`));
 
-    expect(typeof sourcesChecked).toBe('number');
-    expect(typeof packagesAdded).toBe('number');
-    expect(typeof packagesUpdated).toBe('number');
-    expect(Array.isArray(errors)).toBe(true);
-    expect(sourcesChecked).toBeGreaterThan(0);
-
-    db.close();
+      expect(typeof sourcesChecked).toBe('number');
+      expect(typeof packagesAdded).toBe('number');
+      expect(typeof packagesUpdated).toBe('number');
+      expect(Array.isArray(errors)).toBe(true);
+      expect(sourcesChecked).toBeGreaterThan(0);
+    } finally {
+      seed.cleanup();
+    }
   });
 });
 

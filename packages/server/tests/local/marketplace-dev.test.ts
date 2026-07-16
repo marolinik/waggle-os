@@ -11,6 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 
 // ── Seam 1: Catalog Backend ──────────────────────────────────────────
 
@@ -44,22 +45,28 @@ describe('Marketplace Catalog Seam', () => {
     }
 
     const { MarketplaceDB } = await import('@waggle/marketplace');
-    const db = new MarketplaceDB(dbPath);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-dev-seed-'));
+    const isolatedDbPath = path.join(tmpDir, 'marketplace.db');
+    fs.copyFileSync(dbPath, isolatedDbPath);
+    const db = new MarketplaceDB(isolatedDbPath);
 
-    const results = db.search({ query: '', limit: 5 });
-    expect(results).toBeDefined();
-    expect(results.total).toBeGreaterThan(0);
-    expect(results.packages).toBeDefined();
-    expect(Array.isArray(results.packages)).toBe(true);
-    expect(results.packages.length).toBeGreaterThan(0);
+    try {
+      const results = db.search({ query: '', limit: 5 });
+      expect(results).toBeDefined();
+      expect(results.total).toBeGreaterThan(0);
+      expect(results.packages).toBeDefined();
+      expect(Array.isArray(results.packages)).toBe(true);
+      expect(results.packages.length).toBeGreaterThan(0);
 
-    // Verify package shape
-    const pkg = results.packages[0];
-    expect(pkg.name).toBeDefined();
-    expect(pkg.package_type).toBeDefined();
-    expect(pkg.description).toBeDefined();
-
-    db.close();
+      // Verify package shape
+      const pkg = results.packages[0];
+      expect(pkg.name).toBeDefined();
+      expect(pkg.package_type).toBeDefined();
+      expect(pkg.description).toBeDefined();
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 
   it('MarketplaceDB.search() supports text query filtering', async () => {
@@ -75,18 +82,24 @@ describe('Marketplace Catalog Seam', () => {
     if (!dbPath) return;
 
     const { MarketplaceDB } = await import('@waggle/marketplace');
-    const db = new MarketplaceDB(dbPath);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-dev-seed-'));
+    const isolatedDbPath = path.join(tmpDir, 'marketplace.db');
+    fs.copyFileSync(dbPath, isolatedDbPath);
+    const db = new MarketplaceDB(isolatedDbPath);
 
-    const results = db.search({ query: 'research', limit: 10 });
-    expect(results.total).toBeGreaterThanOrEqual(0);
-    // If results exist, they should match query
-    if (results.packages.length > 0) {
-      const names = results.packages.map((p) => p.name.toLowerCase() + ' ' + (p.description || '').toLowerCase());
-      const hasMatch = names.some((n: string) => n.includes('research'));
-      expect(hasMatch).toBe(true);
+    try {
+      const results = db.search({ query: 'research', limit: 10 });
+      expect(results.total).toBeGreaterThanOrEqual(0);
+      // If results exist, they should match query
+      if (results.packages.length > 0) {
+        const names = results.packages.map((p) => p.name.toLowerCase() + ' ' + (p.description || '').toLowerCase());
+        const hasMatch = names.some((n: string) => n.includes('research'));
+        expect(hasMatch).toBe(true);
+      }
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
-
-    db.close();
   });
 });
 
@@ -168,20 +181,26 @@ describe('Marketplace Pack Seam', () => {
     if (!dbPath) return;
 
     const { MarketplaceDB } = await import('@waggle/marketplace');
-    const db = new MarketplaceDB(dbPath);
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'waggle-dev-seed-'));
+    const isolatedDbPath = path.join(tmpDir, 'marketplace.db');
+    fs.copyFileSync(dbPath, isolatedDbPath);
+    const db = new MarketplaceDB(isolatedDbPath);
 
-    const packs = db.listPacks();
-    expect(Array.isArray(packs)).toBe(true);
-    expect(packs.length).toBeGreaterThan(0);
+    try {
+      const packs = db.listPacks();
+      expect(Array.isArray(packs)).toBe(true);
+      expect(packs.length).toBeGreaterThan(0);
 
-    // Verify pack shape
-    const pack = packs[0];
-    expect(pack.slug).toBeDefined();
-    expect(pack.display_name).toBeDefined();
-    expect(pack.priority).toBeDefined();
-    expect(pack.priority).toBeDefined(); expect(typeof pack.priority).toBe('string');
-
-    db.close();
+      // Verify pack shape
+      const pack = packs[0];
+      expect(pack.slug).toBeDefined();
+      expect(pack.display_name).toBeDefined();
+      expect(pack.priority).toBeDefined();
+      expect(pack.priority).toBeDefined(); expect(typeof pack.priority).toBe('string');
+    } finally {
+      db.close();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 
