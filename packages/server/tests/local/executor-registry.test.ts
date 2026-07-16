@@ -44,7 +44,7 @@ const PERSONAS = [
 const DETECTED_TOOLS = [
   detectedTool('claude-code'),
   detectedTool('codex', false),
-  detectedTool('hermes'),
+  { ...detectedTool('hermes'), launchable: false, diagnostic: 'Hermes runtime is broken' },
   detectedTool('openclaw'),
   detectedTool('cursor'),
 ];
@@ -98,7 +98,11 @@ describe('ExecutorRegistry', () => {
       healthy: false,
       egressDestination: 'OpenAI',
     });
-    expect(candidates.find((candidate) => candidate.id === 'external:hermes')?.egressDestination).toBe('Nous');
+    expect(candidates.find((candidate) => candidate.id === 'external:hermes')).toMatchObject({
+      installed: true,
+      healthy: false,
+      egressDestination: 'Nous',
+    });
     expect(candidates.find((candidate) => candidate.id === 'external:openclaw')?.egressDestination)
       .toBe('configured provider');
   });

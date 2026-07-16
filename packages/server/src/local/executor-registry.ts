@@ -87,7 +87,7 @@ export class ExecutorRegistry {
           taskFit: buildTaskFit(id),
           authClass: 'subscription-cli',
           installed,
-          healthy: installed,
+          healthy: installed && detected?.launchable !== false,
           rateLimit: this.rateLimitFor(id, nowMs, 'unknown'),
           supportsHeadless: supportsReadOnly,
           egressDestination: EGRESS_DESTINATIONS[manifest.id] ?? 'configured provider',
