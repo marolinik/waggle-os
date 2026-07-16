@@ -55,6 +55,14 @@ export {
   type AgentRunProgressEventType,
   type AgentRunProgressCallback,
 } from './agent-loop.js';
+export {
+  selectAgentRunBudget,
+  capToolResultForModel,
+  compactToolContextForModel,
+  type AgentRunBudgetInput,
+  type AgentRunBudgetPolicy,
+  type ToolContextBudget,
+} from './agent-run-budget.js';
 
 // Phase 1.2 — model-aware prompt shapes (oversight in original Phase 1.2:
 // re-export to public API was missing; surfaced + fixed during Phase 2.3

@@ -8,6 +8,11 @@ import type { HookRegistry } from './hooks.js';
 import type { CapabilityRouter } from './capability-router.js';
 import type { TraceRecorder, TraceHandle } from './trace-recorder.js';
 import { logTurnEvent } from './turn-context.js';
+import {
+  capToolResultForModel,
+  compactToolContextForModel,
+  type ToolContextBudget,
+} from './agent-run-budget.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 export interface PluginToolProvider {
@@ -45,6 +50,12 @@ export interface AgentLoopConfig {
    */
   onGiveUp?: (message: string) => void;
   maxTurns?: number;
+  /** Evidence/tool rounds allowed before a final synthesis-only turn is forced. */
+  maxToolRounds?: number;
+  /** Tokens held back from maxTokenBudget for the final synthesis request. */
+  synthesisReserveTokens?: number;
+  /** Model-facing tool-result hard cap and historical compaction policy. */
+  toolContextBudget?: ToolContextBudget;
   stream?: boolean;
   fetch?: typeof globalThis.fetch;
   hooks?: HookRegistry;
@@ -185,6 +196,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     onToolUse: userOnToolUse,
     onToolResult: userOnToolResult,
     maxTurns = 10,
+    maxToolRounds,
+    synthesisReserveTokens,
+    toolContextBudget = {
+      maxSingleResultChars: 8_000,
+      recentResultCount: 2,
+      historicalResultChars: 750,
+    },
     stream = false,
     fetch: fetchFn = globalThis.fetch,
     hooks,
@@ -200,6 +218,9 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     stage: 'agent-loop.enter',
     model,
     maxTurns,
+    maxToolRounds,
+    maxTokenBudget: config.maxTokenBudget,
+    synthesisReserveTokens,
     toolCount: configTools.length,
     messageCount: inputMessages.length,
     systemPromptChars: systemPrompt.length,
@@ -289,6 +310,28 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   // One-shot completion gates (D3 verification, D1 skill distillation) +
   // preserved-answer slot for issue #4. See `./loop-gates.ts` for details.
   let gateState = initialGateState();
+  let toolRoundCount = 0;
+  let synthesisForced = false;
+
+  const forceSynthesis = (reason: 'tool-round-limit' | 'token-reserve' | 'token-limit'): void => {
+    if (synthesisForced) return;
+    synthesisForced = true;
+    messages.push({
+      role: 'user',
+      content: [
+        'Evidence collection is complete. Produce the final answer now using only the evidence already present.',
+        'Do not call more tools. Cite source URLs found in the evidence, distinguish verified facts from inference,',
+        'state any remaining evidence gaps, and do not mention internal turn or token budgets.',
+      ].join(' '),
+    });
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.synthesis-forced',
+      reason,
+      toolRoundCount,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    });
+  };
 
   for (let turn = 0; turn < maxTurns; turn++) {
     // Check for abort between turns
@@ -300,11 +343,25 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     }
 
+    if (!synthesisForced && maxToolRounds !== undefined && toolRoundCount >= maxToolRounds) {
+      forceSynthesis('tool-round-limit');
+    }
+    const usedBeforeRequest = totalInputTokens + totalOutputTokens;
+    if (
+      !synthesisForced
+      && toolRoundCount > 0
+      && config.maxTokenBudget
+      && synthesisReserveTokens
+      && usedBeforeRequest + synthesisReserveTokens >= config.maxTokenBudget
+    ) {
+      forceSynthesis('token-reserve');
+    }
+
     const body: Record<string, unknown> = {
       model,
-      messages,
+      messages: compactToolContextForModel(messages, toolContextBudget),
     };
-    if (openaiTools.length > 0) {
+    if (openaiTools.length > 0 && !synthesisForced) {
       body.tools = openaiTools;
     }
     if (stream) {
@@ -419,17 +476,37 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     totalOutputTokens += turnOutputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
 
-    // Check token budget
+    // Legacy callers without a synthesis reserve retain the original hard-stop
+    // behavior. Bounded runs reserve a final synthesis request instead of
+    // surfacing an internal budget/max-turn error to the user.
     if (config.maxTokenBudget && (totalInputTokens + totalOutputTokens) > config.maxTokenBudget) {
       const used = totalInputTokens + totalOutputTokens;
-      // Issue #4 — if D1 has already fired, the user's answer is the deliverable;
-      // surface it rather than swallowing it under a budget message.
-      return {
-        content: gateState.preservedAnswerForDistillation
-          ?? `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
-        toolsUsed,
-        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
-      };
+      if (synthesisReserveTokens) {
+        if (!synthesisForced && turn + 1 < maxTurns) {
+          forceSynthesis('token-limit');
+          continue;
+        }
+        // Provider usage is known only after a request. Accept a final synthesis
+        // that slightly crosses the estimate; never replace it with an internal
+        // token-budget failure.
+        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+          return {
+            content: (gateState.preservedAnswerForDistillation ?? allStreamedContent)
+              || 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.',
+            toolsUsed,
+            usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+          };
+        }
+      } else {
+        // Issue #4 — if D1 has already fired, the user's answer is the deliverable;
+        // surface it rather than swallowing it under a budget message.
+        return {
+          content: gateState.preservedAnswerForDistillation
+            ?? `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
+          toolsUsed,
+          usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+        };
+      }
     }
 
     // No tool calls — return the final response
@@ -489,7 +566,23 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     }
 
+    // Tool definitions are withheld on the reserved synthesis turn. If a model
+    // nevertheless emits a phantom native call, accept its prose but never
+    // execute beyond the evidence budget.
+    if (synthesisForced) {
+      const synthesis = (assistantMessage.content ?? '').trim()
+        || allStreamedContent
+        || 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.';
+      if (!stream && onToken && synthesis) onToken(synthesis);
+      return {
+        content: gateState.preservedAnswerForDistillation ?? synthesis,
+        toolsUsed,
+        usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+      };
+    }
+
     // Has tool calls — execute them and continue the loop
+    toolRoundCount++;
     // Ensure content is never null when tool_calls are present (LiteLLM→Anthropic compat)
     messages.push({
       role: 'assistant',
@@ -511,7 +604,11 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         turnId,
       });
       if (r.countedAsUsed) toolsUsed.push(r.toolName);
-      messages.push({ role: 'tool', content: r.content, tool_call_id: r.toolCallId });
+      messages.push({
+        role: 'tool',
+        content: capToolResultForModel(r.content, toolContextBudget.maxSingleResultChars),
+        tool_call_id: r.toolCallId,
+      });
 
       // Steal #9 T3 — a critical failure streak: give up rather than burn more
       // turns retrying a tool that keeps failing. Surface the give-up copy and
@@ -534,12 +631,14 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
   }
 
-  // maxTurns reached — return any accumulated content rather than generic message.
-  // Issue #4 — if D1 has already fired, prefer the user's captured answer
-  // over the generic "max tool turns" fallback (the answer is the deliverable).
+  // maxTurns reached — bounded runs must never expose an internal max-turn
+  // message. Normally the reserved synthesis turn returns above; this fallback
+  // is only for a malformed provider response during that final request.
   return {
     content: gateState.preservedAnswerForDistillation
-      ?? (allStreamedContent || `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`),
+      ?? (allStreamedContent || (synthesisReserveTokens
+        ? 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.'
+        : `Max tool turns reached (${maxTurns} turns, ${toolsUsed.length} tools used).`)),
     toolsUsed,
     usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
   };
