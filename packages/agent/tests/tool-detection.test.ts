@@ -413,6 +413,64 @@ describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw â
     expect(t.version).toBe('0.2.1');
   });
 
+  it('detects a healthy Hermes Windows fallback when PATH is empty', async () => {
+    const installed =
+      'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === installed,
+        execVersion: async (binary) => binary === installed ? '0.2.1' : null,
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: installed,
+      version: '0.2.1',
+      launchable: true,
+    });
+  });
+
+  it('skips a broken PATH Hermes shim for a healthy Windows fallback', async () => {
+    const broken = 'C:\\broken\\hermes.exe';
+    const healthy = 'C:\\Users\\test\\AppData\\Local\\hermes\\bin\\hermes.cmd';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === broken || p === healthy,
+        pathFromEnv: (name) => name === 'hermes' ? broken : null,
+        execVersion: async (binary) => binary === healthy ? '0.2.1' : null,
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: healthy,
+      version: '0.2.1',
+      launchable: true,
+    });
+  });
+
+  it('reports an all-broken Hermes Windows install as unlaunchable', async () => {
+    const broken = 'C:\\broken\\hermes.exe';
+    const fallback =
+      'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\hermes.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === broken || p === fallback,
+        pathFromEnv: (name) => name === 'hermes' ? broken : null,
+      }),
+    );
+
+    const tool = result.tools.find((candidate) => candidate.id === 'hermes');
+    expect(tool).toMatchObject({
+      installed: true,
+      installedPath: broken,
+      version: null,
+      launchable: false,
+    });
+    expect(tool?.diagnostic).toMatch(/hermes doctor|reinstall Hermes/i);
+  });
+
   it('detects openclaw CLI when present on PATH', async () => {
     const installed = '/usr/local/bin/openclaw';
     const result = await detectInstalledTools(
@@ -457,6 +515,30 @@ describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw â
     const t = result.tools.find((x) => x.id === 'codex-desktop')!;
     expect(t.installed).toBe(true);
     expect(t.installedPath).toBe(installed);
+  });
+
+  it('derives Codex Desktop from the blocked Microsoft Store CLI resource', async () => {
+    const cli =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.12708.0_x64__2p2nqsd0c76g0\\app\\resources\\codex.exe';
+    const desktop =
+      'C:\\Program Files\\WindowsApps\\OpenAI.Codex_26.707.12708.0_x64__2p2nqsd0c76g0\\app\\ChatGPT.exe';
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === cli || p === desktop,
+        pathFromEnv: (name) => name === 'codex' ? cli : null,
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'codex')).toMatchObject({
+      installed: true,
+      installedPath: cli,
+      launchable: false,
+    });
+    expect(result.tools.find((tool) => tool.id === 'codex-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
+      launchable: true,
+    });
   });
 });
 

@@ -60,6 +60,8 @@ import { resolveShellEnv, resolvedShellPath, mergePathValue } from './shell-env.
 const execFileAsync = promisify(execFile);
 const CODEX_WINDOWS_APPS_DIAGNOSTIC =
   'Codex was found in WindowsApps, but Windows blocks command-line launch from that app alias. Install a PATH CLI build of Codex or launch Codex from Start, then refresh.';
+const HERMES_WINDOWS_HEALTH_DIAGNOSTIC =
+  'Hermes is installed but failed its --version health check. Run "hermes doctor" or reinstall Hermes, then refresh.';
 
 function isBlockedWindowsAppsCodexPath(
   id: string,
@@ -325,6 +327,62 @@ async function detectByPath(
   };
 }
 
+function hermesWindowsCandidatePaths(deps: ResolvedDeps): string[] {
+  const base = joinForPlatform(
+    deps.platform,
+    deps.home,
+    'AppData',
+    'Local',
+    'hermes',
+  );
+  return [
+    joinForPlatform(deps.platform, base, 'bin', 'hermes.cmd'),
+    joinForPlatform(deps.platform, base, 'hermes-agent', 'venv', 'Scripts', 'hermes.exe'),
+    joinForPlatform(deps.platform, base, 'hermes-agent', 'venv', 'Scripts', 'hermes-agent.exe'),
+  ];
+}
+
+async function detectHealthyWindowsHermes(
+  binaryName: string,
+  deps: ResolvedDeps,
+  hookPointer: string,
+  displayName: string,
+): Promise<DetectedTool> {
+  const pathCandidate = await deps.pathFromEnv(binaryName);
+  const candidates = [pathCandidate, ...hermesWindowsCandidatePaths(deps)]
+    .filter((candidate): candidate is string => Boolean(candidate));
+  const uniqueCandidates = candidates.filter((candidate, index) =>
+    candidates.findIndex((value) => value.toLowerCase() === candidate.toLowerCase()) === index);
+  let firstExisting: string | null = null;
+
+  for (const candidate of uniqueCandidates) {
+    if (!(await deps.exists(candidate))) continue;
+    firstExisting ??= candidate;
+    const version = await deps.execVersion(candidate, ['--version']);
+    if (version) {
+      return {
+        id: 'hermes',
+        displayName,
+        installed: true,
+        installedPath: candidate,
+        version,
+        ...(await probeHooks(hookPointer, deps)),
+      };
+    }
+  }
+
+  return {
+    id: 'hermes',
+    displayName,
+    installed: firstExisting !== null,
+    installedPath: firstExisting,
+    version: null,
+    launchable: firstExisting ? false : undefined,
+    diagnostic: firstExisting ? HERMES_WINDOWS_HEALTH_DIAGNOSTIC : undefined,
+    ...(await probeHooks(hookPointer, deps)),
+  };
+}
+
 // ── Candidate-path helpers (per platform) ───────────────────────────
 
 function cursorCandidatePaths(deps: ResolvedDeps): string[] {
@@ -364,13 +422,15 @@ function claudeDesktopCandidatePaths(deps: ResolvedDeps): string[] {
   ];
 }
 
-function codexDesktopCandidatePaths(deps: ResolvedDeps): string[] {
-  // OpenAI Codex Desktop is unreleased at time of writing (May 2026)
-  // but the hook package already targets it. Use the conventional
-  // per-platform vendor paths so a future official install is
-  // detected automatically.
+async function codexDesktopCandidatePaths(deps: ResolvedDeps): Promise<string[]> {
   if (deps.platform === 'win32') {
+    const codexPath = await deps.pathFromEnv('codex');
+    const normalized = codexPath?.replace(/\//g, '\\') ?? '';
+    const storeDesktopPath = /\\WindowsApps\\OpenAI\.Codex_[^\\]+\\app\\resources\\codex(?:\.exe)?$/i.test(normalized)
+      ? pathWin32.join(pathWin32.dirname(pathWin32.dirname(normalized)), 'ChatGPT.exe')
+      : null;
     return [
+      ...(storeDesktopPath ? [storeDesktopPath] : []),
       joinForPlatform(deps.platform, deps.home, 'AppData', 'Local', 'OpenAI', 'Codex.exe'),
       'C:\\Program Files\\OpenAI\\Codex.exe',
     ];
@@ -432,7 +492,7 @@ async function detectByCandidates(
  * whose paths are platform-branching code, not declarative data). Keyed by
  * built-in id; third-party adapters are PATH-only so never need an entry.
  */
-const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[]> = {
+const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[] | Promise<string[]>> = {
   'cursor': cursorCandidatePaths,
   'claude-desktop': claudeDesktopCandidatePaths,
   'codex-desktop': codexDesktopCandidatePaths,
@@ -453,13 +513,24 @@ function withManifestMetadata(tool: DetectedTool, manifest: ToolManifest): Detec
 /** Detect one tool from its manifest: PATH lookup, or the candidate resolver. */
 async function detectFromManifest(m: ToolManifest, deps: ResolvedDeps): Promise<DetectedTool> {
   if (m.detect.kind === 'path') {
+    if (m.id === 'hermes' && deps.platform === 'win32') {
+      return withManifestMetadata(
+        await detectHealthyWindowsHermes(
+          m.detect.binaryName,
+          deps,
+          m.hookPointer,
+          m.displayName,
+        ),
+        m,
+      );
+    }
     return withManifestMetadata(
       await detectByPath(m.id, m.detect.binaryName, deps, m.hookPointer, m.displayName),
       m,
     );
   }
   const resolver = CANDIDATE_RESOLVERS[m.id];
-  const candidates = resolver ? resolver(deps) : [];
+  const candidates = resolver ? await resolver(deps) : [];
   return withManifestMetadata(
     await detectByCandidates(m.id, candidates, deps, /* withVersion */ false, m.hookPointer, m.displayName),
     m,
