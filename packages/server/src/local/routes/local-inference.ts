@@ -8,12 +8,20 @@
  * GET  /api/local-inference/hardware    — detect system hardware (GPU, RAM, CPU)
  * GET  /api/local-inference/models      — recommend models that fit this hardware
  * GET  /api/local-inference/status      — check Ollama/vLLM availability + installed models
+ * POST /api/local-inference/bootstrap   — install/start the verified managed runtime
  * POST /api/local-inference/pull        — pull a model via Ollama
  */
 
 import type { FastifyInstance } from 'fastify';
+import os from 'node:os';
+import path from 'node:path';
 import { rankModels, OLLAMA_CATALOG } from '@waggle/agent';
 import { detectHardware } from '../hardware-detect.js';
+import {
+  ManagedOllamaRuntime,
+  type ManagedOllamaReadyResult,
+  type ManagedOllamaStatus,
+} from '../managed-ollama-runtime.js';
 import { isRemoteOllamaAlias } from '../provider-model-catalog.js';
 
 // Cache the hardware scan: detectHardware() spawns a subprocess (nvidia-smi) on
@@ -40,6 +48,18 @@ interface InferenceServerStatus {
   models: string[];
   cloudModels: string[];
   version?: string;
+}
+
+export interface LocalInferenceRuntimeController {
+  getStatus(): ManagedOllamaStatus;
+  ensureReady(): Promise<ManagedOllamaReadyResult>;
+  stop(): Promise<void>;
+}
+
+export interface LocalInferenceRouteOptions {
+  runtimeFactory?: (dataDir: string, baseUrl: string) => LocalInferenceRuntimeController;
+  ollamaProbe?: (baseUrl: string) => Promise<InferenceServerStatus>;
+  vllmProbe?: (baseUrl: string) => Promise<InferenceServerStatus>;
 }
 
 // ── Ollama / vLLM checks ────────────────────────────────────────────
@@ -80,9 +100,23 @@ async function checkVllm(baseUrl: string): Promise<InferenceServerStatus> {
 
 // ── Routes ──────────────────────────────────────────────────────────
 
-export async function localInferenceRoutes(fastify: FastifyInstance) {
-  const OLLAMA_URL = process.env.OLLAMA_HOST ?? 'http://localhost:11434';
+export async function localInferenceRoutes(
+  fastify: FastifyInstance,
+  options: LocalInferenceRouteOptions = {},
+) {
+  const OLLAMA_URL = (process.env.OLLAMA_HOST ?? 'http://127.0.0.1:11434').replace(/\/+$/, '');
   const VLLM_URL = process.env.VLLM_HOST ?? 'http://localhost:8000';
+  const dataDir = fastify.localConfig?.dataDir
+    || process.env.WAGGLE_DATA_DIR
+    || path.join(os.homedir(), '.waggle');
+  const runtime = options.runtimeFactory?.(dataDir, OLLAMA_URL)
+    ?? new ManagedOllamaRuntime(dataDir, OLLAMA_URL);
+  const probeOllama = options.ollamaProbe ?? checkOllama;
+  const probeVllm = options.vllmProbe ?? checkVllm;
+
+  fastify.addHook('onClose', async () => {
+    await runtime.stop();
+  });
 
   // GET /api/local-inference/hardware — in-process clean-room scan (no external binary)
   fastify.get('/api/local-inference/hardware', async () => {
@@ -103,26 +137,78 @@ export async function localInferenceRoutes(fastify: FastifyInstance) {
 
   // GET /api/local-inference/status
   fastify.get('/api/local-inference/status', async () => {
-    const [ollama, vllm] = await Promise.all([checkOllama(OLLAMA_URL), checkVllm(VLLM_URL)]);
+    const [ollama, vllm] = await Promise.all([probeOllama(OLLAMA_URL), probeVllm(VLLM_URL)]);
     const servers = [ollama, vllm].filter(s => s.available);
     const localServers = servers.filter((server) => server.models.length > 0);
     const totalLocalModels = localServers.reduce((acc, server) => acc + server.models.length, 0);
     const offlineReady = totalLocalModels > 0;
+    const managedRuntime = runtime.getStatus();
     return {
       servers,
       primaryServer: localServers[0] ?? null,
-      ollamaInstalled: ollama.available,
+      ollamaInstalled: ollama.available || managedRuntime.installed,
+      ollamaRunning: ollama.available,
       ollamaUrl: OLLAMA_URL,
       vllmUrl: VLLM_URL,
       totalLocalModels,
       offlineReady,
+      dockerRequired: false,
+      managedRuntime,
       setupRequired: !offlineReady,
       setupMessage: offlineReady
         ? null
         : ollama.cloudModels.length > 0
           ? 'Ollama is running, but only cloud aliases are available. Pull an offline model to enable local inference.'
-          : 'Install Ollama or start a local inference server, then pull an offline model.',
+          : managedRuntime.supported
+            ? 'Install the private runtime in Waggle, then download an offline model. Docker and a system Ollama install are not required.'
+            : 'Start a supported local inference server, then pull an offline model.',
     };
+  });
+
+  // Verified runtime download + loopback start. Model weights remain a separate
+  // explicit pull so users see the model identity and disk cost before accepting
+  // its upstream license.
+  fastify.post('/api/local-inference/bootstrap', async (_request, reply) => {
+    const existing = await probeOllama(OLLAMA_URL);
+    if (existing.available) {
+      return {
+        ok: true,
+        installedNow: false,
+        startedNow: false,
+        endpoint: OLLAMA_URL,
+        server: existing,
+        managedRuntime: runtime.getStatus(),
+        dockerRequired: false,
+      };
+    }
+
+    const before = runtime.getStatus();
+    if (!before.supported) {
+      return reply.code(409).send({
+        error: before.reason ?? 'Managed local runtime is unsupported on this platform',
+        code: 'MANAGED_RUNTIME_UNSUPPORTED',
+        managedRuntime: before,
+      });
+    }
+
+    try {
+      const ready = await runtime.ensureReady();
+      const server = await probeOllama(OLLAMA_URL);
+      if (!server.available) {
+        return reply.code(502).send({
+          error: 'Managed local runtime started but failed its loopback health check',
+          code: 'MANAGED_RUNTIME_UNHEALTHY',
+          managedRuntime: runtime.getStatus(),
+        });
+      }
+      return { ok: true, ...ready, server, dockerRequired: false };
+    } catch (error) {
+      return reply.code(502).send({
+        error: error instanceof Error ? error.message : 'Managed local runtime bootstrap failed',
+        code: 'MANAGED_RUNTIME_BOOTSTRAP_FAILED',
+        managedRuntime: runtime.getStatus(),
+      });
+    }
   });
 
   // POST /api/local-inference/pull
