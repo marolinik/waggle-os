@@ -320,4 +320,80 @@ describe('Anthropic Proxy Routes', () => {
       expect(captures).toHaveLength(floatingAliases.length);
     });
   });
+
+  describe('non-Anthropic model guard', () => {
+    it('rejects non-Claude models with 400 and never calls the Anthropic API', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-model-guard';
+      server = createTestServer();
+
+      const outboundCalls: string[] = [];
+      globalThis.fetch = vi.fn(async (url: string | URL | Request) => {
+        outboundCalls.push(String(url));
+        return { ok: true, status: 200, json: async () => ({}) };
+      }) as unknown as typeof globalThis.fetch;
+
+      const nonAnthropicModels = [
+        'alibaba/qwen3.7-max-2026-06-08',
+        'gpt-4o',
+        'openrouter/moonshotai/kimi-k2.5',
+        'gemini/gemini-2.5-pro',
+      ];
+
+      for (const model of nonAnthropicModels) {
+        const res = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model,
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+
+        expect(res.statusCode).toBe(400);
+        const body = res.json();
+        expect(body.error.message).toContain(model);
+        expect(body.error.message).toMatch(/Claude/);
+      }
+
+      // Guard must fire BEFORE any outbound Anthropic request.
+      expect(outboundCalls).toHaveLength(0);
+    });
+
+    it('still forwards Claude models (with and without provider prefix)', async () => {
+      process.env.ANTHROPIC_API_KEY = 'test-key-model-guard-pass';
+      server = createTestServer();
+
+      const captures: string[] = [];
+      globalThis.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        captures.push(body.model);
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            content: [{ type: 'text', text: 'ok' }],
+            model: body.model,
+            stop_reason: 'end_turn',
+            usage: { input_tokens: 1, output_tokens: 1 },
+          }),
+        };
+      }) as unknown as typeof globalThis.fetch;
+
+      for (const model of ['claude-fable-5', 'anthropic/claude-sonnet-5', 'openrouter/anthropic/claude-opus-4.8']) {
+        const res = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model,
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+        expect(res.statusCode).toBe(200);
+      }
+
+      expect(captures).toEqual(['claude-fable-5', 'claude-sonnet-5', 'claude-opus-4-8']);
+    });
+  });
 });

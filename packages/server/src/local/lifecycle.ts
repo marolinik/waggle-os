@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, openSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -14,7 +15,9 @@ export interface LiteLLMStatus {
 
 const DEFAULT_PORT = 4000;
 const HEALTH_POLL_INTERVAL = 1000;
-const HEALTH_POLL_MAX = 30;
+// 819-model runtime configs take >30s to boot uvicorn on a Windows cold
+// start; 30 polls killed healthy children mid-startup.
+const HEALTH_POLL_MAX = 120;
 
 let litellmProcess: ChildProcess | null = null;
 
@@ -46,7 +49,10 @@ export function getBundledPythonPath(): string | null {
 
 async function checkHealth(port: number): Promise<boolean> {
   try {
-    const res = await fetch(`http://localhost:${port}/health`);
+    // /health/liveliness: unauthenticated process-liveness probe. The bare
+    // /health endpoint requires the master key and calls every configured
+    // provider, so polling it reports 401/slow forever.
+    const res = await fetch(`http://localhost:${port}/health/liveliness`);
     return res.ok;
   } catch {
     return false;
@@ -67,7 +73,7 @@ export async function getLiteLLMStatus(port?: number): Promise<LiteLLMStatus> {
 
 /**
  * Start LiteLLM proxy. If already running, returns immediately.
- * Otherwise spawns `python -m litellm --port {port}` and polls health.
+ * Otherwise spawns `python -m litellm.proxy.proxy_cli --port {port}` and polls health.
  * Prefers the bundled Python from app resources; falls back to system PATH.
  */
 export async function startLiteLLM(port?: number, configPath?: string): Promise<LiteLLMStatus> {
@@ -83,14 +89,27 @@ export async function startLiteLLM(port?: number, configPath?: string): Promise<
 
   // Spawn LiteLLM
   try {
-    const args = ['-m', 'litellm'];
+    // litellm ships no __main__ module (`python -m litellm` fails); the
+    // console-script entry point is litellm.proxy.proxy_cli.
+    const args = ['-m', 'litellm.proxy.proxy_cli'];
     if (configPath) args.push('--config', configPath);
     args.push('--port', String(p));
+    // Managed LiteLLM runs stateless (in-memory master key). Inheriting the
+    // sidecar's DATABASE_URL/REDIS_URL flips it into DB mode, which exits
+    // with code 3 at startup when prisma isn't installed. LiteLLM ALSO
+    // dotenv-loads .env from its cwd, so the child must not run from the
+    // repo root either — anchor it to the config's directory instead.
+    const { DATABASE_URL: _db, REDIS_URL: _redis, ...childEnv } = process.env;
+    // Capture child output for post-mortems — silent exits (bad env, missing
+    // deps) are undiagnosable with stdio: 'ignore'.
+    const runDir = configPath ? path.dirname(configPath) : os.homedir();
+    const logFd = openSync(path.join(runDir, 'litellm.child.log'), 'a');
     litellmProcess = spawn(pythonBin, args, {
-      stdio: 'ignore',
+      cwd: runDir,
+      stdio: ['ignore', logFd, logFd],
       detached: false,
       env: {
-        ...process.env,
+        ...childEnv,
         // F3 fix: Prevent UnicodeEncodeError on Windows cp1252 during
         // LiteLLM startup banner (Python defaults to the system code page)
         PYTHONIOENCODING: 'utf-8',

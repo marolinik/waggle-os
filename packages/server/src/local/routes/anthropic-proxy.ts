@@ -90,6 +90,20 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
       });
     }
 
+    // Non-Anthropic model guard. This proxy only fronts the Anthropic API;
+    // without the guard, ids like "alibaba/qwen3.7-max-…" get prefix-stripped,
+    // dot-mangled, and sent to Anthropic, which replies with an opaque
+    // 404 not_found_error instead of anything actionable.
+    const mappedModel = mapModel(body.model);
+    if (!mappedModel.startsWith('claude-')) {
+      return reply.status(400).send({
+        error: {
+          message: `Model "${body.model}" is not an Anthropic model — the built-in proxy only serves Claude models. `
+            + 'The LiteLLM router is not running (it handles non-Claude providers): restart the app or pick a Claude model.',
+        },
+      });
+    }
+
     // Extract system prompt from messages
     let system = '';
     const messages: Array<{ role: string; content: unknown }> = [];
@@ -170,7 +184,7 @@ export const anthropicProxyRoutes: FastifyPluginAsync = async (server) => {
     });
 
     const anthropicBody: Record<string, unknown> = {
-      model: mapModel(body.model),
+      model: mappedModel,
       max_tokens: body.max_tokens ?? 4096,
       system: systemWithCache ?? system,
       messages: cachedMessages,
