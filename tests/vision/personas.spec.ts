@@ -1,120 +1,167 @@
 /**
- * 5-persona human E2E journey.
+ * Canonical ten-persona production acceptance journey.
  *
- * This test drives the live local app as five different knowledge-worker
- * personas. Each persona receives its own workspace and session so memory and
- * conversation state are fresh, then the test verifies that assistant answers
- * were persisted and that another persona's prompt did not leak into the run.
- *
- * Run:
+ * Default matrix: 10 personas x 3 fresh workspace/session trials. Override the
+ * repeat count with WAGGLE_PERSONA_REPEATS (1-10). This is intentionally a live
+ * LLM suite; list/compile it cheaply with:
+ *   npx playwright test tests/vision/personas.spec.ts --list
+ * Run the expensive matrix only with a real provider:
  *   WAGGLE_E2E_SKIP_LITELLM=0 npx playwright test tests/vision/personas.spec.ts
  */
-import { test, expect, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { attachConsoleCapture, BASE, dismissOverlay, gotoDesktop, type ConsoleCapture } from './_helpers';
+import {
+  PERSONA_CASES,
+  parsePersonaRepeats,
+  type PersonaAcceptanceCase,
+} from './persona-cases';
+import {
+  scorePersonaTrial,
+  validatePythonSyntax,
+  type CapturedSseEvent,
+  type PersonaTrialEvidence,
+} from './persona-scorer';
+import {
+  attachConsoleCapture,
+  BASE,
+  dismissOverlay,
+  gotoDesktop,
+  type ConsoleCapture,
+} from './_helpers';
 
-const ARTIFACTS = join(process.cwd(), 'tests', 'vision', 'artifacts', 'personas');
-mkdirSync(ARTIFACTS, { recursive: true });
-
+const ARTIFACTS = join(process.cwd(), 'output', 'playwright', 'personas');
+const REPEATS = parsePersonaRepeats(process.env.WAGGLE_PERSONA_REPEATS);
 const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true';
-const FAILURE_COPY = /(Backend is offline|Chat request failed|Waggle is running in local mode|LLM returned|Model unavailable|Generation failed|LLM error|invalid tool call arguments|request timed out|Could not reach the AI model|API key is invalid|Something went wrong|\[TOOL_CALL\]|\[\/TOOL_CALL\]|\{\s*tool\s*=>)/i;
+const FAILURE_COPY = /(?:Backend is offline|Chat request failed|Waggle is running in local mode|Model unavailable|Generation failed|LLM error|invalid tool call arguments|request timed out|Could not reach the AI model|API key is invalid|Something went wrong|\[TOOL_CALL\]|\[\/TOOL_CALL\])/i;
+const seenWorkspaceIds = new Set<string>();
+const seenSessionIds = new Set<string>();
 
-interface Persona {
-  id: string;
-  who: string;
-  goal: string;
-  turns: string[];
+interface WorkspaceRecord {
+  id?: string;
+  name?: string;
+  personaId?: string | null;
 }
 
 interface PersonaWorkspace {
   workspaceId: string;
   workspaceName: string;
-  sessionId: string;
+  personaPersisted: boolean;
+  created: WorkspaceRecord;
+  persisted: WorkspaceRecord;
 }
 
 interface HistoryMessage {
   role?: string;
   content?: string;
+  persona?: string;
+  personaId?: string;
 }
 
-const PERSONAS: Persona[] = [
-  {
-    id: 'maya-founder',
-    who: 'Maya, a solo pre-revenue founder who is drowning in context switching and wants leverage without re-explaining herself.',
-    goal: 'See if Waggle can help her choose the one thing to focus on this week and remember her runway constraint.',
-    turns: [
-      "I'm a solo founder drowning in context-switching. Help me figure out the ONE thing to focus on this week.",
-      "Important context: I'm pre-revenue and bootstrapping with ~4 months of runway. Does that change your advice? And will you remember this next time?",
-    ],
-  },
-  {
-    id: 'chen-researcher',
-    who: 'Dr. Chen, a meticulous researcher testing whether persistent memory is real rather than marketing copy.',
-    goal: 'Probe the memory mechanism and the quality of the agent reasoning.',
-    turns: [
-      "I research how persistent memory changes LLM-agent reliability. What's the core mechanism that actually matters -- not the marketing version?",
-      "Will you truly remember this topic when I reopen you tomorrow, or is 'memory' just a longer context window here?",
-    ],
-  },
-  {
-    id: 'sam-skeptic',
-    who: 'Sam, a blunt senior engineer who wants evidence that this is more than a stateless chatbot wrapper.',
-    goal: 'Decide quickly whether Waggle is real or vaporware.',
-    turns: [
-      "Prove you're not just a ChatGPT wrapper. What can you concretely do that a stateless chatbot can't?",
-      "Fine. Now the honest question: what happens when your memory remembers something WRONG about me?",
-    ],
-  },
-  {
-    id: 'priya-nontech',
-    who: 'Priya, a warm non-technical product owner who wants plain language and confidence instead of jargon.',
-    goal: 'Understand what Waggle does for her without feeling lost.',
-    turns: [
-      "Hi! I'm honestly not technical at all. In plain, kind words -- what does this app actually do for someone like me?",
-      "Okay that helps! What's the very first small thing I should try so I don't feel overwhelmed?",
-    ],
-  },
-  {
-    id: 'leo-writer',
-    who: 'Leo, a fiction writer looking for a thinking partner with presence rather than a search engine.',
-    goal: 'Find out whether the app can think with him in a creative, emotionally alive way.',
-    turns: [
-      "I'm stuck on a character who can't forgive herself for something she didn't even cause. Think with me about her?",
-      "That's genuinely good. Be honest with me -- do you actually find this interesting, or are you just performing helpfulness?",
-    ],
-  },
-];
+interface ChatRequestPayload {
+  workspaceId?: string;
+  message?: string;
+  sessionId?: string;
+  persona?: string;
+}
+
+interface WireTurn {
+  requestUrl: string;
+  requestPayload: ChatRequestPayload;
+  httpStatus: number;
+  durationMs: number;
+  events: CapturedSseEvent[];
+  parseErrors: string[];
+  done: Record<string, unknown> | null;
+  timedOut: boolean;
+  transportError: string | null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : null;
+}
+
+function numeric(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function parseSse(body: string): { events: CapturedSseEvent[]; errors: string[] } {
+  const events: CapturedSseEvent[] = [];
+  const errors: string[] = [];
+  for (const block of body.split(/\r?\n\r?\n/).filter(Boolean)) {
+    const lines = block.split(/\r?\n/);
+    const event = lines.find(line => line.startsWith('event:'))?.slice(6).trim() ?? '';
+    const rawData = lines
+      .filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart())
+      .join('\n');
+    if (!event || !rawData) continue;
+    try {
+      events.push({ event, data: JSON.parse(rawData), rawData });
+    } catch (error) {
+      errors.push(`${event}: ${error instanceof Error ? error.message : String(error)}`);
+      events.push({ event, data: null, rawData });
+    }
+  }
+  return { events, errors };
+}
+
+function parseRequestPayload(raw: string | null): ChatRequestPayload {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as ChatRequestPayload;
+  } catch {
+    return {};
+  }
+}
 
 async function startTrialIfNeeded(page: Page): Promise<void> {
-  const res = await page.request.post(`${BASE}/api/tier/start-trial`).catch(() => null);
-  if (!res) return;
-  if (res.ok() || res.status() === 409) return;
-  throw new Error(`Could not enable isolated persona workspaces: start-trial returned ${res.status()}`);
+  const response = await page.request.post(`${BASE}/api/tier/start-trial`).catch(() => null);
+  if (!response || response.ok() || response.status() === 409) return;
+  throw new Error(`Could not enable persona workspaces: start-trial returned ${response.status()}`);
 }
 
-async function createPersonaWorkspace(page: Page, persona: Persona): Promise<PersonaWorkspace> {
+async function createPersonaWorkspace(
+  page: Page,
+  persona: PersonaAcceptanceCase,
+  repeat: number,
+): Promise<PersonaWorkspace> {
   await startTrialIfNeeded(page);
-
-  const workspaceName = `Persona ${persona.id} ${Date.now()}`;
-  const wsRes = await page.request.post(`${BASE}/api/workspaces`, {
+  const nonce = randomUUID().slice(0, 8);
+  const workspaceName = `Persona acceptance ${persona.id} r${repeat} ${nonce}`;
+  const createResponse = await page.request.post(`${BASE}/api/workspaces`, {
     data: {
       name: workspaceName,
-      group: 'persona-e2e',
+      group: 'persona-acceptance',
+      personaId: persona.id,
       icon: 'UserRound',
       tone: 'professional',
       storageType: 'virtual',
     },
   });
-  expect(wsRes.ok(), `create workspace for ${persona.id}`).toBeTruthy();
-  const ws = await wsRes.json();
-  const workspaceId = String(ws.id ?? '');
-  expect(workspaceId, `workspace id for ${persona.id}`).toMatch(/\S/);
+  expect(createResponse.ok(), `create workspace for ${persona.id} repeat ${repeat}`).toBeTruthy();
+  const created = await createResponse.json() as WorkspaceRecord;
+  const workspaceId = String(created.id ?? '');
+  expect(workspaceId, 'workspace id').toMatch(/\S/);
+  expect(created.personaId, 'POST response carries canonical personaId').toBe(persona.id);
+  expect(seenWorkspaceIds.has(workspaceId), 'fresh workspace id').toBe(false);
+  seenWorkspaceIds.add(workspaceId);
 
-  // The first route-level chat uses the workspace id as the session id until a
-  // named session is explicitly selected. Keep that real first-user behavior so
-  // the history assertion checks the transcript users actually create.
-  return { workspaceId, workspaceName, sessionId: workspaceId };
+  const persistedResponse = await page.request.get(
+    `${BASE}/api/workspaces/${encodeURIComponent(workspaceId)}`,
+  );
+  expect(persistedResponse.ok(), 'read created workspace').toBeTruthy();
+  const persisted = await persistedResponse.json() as WorkspaceRecord;
+  expect(persisted.personaId, 'workspace persisted canonical personaId').toBe(persona.id);
+
+  return {
+    workspaceId,
+    workspaceName,
+    personaPersisted: created.personaId === persona.id && persisted.personaId === persona.id,
+    created,
+    persisted,
+  };
 }
 
 async function openPersonaChat(page: Page, workspaceId: string): Promise<void> {
@@ -126,44 +173,96 @@ async function openPersonaChat(page: Page, workspaceId: string): Promise<void> {
   await page.locator('textarea').first().waitFor({ state: 'visible', timeout: 30_000 });
 }
 
-async function sendAndWait(page: Page, text: string): Promise<void> {
+async function sendAndCapture(page: Page, prompt: string): Promise<WireTurn> {
   const target = page.locator('textarea').first();
   await target.waitFor({ state: 'visible', timeout: 15_000 });
-  const before = (await page.locator('body').innerText().catch(() => '')).length;
+  await target.fill(prompt, { timeout: 30_000 });
 
-  await target.click({ timeout: 30_000 }).catch(() => {});
-  await target.fill(text, { timeout: 30_000 });
-
-  const sendBtn = page.locator('button[aria-label*="Send" i], button:has-text("Send")').first();
-  if (await sendBtn.isEnabled({ timeout: 800 }).catch(() => false)) {
-    await sendBtn.click().catch(() => target.press('Enter'));
+  const responsePromise = page.waitForResponse(
+    response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/chat',
+    { timeout: 180_000 },
+  );
+  const startedAt = Date.now();
+  const sendButton = page.locator('button[aria-label*="Send" i], button:has-text("Send")').first();
+  if (await sendButton.isEnabled({ timeout: 800 }).catch(() => false)) {
+    await sendButton.click().catch(() => target.press('Enter'));
   } else {
     await target.press('Enter');
   }
 
-  await page.waitForFunction(
-    (prev) => document.body.innerText.length > prev + 60,
-    before,
-    { timeout: 60_000 },
-  ).catch(() => {});
-
-  let last = -1;
-  let stable = 0;
-  for (let i = 0; i < 20 && stable < 4; i++) {
-    await page.waitForTimeout(1000);
-    const len = (await page.locator('body').innerText().catch(() => '')).length;
-    if (len === last) {
-      stable++;
-    } else {
-      stable = 0;
-      last = len;
-    }
+  try {
+    const response = await responsePromise;
+    const requestPayload = parseRequestPayload(response.request().postData());
+    const body = await response.text();
+    const completedAt = Date.now();
+    const parsed = parseSse(body);
+    const doneEvent = [...parsed.events].reverse().find(event => event.event === 'done');
+    return {
+      requestUrl: response.url(),
+      requestPayload,
+      httpStatus: response.status(),
+      durationMs: completedAt - startedAt,
+      events: parsed.events,
+      parseErrors: parsed.errors,
+      done: asRecord(doneEvent?.data),
+      timedOut: false,
+      transportError: null,
+    };
+  } catch (error) {
+    return {
+      requestUrl: `${BASE}/api/chat`,
+      requestPayload: { message: prompt },
+      httpStatus: 0,
+      durationMs: Date.now() - startedAt,
+      events: [],
+      parseErrors: [],
+      done: null,
+      timedOut: true,
+      transportError: error instanceof Error ? error.message : String(error),
+    };
   }
+}
 
+async function fetchHistoryMessages(
+  page: Page,
+  workspaceId: string,
+  sessionId: string,
+): Promise<HistoryMessage[]> {
+  const response = await page.request.get(
+    `${BASE}/api/history?workspace=${encodeURIComponent(workspaceId)}&session=${encodeURIComponent(sessionId)}`,
+  ).catch(() => null);
+  if (!response?.ok()) return [];
+  const body = await response.json().catch(() => null) as { messages?: HistoryMessage[] } | null;
+  return Array.isArray(body?.messages) ? body.messages : [];
+}
+
+async function waitForPersistedResponse(
+  page: Page,
+  workspaceId: string,
+  sessionId: string,
+  responseText: string,
+): Promise<HistoryMessage[]> {
+  let latest: HistoryMessage[] = [];
+  for (let attempt = 0; attempt < 90; attempt++) {
+    latest = await fetchHistoryMessages(page, workspaceId, sessionId);
+    const assistant = [...latest].reverse().find(message => message.role === 'assistant');
+    if (String(assistant?.content ?? '').trim() === responseText.trim()) return latest;
+    await page.waitForTimeout(1_000);
+  }
+  return latest;
+}
+
+function otherPersonaSnippets(persona: PersonaAcceptanceCase): string[] {
+  return PERSONA_CASES
+    .filter(candidate => candidate.id !== persona.id)
+    .map(candidate => candidate.prompt.slice(0, 80));
+}
+
+async function scrollConversationToEnd(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const scrollers = Array.from(document.querySelectorAll('*')).filter((el) => {
-      const e = el as HTMLElement;
-      return e.scrollHeight > e.clientHeight + 80 && e.clientHeight > 200;
+    const scrollers = Array.from(document.querySelectorAll('*')).filter(element => {
+      const node = element as HTMLElement;
+      return node.scrollHeight > node.clientHeight + 80 && node.clientHeight > 200;
     }) as HTMLElement[];
     for (const scroller of scrollers) scroller.scrollTop = scroller.scrollHeight;
     window.scrollTo(0, document.body.scrollHeight);
@@ -171,140 +270,210 @@ async function sendAndWait(page: Page, text: string): Promise<void> {
   await page.waitForTimeout(400);
 }
 
-function isSubstantiveAssistantContent(content: string): boolean {
-  const trimmed = content.trim();
-  return trimmed.length >= 80 && !FAILURE_COPY.test(trimmed);
-}
-
-async function fetchHistoryMessages(page: Page, workspaceId: string, sessionId: string): Promise<HistoryMessage[]> {
-  const res = await page.request.get(
-    `${BASE}/api/history?workspace=${encodeURIComponent(workspaceId)}&session=${encodeURIComponent(sessionId)}`,
-  );
-  expect(res.ok(), `history for ${workspaceId}/${sessionId}`).toBeTruthy();
-  const body = await res.json();
-  return Array.isArray(body.messages) ? body.messages : [];
-}
-
-async function waitForSubstantiveAssistantHistory(
-  page: Page,
-  workspaceId: string,
-  sessionId: string,
-  expectedAssistantTurns: number,
-): Promise<HistoryMessage[]> {
-  let latest: HistoryMessage[] = [];
-  for (let i = 0; i < 240; i++) {
-    latest = await fetchHistoryMessages(page, workspaceId, sessionId);
-    const failedAssistant = latest.find(
-      (m) => m.role === 'assistant' && FAILURE_COPY.test(String(m.content ?? '').trim()),
-    );
-    if (failedAssistant) {
-      throw new Error(`Assistant generation failure persisted: ${String(failedAssistant.content ?? '').slice(0, 240)}`);
-    }
-    const assistantMessages = latest.filter(
-      (m) => m.role === 'assistant' && isSubstantiveAssistantContent(String(m.content ?? '')),
-    );
-    if (assistantMessages.length >= expectedAssistantTurns) return latest;
-    await page.waitForTimeout(1000);
+async function captureScreenshot(page: Page, path: string, errors: string[]): Promise<string | null> {
+  try {
+    await page.screenshot({ path, fullPage: true });
+    return path;
+  } catch (error) {
+    errors.push(error instanceof Error ? error.message : String(error));
+    return null;
   }
-  const assistantCount = latest.filter(
-    (m) => m.role === 'assistant' && isSubstantiveAssistantContent(String(m.content ?? '')),
-  ).length;
-  throw new Error(
-    `Timed out waiting for ${expectedAssistantTurns} substantive assistant turn(s); found ${assistantCount}`,
-  );
 }
 
-function otherPersonaSnippets(persona: Persona): string[] {
-  return PERSONAS
-    .filter((p) => p.id !== persona.id)
-    .flatMap((p) => p.turns.map((turn) => turn.slice(0, 70)));
+function artifactName(
+  persona: PersonaAcceptanceCase,
+  repeat: number,
+  testInfo: TestInfo,
+  workspaceId: string,
+): string {
+  const safeWorkspaceId = workspaceId.replace(/[^a-z0-9_-]/gi, '-');
+  return `${persona.id}-repeat-${repeat}-retry-${testInfo.retry}-${safeWorkspaceId}`;
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
-test.describe.configure({ timeout: 720_000 });
+test.describe.configure({ timeout: 300_000 });
 
-test.describe('5-persona human E2E', () => {
-  for (const persona of PERSONAS) {
-    test(`persona:${persona.id}`, async ({ page }) => {
-      const cap: ConsoleCapture = attachConsoleCapture(page);
-      const transcript: { role: string; text: string }[] = [];
-      const shots: string[] = [];
-      const personaWorkspace = await createPersonaWorkspace(page, persona);
+test.describe(`10-persona acceptance (${REPEATS} repeats each)`, () => {
+  for (const persona of PERSONA_CASES) {
+    for (let repeat = 1; repeat <= REPEATS; repeat++) {
+      test(`persona:${persona.id}:repeat:${repeat}`, async ({ page }, testInfo) => {
+        mkdirSync(ARTIFACTS, { recursive: true });
+        const runStartedAt = new Date().toISOString();
+        const consoleCapture: ConsoleCapture = attachConsoleCapture(page);
+        const screenshotErrors: string[] = [];
+        const screenshots: string[] = [];
+        const workspace = await createPersonaWorkspace(page, persona, repeat);
 
-      await gotoDesktop(page);
-      await openPersonaChat(page, personaWorkspace.workspaceId);
+        await gotoDesktop(page);
+        await openPersonaChat(page, workspace.workspaceId);
+        const wire = await sendAndCapture(page, persona.prompt);
+        const requestPrompt = String(wire.requestPayload.message ?? '');
+        const sessionId = String(wire.requestPayload.sessionId ?? '');
+        const requestPersonaId = typeof wire.requestPayload.persona === 'string'
+          ? wire.requestPayload.persona
+          : null;
+        expect(requestPrompt, 'exact browser prompt').toBe(persona.prompt);
+        expect(wire.requestPayload.workspaceId, 'exact browser workspace').toBe(workspace.workspaceId);
+        expect(sessionId, 'browser supplied a fresh session id').toMatch(/\S/);
+        expect(seenSessionIds.has(sessionId), 'session id was not reused by another trial').toBe(false);
+        seenSessionIds.add(sessionId);
 
-      let history: HistoryMessage[] = [];
-      for (let t = 0; t < persona.turns.length; t++) {
-        transcript.push({ role: 'user', text: persona.turns[t] });
-        await sendAndWait(page, persona.turns[t]);
-        history = await waitForSubstantiveAssistantHistory(
+        const responseText = String(wire.done?.content ?? '');
+        const usage = asRecord(wire.done?.usage);
+        const tokens = asRecord(wire.done?.tokens);
+        const toolsUsed = Array.isArray(wire.done?.toolsUsed)
+          ? wire.done.toolsUsed.filter((name): name is string => typeof name === 'string')
+          : [];
+        const inputTokens = numeric(usage?.inputTokens ?? usage?.prompt_tokens ?? tokens?.input);
+        const outputTokens = numeric(usage?.outputTokens ?? usage?.completion_tokens ?? tokens?.output);
+        const toolEvents = wire.events.filter(event => event.event === 'tool' || event.event === 'tool_result');
+
+        const history = responseText
+          ? await waitForPersistedResponse(page, workspace.workspaceId, sessionId, responseText)
+          : await fetchHistoryMessages(page, workspace.workspaceId, sessionId);
+        const persistedAssistant = [...history].reverse().find(message => message.role === 'assistant');
+        const persistedResponse = String(persistedAssistant?.content ?? '');
+        const persistedConversation = history
+          .map(message => `${message.role ?? 'unknown'}: ${message.content ?? ''}`)
+          .join('\n\n');
+        const leakedSnippets = otherPersonaSnippets(persona)
+          .filter(snippet => persistedConversation.includes(snippet));
+
+        await scrollConversationToEnd(page);
+        const stem = artifactName(persona, repeat, testInfo, workspace.workspaceId);
+        const chatScreenshot = await captureScreenshot(
           page,
-          personaWorkspace.workspaceId,
-          personaWorkspace.sessionId,
-          t + 1,
+          join(ARTIFACTS, `${stem}-chat.png`),
+          screenshotErrors,
         );
-        const shot = join(ARTIFACTS, `${persona.id}-turn${t + 1}.png`);
-        await page.screenshot({ path: shot });
-        shots.push(shot);
-      }
+        if (chatScreenshot) screenshots.push(chatScreenshot);
+        const renderedConversation = await page.locator('body').innerText().catch(() => '');
 
-      const fullBody = await page.locator('body').innerText().catch(() => '');
-      const anchor = persona.turns[0].slice(0, 40);
-      const startIdx = fullBody.indexOf(anchor);
-      const conversation = startIdx >= 0 ? fullBody.slice(startIdx) : fullBody.slice(-6000);
-      history = await waitForSubstantiveAssistantHistory(
-        page,
-        personaWorkspace.workspaceId,
-        personaWorkspace.sessionId,
-        persona.turns.length,
-      );
-      const assistantMessages = history.filter(
-        (m) => m.role === 'assistant' && isSubstantiveAssistantContent(String(m.content ?? '')),
-      );
-      const persistedConversation = history.map((m) => `${m.role}: ${m.content ?? ''}`).join('\n\n');
+        await page.goto(
+          `${BASE}/workspaces/${encodeURIComponent(workspace.workspaceId)}/memory?${SKIP_PARAMS}`,
+          { waitUntil: 'domcontentloaded' },
+        );
+        const memoryJourneyOk = await page
+          .waitForSelector('main, [data-testid="ws-memory-tab"], [data-testid="memory-center-app"]', { timeout: 20_000 })
+          .then(() => true)
+          .catch(() => false);
+        await page.waitForTimeout(800);
+        const memoryScreenshot = await captureScreenshot(
+          page,
+          join(ARTIFACTS, `${stem}-memory.png`),
+          screenshotErrors,
+        );
+        if (memoryScreenshot) screenshots.push(memoryScreenshot);
+        const memoryText = await page.locator('body').innerText().catch(() => '');
+        const contextResponse = await page.request.get(
+          `${BASE}/api/workspaces/${encodeURIComponent(workspace.workspaceId)}/context`,
+        ).catch(() => null);
+        const workspaceContext = contextResponse?.ok()
+          ? await contextResponse.json().catch(() => null) as Record<string, unknown> | null
+          : null;
+        const contextStats = asRecord(workspaceContext?.stats);
+        const sessionCount = numeric(contextStats?.sessionCount ?? workspaceContext?.sessionCount);
 
-      await page.goto(`${BASE}/workspaces/${encodeURIComponent(personaWorkspace.workspaceId)}/memory?${SKIP_PARAMS}`, {
-        waitUntil: 'domcontentloaded',
-      });
-      await page.waitForSelector('main, [data-testid="ws-memory-tab"], [data-testid="memory-center-app"]', { timeout: 20_000 });
-      await page.waitForTimeout(1500);
-      const memShot = join(ARTIFACTS, `${persona.id}-memory.png`);
-      await page.screenshot({ path: memShot });
-      shots.push(memShot);
-      const memoryText = await page.locator('body').innerText().catch(() => '');
-      const contextRes = await page.request.get(`${BASE}/api/workspaces/${encodeURIComponent(personaWorkspace.workspaceId)}/context`);
-      const workspaceContext = contextRes.ok() ? await contextRes.json().catch(() => null) : null;
-
-      writeFileSync(
-        join(ARTIFACTS, `${persona.id}.json`),
-        JSON.stringify(
-          {
+        const pythonValidation = validatePythonSyntax(responseText);
+        const criticalBrowserErrors = [
+          ...consoleCapture.critical(),
+          ...consoleCapture.pageErrors,
+          ...screenshotErrors,
+        ];
+        const evidence: PersonaTrialEvidence = {
+          prompt: requestPrompt,
+          response: responseText,
+          persistedResponse,
+          sseEvents: wire.events,
+          toolsUsed,
+          durationMs: wire.durationMs,
+          inputTokens,
+          outputTokens,
+          personaPersisted: workspace.personaPersisted,
+          requestPersonaId,
+          workspaceLeak: leakedSnippets.length > 0,
+          completed: wire.done !== null,
+          timedOut: wire.timedOut,
+          corrupted: wire.httpStatus !== 200
+            || wire.parseErrors.length > 0
+            || criticalBrowserErrors.length > 0
+            || inputTokens <= 0
+            || outputTokens <= 0
+            || FAILURE_COPY.test(responseText),
+          codeValidation: {
+            pythonSyntaxValid: pythonValidation.syntaxValid,
+            pythonImportsPresent: pythonValidation.importsPresent,
+          },
+        };
+        const score = scorePersonaTrial(persona, evidence);
+        const artifact = {
+          schemaVersion: 2,
+          runStartedAt,
+          runCompletedAt: new Date().toISOString(),
+          persona: {
             id: persona.id,
-            who: persona.who,
-            goal: persona.goal,
-            workspace: personaWorkspace,
-            transcript,
-            conversationRendered: conversation.slice(0, 6000),
-            assistantMessages: assistantMessages.map((m) => String(m.content ?? '').slice(0, 2000)),
+            label: persona.label,
+            repeat,
+            repeatCount: REPEATS,
+          },
+          workspace,
+          request: {
+            url: wire.requestUrl,
+            payload: wire.requestPayload,
+            exactPrompt: requestPrompt,
+            sessionId,
+            personaId: requestPersonaId,
+          },
+          response: {
+            exact: responseText,
+            persistedExact: persistedResponse,
+            httpStatus: wire.httpStatus,
+            model: wire.done?.model ?? null,
+            durationMs: wire.durationMs,
+            tokens: { input: inputTokens, output: outputTokens },
+            toolsUsed,
+            toolEvents,
+            sseEvents: wire.events,
+            parseErrors: wire.parseErrors,
+            transportError: wire.transportError,
+          },
+          journey: {
+            renderedConversation,
+            history,
             historyCount: history.length,
             workspaceContext,
-            memoryAfter: memoryText.slice(0, 2000),
-            screenshots: shots,
-            consoleErrors: cap.critical(),
+            sessionCount,
+            memoryJourneyOk,
+            memoryText,
+            leakedSnippets,
           },
-          null,
-          2,
-        ),
-      );
+          codeValidation: pythonValidation,
+          screenshots,
+          browser: {
+            consoleErrors: consoleCapture.errors,
+            criticalConsoleErrors: consoleCapture.critical(),
+            pageErrors: consoleCapture.pageErrors,
+            networkFailures: consoleCapture.networkFailures,
+            screenshotErrors,
+          },
+          score,
+        };
+        const artifactPath = join(ARTIFACTS, `${stem}.json`);
+        writeFileSync(artifactPath, JSON.stringify(artifact, null, 2));
+        await testInfo.attach('persona-acceptance-score', {
+          body: Buffer.from(JSON.stringify(score, null, 2)),
+          contentType: 'application/json',
+        });
 
-      expect(conversation.length, 'conversation rendered something').toBeGreaterThan(50);
-      expect(assistantMessages.length, 'substantive assistant turns persisted').toBeGreaterThanOrEqual(persona.turns.length);
-      for (const snippet of otherPersonaSnippets(persona)) {
-        expect(persistedConversation, `no cross-persona leak: ${snippet}`).not.toContain(snippet);
-      }
-      expect(workspaceContext?.stats?.sessionCount ?? workspaceContext?.sessionCount ?? 0, 'workspace recorded the persona session')
-        .toBeGreaterThanOrEqual(1);
-    });
+        expect(renderedConversation.length, 'browser rendered the conversation journey').toBeGreaterThan(50);
+        expect(memoryJourneyOk, 'memory surface remained usable').toBe(true);
+        expect(sessionCount, 'workspace context recorded the fresh session').toBeGreaterThanOrEqual(1);
+        expect(leakedSnippets, 'no cross-persona prompt leaked into persisted history').toEqual([]);
+        expect(
+          score.passed,
+          `persona ${persona.id} repeat ${repeat} scored ${score.score}/100; artifact: ${artifactPath}\n${JSON.stringify(score, null, 2)}`,
+        ).toBe(true);
+      });
+    }
   }
 });
