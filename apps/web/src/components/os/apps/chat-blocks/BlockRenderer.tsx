@@ -18,7 +18,7 @@ interface BlockRendererProps {
   /** Router arc B2: a route_proposal dispatch landed (ChatApp consumes the composer text). */
   onRouteProposalDispatched?: (blockId: string, result: RouteProposalConfirmResponse) => void;
   /** Router arc B2: re-run propose after a revalidation_failed confirm. */
-  onRouteProposalRePropose?: (blockId: string) => void;
+  onRouteProposalRePropose?: (blockId: string, preferredExecutorId?: string) => void;
 }
 
 function getBlockKey(block: ContentBlock, index: number): string {
@@ -117,7 +117,7 @@ const BlockRenderer = ({
               ? result => onRouteProposalDispatched(block.blockId, result)
               : undefined}
             onRePropose={onRouteProposalRePropose
-              ? () => onRouteProposalRePropose(block.blockId)
+              ? (preferredExecutorId?: string) => onRouteProposalRePropose(block.blockId, preferredExecutorId)
               : undefined}
           />,
         );

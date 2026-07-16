@@ -369,7 +369,12 @@ export class LocalScheduler {
   private recomputeFailureState(): void {
     if (typeof this.store.getRecentExecutions !== 'function') return;
     for (const schedule of this.store.list()) {
-      if (schedule.enabled !== 1) continue;
+      if (schedule.enabled !== 1) {
+        // Persisted auto-disables (enabled=0 + job_config.auto_disabled marker)
+        // must survive restarts in getStatus().disabledJobCount.
+        if (this.hasAutoDisableMarker(schedule)) this.disabledJobs.add(schedule.id);
+        continue;
+      }
       const recent = this.store.getRecentExecutions(schedule.id, MAX_CONSECUTIVE_FAILURES);
       let count = 0;
       for (const execution of recent) {
@@ -386,6 +391,16 @@ export class LocalScheduler {
         this.disabledJobs.add(schedule.id);
         this.persistAutoDisable(schedule, count);
       }
+    }
+  }
+
+  private hasAutoDisableMarker(schedule: CronSchedule): boolean {
+    try {
+      const parsed = JSON.parse(schedule.job_config) as unknown;
+      return !!parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        && 'auto_disabled' in (parsed as Record<string, unknown>);
+    } catch {
+      return false;
     }
   }
 

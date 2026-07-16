@@ -84,7 +84,7 @@ const participantSchema = z.object({
 });
 const attributionSchema = z.object({
   routeDecisionId: z.string().uuid(),
-  briefHash: z.string().regex(/^[a-f0-9]{64}$/),
+  briefHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 }).strict();
 const runSchema = z.object({
   toolId: toolIdSchema.optional(),

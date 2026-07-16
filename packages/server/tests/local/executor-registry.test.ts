@@ -80,7 +80,7 @@ describe('ExecutorRegistry', () => {
       healthy: true,
       rateLimit: { state: 'unknown' },
       supportsHeadless: false,
-      egressDestination: null,
+      egressDestination: 'configured model provider',
       taskFit: { coding: 0.85, writing: 0.3 },
     });
     expect(candidates.find((candidate) => candidate.id === 'external:claude-code')).toMatchObject({

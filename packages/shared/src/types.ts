@@ -451,7 +451,8 @@ export interface CollaborationRunCapabilities {
 
 export interface CollaborationRunAttribution {
   routeDecisionId: string;
-  briefHash: string;
+  /** Absent when the run was dispatched without a memory brief. */
+  briefHash?: string;
 }
 
 /**

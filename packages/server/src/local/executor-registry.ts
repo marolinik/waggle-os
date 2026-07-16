@@ -64,7 +64,10 @@ export class ExecutorRegistry {
         healthy: true,
         rateLimit: this.rateLimitFor(id, nowMs, 'unknown'),
         supportsHeadless: false,
-        egressDestination: null,
+        // Personas run through the workspace's configured LLM provider, which
+        // is typically hosted — private tasks must not silently route there.
+        // v1 has no local-provider detection, so fail closed (consensus plan §2).
+        egressDestination: 'configured model provider',
       }];
     });
 

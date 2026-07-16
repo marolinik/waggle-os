@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { HybridSearch } from '@waggle/core';
 import {
+  classifyRateLimitError,
   classifyTask,
   routeTask,
   type ExecutorCandidate,
@@ -10,7 +11,7 @@ import {
   type RouteTask,
   type TaskCategory,
 } from '@waggle/agent';
-import { buildExecutorBrief, type ExecutorBrief } from '../executor-brief.js';
+import { buildExecutorBrief, filterExecutorBrief, type ExecutorBrief } from '../executor-brief.js';
 import { runChannelChatTurn } from '../channels/chat-client.js';
 import { emitAuditEvent } from './events.js';
 
@@ -147,6 +148,17 @@ export const routeProposalRoutes: FastifyPluginAsync = async (server) => {
       return reply.code(400).send({ error: 'executor_not_offered', executorId });
     }
 
+    // Egress guarantee: an override may only dispatch to the destination the
+    // user saw disclosed. A different destination requires a fresh proposal.
+    const disclosed = proposal.decision.selected;
+    const chosen = offered.find((candidate) => candidate.id === executorId);
+    if (disclosed && chosen && chosen.egressDestination !== disclosed.egressDestination) {
+      return reply.code(409).send({
+        error: 'revalidation_failed',
+        reason: 'chosen executor sends data to a different destination — re-propose to review the disclosure',
+      });
+    }
+
     proposal.status = 'confirming';
     try {
       const candidates = await server.executorRegistry.snapshot(nowMs);
@@ -163,27 +175,37 @@ export const routeProposalRoutes: FastifyPluginAsync = async (server) => {
       let roomId: string | undefined;
       let runId: string | undefined;
       let mode: 'external' | 'internal';
+      let resultText: string | undefined;
       let brief: ExecutorBrief | null = null;
       if (candidate.kind === 'external') {
         mode = 'external';
-        brief = await provideBrief(server, {
-          workspaceId: proposal.workspaceId,
-          prompt: proposal.prompt,
-          excludeFrameIds: body.data.removeFrameIds,
-        });
+        // Never re-run retrieval at confirm: filter the brief the user
+        // reviewed so removed frames cannot be backfilled by new results.
+        brief = proposal.brief
+          ? filterExecutorBrief(proposal.brief, {
+              workspaceId: proposal.workspaceId,
+              prompt: proposal.prompt,
+              removeFrameIds: body.data.removeFrameIds,
+            })
+          : null;
         const dispatched = await server.inject({
           method: 'POST',
           url: '/api/tools/run',
+          headers: {
+            ...(request.headers.authorization
+              ? { authorization: request.headers.authorization }
+              : {}),
+          },
           payload: {
             toolId: candidate.id.slice('external:'.length),
             workspaceIds: [proposal.workspaceId],
-            prompt: brief.blocked || !brief.text
+            prompt: !brief || brief.blocked || !brief.text
               ? proposal.prompt
               : `${brief.text}\n\n${proposal.prompt}`,
             access: 'read-only',
             attribution: {
               routeDecisionId: proposal.id,
-              briefHash: brief.briefHash,
+              ...(brief && !brief.blocked && brief.text ? { briefHash: brief.briefHash } : {}),
             },
           },
         });
@@ -214,8 +236,16 @@ export const routeProposalRoutes: FastifyPluginAsync = async (server) => {
         });
         if (turn.error) {
           proposal.status = 'proposed';
+          // Feed the registry so the next proposal doesn't re-select an
+          // exhausted persona (mirrors the external-run rate-limit hook).
+          const assessment = classifyRateLimitError(turn.error, Date.now());
+          if (assessment.isRateLimit) {
+            server.executorRegistry.noteRateLimit(candidate.id, assessment.resetAtMs);
+          }
           return reply.code(502).send({ error: 'dispatch_failed', reason: turn.error });
         }
+        server.executorRegistry.noteHealthy(candidate.id);
+        resultText = turn.content || undefined;
       }
 
       proposal.status = 'dispatched';
@@ -232,6 +262,7 @@ export const routeProposalRoutes: FastifyPluginAsync = async (server) => {
         mode,
         ...(roomId ? { roomId } : {}),
         ...(runId ? { runId } : {}),
+        ...(resultText ? { resultText } : {}),
       };
     } catch (error) {
       proposal.status = 'proposed';

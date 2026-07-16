@@ -868,11 +868,15 @@ const ChatApp = ({
     if (entry && input.trim() === entry.prompt) setInput('');
   };
 
-  const handleRouteProposalRePropose = async (blockId: string) => {
+  const handleRouteProposalRePropose = async (blockId: string, preferredExecutorId?: string) => {
     const entry = routeProposals.find(p => p.blockId === blockId);
     if (!entry || !workspaceId) return;
     try {
-      const proposal = await adapter.routeProposals.propose({ workspaceId, prompt: entry.prompt });
+      const proposal = await adapter.routeProposals.propose({
+        workspaceId,
+        prompt: entry.prompt,
+        ...(preferredExecutorId ? { preferredExecutorId } : {}),
+      });
       setRouteProposals(prev => prev.map(p => (p.blockId === blockId ? { ...p, proposal } : p)));
     } catch (err) {
       console.error('[ChatApp] route re-propose failed:', err);
@@ -1303,7 +1307,7 @@ const ChatApp = ({
                 <BlockRenderer
                   blocks={[{ type: 'route_proposal', blockId: rp.blockId, proposal: rp.proposal }]}
                   onRouteProposalDispatched={handleRouteProposalDispatched}
-                  onRouteProposalRePropose={blockId => void handleRouteProposalRePropose(blockId)}
+                  onRouteProposalRePropose={(blockId, preferredExecutorId) => void handleRouteProposalRePropose(blockId, preferredExecutorId)}
                 />
               </div>
             </div>

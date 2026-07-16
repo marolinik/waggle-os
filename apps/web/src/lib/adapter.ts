@@ -2,7 +2,7 @@
 import { fetchWithTimeout, TimeoutError } from './fetch-utils';
 import type { AgentSearchResponse } from './agent-search';
 import type {
-  RouteProposalPayload, RouteProposalConfirmBody, RouteProposalConfirmResponse,
+  RouteProposalPayload, RouteProposalConfirmBody, RouteProposalConfirmResponse, RouteProposalProposeBody,
 } from './route-proposals';
 import { getSelectedShape } from './shape-selection';
 import {
@@ -2933,7 +2933,7 @@ class LocalAdapter {
    * the throwing fetch preserves it on AdapterHttpError.body for the card.
    */
   readonly routeProposals = {
-    propose: async (body: { workspaceId: string; prompt: string }): Promise<RouteProposalPayload> => {
+    propose: async (body: RouteProposalProposeBody): Promise<RouteProposalPayload> => {
       const res = await this.fetch('/api/route-proposals', {
         method: 'POST',
         body: JSON.stringify(body),

@@ -122,6 +122,37 @@ export async function buildExecutorBrief(
   };
 }
 
+/**
+ * Rebuild a brief from an already-disclosed one by dropping removed frames.
+ * Never re-runs retrieval: the dispatched brief can only ever be a subset of
+ * what the user reviewed, so no undisclosed memory can be backfilled in.
+ */
+export function filterExecutorBrief(
+  brief: ExecutorBrief,
+  opts: { workspaceId: string; prompt: string; removeFrameIds?: string[] },
+): ExecutorBrief {
+  if (brief.blocked) return brief;
+  const removed = new Set((opts.removeFrameIds ?? []).map(String));
+  const items = brief.items.filter((item) => !removed.has(item.frameId));
+  if (items.length === brief.items.length) return brief;
+  if (items.length === 0) {
+    return { text: '', items: [], briefHash: hashBrief(''), chars: 0, blocked: false };
+  }
+  const text = renderBrief(opts.workspaceId, opts.prompt, items);
+  const scan = scanForInjection(text, 'tool_output');
+  if (!scan.safe) {
+    return {
+      text: '',
+      items: [],
+      briefHash: hashBrief(''),
+      chars: 0,
+      blocked: true,
+      blockedReason: `Executor brief blocked by injection scan: ${scan.flags.join(', ') || 'unsafe content'}`,
+    };
+  }
+  return { text, items, briefHash: hashBrief(text), chars: text.length, blocked: false };
+}
+
 function normalizeLimit(value: number | undefined, fallback: number): number {
   if (value === undefined || !Number.isFinite(value)) return fallback;
   return Math.max(0, Math.floor(value));

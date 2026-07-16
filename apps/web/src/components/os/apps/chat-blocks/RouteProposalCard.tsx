@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Route, Loader2, CheckCircle2, XCircle, X, ChevronDown, ShieldAlert, ExternalLink,
 } from 'lucide-react';
@@ -14,7 +14,7 @@ interface RouteProposalCardProps {
   /** Fired once the confirm dispatch lands — ChatApp consumes the composer text. */
   onDispatched?: (result: RouteProposalConfirmResponse) => void;
   /** Re-run propose after a revalidation_failed confirm (409). */
-  onRePropose?: () => void;
+  onRePropose?: (preferredExecutorId?: string) => void;
 }
 
 type Phase = 'proposed' | 'dispatching' | 'dispatched' | 'rejected' | 'error';
@@ -43,6 +43,17 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
   const [executorId, setExecutorId] = useState<string>(proposal.selected?.id ?? '');
   const [dispatchResult, setDispatchResult] = useState<RouteProposalConfirmResponse | null>(null);
   const [errorReason, setErrorReason] = useState<string | null>(null);
+
+  // A replaced proposal (re-propose keeps the same blockId/React key) must not
+  // inherit the previous card's phase or stale executor selection.
+  useEffect(() => {
+    setPhase('proposed');
+    setEgressOpen(false);
+    setRemovedFrameIds([]);
+    setExecutorId(proposal.selected?.id ?? '');
+    setDispatchResult(null);
+    setErrorReason(null);
+  }, [proposal.routeDecisionId, proposal.selected?.id]);
 
   const blocked = proposal.egress === null && proposal.briefBlocked === true;
   const egressItems = proposal.egress?.items ?? [];
@@ -275,9 +286,17 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 ) : (
-                  <span>Running in this chat</span>
+                  <span>{dispatchResult.resultText ? 'Completed in this chat' : 'Running in this chat'}</span>
                 )}
               </span>
+            )}
+            {phase === 'dispatched' && dispatchResult?.resultText && (
+              <p
+                className="w-full text-xs text-foreground/90 whitespace-pre-wrap mt-1.5 border-l-2 border-emerald-500/40 pl-2"
+                data-testid="route-proposal-result-text"
+              >
+                {dispatchResult.resultText}
+              </p>
             )}
             {phase === 'error' && (
               <>
@@ -287,7 +306,7 @@ export default function RouteProposalCard({ proposal, onDispatched, onRePropose 
                 {onRePropose && (
                   <button
                     type="button"
-                    onClick={onRePropose}
+                    onClick={() => onRePropose(executorId || undefined)}
                     data-testid="route-proposal-re-propose"
                     className="px-2.5 py-1 text-xs rounded-lg border border-[var(--line-soft)] text-foreground hover:bg-muted/40 font-display transition-colors"
                   >

@@ -142,15 +142,9 @@ async function propose(
 }
 
 describe('route proposal routes', () => {
-  it('confirms an external proposal with a rebuilt brief, read-only access, and attribution', async () => {
+  it('confirms an external proposal with the reviewed brief, read-only access, and attribution', async () => {
     const fullBrief = briefFixture('brief-full-hash');
-    const reducedBrief = briefFixture(
-      'brief-without-frame-hash',
-      '## Waggle task context\nMemory evidence:\n- Remaining context',
-    );
-    const briefProvider = vi.fn(async (opts: { excludeFrameIds?: string[] }) => (
-      opts.excludeFrameIds?.includes('frame-1') ? reducedBrief : fullBrief
-    ));
+    const briefProvider = vi.fn(async () => fullBrief);
     const { server, toolRunPayloads } = await createHarness({
       snapshots: [[externalCandidate()], [externalCandidate()]],
       briefProvider,
@@ -164,7 +158,7 @@ describe('route proposal routes', () => {
     const confirmed = await server.inject({
       method: 'POST',
       url: `/api/route-proposals/${proposal.routeDecisionId}/confirm`,
-      payload: { removeFrameIds: ['frame-1'] },
+      payload: {},
     });
 
     expect(confirmed.statusCode).toBe(200);
@@ -174,26 +168,91 @@ describe('route proposal routes', () => {
       roomId: 'room-1',
       runId: 'run-1',
     });
+    // Retrieval runs exactly once, at propose time — confirm must never
+    // re-query memory (removed frames could be backfilled by new results).
+    expect(briefProvider).toHaveBeenCalledTimes(1);
     expect(briefProvider).toHaveBeenNthCalledWith(1, {
       workspaceId: WORKSPACE_ID,
       prompt: PROMPT,
     });
-    expect(briefProvider).toHaveBeenNthCalledWith(2, {
-      workspaceId: WORKSPACE_ID,
-      prompt: PROMPT,
-      excludeFrameIds: ['frame-1'],
-    });
-    expect(reducedBrief.briefHash).not.toBe(fullBrief.briefHash);
     expect(toolRunPayloads).toEqual([{
       toolId: 'codex',
       workspaceIds: [WORKSPACE_ID],
-      prompt: `${reducedBrief.text}\n\n${PROMPT}`,
+      prompt: `${fullBrief.text}\n\n${PROMPT}`,
       access: 'read-only',
       attribution: {
         routeDecisionId: proposal.routeDecisionId,
-        briefHash: reducedBrief.briefHash,
+        briefHash: fullBrief.briefHash,
       },
     }]);
+  });
+
+  it('refuses an executor override whose egress destination differs from the disclosure', async () => {
+    const codex = externalCandidate();
+    const claude = externalCandidate({
+      id: 'external:claude-code',
+      displayName: 'Claude Code',
+      egressDestination: 'Anthropic',
+    });
+    const { server, toolRunPayloads } = await createHarness({
+      snapshots: [[codex, claude], [codex, claude]],
+    });
+
+    const proposed = await propose(server);
+    const proposal = proposed.json() as {
+      routeDecisionId: string;
+      selected: { id: string };
+      alternatives: Array<{ id: string }>;
+    };
+    const alternative = proposal.alternatives.find((item) => item.id !== proposal.selected.id);
+    expect(alternative).toBeDefined();
+
+    const confirmed = await server.inject({
+      method: 'POST',
+      url: `/api/route-proposals/${proposal.routeDecisionId}/confirm`,
+      payload: { executorId: alternative!.id },
+    });
+
+    expect(confirmed.statusCode).toBe(409);
+    expect(confirmed.json()).toMatchObject({ error: 'revalidation_failed' });
+    expect((confirmed.json() as { reason: string }).reason).toContain('different destination');
+    expect(toolRunPayloads).toHaveLength(0);
+    // Proposal stays claimable: a same-destination confirm still succeeds.
+    const retry = await server.inject({
+      method: 'POST',
+      url: `/api/route-proposals/${proposal.routeDecisionId}/confirm`,
+      payload: {},
+    });
+    expect(retry.statusCode).toBe(200);
+  });
+
+  it('dispatches without any memory when the user removes every disclosed frame', async () => {
+    const fullBrief = briefFixture('brief-full-hash');
+    const briefProvider = vi.fn(async () => fullBrief);
+    const { server, toolRunPayloads } = await createHarness({
+      snapshots: [[externalCandidate()], [externalCandidate()]],
+      briefProvider,
+    });
+
+    const proposed = await propose(server);
+    const proposal = proposed.json() as { routeDecisionId: string };
+
+    const confirmed = await server.inject({
+      method: 'POST',
+      url: `/api/route-proposals/${proposal.routeDecisionId}/confirm`,
+      payload: { removeFrameIds: ['frame-1'] },
+    });
+
+    expect(confirmed.statusCode).toBe(200);
+    expect(briefProvider).toHaveBeenCalledTimes(1);
+    expect(toolRunPayloads).toHaveLength(1);
+    const payload = toolRunPayloads[0] as {
+      prompt: string;
+      attribution: { routeDecisionId: string; briefHash?: string };
+    };
+    // No brief text, no undisclosed frames, no briefHash.
+    expect(payload.prompt).toBe(PROMPT);
+    expect(payload.attribution).toEqual({ routeDecisionId: proposal.routeDecisionId });
   });
 
   it('dispatches a persona with the bare persona id, router origin, and websocket token', async () => {
@@ -212,7 +271,7 @@ describe('route proposal routes', () => {
     });
 
     expect(confirmed.statusCode).toBe(200);
-    expect(confirmed.json()).toEqual({ status: 'dispatched', mode: 'internal' });
+    expect(confirmed.json()).toEqual({ status: 'dispatched', mode: 'internal', resultText: 'Done' });
     expect(personaDispatcher).toHaveBeenCalledWith({
       port: 4567,
       sessionToken: 'ws-session-token',

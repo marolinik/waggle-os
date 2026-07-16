@@ -55,7 +55,7 @@ import {
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { getToolRegistry } from './tool-registry.js';
 import type { ManifestLoaderDeps } from './tool-manifest-loader.js';
-import { resolvedShellPath, mergePathValue } from './shell-env.js';
+import { resolveShellEnv, resolvedShellPath, mergePathValue } from './shell-env.js';
 
 const execFileAsync = promisify(execFile);
 const CODEX_WINDOWS_APPS_DIAGNOSTIC =
@@ -478,6 +478,10 @@ export async function detectInstalledTools(
   opts: ToolDetectionDeps & { manifestLoader?: ManifestLoaderDeps } = {},
 ): Promise<ToolDetectionResult> {
   const deps = resolveDeps(opts);
+  // POSIX GUI sidecars: wait for the login-shell PATH before the first lookup,
+  // otherwise every probe runs against the bare PATH and misses shim-installed
+  // CLIs (and callers cache that empty result). Cached after the first call.
+  if (deps.platform !== 'win32') await resolveShellEnv();
   const registry = getToolRegistry(opts.manifestLoader);
   const tools = await Promise.all(registry.map((m) => detectFromManifest(m, deps)));
   return {

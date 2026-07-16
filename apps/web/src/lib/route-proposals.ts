@@ -76,6 +76,18 @@ export interface RouteProposalConfirmResponse {
   mode: 'external' | 'internal';
   roomId?: string;
   runId?: string;
+  /** Internal (persona) dispatch: the completed turn's answer text. */
+  resultText?: string;
+}
+
+/** Propose request body (SPEC A4). */
+export interface RouteProposalProposeBody {
+  workspaceId: string;
+  prompt: string;
+  category?: string;
+  privacy?: 'normal' | 'private';
+  /** Re-propose with the user's chosen executor weighted as preferred. */
+  preferredExecutorId?: string;
 }
 
 /** Confirm request body (SPEC A4): override + per-frame egress removals. */
