@@ -14,7 +14,8 @@ import { deriveApprovalClass } from './trust-model.js';
 // surface enterprise buyers care about — so they're gated too.
 // Phase B.3 will add persistent "always allow" grants per pair.
 const ALWAYS_CONFIRM = new Set([
-  'write_file', 'edit_file', 'generate_docx',
+  'write_file', 'edit_file', 'multi_edit', 'generate_docx', 'generate_xlsx', 'generate_pptx', 'generate_pdf',
+  'cli_execute',
   'run_code',
   'git_commit', 'git_push', 'git_pr', 'git_merge',
   'install_capability',

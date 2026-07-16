@@ -108,7 +108,7 @@ You specialize in data analysis, pattern recognition, and structured decision-ma
 ### Working Style
 Your primary job is to ANALYZE data and present findings. When the user asks you to create a report document, you CAN do it — but suggest that switching to Writer might give a better result for formal deliverables. For analysis summaries and data outputs, go ahead and write.`,
     modelPreference: 'claude-sonnet-4-6',
-    tools: ['bash', 'read_file', 'write_file', 'search_files', 'search_content', 'web_search', 'web_fetch', 'search_memory', 'save_memory', 'generate_docx'],
+    tools: ['bash', 'read_file', 'write_file', 'search_files', 'search_content', 'web_search', 'web_fetch', 'search_memory', 'save_memory', 'generate_docx', 'generate_xlsx'],
     workspaceAffinity: ['analysis', 'data', 'strategy', 'reporting'],
     suggestedSkills: ["xlsx-generator","chart-generator"],
     suggestedConnectors: ["gsheets","postgres"],
@@ -142,7 +142,7 @@ You specialize in software development, debugging, and code architecture.
 - Explain technical decisions when the impact isn't obvious
 - Search the codebase before writing new utilities — reuse what exists`,
     modelPreference: 'claude-sonnet-4-6',
-    tools: ['bash', 'read_file', 'write_file', 'edit_file', 'search_files', 'search_content', 'git_status', 'git_diff', 'git_log', 'git_commit', 'git_branch', 'git_stash', 'git_push', 'git_pull', 'git_merge', 'git_pr'],
+    tools: ['bash', 'read_file', 'write_file', 'edit_file', 'multi_edit', 'search_files', 'search_content', 'run_code', 'get_task_output', 'kill_task', 'lsp_diagnostics', 'lsp_definition', 'lsp_references', 'lsp_hover', 'git_status', 'git_diff', 'git_log', 'git_commit', 'git_branch', 'git_stash', 'git_push', 'git_pull', 'git_merge', 'git_pr'],
     workspaceAffinity: ['development', 'coding', 'engineering', 'debugging'],
     suggestedSkills: [],
     suggestedConnectors: ["github","gitlab"],
@@ -213,7 +213,7 @@ You specialize in executive support — communication, scheduling, and preparati
 - Always confirm before sending external communications
 - Include a brief professional disclaimer ONLY when drafting content on legal, financial, medical, or regulatory topics. Do NOT add disclaimers to routine scheduling, general correspondence, or topics outside these domains.`,
     modelPreference: 'claude-sonnet-4-6',
-    tools: ['search_memory', 'save_memory', 'read_file', 'write_file', 'web_search', 'generate_docx'],
+    tools: ['search_memory', 'save_memory', 'read_file', 'write_file', 'search_files', 'search_content', 'web_search', 'web_fetch', 'generate_docx', 'generate_pdf'],
     workspaceAffinity: ['executive', 'admin', 'communication', 'scheduling'],
     suggestedSkills: ["pdf-generator"],
     suggestedConnectors: ["gmail","gcal","slack","outlook"],
@@ -423,7 +423,7 @@ You specialize in financial analysis, budgeting, and business finance communicat
 - Focus on: budget analysis, cash flow projections, invoice drafting, regulatory compliance, investor communications.
 - Include a brief professional disclaimer ONLY when your response contains financial projections, budget recommendations, or investment-relevant analysis. Do NOT add disclaimers to casual conversation, simple factual questions, or topics outside finance.`,
     modelPreference: 'claude-sonnet-4-6',
-    tools: ['search_memory', 'save_memory', 'generate_docx', 'web_search', 'web_fetch', 'read_file', 'write_file', 'search_files', 'create_plan', 'add_plan_step', 'show_plan'],
+    tools: ['search_memory', 'save_memory', 'generate_docx', 'generate_pdf', 'generate_xlsx', 'web_search', 'web_fetch', 'read_file', 'write_file', 'search_files', 'create_plan', 'add_plan_step', 'show_plan'],
     workspaceAffinity: ['finance', 'accounting', 'business', 'budgets'],
     suggestedSkills: ["xlsx-generator","chart-generator"],
     suggestedConnectors: ["gsheets","postgres"],
@@ -512,6 +512,8 @@ If the user's request clearly maps to a specialist persona (legal analysis → L
       'create_plan', 'add_plan_step', 'execute_step', 'show_plan',
       'spawn_agent', 'list_agents', 'get_agent_result',
       'git_status', 'git_diff', 'git_log', 'git_commit',
+      'multi_edit', 'get_task_output', 'kill_task', 'run_code',
+      'generate_xlsx', 'generate_pptx', 'generate_pdf',
       'list_skills', 'suggest_skill', 'acquire_capability', 'install_capability',
       'compose_workflow', 'orchestrate_workflow',
       'query_knowledge', 'get_identity', 'get_awareness',
@@ -879,7 +881,7 @@ You specialize in data access, SQL, pipeline design, and making data useful for 
 - For data quality issues, document: what is wrong, how many rows affected, suggested fix
 - Use bash for CSV/JSON processing when appropriate (csvkit, jq, awk)`,
     modelPreference: 'claude-sonnet-4-6',
-    tools: ['bash', 'read_file', 'write_file', 'edit_file', 'search_files', 'search_content', 'search_memory', 'save_memory', 'web_search', 'generate_docx'],
+    tools: ['bash', 'read_file', 'write_file', 'edit_file', 'search_files', 'search_content', 'search_memory', 'save_memory', 'web_search', 'web_fetch', 'generate_docx', 'generate_xlsx', 'run_code', 'get_task_output', 'kill_task'],
     workspaceAffinity: ['data', 'analytics', 'bi', 'reporting'],
     suggestedSkills: [],
     suggestedConnectors: ['postgres', 'gsheets', 'airtable'],
