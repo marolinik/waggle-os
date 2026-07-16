@@ -175,6 +175,10 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
       blocks: [],
       timestamp: new Date().toISOString(),
       tools: [],
+      // Preserve the authoring persona on the turn itself. The active persona
+      // can change while this message remains in the thread; rendering from
+      // mutable window state would otherwise relabel historical responses.
+      persona,
     };
     // Target the assistant turn BY ID (not "last message"): a queued turn may
     // sit after it in the list, so position is not stable during streaming.
