@@ -251,12 +251,14 @@ interface ApprovalWaitOptions {
   policy: ApprovalTimeoutPolicy;
   sendEvent: (event: 'approval_held', data: Record<string, unknown>) => void;
   onHeld: (expiresAt: string) => void;
+  signal?: AbortSignal;
 }
 
 export async function waitForApprovalDecision(options: ApprovalWaitOptions): Promise<{ approved: boolean; held: boolean; timedOut: boolean }> {
   let held = false;
   let timedOut = false;
   let timeout: ReturnType<typeof setTimeout> | undefined;
+  let abortHandler: (() => void) | undefined;
   const approved = await new Promise<boolean>((resolve) => {
     options.pendingApprovals.set(options.requestId, {
       resolve,
@@ -264,6 +266,16 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
       input: options.input,
       timestamp: Date.now(),
     });
+
+    abortHandler = () => {
+      if (!options.pendingApprovals.delete(options.requestId)) return;
+      resolve(false);
+    };
+    if (options.signal?.aborted) {
+      abortHandler();
+      return;
+    }
+    options.signal?.addEventListener('abort', abortHandler, { once: true });
 
     timeout = setTimeout(() => {
       if (!options.pendingApprovals.delete(options.requestId)) return;
@@ -300,6 +312,7 @@ export async function waitForApprovalDecision(options: ApprovalWaitOptions): Pro
     }, options.policy.timeoutMs);
   });
   if (timeout) clearTimeout(timeout);
+  if (abortHandler) options.signal?.removeEventListener('abort', abortHandler);
   return { approved, held, timedOut };
 }
 
@@ -818,19 +831,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       'Access-Control-Allow-Origin': validateOrigin(request.headers.origin as string | undefined),
     });
 
+    // The response side owns the long-lived SSE socket. Cancelling its reader
+    // closes reply.raw (request.raw already finished after the POST body), which
+    // must abort the provider/tool run immediately.
+    const abortController = new AbortController();
+    raw.once('close', () => {
+      if (!raw.writableEnded) abortController.abort();
+    });
+    if (raw.destroyed) abortController.abort();
+
     // Helper to write SSE events
     const sendEvent = (event: string, data: unknown) => {
+      if (abortController.signal.aborted || raw.destroyed || raw.writableEnded) return;
       if (event === 'token' && firstTokenAt === null) {
         firstTokenAt = performance.now();
       }
       raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
-
-    // Graceful shutdown: abort agent loop when client disconnects
-    const abortController = new AbortController();
-    request.raw.on('close', () => {
-      abortController.abort();
-    });
 
     // Declare at handler scope so error handler can surface recalled memories (P1-4)
     let recalledContext = '';
@@ -1018,7 +1035,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               healthHeaders['Authorization'] = `Bearer ${token}`;
             }
             const healthRes = await fetch(`${getLitellmUrl()}/health/liveliness`, {
-              signal: AbortSignal.timeout(3000),
+              signal: AbortSignal.any([abortController.signal, AbortSignal.timeout(3000)]),
               headers: healthHeaders,
             });
             litellmAvailable = healthRes.ok;
@@ -1029,6 +1046,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       }
 
       // ── Slash command routing (works even in echo mode) ──
+      if (abortController.signal.aborted) return;
       const { commandRegistry } = server.agentState;
       if (commandRegistry.isCommand(message)) {
         // Build a lightweight command context (same as commands.ts route)
@@ -1077,9 +1095,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           const friendlyError = `**${cmdName} requires AI** — This command needs a working LLM connection.\n\nConfigure an API key in Settings > API Keys, then try again.`;
           const words = friendlyError.split(' ');
           for (const word of words) {
+            if (abortController.signal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
+          if (abortController.signal.aborted) return;
           history.push({ role: 'assistant', content: friendlyError });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: friendlyError });
           sendEvent('done', { content: friendlyError, usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, toolsUsed: [] });
@@ -1089,9 +1109,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Stream the command result as SSE tokens
           const cmdWords = cmdResult.split(' ');
           for (const word of cmdWords) {
+            if (abortController.signal.aborted) return;
             sendEvent('token', { content: word + ' ' });
             await new Promise((r) => setTimeout(r, 10));
           }
+          if (abortController.signal.aborted) return;
           // Persist command result
           history.push({ role: 'assistant', content: cmdResult });
           persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: cmdResult });
@@ -1114,9 +1136,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const echoResponse = `**Waggle is running in local mode** (no LLM proxy connected).\n\nYour message: "${message}"\n\nTo enable AI responses, configure an API key in Settings > API Keys.`;
         const words = echoResponse.split(' ');
         for (const word of words) {
+          if (abortController.signal.aborted) return;
           sendEvent('token', { content: word + ' ' });
           await new Promise((r) => setTimeout(r, 15));
         }
+        if (abortController.signal.aborted) return;
         // Persist echo response so session continuity is maintained
         history.push({ role: 'assistant', content: echoResponse });
         persistMessage(server.localConfig.dataDir, effectiveWorkspace, sessionId, { role: 'assistant', content: echoResponse });
@@ -1479,6 +1503,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             },
             policy: approvalTimeoutPolicy,
             sendEvent,
+            signal: abortController.signal,
             onHeld: (expiresAt) => {
               log.warn(`[security] Approval timed out for ${toolName} (requestId: ${requestId}) — moved to Approvals inbox`);
               emitAuditEvent(server, {
@@ -1492,6 +1517,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             },
           });
 
+          if (abortController.signal.aborted) {
+            return { cancel: true, reason: 'Chat request cancelled' };
+          }
           if (!approved) {
             if (held) {
               return { cancel: true, reason: `Approval for ${toolName} moved to Approvals inbox` };
@@ -2028,7 +2056,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         const runAgentAttempt = async (config: typeof runConfig) => {
           bufferedAgentTokens = [];
-          return agentRunner(config);
+          const attemptedResult = await agentRunner(config);
+          if (abortController.signal.aborted) {
+            throw abortController.signal.reason ?? new Error('Chat request aborted');
+          }
+          return attemptedResult;
         };
 
         // SEC: publish the request-scoped security context so sub-agents /
@@ -2065,6 +2097,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // Report success to credential pool
           if (credPool && poolKey) credPool.reportSuccess(poolKey);
         } catch (primaryErr) {
+          if (abortController.signal.aborted) throw primaryErr;
           // Report error to credential pool and try next key
           const errStatus = extractStatusCode(primaryErr);
           if (credPool && poolKey && errStatus) {
@@ -2370,6 +2403,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // the HTTP boundary so token events contain only the exact content in
         // the authoritative done event. Preserve the original chunking when it
         // already matches the fully post-processed response.
+        if (abortController.signal.aborted) return;
         const finalTokenChunks = bufferedAgentTokens.join('') === finalContent
           ? bufferedAgentTokens
           : finalContent ? [finalContent] : [];
@@ -2442,6 +2476,13 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         });
       }
     } catch (err) {
+      // A user Stop/client disconnect is not an assistant answer or generation
+      // failure. Keep the already-persisted user turn, but never fabricate an
+      // authoritative assistant/error turn from partial work.
+      if (abortController.signal.aborted) {
+        log.info(`[chat] turn ${turnId} cancelled by client`);
+        return;
+      }
       // H-07 G4: finalize aborted trace so the evolution dataset builder can
       // mine it as a negative example. Without this the row stays 'pending'
       // and GEPA never sees it — starving the loop of counterexamples.
@@ -2553,7 +2594,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     }
 
     // End the SSE stream
-    raw.end();
+    if (!raw.destroyed && !raw.writableEnded) raw.end();
   });
 
   // DELETE /api/chat/history — clear session history AND all per-session in-process state.

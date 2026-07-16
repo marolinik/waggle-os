@@ -19,17 +19,23 @@ export async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, controller.signal])
+    : controller.signal;
 
   try {
     const response = await fetch(url, {
       ...options,
-      signal: controller.signal,
+      signal,
     });
     return response;
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (controller.signal.aborted && !options.signal?.aborted) {
       throw new TimeoutError(url, timeoutMs);
     }
+    // Caller cancellation (for example Chat Stop) is control flow, not a
+    // timeout/network outage. Preserve the native AbortError for the caller.
+    if (options.signal?.aborted) throw err;
     throw new NetworkError(url, err instanceof Error ? err : undefined);
   } finally {
     clearTimeout(timeout);

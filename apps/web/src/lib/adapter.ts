@@ -278,6 +278,8 @@ class LocalAdapter {
   private ws: WebSocket | null = null;
   /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
   private sseStreams = new Map<string, { close: () => void; listeners: Set<(data: unknown) => void> }>();
+  /** Active chat requests, grouped by the workspace-level Stop contract. */
+  private activeChatControllers = new Map<string, Set<AbortController>>();
   private _connected = false;
   private _connectAttempted = false;
   // P1b D3 gate state. _connectPromise doubles as the deferral gate: kept
@@ -826,49 +828,73 @@ class LocalAdapter {
     // runRetrievalAgentLoop; carrying it now means A3.1 is a one-line server
     // change with no client redeploy needed.
     const shape = getSelectedShape();
-    const res = await this.fetch('/api/chat', {
-      method: 'POST',
-      body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry }),
-    });
+    const controller = new AbortController();
+    let controllers = this.activeChatControllers.get(workspaceId);
+    if (!controllers) {
+      controllers = new Set();
+      this.activeChatControllers.set(workspaceId, controllers);
+    }
+    controllers.add(controller);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
-    if (!res.body) return;
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let currentEventType = '';
+    try {
+      const res = await this.fetch('/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({ workspaceId, message, sessionId, persona, autonomy, shape, retry }),
+        signal: controller.signal,
+      });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        if (line.startsWith('event: ')) {
-          currentEventType = line.slice(7).trim();
-        } else if (line.startsWith('data: ')) {
-          try {
-            const data = JSON.parse(line.slice(6));
-            // Map SSE event types to StreamEvent types expected by useChat
-            let type = currentEventType;
-            if (type === 'token') type = 'token';
-            else if (type === 'tool') type = 'tool_start';
-            else if (type === 'tool_result') type = 'tool_end';
-            else if (type === 'done') type = 'done';
-            else if (type === 'error') type = 'error';
-            else if (type === 'step') type = 'step';
-            else if (type === 'approval_request') type = 'approval_request';
+      if (!res.body) return;
+      reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let currentEventType = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          if (line.startsWith('event: ')) {
+            currentEventType = line.slice(7).trim();
+          } else if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              // Map SSE event types to StreamEvent types expected by useChat
+              let type = currentEventType;
+              if (type === 'token') type = 'token';
+              else if (type === 'tool') type = 'tool_start';
+              else if (type === 'tool_result') type = 'tool_end';
+              else if (type === 'done') type = 'done';
+              else if (type === 'error') type = 'error';
+              else if (type === 'step') type = 'step';
+              else if (type === 'approval_request') type = 'approval_request';
 
-            yield { type, data } as StreamEvent;
-            currentEventType = '';
-          } catch { /* skip malformed */ }
+              yield { type, data } as StreamEvent;
+              currentEventType = '';
+            } catch { /* skip malformed */ }
+          }
         }
+      }
+    } finally {
+      controller.abort();
+      controllers.delete(controller);
+      if (controllers.size === 0 && this.activeChatControllers.get(workspaceId) === controllers) {
+        this.activeChatControllers.delete(workspaceId);
+      }
+      if (reader) {
+        try { await reader.cancel(); } catch { /* stream already closed */ }
+        try { reader.releaseLock(); } catch { /* reader already released */ }
       }
     }
   }
 
   async abortAgent(workspaceId: string): Promise<void> {
-    await this.fetch(`/api/agent/abort`, { method: 'POST', body: JSON.stringify({ workspaceId }) });
+    const controllers = this.activeChatControllers.get(workspaceId);
+    if (!controllers) return;
+    this.activeChatControllers.delete(workspaceId);
+    for (const controller of controllers) controller.abort();
   }
 
   async clearHistory(sessionId: string): Promise<void> {

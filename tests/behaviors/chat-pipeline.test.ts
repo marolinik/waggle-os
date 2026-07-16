@@ -35,6 +35,7 @@ import {
 import { buildLocalServer } from '../../packages/server/src/local/index.js';
 import type { AgentRunner } from '../../packages/server/src/local/routes/chat.js';
 import type { AgentResponse } from '../../packages/agent/src/agent-loop.js';
+import { loadSessionMessages } from '../../packages/server/src/local/routes/chat-persistence.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -362,6 +363,97 @@ describe('POST /api/chat HTTP pipeline (live server)', () => {
   });
 
   // ── Session history ────────────────────────────────────────────────────
+
+  it('aborts active provider/tool work without persisting a partial assistant turn', async () => {
+    const originalRunner = serverInst.agentRunner;
+    const session = `session-abort-test-${Date.now()}`;
+    const message = 'stop this active tool run';
+    let releaseRunner: (() => void) | undefined;
+    let resolveStarted!: () => void;
+    const started = new Promise<void>((resolve) => { resolveStarted = resolve; });
+    let resolveStopped!: () => void;
+    const stopped = new Promise<void>((resolve) => { resolveStopped = resolve; });
+    let workTicks = 0;
+
+    serverInst.agentRunner = (config) => new Promise<AgentResponse>((resolve, reject) => {
+      config.onToken?.('partial answer that is not authoritative');
+      const interval = setInterval(() => { workTicks++; }, 5);
+      resolveStarted();
+
+      const stopWork = () => {
+        clearInterval(interval);
+        resolveStopped();
+        const error = new Error('chat aborted');
+        error.name = 'AbortError';
+        reject(error);
+      };
+      if (config.signal?.aborted) stopWork();
+      else config.signal?.addEventListener('abort', stopWork, { once: true });
+
+      releaseRunner = () => {
+        clearInterval(interval);
+        resolve({
+          content: 'fabricated completion after the client left',
+          toolsUsed: ['slow_tool'],
+          usage: { inputTokens: 1, outputTokens: 1 },
+        });
+      };
+    });
+
+    const previousLocalStorage = globalThis.localStorage;
+    const storageValues = new Map<string, string>();
+    const testStorage: Storage = {
+      get length() { return storageValues.size; },
+      clear: () => storageValues.clear(),
+      getItem: (key) => storageValues.get(key) ?? null,
+      key: (index) => [...storageValues.keys()][index] ?? null,
+      removeItem: (key) => { storageValues.delete(key); },
+      setItem: (key, value) => { storageValues.set(key, value); },
+    };
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: testStorage });
+    let client: InstanceType<(typeof import('../../apps/web/src/lib/adapter.js'))['default']> | undefined;
+    let events: AsyncGenerator<import('../../apps/web/src/lib/types.js').StreamEvent> | undefined;
+    try {
+      const { default: LocalAdapter } = await import('../../apps/web/src/lib/adapter.js');
+      client = new LocalAdapter(baseUrl);
+      events = client.sendMessage('default', message, session);
+      const pendingEvent = events.next().then(
+        (result) => result,
+        (error: unknown) => error,
+      );
+      await started;
+
+      await client.abortAgent('default');
+      await Promise.race([
+        stopped,
+        new Promise<never>((_, reject) => setTimeout(
+          () => reject(new Error('agent work did not stop after client abort')),
+          1_000,
+        )),
+      ]);
+
+      const ticksAtStop = workTicks;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(workTicks).toBe(ticksAtStop);
+      await expect(pendingEvent).resolves.toMatchObject({ name: 'AbortError' });
+
+      // Let the route's abort catch/finally finish before inspecting both stores.
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(serverInst.agentState.sessionHistories.get(session)).toEqual([
+        { role: 'user', content: message },
+      ]);
+      expect(loadSessionMessages(serverInst.localConfig.dataDir, 'default', session)).toEqual([
+        expect.objectContaining({ role: 'user', content: message }),
+      ]);
+    } finally {
+      await client?.abortAgent('default');
+      await events?.return(undefined);
+      releaseRunner?.();
+      serverInst.agentRunner = originalRunner;
+      if (previousLocalStorage === undefined) Reflect.deleteProperty(globalThis, 'localStorage');
+      else Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: previousLocalStorage });
+    }
+  });
 
   it('accumulates session history across multiple turns in the same session', async () => {
     const session = `session-history-test-${Date.now()}`;
