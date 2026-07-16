@@ -10,7 +10,7 @@ import type {
 } from '@waggle/shared';
 import { resolveToolCommandInvocation } from './tool-command.js';
 import { stripAnsi } from './tool-output-buffer.js';
-import { resolvedShellPath, mergePathValue } from './shell-env.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
 
 const MAX_STDOUT = 256 * 1024;
 const MAX_STDERR = 64 * 1024;
@@ -19,13 +19,6 @@ const DEFAULT_TIMEOUT_MS = 10 * 60 * 1_000;
 const MAX_TIMEOUT_MS = 30 * 60 * 1_000;
 const DEFAULT_STALL_AFTER_MS = 120_000;
 const MIN_STALL_AFTER_MS = 30_000;
-
-const ENV_ALLOWLIST = new Set([
-  'PATH', 'PATHEXT', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'HOME', 'USERPROFILE',
-  'APPDATA', 'LOCALAPPDATA', 'TEMP', 'TMP', 'LANG', 'LC_ALL', 'TERM',
-  'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY',
-  'OPENROUTER_API_KEY', 'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY',
-]);
 
 export type ExternalRunEventType =
   | 'started' | 'progress' | 'message' | 'tool'
@@ -136,7 +129,7 @@ export async function runExternalTool(
     promptFile?.path,
     timeoutMs,
   );
-  const env = buildExternalToolEnv(deps.baseEnv ?? process.env, request, workspacePath);
+  const env = buildExternalToolEnv(deps.baseEnv ?? process.env, request, workspacePath, platform);
   const spawnProcess = deps.spawnProcess ?? defaultSpawnProcess;
   const killTree = deps.killTree ?? defaultKillTree;
   const parseState: ParseState = { finalText: '' };
@@ -285,20 +278,9 @@ export function buildExternalToolEnv(
   base: NodeJS.ProcessEnv,
   request: Pick<ExternalToolRunRequest, 'runId' | 'roomId' | 'workspaceId' | 'dance' | 'dataDir'>,
   workspacePath: string,
+  platform: NodeJS.Platform = process.platform,
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(base)) {
-    if (value !== undefined && ENV_ALLOWLIST.has(key.toUpperCase())) env[key] = value;
-  }
-  // POSIX GUI-launched sidecars inherit a bare PATH. Merge the
-  // resolved login-shell PATH so spawned CLIs resolve their shims; the value
-  // stays ENV_ALLOWLIST-scoped (PATH only). No-op on win32 / before resolve.
-  if (process.platform !== 'win32') {
-    const shellPath = resolvedShellPath();
-    if (shellPath) env.PATH = mergePathValue(shellPath, env.PATH);
-  }
-  return {
-    ...env,
+  return buildExternalProcessEnv(base, {
     WAGGLE_RUN_ID: request.runId,
     WAGGLE_ROOM_ID: request.roomId,
     WAGGLE_WORKSPACE_ID: request.workspaceId,
@@ -314,7 +296,7 @@ export function buildExternalToolEnv(
     ...(request.dataDir ? { HIVE_MIND_DATA_DIR: request.dataDir } : {}),
     WAGGLE_SIGNAL_EMIT: '0',
     NO_COLOR: '1',
-  };
+  }, platform);
 }
 
 function requireTaskSpec(

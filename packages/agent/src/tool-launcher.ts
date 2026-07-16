@@ -52,6 +52,7 @@ import {
   resolveToolCommandInvocation,
   type ToolCommandInvocation,
 } from './tool-command.js';
+import { buildExternalProcessEnv } from './external-process-env.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -79,6 +80,8 @@ export interface ObservedHandle {
 export interface ToolLauncherDeps {
   /** Override platform (defaults to process.platform). */
   platform?: NodeJS.Platform;
+  /** Test seam for the ambient process environment. */
+  baseEnv?: NodeJS.ProcessEnv;
   /**
    * Detached-spawn implementation. Production uses `child_process.spawn`
    * with `detached: true`. Returns { pid } on success or { error }.
@@ -124,7 +127,7 @@ function defaultSpawnDetached(
     const invocation = resolveSpawnInvocation(binary, args);
     const child = spawn(invocation.binary, invocation.args, {
       cwd: options.cwd,
-      env: { ...process.env, ...(options.env ?? {}) },
+      env: options.env,
       detached: true,
       stdio: 'ignore',
       windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
@@ -154,7 +157,7 @@ function defaultSpawnObserved(
     const invocation = resolveSpawnInvocation(binary, args);
     const child = spawn(invocation.binary, invocation.args, {
       cwd: options.cwd,
-      env: { ...process.env, ...(options.env ?? {}) },
+      env: options.env,
       // NOT detached, NOT unref'd: observation requires holding the pipes,
       // so the child is tethered to the sidecar lifecycle.
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -201,7 +204,7 @@ async function defaultExecCapture(
     const invocation = resolveToolCommandInvocation(binary, args);
     const { stdout, stderr } = await execFileAsync(invocation.binary, invocation.args, {
       timeout: options?.timeoutMs ?? 30000,
-      env: { ...process.env, ...(options?.env ?? {}) },
+      env: options?.env,
       shell: false,
       windowsVerbatimArguments: invocation.windowsVerbatimArguments === true,
       maxBuffer: 4 * 1024 * 1024,
@@ -224,6 +227,7 @@ async function defaultExecCapture(
 
 interface ResolvedDeps {
   platform: NodeJS.Platform;
+  baseEnv: NodeJS.ProcessEnv;
   spawnDetached: NonNullable<ToolLauncherDeps['spawnDetached']>;
   spawnObserved: NonNullable<ToolLauncherDeps['spawnObserved']>;
   execCapture: NonNullable<ToolLauncherDeps['execCapture']>;
@@ -232,6 +236,7 @@ interface ResolvedDeps {
 function resolveDeps(opts: ToolLauncherDeps): ResolvedDeps {
   return {
     platform: opts.platform ?? process.platform,
+    baseEnv: opts.baseEnv ?? process.env,
     spawnDetached: opts.spawnDetached ?? defaultSpawnDetached,
     spawnObserved: opts.spawnObserved ?? defaultSpawnObserved,
     execCapture: opts.execCapture ?? defaultExecCapture,
@@ -350,28 +355,29 @@ export function launchTool(opts: LaunchOptions): LaunchResult {
   }
   const deps = resolveDeps(opts.deps ?? {});
   const args = opts.args ?? [];
-  const env: NodeJS.ProcessEnv = {};
+  const waggleEnv: NodeJS.ProcessEnv = {};
   if (opts.workspaceId) {
-    env.WAGGLE_WORKSPACE_ID = opts.workspaceId;
+    waggleEnv.WAGGLE_WORKSPACE_ID = opts.workspaceId;
   }
   // Self-enabling: light the SignalBus this pipeline was built to feed.
   // Opt out with signalEmit:false for a silent launch.
   if (opts.signalEmit !== false) {
-    env.WAGGLE_SIGNAL_EMIT = '1';
+    waggleEnv.WAGGLE_SIGNAL_EMIT = '1';
   }
   if (opts.sidecarUrl) {
-    env.WAGGLE_SIDECAR_URL = opts.sidecarUrl;
+    waggleEnv.WAGGLE_SIDECAR_URL = opts.sidecarUrl;
   }
   if (opts.dataDir) {
-    env.HIVE_MIND_DATA_DIR = opts.dataDir;
+    waggleEnv.HIVE_MIND_DATA_DIR = opts.dataDir;
   }
   if (opts.runId && opts.roomId && opts.runToken) {
-    env.WAGGLE_RUN_ID = opts.runId;
-    env.WAGGLE_ROOM_ID = opts.roomId;
-    env.WAGGLE_DANCE_TEAM_ID = `room::${opts.roomId}`;
-    env.WAGGLE_SENDER_ID = `run::${opts.runId}`;
-    env.WAGGLE_RUN_TOKEN = opts.runToken;
+    waggleEnv.WAGGLE_RUN_ID = opts.runId;
+    waggleEnv.WAGGLE_ROOM_ID = opts.roomId;
+    waggleEnv.WAGGLE_DANCE_TEAM_ID = `room::${opts.roomId}`;
+    waggleEnv.WAGGLE_SENDER_ID = `run::${opts.runId}`;
+    waggleEnv.WAGGLE_RUN_TOKEN = opts.runToken;
   }
+  const env = buildExternalProcessEnv(deps.baseEnv, waggleEnv, deps.platform);
   // Observed mode: piped-stdio spawn that surfaces a live output handle.
   // Tethered to the sidecar (not unref'd) and tracked in-memory only.
   if (opts.observe) {
@@ -542,10 +548,10 @@ export async function runHookCommand(
   if (opts.action === 'install') args.push('--cli-path', runtime.cliEntry);
   const result = await deps.execCapture(runtime.nodePath, args, {
     timeoutMs: 60000,
-    env: {
+    env: buildExternalProcessEnv(deps.baseEnv, {
       WAGGLE_HOOK_NODE_PATH: runtime.nodePath,
       ...(opts.dataDir ? { HIVE_MIND_DATA_DIR: opts.dataDir } : {}),
-    },
+    }, deps.platform),
   });
   if (!result) {
     return {

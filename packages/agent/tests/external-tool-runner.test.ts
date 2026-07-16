@@ -89,6 +89,7 @@ describe('runExternalTool', () => {
     expect(events).toContain('tool');
     expect(events.at(-1)).toBe('completed');
     expect(captured?.env.SUPER_SECRET).toBeUndefined();
+    expect(captured?.env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(captured?.env.WAGGLE_RUN_ID).toBe('run-1');
   });
 
@@ -396,9 +397,19 @@ describe('runExternalTool', () => {
 });
 
 describe('external adapter safety', () => {
-  it('passes only an explicit environment allowlist plus run identity', () => {
+  it('passes OS context and explicit run identity but no ambient secrets', () => {
     const env = buildExternalToolEnv(
-      { PATH: '/bin', OPENAI_API_KEY: 'allowed-provider-key', DATABASE_URL: 'must-not-pass' },
+      {
+        PATH: 'C:\\Windows\\System32', USERPROFILE: 'C:\\Users\\tester',
+        APPDATA: 'C:\\Users\\tester\\AppData\\Roaming', TERM: 'xterm-256color',
+        ANTHROPIC_API_KEY: 'anthropic-secret', OPENAI_API_KEY: 'openai-secret',
+        OPENROUTER_API_KEY: 'openrouter-secret', GOOGLE_API_KEY: 'google-secret',
+        GEMINI_API_KEY: 'gemini-secret', XAI_API_KEY: 'xai-secret',
+        STRIPE_SECRET_KEY: 'stripe-secret', AWS_SECRET_ACCESS_KEY: 'aws-secret',
+        DATABASE_URL: 'database-secret', SSH_AUTH_SOCK: 'credential-socket',
+        GIT_ASKPASS: 'credential-helper', HTTPS_PROXY: 'https://user:secret@proxy.invalid',
+        NODE_OPTIONS: '--require C:\\malicious.js', WAGGLE_RUN_TOKEN: 'stale-token',
+      },
       {
         runId: 'run', roomId: 'room', workspaceId: 'workspace',
         dance: {
@@ -408,16 +419,36 @@ describe('external adapter safety', () => {
         dataDir: '/waggle-data',
       },
       '/workspace',
+      'win32',
     );
-    expect(env.PATH).toBe('/bin');
-    expect(env.OPENAI_API_KEY).toBe('allowed-provider-key');
-    expect(env.DATABASE_URL).toBeUndefined();
+    expect(env).toMatchObject({
+      PATH: 'C:\\Windows\\System32',
+      USERPROFILE: 'C:\\Users\\tester',
+      APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+      TERM: 'xterm-256color',
+    });
+    for (const name of [
+      'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY',
+      'GOOGLE_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY',
+      'STRIPE_SECRET_KEY', 'AWS_SECRET_ACCESS_KEY', 'DATABASE_URL',
+      'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'HTTPS_PROXY', 'NODE_OPTIONS',
+    ]) {
+      expect(env[name], name).toBeUndefined();
+    }
     expect(env.WAGGLE_DANCE_TEAM_ID).toBe('room::room');
     expect(env.WAGGLE_DANCE_URL).toBe('http://127.0.0.1:3333');
     expect(env.WAGGLE_RUN_TOKEN).toBe('run-token-123456789012345678901234');
     expect(env.WAGGLE_CLI_NODE_PATH).toBe('/runtime/node');
     expect(env.WAGGLE_CLI_ENTRY).toBe('/runtime/hive-mind-cli.js');
     expect(env.HIVE_MIND_DATA_DIR).toBe('/waggle-data');
+
+    const withoutDance = buildExternalToolEnv(
+      { WAGGLE_RUN_TOKEN: 'stale-ambient-token' },
+      { runId: 'run', roomId: 'room', workspaceId: 'workspace' },
+      '/workspace',
+      'win32',
+    );
+    expect(withoutDance.WAGGLE_RUN_TOKEN).toBeUndefined();
   });
 
   it('loads only data-only generic task specs with known placeholders', () => {

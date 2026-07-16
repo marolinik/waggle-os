@@ -95,6 +95,59 @@ describe('launchTool', () => {
     expect(calls[0].options.env?.WAGGLE_WORKSPACE_ID).toBe('ws-kvark');
   });
 
+  it('fails closed against ambient provider and infrastructure secrets', () => {
+    const { calls, spawnDetached } = captureSpawn();
+    launchTool({
+      id: 'claude-code',
+      installedPath: 'C:\\tools\\claude.exe',
+      workspaceId: 'ws-isolated',
+      runId: 'run-1',
+      roomId: 'room-1',
+      runToken: 'narrow-room-token',
+      deps: {
+        platform: 'win32',
+        baseEnv: {
+          PATH: 'C:\\Windows\\System32',
+          PATHEXT: '.COM;.EXE;.CMD',
+          USERPROFILE: 'C:\\Users\\tester',
+          APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+          TERM: 'xterm-256color',
+          ANTHROPIC_API_KEY: 'anthropic-secret',
+          OPENAI_API_KEY: 'openai-secret',
+          OPENROUTER_API_KEY: 'openrouter-secret',
+          GEMINI_API_KEY: 'gemini-secret',
+          STRIPE_SECRET_KEY: 'stripe-secret',
+          AWS_SECRET_ACCESS_KEY: 'aws-secret',
+          DATABASE_URL: 'database-secret',
+          SSH_AUTH_SOCK: 'credential-socket',
+          GIT_ASKPASS: 'credential-helper',
+          HTTPS_PROXY: 'https://user:secret@proxy.invalid',
+          NODE_OPTIONS: '--require C:\\malicious.js',
+          WAGGLE_RUN_TOKEN: 'stale-ambient-token',
+        },
+        spawnDetached,
+      },
+    });
+
+    expect(calls[0].options.env).toMatchObject({
+      PATH: 'C:\\Windows\\System32',
+      PATHEXT: '.COM;.EXE;.CMD',
+      USERPROFILE: 'C:\\Users\\tester',
+      APPDATA: 'C:\\Users\\tester\\AppData\\Roaming',
+      TERM: 'xterm-256color',
+      WAGGLE_WORKSPACE_ID: 'ws-isolated',
+      WAGGLE_RUN_TOKEN: 'narrow-room-token',
+    });
+    for (const name of [
+      'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY',
+      'GEMINI_API_KEY', 'STRIPE_SECRET_KEY', 'AWS_SECRET_ACCESS_KEY',
+      'DATABASE_URL', 'SSH_AUTH_SOCK', 'GIT_ASKPASS', 'HTTPS_PROXY',
+      'NODE_OPTIONS',
+    ]) {
+      expect(calls[0].options.env?.[name], name).toBeUndefined();
+    }
+  });
+
   it('does not inject env when workspaceId is absent', () => {
     const { calls, spawnDetached } = captureSpawn();
     launchTool({
