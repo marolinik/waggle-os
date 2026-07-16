@@ -650,6 +650,15 @@ describe('conversational gated tool filtering', () => {
 
   it('keeps gated tools when the user explicitly asks for an action', () => {
     expect(isExplicitGatedToolRequest('Write this as a file and export a document')).toBe(true);
+    for (const request of [
+      'Fix the failing TypeScript test',
+      'Build a roadmap with dependencies',
+      'Prepare a meeting brief from prior notes',
+      'Verify this implementation with evidence',
+      'Delegate parallel research to agents',
+    ]) {
+      expect(isExplicitGatedToolRequest(request), request).toBe(true);
+    }
     const filtered = filterGatedToolsForConversationalTurn(
       tools,
       'Write this as a file and export a document',
@@ -681,6 +690,8 @@ describe('conversational gated tool filtering', () => {
         { name: 'bash', description: '', parameters: {}, execute: async () => 'ok' },
         { name: 'web_search', description: '', parameters: {}, execute: async () => 'ok' },
         { name: 'save_memory', description: '', parameters: {}, execute: async () => 'ok' },
+        { name: 'plugin_slack_send_message', description: 'Send a Slack message', parameters: {}, execute: async () => 'ok' },
+        { name: 'mcp_github_create_issue', description: 'Create a GitHub issue', parameters: {}, execute: async () => 'ok' },
       ],
     };
     const withheld: number[] = [];
@@ -693,6 +704,6 @@ describe('conversational gated tool filtering', () => {
     );
 
     expect(filteredProvider.getAllTools().map(t => t.name)).toEqual([]);
-    expect(withheld).toEqual([3]);
+    expect(withheld).toEqual([5]);
   });
 });

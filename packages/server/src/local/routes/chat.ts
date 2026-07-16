@@ -39,7 +39,7 @@ import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggest
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import { getGovernancePermissions } from './chat-governance.js';
-import { applyPersonaToolFilter, filterMcpToolsForPersona } from '../persona-tool-filter.js';
+import { applyPersonaToolFilter, filterMcpToolsForPersona, selectToolsForTurn } from '../persona-tool-filter.js';
 import { decideReviewTurnTool } from '../held-action-executor.js';
 import { assertSafeSegment } from './validate.js';
 import { resolveUsableModel } from '../model-availability.js';
@@ -134,7 +134,8 @@ export function resolveChatAncestry(
 }
 
 export function isExplicitGatedToolRequest(message: string): boolean {
-  return /\b(write|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|cross-workspace|other workspace)\b/i.test(message)
+  return /\b(write|read|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|plan|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|cross-workspace|other workspace)\b/i.test(message)
+    || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
     || /\bsave\s+(this|that|it)\s+(as|to|in)\b/i.test(message);
 }
 
@@ -189,7 +190,10 @@ export function filterPluginToolsForConversationalTurn(
   return {
     getAllTools: () => {
       const pluginTools = provider.getAllTools();
-      const filtered = filterGatedToolsForConversationalTurn(pluginTools, message, autonomyLevel);
+      // Plugin capabilities are external and may mutate remote state. On a
+      // conversational turn there is no safe static allowlist for arbitrary
+      // plugin names, so defer all of them until the user requests an action.
+      const filtered: typeof pluginTools = [];
       if (filtered.length !== pluginTools.length) {
         onWithheld?.(pluginTools.length - filtered.length);
       }
@@ -1496,11 +1500,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // override > workspace config.
         const wsConfig = effectiveWorkspace ? server.workspaceManager?.get(effectiveWorkspace) : null;
         const activePersonaId = personaOverride ?? wsConfig?.personaId ?? null;
-        if (!hasCustomRunner && activePersonaId) {
-          const persona = resolvePersona(activePersonaId);
-          if (persona) {
-            effectiveTools = applyPersonaToolFilter(effectiveTools, persona);
-          }
+        const activePersona = activePersonaId ? resolvePersona(activePersonaId) : null;
+        if (!hasCustomRunner && activePersona) {
+          effectiveTools = applyPersonaToolFilter(effectiveTools, activePersona);
         }
 
         // #17: schedule-originated turns must not schedule further work — an
@@ -1520,6 +1522,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // conversational narrowing (a UX heuristic) must not shrink a
         // sub-agent's legitimate toolset for its explicit task.
         let spawnAllowedToolNames: ReadonlySet<string> | null = null;
+        const externalToolNames = new Set<string>();
         if (!hasCustomRunner) {
           effectiveTools = filterAvailableTools(effectiveTools);
 
@@ -1536,48 +1539,36 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             let selectedMcp = await server.agentState.mcpToolRetriever.selectTools(
               runningMcpTools, history, sessionId, retrievalCfg,
             );
-            const mcpPersona = activePersonaId ? resolvePersona(activePersonaId) : null;
-            if (mcpPersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, mcpPersona);
+            if (activePersona) selectedMcp = filterMcpToolsForPersona(selectedMcp, activePersona);
+            selectedMcp = filterAvailableTools(selectedMcp);
             if (selectedMcp.length > 0) {
               const present = new Set(effectiveTools.map(t => t.name));
-              effectiveTools = [...effectiveTools, ...selectedMcp.filter(t => !present.has(t.name))];
+              const additions = selectedMcp.filter(t => !present.has(t.name));
+              for (const candidate of additions) externalToolNames.add(candidate.name);
+              effectiveTools = [...effectiveTools, ...additions];
             }
           }
 
+          // Plugins remain parent-only. Materialize exactly once, apply the
+          // same unknown-external persona rails as MCP, and keep native names
+          // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
-          spawnAllowedToolNames = new Set(effectiveTools.map(t => t.name));
-          const beforeNarrowing = effectiveTools.length;
-          effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
-          if (effectiveTools.length !== beforeNarrowing) {
-            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          let materializedPlugins = server.agentState.pluginRuntimeManager.getAllTools();
+          if (activePersona) {
+            materializedPlugins = filterMcpToolsForPersona(materializedPlugins, activePersona);
+          }
+          materializedPlugins = filterAvailableTools(materializedPlugins);
+          if (materializedPlugins.length > 0) {
+            const present = new Set(effectiveTools.map(t => t.name));
+            const additions = materializedPlugins.filter(t => !present.has(t.name));
+            for (const candidate of additions) externalToolNames.add(candidate.name);
+            effectiveTools = [...effectiveTools, ...additions];
           }
         }
-        const pluginTools = hasCustomRunner
-          ? undefined
-          : filterPluginToolsForConversationalTurn(
-            server.agentState.pluginRuntimeManager,
-            agentMessage,
-            autonomyLevel,
-            (count) => log.info(`[chat] conversational turn: withheld ${count} deferred plugin tools until explicitly requested`),
-          );
 
         // Track tool execution times for duration reporting
         const toolStartTimes = new Map<string, number>();
         let toolStartCounter = 0;
-
-        // Build capability router for intelligent tool-not-found handling
-        const capabilityRouter = hasCustomRunner ? undefined : new CapabilityRouter({
-          toolNames: effectiveTools.map(t => t.name),
-          skills: server.agentState.skills,
-          plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
-            name: p.getManifest().name,
-            description: p.getManifest().description ?? '',
-            skills: p.getContributedSkills(),
-          })),
-          mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
-          subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
-          mcpRuntime: server.agentState.mcpRuntime,
-        });
 
         // B1-B7: If this is a rerouted slash command, replace the last user message
         // with the enriched agent prompt so the LLM gets better instructions
@@ -1684,6 +1675,23 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           } catch { /* governance not available — allow all */ }
         }
 
+        if (!hasCustomRunner) {
+          // Remove governance-blocked definitions before serialization, while
+          // retaining the executor's deny check as defense in depth.
+          const blockedTools = new Set(governancePolicies?.blockedTools ?? []);
+          if (blockedTools.size > 0) {
+            effectiveTools = effectiveTools.filter(tool => !blockedTools.has(tool.name));
+            spawnAvailableTools = spawnAvailableTools.filter(tool => !blockedTools.has(tool.name));
+          }
+          spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
+
+          const beforeNarrowing = effectiveTools.length;
+          effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
+          if (effectiveTools.length !== beforeNarrowing) {
+            log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
+          }
+        }
+
         // Bind collaboration producers to THIS request's workspace, session,
         // security policy, and runner. Static startup tools are replaced only
         // when their names survived persona/availability/intent filtering.
@@ -1706,6 +1714,42 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // Iteration budget — prevents runaway agent loops
+        if (!hasCustomRunner) {
+          const sequenceHistory = sessionToolSequences.get(sessionId);
+          const previousToolSequence = sequenceHistory?.[sequenceHistory.length - 1] ?? [];
+          const recentMessages = history
+            .slice(0, -1)
+            .filter(entry => entry.role === 'user' || entry.role === 'assistant')
+            .slice(-4)
+            .map(entry => ({ role: entry.role, content: entry.content }));
+          const selection = selectToolsForTurn(effectiveTools, {
+            message: agentMessage,
+            recentMessages,
+            recentToolNames: previousToolSequence,
+            preferredToolNames: activePersona?.tools ?? [],
+            mandatoryToolNames: isExplicitGatedToolRequest(agentMessage) && !activePersona?.isReadOnly
+              ? ['search_skills', 'create_skill']
+              : [],
+            externalToolNames: [...externalToolNames],
+          });
+          effectiveTools = selection.tools;
+          log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
+        }
+
+        // Build routing suggestions from the exact executable/serialized set.
+        const capabilityRouter = hasCustomRunner ? undefined : new CapabilityRouter({
+          toolNames: effectiveTools.map(t => t.name),
+          skills: server.agentState.skills,
+          plugins: server.agentState.pluginRuntimeManager.getActive().map(p => ({
+            name: p.getManifest().name,
+            description: p.getManifest().description ?? '',
+            skills: p.getContributedSkills(),
+          })),
+          mcpServers: Object.keys(server.agentState.mcpRuntime.getServerStates()),
+          subAgentRoles: ['researcher', 'writer', 'coder', 'analyst', 'reviewer', 'planner'],
+          mcpRuntime: server.agentState.mcpRuntime,
+        });
+
         const iterBudget = new IterationBudget({
           maxIterations: 90,
           freeToolCalls: ['execute_code'],
@@ -1724,7 +1768,6 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           hooks: requestHookRegistry,
           capabilityRouter,
           governancePolicies,
-          pluginTools,
           signal: abortController.signal,
           turnId, // H-AUDIT-1: propagate trace ID into the loop
 
