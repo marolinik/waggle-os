@@ -75,7 +75,7 @@ vi.mock('@waggle/agent', async (importOriginal) => {
 
 import { buildLocalServer } from '../src/local/index.js';
 import { injectWithAuth } from './test-utils.js';
-import { launchTool, runHookCommand } from '@waggle/agent';
+import { detectInstalledTools, launchTool, runHookCommand } from '@waggle/agent';
 import { loopbackSidecarUrl } from '../src/local/routes/tools.js';
 
 function createTmpDir(prefix: string): string {
@@ -231,6 +231,36 @@ describe('POST /api/tools/launch', () => {
     expect(launchTool).toHaveBeenLastCalledWith(
       expect.objectContaining({ installedPath: '/server-detected/claude-code' }),
     );
+  });
+
+  it('rejects a dynamically blocked executable before creating a run or process', async () => {
+    vi.mocked(launchTool).mockClear();
+    const runCountBefore = server.agentRunRegistry.snapshot().runs.length;
+    vi.mocked(detectInstalledTools).mockResolvedValueOnce({
+      platform: 'win32',
+      detectedAt: new Date().toISOString(),
+      tools: [{
+        id: 'codex', displayName: 'Codex CLI', installed: true,
+        installedPath: 'C:\\Program Files\\WindowsApps\\OpenAI.Codex\\resources\\codex.exe',
+        version: null, hooksInstalled: false, hookPointerPath: null,
+        launchable: false, diagnostic: 'The Store resource CLI cannot launch outside its package.',
+      }],
+    });
+
+    const response = await injectWithAuth(server, {
+      method: 'POST', url: '/api/tools/launch',
+      headers: { 'content-type': 'application/json' },
+      payload: { id: 'codex', workspaceId },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      error: 'tool_not_launchable',
+      toolId: 'codex',
+      message: 'The Store resource CLI cannot launch outside its package.',
+    });
+    expect(launchTool).not.toHaveBeenCalled();
+    expect(server.agentRunRegistry.snapshot().runs).toHaveLength(runCountBefore);
   });
 
   it('rejects unknown tool id', async () => {

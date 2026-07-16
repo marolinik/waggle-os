@@ -171,6 +171,13 @@ export const externalToolRunRoutes: FastifyPluginAsync = async (server) => {
           message: `${manifest.displayName} was not found.`,
         });
       }
+      if (tool.launchable === false) {
+        return reply.code(409).send({
+          error: 'tool_not_launchable', toolId: input.toolId,
+          message: tool.diagnostic
+            ?? `${manifest.displayName} was found but cannot be launched safely.`,
+        });
+      }
       const workspaceIds = [...new Set(input.workspaceIds)];
       for (const workspaceId of workspaceIds) {
         const key = `${manifest.id}\0${workspaceId}`;
