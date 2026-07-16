@@ -290,7 +290,9 @@ describe('deterministic 100-point persona scorer', () => {
       '### Decision Table: SQLite-Vector vs. PostgreSQL with pgvector',
       '| Feature/Criterion | SQLite-Vector (https://github.com/sqliteai/sqlite-vector) | PostgreSQL + pgvector (https://github.com/pgvector/pgvector) |',
       '|---|---|---|',
-      '| Deployment | Embedded. **Fact**. **Inference**: removes a desktop service boundary. | Client/server. **Fact**. |',
+      '| Deployment | Embedded. | Client/server. |',
+      '**Facts supporting this recommendation:** Embedded deployment avoids a separate database service.',
+      '**Inference supporting this recommendation:** This likely reduces desktop operational overhead.',
       '## Recommendation',
       'Use SQLite vector search for this stated use case, subject to measuring the real corpus.',
     ].join('\n');
