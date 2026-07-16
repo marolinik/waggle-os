@@ -417,6 +417,48 @@ describe('Anthropic Proxy Routes', () => {
       expect(JSON.parse(String(init?.body)).model).toBe('gemini-3.5-flash');
     });
 
+    it('falls back from a stale Gemini alias to a working Google alias', async () => {
+      const priorGemini = process.env.GEMINI_API_KEY;
+      const priorGoogle = process.env.GOOGLE_API_KEY;
+      process.env.GEMINI_API_KEY = 'stale-gemini-key';
+      process.env.GOOGLE_API_KEY = 'working-google-key';
+      try {
+        server = createTestServer({ vaultProviders: {} });
+        globalThis.fetch = vi.fn(async (_url, init) => {
+          const authorization = (init?.headers as Record<string, string>).Authorization;
+          if (authorization === 'Bearer stale-gemini-key') {
+            return new Response(JSON.stringify({
+              error: { message: 'Please pass a valid API key.' },
+            }), { status: 400, headers: { 'content-type': 'application/json' } });
+          }
+          return new Response(JSON.stringify({
+            choices: [{ message: { role: 'assistant', content: 'fallback works' }, finish_reason: 'stop' }],
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }) as unknown as typeof globalThis.fetch;
+
+        const res = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model: 'google/gemini-2.5-flash',
+            messages: [{ role: 'user', content: 'test' }],
+            stream: false,
+          },
+        });
+
+        expect(res.statusCode).toBe(200);
+        expect(res.json().choices[0].message.content).toBe('fallback works');
+        expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledTimes(2);
+        expect(process.env.GEMINI_API_KEY).toBe('working-google-key');
+        expect(process.env.GOOGLE_API_KEY).toBe('working-google-key');
+      } finally {
+        if (priorGemini === undefined) delete process.env.GEMINI_API_KEY;
+        else process.env.GEMINI_API_KEY = priorGemini;
+        if (priorGoogle === undefined) delete process.env.GOOGLE_API_KEY;
+        else process.env.GOOGLE_API_KEY = priorGoogle;
+      }
+    });
+
     it('passes through provider SSE without buffering it into JSON', async () => {
       server = createTestServer({
         vaultProviders: { deepseek: { value: 'deepseek-vault-key' } },

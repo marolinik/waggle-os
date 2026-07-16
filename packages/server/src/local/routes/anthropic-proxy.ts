@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyPluginAsync, FastifyInstance, FastifyReply } from 'fastify';
 import { validateOrigin } from '../cors-config.js';
-import { getProviderApiKey } from '../provider-env.js';
+import { applyProviderKeyToEnv, getProviderApiKeys } from '../provider-env.js';
 import { PROVIDER_MODEL_CATALOGS } from '../provider-model-catalog.js';
 
 interface OpenAIMessage {
@@ -117,8 +117,8 @@ async function forwardCompatibleProvider(
   origin: string | undefined,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const apiKey = getProviderApiKey(route.providerId, server.vault);
-  if (!apiKey) {
+  const apiKeys = getProviderApiKeys(route.providerId, server.vault);
+  if (apiKeys.length === 0) {
     return reply.status(500).send({
       error: {
         message: `No ${route.providerId} API key configured. Add one in Settings > API Keys.`,
@@ -127,23 +127,63 @@ async function forwardCompatibleProvider(
   }
 
   const url = completionEndpoint(directProviderBaseUrl(server, route.providerId));
-  let upstream: Response;
-  try {
-    upstream = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-        ...(body.stream ? { Accept: 'text/event-stream' } : {}),
-      },
-      body: JSON.stringify({ ...body, model: route.model }),
-    });
-  } catch (error) {
+  let upstream: Response | null = null;
+  let credentialRejected = false;
+  for (let index = 0; index < apiKeys.length; index += 1) {
+    const apiKey = apiKeys[index];
+    try {
+      upstream = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+          ...(body.stream ? { Accept: 'text/event-stream' } : {}),
+        },
+        body: JSON.stringify({ ...body, model: route.model }),
+      });
+    } catch (error) {
+      return reply.status(502).send({
+        error: {
+          message: `${route.providerId} API request failed: ${error instanceof Error ? error.message : String(error)}`,
+        },
+      });
+    }
+
+    credentialRejected = upstream.status === 401 || upstream.status === 403;
+    if (!credentialRejected && upstream.status === 400) {
+      const detail = await upstream.clone().text().catch(() => '');
+      credentialRejected = /please pass a valid api key|api key (?:is )?(?:invalid|not valid|expired)/i.test(detail);
+    }
+    if (!credentialRejected) {
+      applyProviderKeyToEnv(route.providerId, apiKey, true);
+      if (server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+        server.agentState.llmProvider = {
+          provider: 'anthropic-proxy',
+          health: 'healthy',
+          detail: `Built-in provider proxy (${route.providerId} credential verified)`,
+          checkedAt: new Date().toISOString(),
+        };
+      }
+      break;
+    }
+    if (index < apiKeys.length - 1) {
+      await upstream.body?.cancel().catch(() => undefined);
+      upstream = null;
+    }
+  }
+
+  if (!upstream) {
     return reply.status(502).send({
-      error: {
-        message: `${route.providerId} API request failed: ${error instanceof Error ? error.message : String(error)}`,
-      },
+      error: { message: `${route.providerId} rejected every configured API key.` },
     });
+  }
+  if (credentialRejected && server.agentState?.llmProvider?.provider === 'anthropic-proxy') {
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: `Built-in provider proxy (${route.providerId} API key invalid or expired)`,
+      checkedAt: new Date().toISOString(),
+    };
   }
 
   const contentType = upstream.headers.get('content-type')

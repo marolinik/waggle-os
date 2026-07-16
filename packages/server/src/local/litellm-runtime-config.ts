@@ -8,7 +8,7 @@ import {
   type DiscoveryOptions,
   type DiscoveredProviderModel,
 } from './provider-model-catalog.js';
-import { applyProviderKeyToEnv, getProviderApiKey } from './provider-env.js';
+import { applyProviderKeyToEnv, getProviderApiKeys } from './provider-env.js';
 import { startLiteLLM, stopLiteLLM } from './lifecycle.js';
 
 interface LiteLLMProviderRoute {
@@ -117,17 +117,20 @@ export async function prepareLiteLLMRuntimeConfig(
 
   await Promise.all(Object.keys(PROVIDER_MODEL_CATALOGS).map(async (providerId) => {
     const entry = vault.get(providerId);
-    const apiKey = getProviderApiKey(providerId, vault);
-    if (!apiKey) return;
-    // Keep aliases such as GEMINI_API_KEY / GOOGLE_API_KEY aligned so the
-    // generated config's canonical env reference always resolves. Overwrite:
-    // getProviderApiKey resolves vault-first, and a stale machine-level env
-    // var (which node --env-file never overrides) would otherwise poison the
-    // child's os.environ/* key references while discovery used the vault key.
-    applyProviderKeyToEnv(providerId, apiKey, true);
+    const apiKeys = getProviderApiKeys(providerId, vault);
+    if (apiKeys.length === 0) return;
     const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
     if (baseUrl) customBaseUrls.set(providerId, baseUrl);
-    const result = await discoverProviderModels(providerId, apiKey, baseUrl, discoveryOptions);
+    let result = await discoverProviderModels(providerId, apiKeys[0], baseUrl, discoveryOptions);
+    let workingKey = result.status === 'unavailable' ? null : apiKeys[0];
+    for (let index = 1; !workingKey && index < apiKeys.length; index += 1) {
+      result = await discoverProviderModels(providerId, apiKeys[index], baseUrl, discoveryOptions);
+      if (result.status !== 'unavailable') workingKey = apiKeys[index];
+    }
+    // Keep aliases such as GEMINI_API_KEY / GOOGLE_API_KEY aligned to the key
+    // that actually passed provider discovery. Otherwise a stale machine-level
+    // alias can poison LiteLLM even though another configured alias is valid.
+    if (workingKey) applyProviderKeyToEnv(providerId, workingKey, true);
     if (result.models.length > 0) catalogs.set(providerId, result.models);
     if (result.status === 'unavailable') unavailableProviders.push(providerId);
   }));

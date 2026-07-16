@@ -32,12 +32,29 @@ export function applyProviderKeyToEnv(
   return updated;
 }
 
-export function getProviderApiKey(providerId: string, vault: VaultStore): string | undefined {
-  const vaultKey = vault.get(providerId)?.value;
-  if (vaultKey) return vaultKey;
-  return PROVIDER_ENV_NAMES[providerId]
-    ?.map((envName) => process.env[envName])
-    .find((value): value is string => Boolean(value));
+export function getProviderApiKeys(
+  providerId: string,
+  vault: VaultStore | null | undefined,
+): string[] {
+  const candidates: string[] = [];
+  try {
+    const vaultKey = vault?.get(providerId)?.value;
+    if (vaultKey) candidates.push(vaultKey);
+  } catch {
+    // A locked/unavailable vault must not hide explicit process credentials.
+  }
+  for (const envName of PROVIDER_ENV_NAMES[providerId] ?? []) {
+    const value = process.env[envName];
+    if (value) candidates.push(value);
+  }
+  return [...new Set(candidates)];
+}
+
+export function getProviderApiKey(
+  providerId: string,
+  vault: VaultStore | null | undefined,
+): string | undefined {
+  return getProviderApiKeys(providerId, vault)[0];
 }
 
 /** Hydrate provider SDK/LiteLLM env before a child process snapshots it. */
