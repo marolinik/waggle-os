@@ -163,6 +163,11 @@ describe('install (openclaw)', () => {
     expect(hookMd).toContain('session:compact:before');
   });
 
+  // Spawns two child Node processes (esbuild bundle of the handler + import of
+  // the produced bundle). Standalone this takes <1s, but full-suite runs
+  // saturate the CPU (forks pool, 4 workers) and the spawns can exceed vitest's
+  // 30s default testTimeout (observed 2026-07-15 full-suite flake,
+  // standalone-green). 60s per-test timeout, same class as f322cc2c.
   it('copies a self-contained handler that imports and runs with NODE_PATH empty', async () => {
     env = await bootstrap(undefined);
     const buildScript = fileURLToPath(new URL('../scripts/build-handler.mjs', import.meta.url));
@@ -188,7 +193,7 @@ describe('install (openclaw)', () => {
       env: { ...process.env, NODE_PATH: '' },
       stdio: 'pipe',
     });
-  });
+  }, 60_000);
 
   // ── pointer + lifecycles + cli-path ───────────────────────────────────
 
