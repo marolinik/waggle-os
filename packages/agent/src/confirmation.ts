@@ -15,6 +15,7 @@ import { deriveApprovalClass } from './trust-model.js';
 // Phase B.3 will add persistent "always allow" grants per pair.
 const ALWAYS_CONFIRM = new Set([
   'write_file', 'edit_file', 'generate_docx',
+  'run_code',
   'git_commit', 'git_push', 'git_pr', 'git_merge',
   'install_capability',
   // D4(i) skill-write governance: create_skill gates at normal (auto-passes at
@@ -30,12 +31,8 @@ const CONNECTOR_WRITE_PATTERNS = /_(create|update|delete|send|post|transition|re
 
 // Bash command patterns that are safe (read-only / informational)
 const SAFE_BASH_PATTERNS = [
-  /^(date|whoami|hostname|pwd|echo|printenv|env|uname|id|uptime)\b/,
-  /^(ls|dir|cat|head|tail|wc|find|which|where|type)\b/,
-  /^(git\s+(status|log|diff|branch|remote|show|tag))\b/,
-  /^(node|python|python3|npm|npx|pip)\s+--version/,
-  /^(curl|wget)\s+.*--head/,
-  /^(df|du|free|top|ps|netstat|lsof)\b/,
+  /^(date|whoami|hostname|pwd|uname|id|uptime)$/i,
+  /^(node|python|python3|npm|npx|pip|git)\s+--version$/i,
 ];
 
 // Bash command patterns that are destructive (always confirm)
@@ -245,13 +242,14 @@ const CRITICAL_NEVER_AUTOPASS: RegExp[] = [
 export function isCriticalNeverAutopass(toolName: string, args?: Record<string, unknown>): boolean {
   // D4(i): deleting a skill is destructive — always ask, every autonomy level.
   if (toolName === 'delete_skill') return true;
+  if (toolName === 'run_code') return true;
   // Irreversible connector deletes (delete_record, delete_repository, …) are
   // terminal — never auto-pass and never a one-click L2 held action.
   if (toolName.startsWith('connector_') && /_(delete|remove|destroy|purge|drop)(_|$)/.test(toolName)) return true;
   if (toolName === 'bash') {
     const command = String(args?.command ?? '').trim();
-    for (const pat of CRITICAL_NEVER_AUTOPASS) {
-      if (pat.test(command)) return true;
+    for (const pattern of CRITICAL_NEVER_AUTOPASS) {
+      if (pattern.test(command)) return true;
     }
   }
   if (toolName === 'install_capability') {
@@ -288,17 +286,16 @@ export function needsConfirmationWithAutonomy(
   if (!baseGates) return false; // never gated anyway
 
   if (level === 'normal') return true;
+  if (toolName === 'bash' || toolName === 'run_code') return true;
 
   // Critical blacklist overrides everything — never auto-pass at any level.
   if (isCriticalNeverAutopass(toolName, args ?? {})) return true;
 
   if (level === 'yolo') return false;
 
-  // Trusted: pass the Trusted-specific set + bash (already filtered above),
-  // gate everything else.
+  // Trusted: pass the Trusted-specific set and gate everything else.
   if (level === 'trusted') {
     if (TRUSTED_AUTOPASS.has(toolName)) return false;
-    if (toolName === 'bash') return false; // passed the blacklist check
     return true; // git push, install, connector writes, cross-workspace writes still gate
   }
 

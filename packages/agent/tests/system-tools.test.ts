@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createSystemTools } from '../src/system-tools.js';
+import { createSanitizedEnv, createSystemTools } from '../src/system-tools.js';
 import type { ToolDefinition } from '../src/tools.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -88,6 +88,24 @@ describe('createSystemTools', () => {
       const result = await readFile.execute({ path: '../../etc/passwd' });
       expect(result.toLowerCase()).toContain('outside');
     });
+
+    it('rejects absolute sibling-prefix and junction escapes', async () => {
+      const outside = `${workspace}-outside`;
+      const junction = path.join(workspace, 'junction-out');
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'secret.txt'), 'must-not-read');
+      try {
+        const readFile = getTool('read_file');
+        const siblingResult = await readFile.execute({ path: path.join(outside, 'secret.txt') });
+        expect(siblingResult.toLowerCase()).toContain('outside');
+
+        fs.symlinkSync(outside, junction, process.platform === 'win32' ? 'junction' : 'dir');
+        const junctionResult = await readFile.execute({ path: 'junction-out/secret.txt' });
+        expect(junctionResult.toLowerCase()).toContain('outside');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('write_file', () => {
@@ -105,6 +123,12 @@ describe('createSystemTools', () => {
 
       const written = fs.readFileSync(path.join(workspace, 'a', 'b', 'c', 'deep.txt'), 'utf-8');
       expect(written).toBe('deep content');
+    });
+
+    it.runIf(process.platform === 'win32')('rejects NTFS alternate data streams', async () => {
+      const writeFile = getTool('write_file');
+      const result = await writeFile.execute({ path: 'safe.txt:secret', content: 'hidden' });
+      expect(result.toLowerCase()).toContain('alternate data');
     });
   });
 
@@ -176,6 +200,24 @@ describe('createSystemTools', () => {
       expect(result).toContain('app.ts');
       expect(result).not.toContain('node_modules');
     });
+
+    it('rejects absolute and parent-traversing glob patterns', async () => {
+      const outside = `${workspace}-glob-outside`;
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'secret.txt'), 'glob-secret');
+      try {
+        const searchFiles = getTool('search_files');
+        const absolute = await searchFiles.execute({ pattern: path.join(outside, '*.txt') });
+        expect(absolute.toLowerCase()).toContain('relative');
+
+        const traversal = await searchFiles.execute({
+          pattern: `../${path.basename(outside)}/*.txt`,
+        });
+        expect(traversal.toLowerCase()).toContain('outside');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('search_content', () => {
@@ -198,5 +240,78 @@ describe('createSystemTools', () => {
       expect(result).toContain('code.ts');
       expect(result).toContain('const foo = 123');
     });
+
+    it('rejects parent-traversing content globs', async () => {
+      const outside = `${workspace}-content-outside`;
+      fs.mkdirSync(outside, { recursive: true });
+      fs.writeFileSync(path.join(outside, 'secret.txt'), 'content-secret');
+      try {
+        const searchContent = getTool('search_content');
+        const result = await searchContent.execute({
+          pattern: 'content-secret',
+          glob: `../${path.basename(outside)}/*.txt`,
+        });
+        expect(result.toLowerCase()).toContain('outside');
+        expect(result).not.toContain('content-secret');
+      } finally {
+        fs.rmSync(outside, { recursive: true, force: true });
+      }
+    });
+  });
+
+  describe('run_code', () => {
+    it('preserves JavaScript quotes and shell metacharacters without invoking a shell', async () => {
+      const expected = 'quote:" amp:& pipe:| percent:% caret:^';
+      const runCode = getTool('run_code');
+      const result = await runCode.execute({
+        language: 'javascript',
+        code: `console.log(${JSON.stringify(expected)})`,
+      });
+      expect(result).toContain(expected);
+    });
+
+    it('uses an allowlisted child environment and strips provider and infrastructure secrets', async () => {
+      const secrets = {
+        GEMINI_API_KEY: 'gemini-sentinel',
+        GOOGLE_API_KEY: 'google-sentinel',
+        XAI_API_KEY: 'xai-sentinel',
+        DEEPSEEK_API_KEY: 'deepseek-sentinel',
+        STRIPE_SECRET_KEY: 'stripe-sentinel',
+        AWS_SECRET_ACCESS_KEY: 'aws-sentinel',
+        GITHUB_TOKEN: 'github-sentinel',
+      };
+      const originals = Object.fromEntries(
+        Object.keys(secrets).map((key) => [key, process.env[key]]),
+      );
+      Object.assign(process.env, secrets);
+      try {
+        const sanitized = createSanitizedEnv();
+        for (const key of Object.keys(secrets)) expect(sanitized[key]).toBeUndefined();
+        expect(sanitized.PATH ?? sanitized.Path).toBeDefined();
+
+        const runCode = getTool('run_code');
+        const result = await runCode.execute({
+          language: 'javascript',
+          code: `console.log(JSON.stringify(${JSON.stringify(Object.keys(secrets))}.map((key) => process.env[key] ?? null)))`,
+        });
+        for (const sentinel of Object.values(secrets)) expect(result).not.toContain(sentinel);
+      } finally {
+        for (const [key, value] of Object.entries(originals)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    });
+
+    it.runIf(process.platform === 'win32')('kills descendant processes when execution times out', async () => {
+      const marker = path.join(workspace, 'orphan-marker.txt');
+      const childCode = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1500)`;
+      const code = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' }); setTimeout(() => {}, 30000)`;
+      const runCode = getTool('run_code');
+      const result = await runCode.execute({ language: 'javascript', code, timeout: 1000 });
+      expect(result.toLowerCase()).toContain('timed out');
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      expect(fs.existsSync(marker)).toBe(false);
+    }, 10_000);
   });
 });

@@ -9,7 +9,7 @@ import { dedupTextResults, truncateToTokenBudget } from './tool-output-compresso
 import { safeFetch, allowLocalFromEnv, EgressBlockedError } from './url-egress-guard.js';
 import {
   IMAGE_EXTENSIONS, DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
-  checkDeniedBinaries, createSanitizedEnv, truncateOutput, resolveSafe,
+  checkDeniedBinaries, createSanitizedEnv, terminateProcessTree, truncateOutput, resolveSafe,
 } from './system-tools-helpers.js';
 
 /**
@@ -115,6 +115,13 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     return '/' + parts.join('/');
   };
 
+  const validateWorkspaceGlob = (pattern: string): string => {
+    if (typeof pattern !== 'string' || !pattern) throw new Error('Invalid glob pattern');
+    if (path.isAbsolute(pattern)) throw new Error('Glob pattern must be relative to the workspace');
+    resolveSafe(workspace, pattern);
+    return pattern;
+  };
+
   return [
     // 1. bash — Execute shell commands
     {
@@ -152,6 +159,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             cwd: workspace,
             maxBuffer: 10 * 1024 * 1024,
             env: sanitizedEnv,
+            windowsHide: true,
           });
 
           const task: BackgroundTask = {
@@ -188,22 +196,20 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           return `Background task started. Task ID: ${taskId}`;
         }
 
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), timeout);
-
         return new Promise<string>((resolve) => {
-          execFile(shell, shellArgs, {
+          let timedOut = false;
+          const child = execFile(shell, shellArgs, {
             cwd: workspace,
             maxBuffer: MAX_OUTPUT_SIZE,
-            signal: ac.signal,
             env: sanitizedEnv,
+            windowsHide: true,
           }, (error, stdout, stderr) => {
             clearTimeout(timer);
+            if (timedOut) {
+              resolve(`Error: Command timeout after ${timeout}ms`);
+              return;
+            }
             if (error) {
-              if (error.code === 'ABORT_ERR') {
-                resolve(`Error: Command timeout after ${timeout}ms`);
-                return;
-              }
               // Return stderr + stdout on non-zero exit (truncated)
               const output = truncateOutput((stderr || '') + (stdout || ''));
               resolve(output || `Error: ${error.message}`);
@@ -211,6 +217,10 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             }
             resolve(truncateOutput(stdout));
           });
+          const timer = setTimeout(() => {
+            timedOut = true;
+            terminateProcessTree(child);
+          }, timeout);
         });
       },
     },
@@ -420,11 +430,13 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
       },
       execute: async (args) => {
         try {
-          const matches = await glob(args.pattern as string, {
+          const pattern = validateWorkspaceGlob(args.pattern as string);
+          const matches = await glob(pattern, {
             cwd: workspace,
             ignore: ['node_modules/**', '.git/**'],
             nodir: true,
           });
+          for (const match of matches) resolveSafe(workspace, match);
           if (matches.length === 0) return 'No files found.';
           // A3: Cap file list to prevent token overflow
           const MAX_FILE_RESULTS = 200;
@@ -472,21 +484,27 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           // If file_type is specified, override glob with extension-specific pattern
           if (fileType) {
+            if (!/^[a-zA-Z0-9][a-zA-Z0-9.+-]*$/.test(fileType)) {
+              throw new Error('Invalid file_type extension');
+            }
             filePattern = `**/*.${fileType}`;
           }
+
+          validateWorkspaceGlob(filePattern);
 
           const files = await glob(filePattern, {
             cwd: workspace,
             ignore: ['node_modules/**', '.git/**'],
             nodir: true,
           });
+          for (const file of files) resolveSafe(workspace, file);
 
           if (outputMode === 'files') {
             // Return only file paths that contain matches
             const matchingFiles: string[] = [];
             for (const file of files) {
               if (maxResults !== undefined && matchingFiles.length >= maxResults) break;
-              const absPath = path.join(workspace, file);
+              const absPath = resolveSafe(workspace, file);
               try {
                 const content = fs.readFileSync(absPath, 'utf-8');
                 if (regex.test(content)) {
@@ -504,7 +522,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             // Return file paths with match counts
             const counts: string[] = [];
             for (const file of files) {
-              const absPath = path.join(workspace, file);
+              const absPath = resolveSafe(workspace, file);
               try {
                 const content = fs.readFileSync(absPath, 'utf-8');
                 const lines = content.split('\n');
@@ -530,7 +548,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
           for (const file of files) {
             if (maxResults !== undefined && totalResults >= maxResults) break;
-            const absPath = path.join(workspace, file);
+            const absPath = resolveSafe(workspace, file);
             try {
               const content = fs.readFileSync(absPath, 'utf-8');
               const lines = content.split('\n');
@@ -899,7 +917,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
     // 11. run_code — Execute code in a sandboxed environment
     {
       name: 'run_code',
-      description: 'Execute a code snippet in a sandboxed environment. Supports JavaScript/TypeScript and Python (if installed).',
+      description: 'Execute a code snippet in an approved local child process with a minimal environment. This is not an OS sandbox. Supports JavaScript/TypeScript and Python (if installed).',
       offlineCapable: true,
       parameters: {
         type: 'object',
@@ -916,45 +934,40 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         const rawTimeout = (args.timeout as number) ?? 10_000;
         const timeout = Math.min(Math.max(rawTimeout, 1000), 30_000);
 
-        // Build the command depending on language
-        let shell: string;
-        let shellArgs: string[];
-        const isWindows = process.platform === 'win32';
+        let executable: string;
+        let runtimeArgs: string[];
 
         if (language === 'javascript' || language === 'typescript') {
-          // Use node -e for both JS and TS (TS runs as JS via node — for full TS, tsx would be needed)
-          shell = isWindows ? 'cmd.exe' : '/bin/sh';
-          const nodeCmd = `node -e ${JSON.stringify(code)}`;
-          shellArgs = isWindows ? ['/c', nodeCmd] : ['-c', nodeCmd];
+          executable = process.execPath;
+          runtimeArgs = language === 'typescript'
+            ? ['--experimental-strip-types', '-e', code]
+            : ['-e', code];
         } else if (language === 'python') {
-          shell = isWindows ? 'cmd.exe' : '/bin/sh';
-          // Try python3 first on Unix, python on Windows
-          const pythonBin = isWindows ? 'python' : 'python3';
-          const pyCmd = `${pythonBin} -c ${JSON.stringify(code)}`;
-          shellArgs = isWindows ? ['/c', pyCmd] : ['-c', pyCmd];
+          executable = process.platform === 'win32' ? 'python' : 'python3';
+          runtimeArgs = ['-c', code];
         } else {
           return `Error: Unsupported language "${language}". Supported: javascript, typescript, python.`;
         }
 
         const sanitizedEnv = createSanitizedEnv();
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), timeout);
 
         return new Promise<string>((resolve) => {
-          execFile(shell, shellArgs, {
+          let timedOut = false;
+          const child = execFile(executable, runtimeArgs, {
             cwd: workspace,
             maxBuffer: MAX_OUTPUT_SIZE,
-            signal: ac.signal,
             env: sanitizedEnv,
+            windowsHide: true,
           }, (error, stdout, stderr) => {
             clearTimeout(timer);
             const parts: string[] = [];
 
+            if (timedOut) {
+              resolve(`Error: Code execution timed out after ${timeout}ms`);
+              return;
+            }
+
             if (error) {
-              if (error.code === 'ABORT_ERR') {
-                resolve(`Error: Code execution timed out after ${timeout}ms`);
-                return;
-              }
               // Check for runtime not found
               if (error.code === 'ENOENT' || (error.message && error.message.includes('not found'))) {
                 resolve(`Error: ${language} runtime not found. Please ensure ${language === 'python' ? 'python3/python' : 'node'} is installed and on PATH.`);
@@ -975,6 +988,10 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
             }
             resolve(parts.join('\n'));
           });
+          const timer = setTimeout(() => {
+            timedOut = true;
+            terminateProcessTree(child);
+          }, timeout);
         });
       },
     },
@@ -1003,7 +1020,7 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           return `Task ${taskId} is already ${task.status}`;
         }
 
-        task.process.kill();
+        terminateProcessTree(task.process);
         task.status = 'killed';
         return `Task ${taskId} has been killed`;
       },
@@ -1017,6 +1034,6 @@ export { backgroundTasks, MAX_BACKGROUND_TASKS, STALE_TASK_THRESHOLD_MS };
 /** Re-export helpers so existing consumers keep working */
 export {
   DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
-  checkDeniedBinaries, createSanitizedEnv, truncateOutput,
+  checkDeniedBinaries, createSanitizedEnv, terminateProcessTree, truncateOutput,
   resolveSafe,
 } from './system-tools-helpers.js';
