@@ -422,6 +422,35 @@ function claudeDesktopCandidatePaths(deps: ResolvedDeps): string[] {
   ];
 }
 
+function hermesDesktopCandidatePaths(deps: ResolvedDeps): string[] {
+  if (deps.platform === 'win32') {
+    const localAppData = joinForPlatform(deps.platform, deps.home, 'AppData', 'Local');
+    return [
+      joinForPlatform(
+        deps.platform,
+        localAppData,
+        'hermes',
+        'hermes-agent',
+        'apps',
+        'desktop',
+        'release',
+        'win-unpacked',
+        'Hermes.exe',
+      ),
+      joinForPlatform(deps.platform, localAppData, 'Programs', 'Hermes', 'Hermes.exe'),
+      joinForPlatform(deps.platform, localAppData, 'Programs', 'hermes', 'Hermes.exe'),
+      'C:\\Program Files\\Hermes\\Hermes.exe',
+    ];
+  }
+  if (deps.platform === 'darwin') {
+    return ['/Applications/Hermes.app/Contents/MacOS/Hermes'];
+  }
+  return [
+    joinForPlatform(deps.platform, deps.home, '.local', 'share', 'Hermes', 'Hermes'),
+    '/opt/Hermes/Hermes',
+  ];
+}
+
 async function codexDesktopCandidatePaths(deps: ResolvedDeps): Promise<string[]> {
   if (deps.platform === 'win32') {
     const codexPath = await deps.pathFromEnv('codex');
@@ -496,6 +525,7 @@ const CANDIDATE_RESOLVERS: Record<string, (deps: ResolvedDeps) => string[] | Pro
   'cursor': cursorCandidatePaths,
   'claude-desktop': claudeDesktopCandidatePaths,
   'codex-desktop': codexDesktopCandidatePaths,
+  'hermes-desktop': hermesDesktopCandidatePaths,
 };
 
 function withManifestMetadata(tool: DetectedTool, manifest: ToolManifest): DetectedTool {

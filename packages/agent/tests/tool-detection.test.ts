@@ -324,10 +324,10 @@ describe('claude-desktop detector', () => {
   });
 });
 
-describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw — Phase 4)', () => {
+describe('extended-cohort detectors (Codex / Hermes / OpenClaw — Phase 4)', () => {
   // Default makeDeps reports nothing installed — the envelope is still
   // present per the stable-shape contract.
-  it.each<ToolId>(['codex', 'codex-desktop', 'hermes', 'openclaw'])(
+  it.each<ToolId>(['codex', 'codex-desktop', 'hermes', 'hermes-desktop', 'openclaw'])(
     'reports %s as not installed on a clean machine',
     async (id) => {
       const result = await detectInstalledTools(makeDeps());
@@ -469,6 +469,41 @@ describe('extended-cohort detectors (codex / codex-desktop / hermes / openclaw �
       launchable: false,
     });
     expect(tool?.diagnostic).toMatch(/hermes doctor|reinstall Hermes/i);
+  });
+
+  it('separates an installed Hermes Desktop from a broken Hermes CLI', async () => {
+    const cli = 'C:\\Users\\test\\AppData\\Local\\hermes\\bin\\hermes.cmd';
+    const desktop =
+      'C:\\Users\\test\\AppData\\Local\\hermes\\hermes-agent\\apps\\desktop\\release\\win-unpacked\\Hermes.exe';
+    const versionProbes: string[] = [];
+    const result = await detectInstalledTools(
+      makeDeps({
+        exists: async (p) => p === cli || p === desktop,
+        pathFromEnv: (name) => name === 'hermes' ? cli : null,
+        execVersion: async (binary) => {
+          versionProbes.push(binary);
+          return null;
+        },
+      }),
+    );
+
+    expect(result.tools.find((tool) => tool.id === 'hermes')).toMatchObject({
+      installed: true,
+      installedPath: cli,
+      version: null,
+      launchable: false,
+      capabilities: { headlessTask: true },
+    });
+    expect(result.tools.find((tool) => tool.id === 'hermes-desktop')).toMatchObject({
+      installed: true,
+      installedPath: desktop,
+      version: null,
+      launchable: true,
+      hookCapable: false,
+      capabilities: { interactiveLaunch: true, headlessTask: false },
+    });
+    expect(versionProbes).toContain(cli);
+    expect(versionProbes).not.toContain(desktop);
   });
 
   it('detects openclaw CLI when present on PATH', async () => {
