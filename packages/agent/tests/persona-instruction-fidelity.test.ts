@@ -45,6 +45,8 @@ describe('persona defaults yield without losing domain discipline', () => {
     const prompt = personaPrompt('researcher');
     expect(prompt).toMatch(/primary sources.*official/i);
     expect(prompt).toMatch(/requested source (?:class|constraints)/i);
+    expect(prompt).toMatch(/primary-source URL for each compared item/i);
+    expect(prompt).toMatch(/distinguish facts from inference.*label both explicitly/i);
     expect(prompt).not.toMatch(/always triangulate across at least 3 sources/i);
   });
 

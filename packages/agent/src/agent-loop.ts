@@ -312,6 +312,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let gateState = initialGateState();
   let toolRoundCount = 0;
   let synthesisForced = false;
+  let lastRequestInputTokens = 0;
 
   const forceSynthesis = (reason: 'tool-round-limit' | 'token-reserve' | 'token-limit'): void => {
     if (synthesisForced) return;
@@ -348,10 +349,13 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
     const usedBeforeRequest = totalInputTokens + totalOutputTokens;
     let requestMessages = compactToolContextForModel(messages, toolContextBudget);
-    const estimatedNextRequestTokens = Math.ceil((
-      JSON.stringify(requestMessages).length
-      + (!synthesisForced && openaiTools.length > 0 ? JSON.stringify(openaiTools).length : 0)
-    ) / 4);
+    const estimatedNextRequestTokens = Math.max(
+      lastRequestInputTokens,
+      Math.ceil((
+        JSON.stringify(requestMessages).length
+        + (!synthesisForced && openaiTools.length > 0 ? JSON.stringify(openaiTools).length : 0)
+      ) / 4),
+    );
     if (
       !synthesisForced
       && toolRoundCount > 0
@@ -480,6 +484,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     totalInputTokens += turnInputTokens;
     totalOutputTokens += turnOutputTokens;
+    lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
 
     // Legacy callers without a synthesis reserve retain the original hard-stop

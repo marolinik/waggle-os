@@ -53,10 +53,10 @@ describe('agent run budget policy', () => {
       selectedToolNames: ['web_search', 'web_fetch'],
     });
 
-    expect(policy.maxToolRounds).toBe(6);
-    expect(policy.maxTurns).toBe(7);
-    expect(policy.maxTokenBudget).toBe(52_000);
-    expect(policy.synthesisReserveTokens).toBe(24_000);
+    expect(policy.maxToolRounds).toBe(4);
+    expect(policy.maxTurns).toBe(5);
+    expect(policy.maxTokenBudget).toBe(56_000);
+    expect(policy.synthesisReserveTokens).toBe(13_000);
     expect(policy.toolContextBudget).toEqual({
       maxSingleResultChars: 3_000,
       recentResultCount: 1,
@@ -159,20 +159,20 @@ describe('bounded agent loop synthesis', () => {
 
     const result = await runAgentLoop(researchConfig(fetchFn, webFetch));
 
-    expect(webFetch.execute).toHaveBeenCalledTimes(3);
-    expect(fetchFn).toHaveBeenCalledTimes(4);
+    expect(webFetch.execute).toHaveBeenCalledTimes(4);
+    expect(fetchFn).toHaveBeenCalledTimes(5);
     expect(result.content).toBe('Synthesis grounded in the collected sources.');
     expect(result.usage.inputTokens).toBeLessThanOrEqual(60_000);
     const finalMessages = requestBodies.at(-1)!.messages as Array<{ role: string; content: string; tool_call_id?: string }>;
     const toolResults = finalMessages.filter(message => message.role === 'tool');
-    expect(toolResults).toHaveLength(3);
+    expect(toolResults).toHaveLength(4);
     expect(toolResults.every(message => message.content.length <= 3_000)).toBe(true);
     expect(toolResults.map(message => message.tool_call_id)).toEqual(
-      Array.from({ length: 3 }, (_, index) => `call_${index}`),
+      Array.from({ length: 4 }, (_, index) => `call_${index}`),
     );
   });
 
-  it('forces synthesis after six normal research rounds without a max-turn failure', async () => {
+  it('forces synthesis after four normal research rounds without a max-turn failure', async () => {
     let toolCall = 0;
     const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as { tools?: unknown[] };
@@ -210,8 +210,8 @@ describe('bounded agent loop synthesis', () => {
       maxTokenBudget: 1_000_000,
     });
 
-    expect(webFetch.execute).toHaveBeenCalledTimes(6);
-    expect(fetchFn).toHaveBeenCalledTimes(7);
+    expect(webFetch.execute).toHaveBeenCalledTimes(4);
+    expect(fetchFn).toHaveBeenCalledTimes(5);
     expect(result.content).toBe('Final evidence synthesis.');
     expect(result.content).not.toMatch(/max(?:imum)? tool turns/i);
   });
