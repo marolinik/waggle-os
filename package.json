@@ -85,13 +85,18 @@
     "@tailwindcss/vite": "^4.2.2",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-shell": "^2.3.5",
-    "@vitejs/plugin-react": "^6.0.1",
+    "@vitejs/plugin-react": "5.1.1",
     "stripe": "^21.0.1",
     "tailwind-merge": "^3.5.0"
   },
   "//optionalDependencies": "Platform-specific native binaries — optional so npm SKIPS them on os/cpu mismatch (Linux/macOS CI) instead of failing install with EBADPLATFORM. See docs/audits/2026-06-01-full-repo-verification-sweep.md.",
   "optionalDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.0.0-rc.13",
+    "@rollup/rollup-darwin-arm64": "4.60.4",
+    "@rollup/rollup-darwin-x64": "4.60.4",
+    "@rollup/rollup-linux-x64-gnu": "4.60.4",
+    "@rollup/rollup-linux-x64-musl": "4.60.4",
+    "@rollup/rollup-win32-x64-msvc": "4.60.4",
     "@swc/core-win32-x64-msvc": "^1.15.21",
     "lightningcss-win32-x64-msvc": "^1.32.0",
     "sqlite-vec-windows-x64": "^0.1.9"
