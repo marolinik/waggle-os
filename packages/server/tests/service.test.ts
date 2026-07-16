@@ -4,7 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { MindDB } from '@waggle/core';
 import { startService } from '../src/local/service.js';
-import { getLiteLLMStatus } from '../src/local/lifecycle.js';
+import { getLiteLLMStatus, selectLiteLLMPython } from '../src/local/lifecycle.js';
 import { PROVIDER_ENV_NAMES } from '../src/local/provider-env.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -146,7 +146,7 @@ describe('Agent Service', () => {
     expect(body.defaultModel).toBe('ollama/llama3.2:latest');
   });
 
-  it('reports the built-in provider proxy healthy with a non-Anthropic key and no LiteLLM', async () => {
+  it('reports the built-in provider proxy degraded until a configured key is verified', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);
     const port = randomPort();
@@ -168,13 +168,14 @@ describe('Agent Service', () => {
     const res = await server.inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
-      status: 'ok',
+      status: 'degraded',
       llm: {
         provider: 'anthropic-proxy',
-        health: 'healthy',
+        health: 'degraded',
       },
     });
     expect(server.agentState.llmProvider.detail).toContain('provider proxy');
+    expect(server.agentState.llmProvider.detail).toContain('verification pending');
     expect(server.localConfig.manageLiteLLM).toBe(false);
   });
 
@@ -195,6 +196,27 @@ describe('Agent Service', () => {
 });
 
 describe('LiteLLM Lifecycle', () => {
+  it('skips a Hermes venv without LiteLLM and selects the next working interpreter', () => {
+    const hermesPython = 'C:\\Users\\test\\hermes\\venv\\Scripts\\python.exe';
+    const systemPython = 'C:\\Python311\\python.exe';
+    const probed: string[] = [];
+
+    const selected = selectLiteLLMPython(
+      [hermesPython, systemPython],
+      (candidate) => {
+        probed.push(candidate);
+        return candidate === systemPython;
+      },
+    );
+
+    expect(selected).toBe(systemPython);
+    expect(probed).toEqual([hermesPython, systemPython]);
+  });
+
+  it('returns null when no discovered interpreter can import LiteLLM', () => {
+    expect(selectLiteLLMPython(['python-a', 'python-b'], () => false)).toBeNull();
+  });
+
   it('getLiteLLMStatus returns error when nothing is running', async () => {
     // Use a very unlikely port
     const status = await getLiteLLMStatus(59999);

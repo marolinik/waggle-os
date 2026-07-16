@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, openSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -47,6 +47,79 @@ export function getBundledPythonPath(): string | null {
   return null;
 }
 
+export function selectLiteLLMPython(
+  candidates: readonly string[],
+  supportsLiteLLM: (pythonBin: string) => boolean,
+): string | null {
+  const seen = new Set<string>();
+  for (const rawCandidate of candidates) {
+    const candidate = rawCandidate.trim();
+    if (!candidate) continue;
+    const key = process.platform === 'win32' ? candidate.toLowerCase() : candidate;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (supportsLiteLLM(candidate)) return candidate;
+  }
+  return null;
+}
+
+function discoverSystemPythonPaths(): string[] {
+  const command = process.platform === 'win32' ? 'where.exe' : 'which';
+  const args = process.platform === 'win32'
+    ? ['python']
+    : ['-a', 'python3', 'python'];
+  const fallback = process.platform === 'win32'
+    ? ['python']
+    : ['python3', 'python'];
+
+  try {
+    const result = spawnSync(command, args, {
+      encoding: 'utf-8',
+      timeout: 5_000,
+      windowsHide: true,
+    });
+    const output: string = result.stdout ?? '';
+    const discovered = output
+      .split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return discovered.length > 0 ? discovered : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function canImportLiteLLM(pythonBin: string): boolean {
+  const probeEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PYTHONDONTWRITEBYTECODE: '1',
+    PYTHONIOENCODING: 'utf-8',
+  };
+  delete probeEnv['DATABASE_URL'];
+  delete probeEnv['REDIS_URL'];
+
+  const result = spawnSync(
+    pythonBin,
+    ['-c', 'import litellm.proxy.proxy_cli'],
+    {
+      env: probeEnv,
+      stdio: 'ignore',
+      timeout: 10_000,
+      windowsHide: true,
+    },
+  );
+  return result.status === 0 && !result.error;
+}
+
+export function resolveLiteLLMPython(): string | null {
+  const bundledPython = getBundledPythonPath();
+  const candidates = [
+    ...(bundledPython ? [bundledPython] : []),
+    ...discoverSystemPythonPaths(),
+  ];
+  return selectLiteLLMPython(candidates, canImportLiteLLM);
+}
+
 async function checkHealth(port: number): Promise<boolean> {
   try {
     // /health/liveliness: unauthenticated process-liveness probe. The bare
@@ -74,7 +147,7 @@ export async function getLiteLLMStatus(port?: number): Promise<LiteLLMStatus> {
 /**
  * Start LiteLLM proxy. If already running, returns immediately.
  * Otherwise spawns `python -m litellm.proxy.proxy_cli --port {port}` and polls health.
- * Prefers the bundled Python from app resources; falls back to system PATH.
+ * Prefers a compatible bundled Python, then probes every Python on system PATH.
  */
 export async function startLiteLLM(port?: number, configPath?: string): Promise<LiteLLMStatus> {
   const p = port ?? DEFAULT_PORT;
@@ -84,8 +157,14 @@ export async function startLiteLLM(port?: number, configPath?: string): Promise<
     return { status: 'running', port: p };
   }
 
-  // Prefer bundled Python, fall back to system 'python'
-  const pythonBin = getBundledPythonPath() ?? 'python';
+  const pythonBin = resolveLiteLLMPython();
+  if (!pythonBin) {
+    return {
+      status: 'error',
+      port: p,
+      error: 'No Python interpreter with litellm.proxy.proxy_cli installed was found',
+    };
+  }
 
   // Spawn LiteLLM
   try {

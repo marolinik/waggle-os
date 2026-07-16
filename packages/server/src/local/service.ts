@@ -294,10 +294,10 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
 
     const configuredProviders = getConfiguredProviderIds(dataDir, server);
     if (configuredProviders.length > 0) {
-      providerHealth = 'healthy';
+      providerHealth = 'degraded';
       providerDetail = configuredProviders.length === 1 && configuredProviders[0] === 'anthropic'
-        ? 'Built-in Anthropic proxy (API key configured)'
-        : `Built-in provider proxy (${configuredProviders.join(', ')})`;
+        ? 'Built-in Anthropic proxy (API key configured; verification pending)'
+        : `Built-in provider proxy (credentials configured: ${configuredProviders.join(', ')}; verification pending)`;
     } else {
       const localModels = await listOllamaChatModelIds();
       if (localModels.length > 0) {
