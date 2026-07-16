@@ -352,16 +352,9 @@ describe('runHookCommand', () => {
     expect(result.error).toContain('exec failed');
   });
 
-  // R8-001: hook management is gated on HOOKS_COHORT — the claude-desktop
-  // hook package is still a binless stub (deferred MCP-bridge category), so
-  // routing npx at it always failed for the user. claude-code, codex,
-  // codex-desktop, cursor, hermes, and openclaw ship real bins (codex-desktop
-  // is a thin re-export of codex sharing ~/.codex/; cursor is a JSON installer
-  // with degraded events; hermes is a YAML installer with 3 events, no
-  // PreCompact; openclaw is a JSON5 + in-process-TS installer with 4 events,
-  // Stop debounced), so they ROUTE; every remaining stub tool must REFUSE
-  // without invoking npx.
-  it.each<ToolId>(['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'])(
+  // R8-001: hook management is gated on HOOKS_COHORT. All seven built-ins now
+  // ship real bins, including Claude Desktop's MCP bridge, so they all route.
+  it.each<ToolId>(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw'])(
     'routes the hook command for HOOKS_COHORT tool (%s)',
     async (id) => {
       const { calls, execCapture } = captureExec();
@@ -372,11 +365,10 @@ describe('runHookCommand', () => {
     },
   );
 
-  it.each<ToolId>([
-    'claude-desktop',
-  ])('refuses hook command for non-HOOKS_COHORT stub tool (%s) without calling npx', async (id) => {
+  it('refuses hook command for an unsupported tool id without invoking exec', async () => {
+    const fakeId = 'not-a-real-tool' as ToolId;
     const { calls, execCapture } = captureExec();
-    const result = await runHookCommand({ id, action: 'install', deps: { execCapture } });
+    const result = await runHookCommand({ id: fakeId, action: 'install', deps: { execCapture } });
     expect(result.ok).toBe(false);
     expect(result.error).toContain('not supported');
     expect(calls).toHaveLength(0);
@@ -388,10 +380,10 @@ describe('runHookCommand', () => {
 });
 
 describe('HOOKS_COHORT derivation (#5)', () => {
-  it('equals the hook-capable manifests (claude-desktop excluded)', () => {
+  it('equals the hook-capable manifests and includes claude-desktop', () => {
     const expected = BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id).sort();
     expect([...HOOKS_COHORT].sort()).toEqual(expected);
-    expect(HOOKS_COHORT).not.toContain('claude-desktop');
+    expect(HOOKS_COHORT).toContain('claude-desktop');
   });
 });
 

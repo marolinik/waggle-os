@@ -1,11 +1,33 @@
-// @waggle/hive-mind-hooks-claude-desktop — STUB.
-//
-// Wave 2/3 implementation pending per CC Sesija B brief 2026-04-30 §2.3 Task B10.
-// This package exists in the monorepo so that subtree-split + dependency-graph
-// tooling sees the package boundary; runtime functionality lands in a future
-// sprint when the claude-desktop client's hook surface is implemented.
-//
-// See packages/hive-mind-hooks-claude-code for the Wave 1 reference shape.
+/**
+ * @waggle/hive-mind-hooks-claude-desktop — public MCP-bridge API.
+ */
 
-// TODO: Wave 2/3 implementation
-export {};
+export { MCP_SERVER_NAME } from './install.js';
+
+export type {
+  InstallOptions,
+  InstallResult,
+} from './install.js';
+export { install } from './install.js';
+
+export type {
+  UninstallOptions,
+  UninstallResult,
+} from './uninstall.js';
+export { uninstall } from './uninstall.js';
+
+export type {
+  VerifyOptions,
+  VerifyResult,
+  VerifyCheck,
+} from './verify.js';
+export { verify } from './verify.js';
+
+export type {
+  ClaudeDesktopPaths,
+  ResolvePathsOptions,
+} from './paths.js';
+export {
+  resolvePaths,
+  resolveMcpEntry,
+} from './paths.js';

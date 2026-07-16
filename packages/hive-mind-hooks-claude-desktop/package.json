@@ -1,10 +1,13 @@
 {
   "name": "@waggle/hive-mind-hooks-claude-desktop",
   "version": "0.0.1",
-  "description": "STUB — hive-mind silent capture shim for claude-desktop. Wave 2/3 of marolinik/waggle-os monorepo migration. Implementation pending.",
+  "description": "Claude Desktop MCP bridge for hive-mind. Registers the waggle-memory MCP server in claude_desktop_config.json with reversible create-if-missing installation, byte-identical uninstall, and a surgical fallback when the config is edited after install.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "claude-desktop-hooks": "dist/bin/claude-desktop-hooks.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -12,9 +15,14 @@
     }
   },
   "scripts": {
-    "build": "tsc --build"
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "typecheck": "tsc --build && tsc --noEmit -p tsconfig.test.json",
+    "test": "node ../../node_modules/vitest/vitest.mjs run --root ../.. --config vitest.config.ts packages/hive-mind-hooks-claude-desktop/tests",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@waggle/hive-mind-hooks-core": "*",
     "@waggle/hive-mind-shim-core": "*"
   },
   "engines": {
@@ -39,7 +47,7 @@
     "memory",
     "ai",
     "hook",
-    "stub"
+    "mcp"
   ],
   "types": "dist/index.d.ts"
 }

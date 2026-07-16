@@ -56,16 +56,12 @@ import {
 const execFileAsync = promisify(execFile);
 
 /**
- * Tools whose hive-mind hook package is real (ships a `bin`) and can
- * therefore be installed/verified/uninstalled via npx. claude-code, codex,
- * codex-desktop, cursor, hermes, and openclaw qualify (all ship a real bin —
- * codex-desktop is a thin re-export of codex that shares ~/.codex/; cursor is
- * a JSON installer with field renames + degraded events; hermes is a YAML
- * installer with 3 events, no PreCompact; openclaw is a JSON5 + in-process-TS
- * installer with 4 events, Stop debounced); the claude-desktop hook package is
- * still a binless `export {}` stub (deferred MCP-bridge category). Hook code
- * paths gate on THIS cohort, not LAUNCH_COHORT, so the UI never offers a hook
- * action that npx cannot fulfil.
+ * Tools whose hive-mind integration package ships a real `bin` and can
+ * therefore be installed/verified/uninstalled by the bundled runtime. All
+ * seven built-ins qualify: Claude Desktop registers the waggle-memory MCP
+ * bridge, while the other six install lifecycle hooks. Hook code paths gate on
+ * THIS cohort, not LAUNCH_COHORT, so the UI never offers a hook action that the
+ * runtime cannot fulfil.
  */
 export const HOOKS_COHORT: readonly ToolId[] =
   BUILTIN_TOOL_MANIFESTS.filter((m) => m.hookCapable).map((m) => m.id as ToolId);
@@ -451,6 +447,7 @@ interface RuntimeResolveDeps {
 
 const HOOK_BIN_BY_TOOL: Partial<Record<ToolId, string>> = {
   'claude-code': 'dist/bin/claude-code-hooks-cli.js',
+  'claude-desktop': 'dist/bin/claude-desktop-hooks.js',
   codex: 'dist/bin/codex-hooks.js',
   'codex-desktop': 'dist/bin/codex-desktop-hooks.js',
   cursor: 'dist/bin/cursor-hooks.js',
@@ -524,7 +521,7 @@ export async function runHookCommand(
       stdout: '',
       stderr: '',
       code: -1,
-      error: `Hook management for '${opts.id}' is not supported yet — only claude-code and codex ship functional hook packages today.`,
+      error: `Hook management for '${opts.id}' is not supported — no built-in hook runtime is registered for this tool.`,
     };
   }
   const deps = resolveDeps(opts.deps ?? {});

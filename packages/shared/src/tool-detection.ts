@@ -125,8 +125,8 @@ export const BUILTIN_TOOL_MANIFESTS: readonly ToolManifest[] = [
     },
   },
   {
-    id: 'claude-desktop', displayName: 'Claude Desktop', launchable: true, hookCapable: false,
-    hookPointer: '.config/Claude/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
+    id: 'claude-desktop', displayName: 'Claude Desktop', launchable: true, hookCapable: true,
+    hookPointer: '.waggle/claude-desktop/hive-mind-install.json', detect: { kind: 'candidates' }, builtin: true,
     capabilities: { interactiveLaunch: true, headlessTask: false, structuredProgress: false, resumable: false, liveWaggleDance: false },
   },
   {

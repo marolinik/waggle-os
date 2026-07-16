@@ -12,6 +12,7 @@ const tsc = path.join(root, 'node_modules', 'typescript', 'bin', 'tsc');
 const projects = [
   'packages/hive-mind-cli/tsconfig.json',
   'packages/hive-mind-hooks-claude-code/tsconfig.json',
+  'packages/hive-mind-hooks-claude-desktop/tsconfig.json',
   'packages/hive-mind-hooks-codex/tsconfig.json',
   'packages/hive-mind-hooks-codex-desktop/tsconfig.json',
   'packages/hive-mind-hooks-cursor/tsconfig.json',
@@ -24,7 +25,7 @@ if (!fs.existsSync(tsc)) {
   process.exit(1);
 }
 
-console.log('[build-hook-runtime] Building CLI and six hook adapters...');
+console.log('[build-hook-runtime] Building CLI and seven hook adapters...');
 execFileSync(process.execPath, [tsc, '--build', ...projects], {
   cwd: root,
   stdio: 'inherit',
@@ -39,6 +40,7 @@ execFileSync(process.execPath, [
 const expected = [
   'packages/hive-mind-cli/dist/index.js',
   'packages/hive-mind-hooks-claude-code/dist/bin/claude-code-hooks-cli.js',
+  'packages/hive-mind-hooks-claude-desktop/dist/bin/claude-desktop-hooks.js',
   'packages/hive-mind-hooks-codex/dist/bin/codex-hooks.js',
   'packages/hive-mind-hooks-codex-desktop/dist/bin/codex-desktop-hooks.js',
   'packages/hive-mind-hooks-cursor/dist/bin/cursor-hooks.js',

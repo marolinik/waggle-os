@@ -232,11 +232,9 @@ function resolveDeps(opts: ToolDetectionDeps): ResolvedDeps {
 
 // ── Hook status (shared across all tools) ───────────────────────────
 
-// Hook-pointer paths + display names now come from each tool's ToolManifest
+// Hook-pointer paths + display names come from each tool's ToolManifest
 // (the registry — #5). probeHooks takes the resolved relative pointer directly,
-// so third-party adapters work with no per-tool map. (The claude-desktop pointer
-// '.config/Claude/...' is still a known-approximate placeholder — see its
-// manifest in @waggle/shared; it has no lifecycle-hook surface yet.)
+// so third-party adapters and the Claude Desktop MCP bridge need no per-tool map.
 
 interface HookProbe {
   hooksInstalled: boolean;

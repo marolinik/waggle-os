@@ -7,14 +7,15 @@
  * with no bin, so `npx @waggle/hive-mind-hooks-<id>` ALWAYS failed for the
  * user. HOOKS_COHORT fixed this by gating hook actions on the tools whose
  * package actually ships a bin. The cohort has since grown as Tier-A/B
- * packages landed (claude-code, codex, codex-desktop, cursor, hermes, openclaw).
+ * packages landed (claude-code, claude-desktop, codex, codex-desktop, cursor,
+ * hermes, openclaw).
  *
  * The existing tool-launcher tests mock execCapture and only assert the
  * npx command SHAPE, so the binless-stub failure was invisible. These
  * are STATIC tests that:
  *   1. ground HOOKS_COHORT against the real on-disk hook packages
  *      (a tool is hook-capable iff its package.json declares a bin),
- *   2. prove runHookCommand REFUSES stub tools without invoking npx,
+ *   2. prove runHookCommand REFUSES unsupported tools without invoking exec,
  *   3. prove the real targets still route through.
  */
 
@@ -63,65 +64,36 @@ describe('HOOKS_COHORT grounding (R8-001)', () => {
   });
 
   it('matches the current real-bin cohort (snapshot tripwire)', () => {
-    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw']);
+    expect([...HOOKS_COHORT].sort()).toEqual(['claude-code', 'claude-desktop', 'codex', 'codex-desktop', 'cursor', 'hermes', 'openclaw']);
   });
 
-  it('is a strict subset of LAUNCH_COHORT (all hook targets are launchable, not vice-versa)', () => {
+  it('is a subset of LAUNCH_COHORT (all hook targets are launchable)', () => {
     for (const id of HOOKS_COHORT) {
       expect(LAUNCH_COHORT).toContain(id);
     }
-    expect(HOOKS_COHORT.length).toBeLessThan(LAUNCH_COHORT.length);
+    expect(HOOKS_COHORT.length).toBeLessThanOrEqual(LAUNCH_COHORT.length);
   });
 });
 
-describe('runHookCommand refuses binless stub tools (R8-002)', () => {
-  // Every supported tool that is NOT a real hook target. npx against
-  // these packages would fail for the user, so the command must be
-  // refused BEFORE exec rather than shelling out and surfacing a
-  // confusing npx error.
-  const stubTools = SUPPORTED_TOOLS.filter((id) => !HOOKS_COHORT.includes(id));
+describe('runHookCommand refuses unsupported tools (R8-002)', () => {
+  it('does not invoke exec for an unsupported tool id', async () => {
+    const fakeId = 'not-a-real-tool' as ToolId;
+    let invoked = false;
+    const execCapture: NonNullable<ToolLauncherDeps['execCapture']> = async () => {
+      invoked = true;
+      return { stdout: 'ok', stderr: '', code: 0 };
+    };
 
-  it.each(stubTools)(
-    'does not invoke npx and returns a clear error for stub tool %s',
-    async (id) => {
-      let invoked = false;
-      const execCapture: NonNullable<ToolLauncherDeps['execCapture']> =
-        async () => {
-          invoked = true;
-          return { stdout: 'ok', stderr: '', code: 0 };
-        };
-      const result = await runHookCommand({
-        id,
-        action: 'install',
-        deps: { execCapture },
-      });
-      expect(invoked, `npx must NOT be invoked for binless stub ${id}`).toBe(
-        false,
-      );
-      expect(result.ok).toBe(false);
-      expect(result.error).toBeDefined();
-      expect(result.error).toMatch(/not supported|claude-code/i);
-    },
-  );
+    const result = await runHookCommand({
+      id: fakeId,
+      action: 'install',
+      deps: { execCapture },
+    });
 
-  it.each(stubTools)(
-    'refuses every hook action (verify) for stub tool %s, even though it is launchable',
-    async (id) => {
-      let invoked = false;
-      const execCapture: NonNullable<ToolLauncherDeps['execCapture']> =
-        async () => {
-          invoked = true;
-          return { stdout: 'ok', stderr: '', code: 0 };
-        };
-      const result = await runHookCommand({
-        id,
-        action: 'verify',
-        deps: { execCapture },
-      });
-      expect(invoked).toBe(false);
-      expect(result.ok).toBe(false);
-    },
-  );
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain('not supported');
+    expect(invoked).toBe(false);
+  });
 });
 
 describe('runHookCommand still routes the real target (regression guard)', () => {

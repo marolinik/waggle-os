@@ -72,6 +72,7 @@ if (!fs.existsSync(path.join(stagedDepsDir, 'better-sqlite3', 'package.json'))) 
 const hookRuntimeEntries = [
   '@waggle/hive-mind-cli/dist/index.js',
   '@waggle/hive-mind-hooks-claude-code/dist/bin/claude-code-hooks-cli.js',
+  '@waggle/hive-mind-hooks-claude-desktop/dist/bin/claude-desktop-hooks.js',
   '@waggle/hive-mind-hooks-codex/dist/bin/codex-hooks.js',
   '@waggle/hive-mind-hooks-codex-desktop/dist/bin/codex-desktop-hooks.js',
   '@waggle/hive-mind-hooks-cursor/dist/bin/cursor-hooks.js',

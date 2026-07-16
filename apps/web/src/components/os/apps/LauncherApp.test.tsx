@@ -299,9 +299,9 @@ describe('LauncherApp · captured tasks', () => {
 
 describe('LauncherApp · hook cohort (#3)', () => {
   it('offers hook actions for every real-hook tool (e.g. codex), not just claude-code', async () => {
-    // The 6 real-hook tools (claude-code, codex, codex-desktop, cursor,
-    // hermes, openclaw) all ship a bin — the dock must expose hook
-    // install for each, mirroring the backend HOOKS_COHORT.
+    // The 7 real-hook tools (claude-code, claude-desktop, codex,
+    // codex-desktop, cursor, hermes, openclaw) all ship a bin — the dock
+    // must expose hook install for each, mirroring the backend HOOKS_COHORT.
     mocks.adapter.detectTools.mockResolvedValue({
       platform: 'darwin',
       detectedAt: '2026-06-29T00:00:00.000Z',

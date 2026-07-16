@@ -14,9 +14,8 @@ describe('BUILTIN_TOOL_MANIFESTS', () => {
       expect(m.launchable).toBe(true);
     }
   });
-  it('claude-desktop is the only non-hook-capable tool', () => {
-    const nonHook = BUILTIN_TOOL_MANIFESTS.filter((m) => !m.hookCapable).map((m) => m.id);
-    expect(nonHook).toEqual(['claude-desktop']);
+  it('every built-in is hook-capable', () => {
+    expect(BUILTIN_TOOL_MANIFESTS.filter((m) => !m.hookCapable)).toEqual([]);
   });
   it('derives TOOL_DISPLAY_NAMES + LAUNCH_COHORT from the manifests (unchanged values)', () => {
     expect(TOOL_DISPLAY_NAMES['claude-code']).toBe('Claude Code');

@@ -43,6 +43,7 @@ const hookRuntimeBuild = path.join(root, 'scripts', 'build-hook-runtime.mjs');
 const HOOK_RUNTIME_ROOTS = new Set([
   '@waggle/hive-mind-cli',
   '@waggle/hive-mind-hooks-claude-code',
+  '@waggle/hive-mind-hooks-claude-desktop',
   '@waggle/hive-mind-hooks-codex',
   '@waggle/hive-mind-hooks-codex-desktop',
   '@waggle/hive-mind-hooks-cursor',
