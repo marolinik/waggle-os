@@ -67,7 +67,17 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     responseRules: [
       { id: 'all-priorities', description: 'Addresses all three supplied priorities', kind: 'allPatterns', patterns: [/customer/i, /onboarding/i, /memory (?:bug|issue)/i], points: 10 },
       { id: 'ordered-plan', description: 'Provides an explicit order', kind: 'pattern', pattern: /(?:priority order|\b1[.)]|\bfirst\b[\s\S]*\bsecond\b)/i, points: 10 },
-      { id: 'justification', description: 'Explains the prioritization', kind: 'pattern', pattern: /(?:because|rationale|reason|leverage|impact)/i, points: 10 },
+      {
+        id: 'justification',
+        description: 'Links each priority to a relevant decision basis',
+        kind: 'allPatterns',
+        patterns: [
+          /(?:memory (?:bug|issue)[^\r\n]{0,180}(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust)|(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust)[^\r\n]{0,180}memory (?:bug|issue))/i,
+          /(?:(?:customer|deal)[^\r\n]{0,180}(?:revenue|pipeline|cash|commercial|near[- ]term)|(?:revenue|pipeline|cash|commercial|near[- ]term)[^\r\n]{0,180}(?:customer|deal))/i,
+          /(?:onboarding[^\r\n]{0,180}(?:conversion|retention|activation|drop[- ]?off|sales drag)|(?:conversion|retention|activation|drop[- ]?off|sales drag)[^\r\n]{0,180}onboarding)/i,
+        ],
+        points: 10,
+      },
       { id: 'first-action', description: 'Names the first action for today', kind: 'pattern', pattern: /(?:first action|today(?:'s)? action|start today|begin today)/i, points: 10 },
       { id: 'no-followup', description: 'Does not end by reopening clarification', kind: 'notPattern', pattern: /\?\s*$/, points: 10 },
     ],

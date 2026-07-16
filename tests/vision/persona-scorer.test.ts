@@ -256,6 +256,79 @@ describe('deterministic 100-point persona scorer', () => {
     });
   });
 
+  it('awards the exact live general-purpose response 100 for substantive prioritization', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Source:** Your message (three stated priorities); assumptions explicitly added below.',
+      '',
+      '## Priority order (this week)',
+      '1. **Investigate the production memory bug**',
+      '2. **Close one customer**',
+      '3. **Repair onboarding friction**',
+      '',
+      '## Concise plan (with assumptions)',
+      '**Assumptions:** the memory bug is in production (risk to reliability), the customer is in late-stage pipeline, onboarding friction is meaningful but not causing an active outage.',
+      '',
+      '- **Mon–Tue:** Run a focused bug investigation to reduce operational risk first (stability protects both revenue and customer trust).',
+      '- **Tue–Thu:** Push the strongest late-stage deal to close (once immediate technical risk is contained, shift to near-term revenue).',
+      '- **Thu–Fri:** Address the highest-friction onboarding step (improves conversion/retention and reduces future sales drag).',
+      '',
+      '## First action for today',
+      '**Open a 2-hour production bug triage block now:** identify reproduction path, capture one heap snapshot/comparison, and define a single owner + next fix step by end of session.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('accepts an unseen paraphrase that ties every priority to a decision basis', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. Investigate the memory issue first — protecting service reliability limits outage risk.',
+      '2. Close the customer deal second — it is the clearest route to immediate cash.',
+      '3. Repair onboarding third — reducing drop-off should improve activation.',
+      'First action for today: reproduce the memory issue and assign an owner.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('rejects a bare ordered list with a placeholder rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      'Priority order:',
+      '1. Investigate the production memory bug.',
+      '2. Close one customer.',
+      '3. Repair onboarding friction.',
+      'Rationale: TBD',
+      'First action for today: open the bug report.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'justification')).toMatchObject({
+      passed: false,
+      pointsAwarded: 0,
+    });
+    expect(result).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
   it('syntax-checks fenced Python without executing generated code', () => {
     const valid = [
       '```python',
