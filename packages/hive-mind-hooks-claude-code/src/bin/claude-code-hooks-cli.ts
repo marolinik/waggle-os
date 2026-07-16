@@ -3,7 +3,7 @@
  * `claude-code-hooks``claude-code-hooks` — CLI entry for the @waggle/hive-mind-hooks-claude-code shim (was @hive-mind/claude-code-hooks pre-monorepo migration).
  *
  *   claude-code-hooks install       Patch ~/.claude/settings.json (additive merge).
- *   claude-code-hooks uninstall     Restore the byte-identical pre-install state.
+ *   claude-code-hooks uninstall     Restore the exact pre-install settings state.
  *   claude-code-hooks verify        Smoke-check the install + hive-mind-cli reachability.
  */
 
@@ -49,7 +49,7 @@ function printHelp(): void {
     '',
     'Commands:',
     '  install     Patch ~/.claude/settings.json (additive, with backup).',
-    '  uninstall   Restore the byte-identical pre-install settings.json.',
+    '  uninstall   Restore pre-existing settings or remove installer-created settings.',
     '  verify      Smoke-check the install + hive-mind-cli reachability.',
     '',
     'Options:',
@@ -86,11 +86,13 @@ function printUninstallSummary(result: UninstallResult): void {
   const lines: string[] = [
     'hive-mind/claude-code-hooks: uninstall',
     `  - settings:        ${result.paths.settingsPath}`,
-    `  - restored from:   ${result.restoredFrom}`,
+    result.settingsRemoved
+      ? '  - settings state: removed (file was installer-created)'
+      : `  - restored from:   ${result.restoredFrom}`,
     `  - backup removed:  ${result.backupRemoved ? 'yes' : 'no (kept on disk)'}`,
     `  - pointer removed: ${result.pointerRemoved ? 'yes' : 'no'}`,
     '',
-    'Done. settings.json is byte-identical to pre-install state.',
+    'Done. The pre-install settings state has been restored.',
     '',
   ];
   process.stdout.write(lines.join('\n'));

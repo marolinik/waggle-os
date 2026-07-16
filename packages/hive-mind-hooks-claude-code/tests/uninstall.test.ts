@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { install } from '../src/install.js';
 import { uninstall } from '../src/uninstall.js';
+import { verify } from '../src/verify.js';
 import type { ClaudeCodeSettings } from '../src/settings-merger.js';
 
 interface TestEnv {
@@ -50,7 +51,7 @@ describe('uninstall', () => {
       .rejects.toThrow(/malformed/);
   });
 
-  it('install + uninstall round-trip is SHA-256 identical to pre-install state', async () => {
+  it('reinstall + uninstall round-trip is SHA-256 identical to pre-install state', async () => {
     const initialSettings: ClaudeCodeSettings = {
       env: { CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: '1' },
       hooks: {
@@ -69,11 +70,42 @@ describe('uninstall', () => {
     await install({ home: env.home, hooksDir: env.hooksDir });
     const afterInstall = await readFile(env.settingsPath, 'utf-8');
     expect(sha256(afterInstall)).not.toBe(preHash);
+    await install({ home: env.home, hooksDir: env.hooksDir });
 
     await uninstall({ home: env.home, hooksDir: env.hooksDir });
     const afterUninstall = await readFile(env.settingsPath, 'utf-8');
     expect(sha256(afterUninstall)).toBe(preHash);
     expect(afterUninstall).toBe(preInstall);
+  });
+
+  it('install + verify + uninstall round-trips an absent settings file', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'hmc-uninstall-fresh-'));
+    const hooksDir = resolve(home, 'fake-dist', 'hooks');
+    await mkdir(hooksDir, { recursive: true });
+    for (const basename of ['session-start', 'user-prompt-submit', 'stop', 'pre-compact']) {
+      await writeFile(join(hooksDir, `${basename}.js`), '/* mock hook */', 'utf-8');
+    }
+    const cliPath = join(home, 'fake-cli.mjs');
+    await writeFile(cliPath, 'process.stdout.write("ok\\n");', 'utf-8');
+    env = {
+      home,
+      hooksDir,
+      settingsPath: join(home, '.claude', 'settings.json'),
+      pointerPath: join(home, '.claude', 'hive-mind-install.json'),
+    };
+
+    expect(existsSync(env.settingsPath)).toBe(false);
+    const installed = await install({ home, hooksDir, cliPath });
+    const reinstalled = await install({ home, hooksDir, cliPath });
+    expect(reinstalled.alreadyInstalled).toBe(true);
+    expect(reinstalled.backupPath).toBe(installed.backupPath);
+    await expect(verify({ home, hooksDir })).resolves.toMatchObject({ ok: true });
+
+    const removed = await uninstall({ home, hooksDir });
+    expect(removed.settingsRemoved).toBe(true);
+    expect(existsSync(env.settingsPath)).toBe(false);
+    expect(existsSync(installed.pointerPath)).toBe(false);
+    expect(existsSync(installed.backupPath)).toBe(false);
   });
 
   it('removes the backup file by default after restore', async () => {
