@@ -245,7 +245,11 @@ async function sendAndCapture(page: Page, prompt: string): Promise<WireTurn> {
   try {
     const response = await responsePromise;
     const requestPayload = parseRequestPayload(response.request().postData());
-    const body = await response.text();
+    // Playwright's response.text() can honor a missing/legacy HTTP charset and
+    // mojibake UTF-8 punctuation on Windows. The chat wire contract is UTF-8;
+    // decode the captured bytes explicitly so wire, UI, and persisted evidence
+    // are compared without a test-harness encoding artifact.
+    const body = (await response.body()).toString('utf8');
     const completedAt = Date.now();
     const parsed = parseSse(body);
     const doneEvent = [...parsed.events].reverse().find(event => event.event === 'done');

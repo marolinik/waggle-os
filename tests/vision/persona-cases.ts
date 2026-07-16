@@ -47,6 +47,7 @@ export interface PersonaAcceptanceCase {
 
 const primaryResearchDomains = [
   'sqlite.org',
+  'sqlite.ai',
   'postgresql.org',
   'github.com/asg017/sqlite-vec',
   'github.com/pgvector/pgvector',
@@ -83,7 +84,13 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
       { id: 'primary-sources', description: 'Cites at least two distinct primary-source URLs', kind: 'primaryUrls', minimum: 2, allowedDomains: primaryResearchDomains, points: 10 },
       { id: 'decision-table', description: 'Includes a comparison or decision table', kind: 'pattern', pattern: /(?:decision table|\|\s*(?:criterion|dimension|factor|consideration)\s*\|)/i, points: 10 },
       { id: 'recommendation', description: 'Makes a recommendation for the stated desktop use case', kind: 'pattern', pattern: /recommend(?:ation|ed)?/i, points: 10 },
-      { id: 'fact-inference', description: 'Separates sourced facts from inference', kind: 'allPatterns', patterns: [/\bfacts?\b/i, /\binference\b/i], points: 10 },
+      {
+        id: 'fact-inference',
+        description: 'Separates sourced facts from inference',
+        kind: 'pattern',
+        pattern: /(?:(?:^|\n)#{1,6}\s*facts?\b[\s\S]*?(?:^|\n)#{1,6}\s*inference\b|(?:^|\n)#{1,6}\s*inference\b[\s\S]*?(?:^|\n)#{1,6}\s*facts?\b|\|[^\n|]*(?:feature|criterion)[^\n|]*\|[^\n|]*sqlite[^\n|]*\|[^\n|]*(?:postgres|pgvector)[^\n|]*\|[^\n|]*inference[^\n|]*\|)/im,
+        points: 10,
+      },
       { id: 'source-quality', description: 'Avoids known secondary AI-synthesized sources', kind: 'notPattern', pattern: /(?:grokipedia|deepwiki)/i, points: 10 },
     ],
   },

@@ -287,13 +287,10 @@ describe('deterministic 100-point persona scorer', () => {
   it('scores primary-source URLs and required research-tool evidence objectively', () => {
     const researcher = PERSONA_CASES.find(persona => persona.id === 'researcher')!;
     const response = [
-      '## Facts',
-      '| Criterion | SQLite vector search | PostgreSQL + pgvector |',
-      '|---|---|---|',
-      '| Deployment | Embedded | Client/server |',
-      'Primary sources: https://www.sqlite.org/vec1.html and https://github.com/pgvector/pgvector',
-      '## Inference',
-      'For the stated single-user desktop use case, the embedded option removes a service boundary.',
+      '### Decision Table: SQLite-Vector vs. PostgreSQL with pgvector',
+      '| Feature/Criterion | SQLite-Vector (https://www.sqlite.ai/sqlite-vector) | PostgreSQL + pgvector (https://github.com/pgvector/pgvector) | Inference for Single-User Desktop |',
+      '|---|---|---|---|',
+      '| Deployment | Embedded | Client/server | The embedded option removes a service boundary. |',
       '## Recommendation',
       'Use SQLite vector search for this stated use case, subject to measuring the real corpus.',
     ].join('\n');
