@@ -83,6 +83,16 @@ async function modelIsRoutable(
     return (await listOllamaChatModelIds()).includes(model);
   }
   if (!providerIsReady(server, provider)) return false;
+  // The in-process proxy routes provider-prefixed models directly. Its live
+  // request is the authority; managed LiteLLM catalog state may be stale or
+  // absent after the service has fallen back from a failed LiteLLM launch.
+  const activeProvider = server.agentState?.llmProvider;
+  if (
+    activeProvider?.provider === 'anthropic-proxy'
+    && activeProvider.health !== 'unavailable'
+  ) {
+    return true;
+  }
   return ensureManagedLiteLLMModel(server, model);
 }
 
@@ -160,17 +170,7 @@ export async function resolveExplicitRoutableModel(
   const provider = providerForModel(trimmed);
   if (!provider) return null;
   const canonical = canonicalModelId(trimmed, provider);
-  if (provider === 'ollama') {
-    const localModels = await listOllamaChatModelIds();
-    return localModels.includes(canonical) ? canonical : null;
-  }
-  const apiKey = getProviderApiKey(provider, server.vault);
-  if (!apiKey) return null;
-  const entry = server.vault?.get(provider);
-  const baseUrl = typeof entry?.metadata?.baseUrl === 'string' ? entry.metadata.baseUrl : undefined;
-  const catalog = await discoverProviderModels(provider, apiKey, baseUrl);
-  if (!catalog.models.some((model) => model.id === canonical)) return null;
-  return await ensureManagedLiteLLMModel(server, canonical) ? canonical : null;
+  return await modelIsRoutable(server, canonical, provider) ? canonical : null;
 }
 
 export async function resolveUsableModel(

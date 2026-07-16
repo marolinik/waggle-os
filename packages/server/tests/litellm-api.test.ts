@@ -13,7 +13,11 @@ vi.mock('../src/local/lifecycle.js', () => ({
 
 import { buildLocalServer } from '../src/local/index.js';
 import { getLiteLLMStatus, startLiteLLM, stopLiteLLM } from '../src/local/lifecycle.js';
-import { listOllamaChatModelIds, resolveUsableModel } from '../src/local/model-availability.js';
+import {
+  listOllamaChatModelIds,
+  resolveExplicitRoutableModel,
+  resolveUsableModel,
+} from '../src/local/model-availability.js';
 import { PROVIDER_ENV_NAMES } from '../src/local/provider-env.js';
 import { startService } from '../src/local/service.js';
 import { injectWithAuth } from './test-utils.js';
@@ -477,6 +481,72 @@ describe('LiteLLM Management API', () => {
       expect(ollamaRequests).toBe(0);
     } finally {
       server.agentState.currentModel = priorCurrentModel;
+      if (priorRuntime === null) fs.rmSync(runtimePath, { force: true });
+      else fs.writeFileSync(runtimePath, priorRuntime, 'utf-8');
+    }
+  });
+
+  it('keeps an explicit built-in proxy model exact when managed LiteLLM catalog state is stale', async () => {
+    const requestedModel = 'openrouter/openai/gpt-5.3-codex';
+    const fallbackModel = 'google/gemini-2.5-flash';
+    const runtimePath = path.join(dataDir, 'litellm.runtime.json');
+    const priorRuntime = fs.existsSync(runtimePath) ? fs.readFileSync(runtimePath, 'utf-8') : null;
+    const priorCurrentModel = server.agentState.currentModel;
+    const priorProvider = { ...server.agentState.llmProvider };
+    server.agentState.currentModel = fallbackModel;
+    server.agentState.llmProvider = {
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+      detail: 'Built-in provider proxy (verification pending)',
+      checkedAt: new Date().toISOString(),
+    };
+    server.vault.set('google', 'google-model-lock-test-key');
+    server.vault.set('openrouter', 'openrouter-model-lock-test-key');
+    fs.writeFileSync(runtimePath, JSON.stringify({
+      model_list: [{ model_name: fallbackModel }],
+    }), 'utf-8');
+
+    const probedModels: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes('/v1/chat/completions')) {
+        const body = JSON.parse(String(init?.body)) as { model: string };
+        probedModels.push(body.model);
+        return new Response('{}', { status: 200 });
+      }
+      if (url.startsWith('https://generativelanguage.googleapis.com/')) {
+        return new Response(JSON.stringify({
+          models: [{ name: 'models/gemini-2.5-flash' }],
+        }), { status: 200 });
+      }
+      if (url.startsWith('https://openrouter.ai/')) {
+        return new Response('', { status: 503 });
+      }
+      if (url.endsWith('/api/tags')) {
+        return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      }
+      return new Response('', { status: 503 });
+    });
+
+    try {
+      await expect(resolveUsableModel(server, requestedModel)).resolves.toBe(requestedModel);
+      await expect(resolveExplicitRoutableModel(server, requestedModel)).resolves.toBe(requestedModel);
+
+      const response = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/settings/probe-model',
+        payload: { model: requestedModel },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        model: requestedModel,
+        configured: true,
+        verified: true,
+      });
+      expect(probedModels).toEqual([requestedModel]);
+    } finally {
+      server.agentState.currentModel = priorCurrentModel;
+      server.agentState.llmProvider = priorProvider;
       if (priorRuntime === null) fs.rmSync(runtimePath, { force: true });
       else fs.writeFileSync(runtimePath, priorRuntime, 'utf-8');
     }

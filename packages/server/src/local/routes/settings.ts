@@ -8,7 +8,7 @@ import type { AutonomyLevel } from '@waggle/agent';
 import { requireTier } from '../../middleware/assert-tier.js';
 import { validateBody } from '../../validate-body.js';
 import { probeProviderKey, validateKeyFormat } from '../llm-key-probe.js';
-import { resolveUsableModel } from '../model-availability.js';
+import { resolveExplicitRoutableModel, resolveUsableModel } from '../model-availability.js';
 import { maxWorkspaceSessionsForTier } from '../tier-session-cap.js';
 import { applyProviderKeyToEnv } from '../provider-env.js';
 import { refreshManagedLiteLLM, type LiteLLMRefreshResult } from '../litellm-runtime-config.js';
@@ -312,7 +312,15 @@ export const settingsRoutes: FastifyPluginAsync = async (server) => {
       ).trim();
       if (!preferred) return { model: null, configured: false, verified: false };
 
-      const model = await resolveUsableModel(server, preferred);
+      // A caller-supplied model is an exact-model gate. Never turn a successful
+      // probe of a different provider into false assurance for the requested
+      // model. Default probes retain normal fallback-capable resolution.
+      const model = request.body.model
+        ? await resolveExplicitRoutableModel(server, preferred)
+        : await resolveUsableModel(server, preferred);
+      if (!model) {
+        return { model: preferred, configured: false, verified: false };
+      }
 
       // Endpoint selection mirrors chat.ts: Ollama models go direct to Ollama's
       // OpenAI-compatible endpoint (strip the 'ollama/' prefix); everything else
