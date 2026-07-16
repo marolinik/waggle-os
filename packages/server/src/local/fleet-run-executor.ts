@@ -4,6 +4,7 @@ import { FrameStore, SessionStore } from '@waggle/core';
 import {
   TraceRecorder,
   detectTaskShape,
+  filterAvailableTools,
   isEnabled,
   listPersonas,
   runAgentLoop,
@@ -15,7 +16,7 @@ import type {
   GoalAncestry,
   WaggleMessage,
 } from '@waggle/shared';
-import { applyPersonaToolFilter } from './persona-tool-filter.js';
+import { applyPersonaToolFilter, selectToolsForTurn } from './persona-tool-filter.js';
 import { resolveWorkspaceExecutionRoot } from './workspace-execution-root.js';
 import { persistMessage } from './routes/chat-persistence.js';
 import { emitWaggleSignal } from './routes/waggle-signals.js';
@@ -211,6 +212,11 @@ async function executeFleetRun(
     const persona = listPersonas().find((item) => item.id === personaId) ?? null;
     let tools = server.agentState.buildToolsForSession(orchestrator, cwd, run.workspaceId);
     if (persona) tools = applyPersonaToolFilter(tools, persona);
+    tools = filterAvailableTools(tools);
+    tools = selectToolsForTurn(tools, {
+      message: task,
+      preferredToolNames: persona?.tools ?? [],
+    }).tools;
     orchestrator.setGoalAncestry(buildFleetAncestry(server.workspaceManager.get(run.workspaceId)?.name, goal));
     let systemPrompt: string;
     if (isEnabled('PROMPT_ASSEMBLER')) {

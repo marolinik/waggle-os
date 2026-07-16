@@ -213,6 +213,21 @@ describe('selectToolsForTurn - bounded per-turn model context', () => {
     expect(measureOpenAiToolSchemaChars(first.tools)).toBe(first.schemaChars);
   });
 
+  it('never serializes all 29 simultaneously relevant tools into one turn', () => {
+    const candidates = Array.from({ length: 29 }, (_, index) =>
+      selectorTool(`code_tool_${index}`, 'Run code tests and inspect this implementation.', 120));
+
+    const selected = selectToolsForTurn(candidates, {
+      message: 'Run code tests and inspect this implementation',
+    });
+
+    expect(selected.tools.length).toBeLessThanOrEqual(DEFAULT_TURN_TOOL_LIMIT);
+    expect(selected.tools.length).toBeLessThan(candidates.length);
+    expect(selected.omittedCount).toBe(candidates.length - selected.tools.length);
+    expect(selected.schemaChars).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
+    expect(measureOpenAiToolSchemaChars(selected.tools)).toBe(selected.schemaChars);
+  });
+
   it('deduplicates by name with the first eligible definition winning', () => {
     const native = selectorTool('read_file', 'Native read implementation');
     const shadow = selectorTool('read_file', 'Plugin shadow implementation');

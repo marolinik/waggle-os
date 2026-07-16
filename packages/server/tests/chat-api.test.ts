@@ -123,6 +123,46 @@ describe('Chat Streaming API', () => {
     expect(doneData.content).toBe('Hello world');
     expect(doneData.usage).toEqual({ inputTokens: 10, outputTokens: 5 });
     expect(doneData.toolsUsed).toEqual([]);
+    expect(Object.keys(doneData.contextMetrics).sort()).toEqual([
+      'agentLatencyMs',
+      'estimatedSystemPromptTokens',
+      'estimatedToolSchemaTokens',
+      'finalSystemPromptChars',
+      'packageMode',
+      'providerInputTokens',
+      'providerOutputTokens',
+      'selectorLatencyMs',
+      'timeToFirstTokenMs',
+      'toolCatalogCount',
+      'toolEligibleCount',
+      'toolOmittedCount',
+      'toolSelectedCount',
+      'totalServerLatencyMs',
+      'transmittedToolSchemaChars',
+    ].sort());
+    expect(doneData.contextMetrics).toMatchObject({
+      toolCatalogCount: 0,
+      toolEligibleCount: 0,
+      toolSelectedCount: 0,
+      toolOmittedCount: 0,
+      transmittedToolSchemaChars: 0,
+      estimatedToolSchemaTokens: 0,
+      finalSystemPromptChars: 'You are a helpful AI assistant.'.length,
+      estimatedSystemPromptTokens: Math.ceil('You are a helpful AI assistant.'.length / 4),
+      packageMode: 'custom',
+      selectorLatencyMs: 0,
+      providerInputTokens: 10,
+      providerOutputTokens: 5,
+    });
+    expect(Number.isFinite(doneData.contextMetrics.timeToFirstTokenMs)).toBe(true);
+    expect(Number.isFinite(doneData.contextMetrics.agentLatencyMs)).toBe(true);
+    expect(Number.isFinite(doneData.contextMetrics.totalServerLatencyMs)).toBe(true);
+    expect(doneData.contextMetrics.totalServerLatencyMs).toBeGreaterThanOrEqual(
+      doneData.contextMetrics.timeToFirstTokenMs,
+    );
+    expect(doneData.contextMetrics.totalServerLatencyMs).toBeGreaterThanOrEqual(
+      doneData.contextMetrics.agentLatencyMs,
+    );
   });
 
   it('validates message is required', async () => {

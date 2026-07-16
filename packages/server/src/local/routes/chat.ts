@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
@@ -677,6 +678,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       channel?: { platform: string; chatId: string };
     };
   }>('/api/chat', async (request, reply) => {
+    const totalServerStartedAt = performance.now();
+    let firstTokenAt: number | null = null;
+
     // P0-4: Accept both 'workspace' and 'workspaceId' for backwards compat
     // Phase A.2: `persona` is an optional per-window override — takes precedence
     // over the workspace's default persona for this single request only.
@@ -816,6 +820,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
     // Helper to write SSE events
     const sendEvent = (event: string, data: unknown) => {
+      if (event === 'token' && firstTokenAt === null) {
+        firstTokenAt = performance.now();
+      }
       raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
@@ -1507,6 +1514,14 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             ? wsSession?.tools
               ?? server.agentState.buildToolsForWorkspace(workspacePath, sessionOrch, effectiveWorkspace)
             : allTools;
+        const catalogToolNames = new Set(effectiveTools.map(tool => tool.name));
+        let toolCatalogCount = catalogToolNames.size;
+        let toolEligibleCount = 0;
+        let toolSelectedCount = 0;
+        let toolOmittedCount = 0;
+        let transmittedToolSchemaChars = 0;
+        let selectorLatencyMs = 0;
+        let packageMode: ChatPromptPackageMode | 'custom' = 'custom';
         let spawnAvailableTools = effectiveTools;
 
         // W3.1: Filter tools by persona — non-technical personas get a reduced
@@ -1552,6 +1567,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // retriever injects them all; above it, the conversation's union-only
           // accumulated top-k. Persona denylist / read-only rails still apply.
           const runningMcpTools = server.agentState.mcpRuntime.getAllTools();
+          for (const tool of runningMcpTools) catalogToolNames.add(tool.name);
           if (runningMcpTools.length > 0) {
             const retrievalCfg = new WaggleConfig(server.localConfig.dataDir).getMcpToolRetrieval();
             let selectedMcp = await server.agentState.mcpToolRetriever.selectTools(
@@ -1572,6 +1588,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           // first so a plugin cannot shadow a built-in implementation.
           spawnAvailableTools = effectiveTools;
           let materializedPlugins = server.agentState.pluginRuntimeManager.getAllTools();
+          for (const tool of materializedPlugins) catalogToolNames.add(tool.name);
           if (activePersona) {
             materializedPlugins = filterMcpToolsForPersona(materializedPlugins, activePersona);
           }
@@ -1733,6 +1750,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // Iteration budget — prevents runaway agent loops
         if (!hasCustomRunner) {
+          toolCatalogCount = catalogToolNames.size;
+          toolEligibleCount = effectiveTools.length;
           const sequenceHistory = sessionToolSequences.get(sessionId);
           const previousToolSequence = sequenceHistory?.[sequenceHistory.length - 1] ?? [];
           const recentMessages = history
@@ -1740,6 +1759,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             .filter(entry => entry.role === 'user' || entry.role === 'assistant')
             .slice(-4)
             .map(entry => ({ role: entry.role, content: entry.content }));
+          const selectorStartedAt = performance.now();
           const selection = selectToolsForTurn(effectiveTools, {
             message: agentMessage,
             recentMessages,
@@ -1750,7 +1770,11 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               : [],
             externalToolNames: [...externalToolNames],
           });
+          selectorLatencyMs = Math.max(0, Math.round(performance.now() - selectorStartedAt));
           effectiveTools = selection.tools;
+          toolSelectedCount = effectiveTools.length;
+          toolOmittedCount = selection.omittedCount;
+          transmittedToolSchemaChars = toolSelectedCount > 0 ? selection.schemaChars : 0;
           log.info(`[chat] turn tools: selected ${effectiveTools.length}, omitted ${selection.omittedCount}, schema ${selection.schemaChars} chars`);
         }
 
@@ -1762,7 +1786,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             || isExplicitMemoryRecallRequest(agentMessage)
             || isExplicitMemorySaveRequest(agentMessage)
             || isExplicitExternalResearchRequest(agentMessage);
-          const packageMode = selectChatPromptPackageMode({
+          packageMode = selectChatPromptPackageMode({
             message: agentMessage,
             selectedToolCount: effectiveTools.length,
             autonomyLevel,
@@ -2026,6 +2050,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
 
         // ── Run agent with credential pool + fallback chain ──
         let result;
+        const agentStartedAt = performance.now();
+        let agentLatencyMs = 0;
         try {
           result = await agentRunner(runConfig);
           // Report success to credential pool
@@ -2066,6 +2092,8 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           } else {
             throw primaryErr;
           }
+        } finally {
+          agentLatencyMs = Math.max(0, Math.round(performance.now() - agentStartedAt));
         }
 
         // Notify client of model switch
@@ -2337,11 +2365,31 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         const messageCost = result.usage
           ? costTracker.calculateCost(result.usage.inputTokens, result.usage.outputTokens, resolvedModel)
           : undefined;
+        const doneAt = performance.now();
         sendEvent('done', {
           content: finalContent,
           usage: result.usage,
           toolsUsed: result.toolsUsed,
           model: resolvedModel,
+          contextMetrics: {
+            toolCatalogCount,
+            toolEligibleCount,
+            toolSelectedCount,
+            toolOmittedCount,
+            transmittedToolSchemaChars,
+            estimatedToolSchemaTokens: Math.ceil(transmittedToolSchemaChars / 4),
+            finalSystemPromptChars: systemPrompt.length,
+            estimatedSystemPromptTokens: Math.ceil(systemPrompt.length / 4),
+            packageMode,
+            selectorLatencyMs,
+            timeToFirstTokenMs: firstTokenAt === null
+              ? null
+              : Math.max(0, Math.round(firstTokenAt - totalServerStartedAt)),
+            agentLatencyMs,
+            totalServerLatencyMs: Math.max(0, Math.round(doneAt - totalServerStartedAt)),
+            providerInputTokens: result.usage.inputTokens,
+            providerOutputTokens: result.usage.outputTokens,
+          },
           ...(messageCost !== undefined && {
             cost: Math.round(messageCost * 1_000_000) / 1_000_000,
             tokens: { input: result.usage.inputTokens, output: result.usage.outputTokens },
