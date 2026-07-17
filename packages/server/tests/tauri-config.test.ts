@@ -810,6 +810,32 @@ describe('CI/CD Configuration', () => {
     expect(workflow).toContain('stage-sidecar-deps');
   });
 
+  it('Windows desktop workflows verify isolated packaged hook lifecycles after staging', () => {
+    const workflows = [
+      { name: 'release.yml', windowsJob: '  build-windows:', macJob: '  build-macos:' },
+      { name: 'tauri-build-pr.yml', windowsJob: '  verify-windows:', macJob: '  verify-macos:' },
+    ];
+
+    for (const { name, windowsJob, macJob } of workflows) {
+      const workflow = fs.readFileSync(
+        path.join(ROOT, '.github', 'workflows', name),
+        'utf-8',
+      );
+      const windowsStart = workflow.indexOf(windowsJob);
+      const macStart = workflow.indexOf(macJob);
+      expect(windowsStart).toBeGreaterThanOrEqual(0);
+      expect(macStart).toBeGreaterThan(windowsStart);
+
+      const windowsSteps = workflow.slice(windowsStart, macStart);
+      const stageIndex = windowsSteps.indexOf('node scripts/stage-sidecar-deps.mjs');
+      const lifecycleIndex = windowsSteps.indexOf('hook-packages-runtime.test.ts');
+      expect(stageIndex).toBeGreaterThanOrEqual(0);
+      expect(lifecycleIndex).toBeGreaterThan(stageIndex);
+      expect(windowsSteps).toContain('WAGGLE_VERIFY_STAGED_HOOK_RUNTIME');
+      expect(windowsSteps).toContain('runs staged Tauri hook lifecycles');
+    }
+  });
+
   it('release workflow builds packages before bundling the desktop sidecar', () => {
     // Release builds must follow the same package -> sidecar ordering as the
     // PR Tauri verification lane, otherwise tag artifacts can ship stale or

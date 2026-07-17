@@ -55,6 +55,11 @@ jobs:
       - name: Stage sidecar dependencies
         run: node scripts/stage-sidecar-deps.mjs
 
+      - name: Verify packaged hook lifecycles
+        run: node node_modules/vitest/vitest.mjs run --root . --config vitest.config.ts packages/agent/tests/hook-packages-runtime.test.ts -t "runs staged Tauri hook lifecycles"
+        env:
+          WAGGLE_VERIFY_STAGED_HOOK_RUNTIME: '1'
+
       - name: Build frontend
         run: cd apps/web && npx vite build
 
