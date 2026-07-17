@@ -54,6 +54,13 @@ const primaryResearchDomains = [
   'github.com/pgvector/pgvector',
 ] as const;
 
+const runwayFormulaPattern = new RegExp([
+  String.raw`40[,.]?000\s*(?:/|divided by)\s*10[,.]?000`,
+  String.raw`cash\s*(?:/|divided by)\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn|net\s+burn|burn)`,
+  String.raw`\\frac\s*\{\s*\\text\s*\{\s*cash\s*\}\s*\}\s*\{\s*\\text\s*\{\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn)\s*\}\s*\}`,
+  String.raw`\\frac\s*\{\s*\\?\$?\s*40(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}\s*\{\s*\\?\$?\s*10(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}`,
+].join('|'), 'i');
+
 export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   {
     id: 'general-purpose',
@@ -170,7 +177,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'runway', description: 'Calculates four months of runway', kind: 'pattern', pattern: /\b4(?:\.0)?\s+months?\b/i, points: 10 },
-      { id: 'formula', description: 'States cash divided by monthly net burn', kind: 'pattern', pattern: /(?:40[,.]?000\s*(?:\/|divided by)\s*10[,.]?000|cash\s*(?:\/|divided by)\s*(?:monthly )?(?:net )?burn)/i, points: 10 },
+      { id: 'formula', description: 'States cash divided by monthly net burn', kind: 'pattern', pattern: runwayFormulaPattern, points: 10 },
       { id: 'assumption', description: 'Names the constant-burn/no-revenue assumption', kind: 'allPatterns', patterns: [/assumption/i, /(?:burn.*constant|no (?:new )?revenue|revenue remains zero)/i], points: 10 },
       { id: 'two-actions', description: 'Gives cost and revenue actions', kind: 'allPatterns', patterns: [/(?:reduce|cut|lower)[\s\S]{0,60}(?:costs?|burn)/i, /(?:increase|generate|close|raise)[\s\S]{0,60}(?:revenue|customers?|funding)/i], points: 10 },
       { id: 'no-false-impact', description: 'Avoids false dollar-to-month claims and schedule CTAs', kind: 'notPattern', pattern: /(?:each dollar saved.*(?:one|1).*month|\/schedule|calendar event)/i, points: 10 },
@@ -196,7 +203,7 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   {
     id: 'data-engineer',
     label: 'Idempotent ETL design',
-    prompt: 'Design an idempotent ETL from newline-delimited JSON events into SQLite. Include schema, deduplication key, transaction strategy, retry behavior, and a compact Python example. The example must be syntactically valid and include all imports. Do not write files.',
+    prompt: 'Design an idempotent ETL from newline-delimited JSON events into SQLite. Include schema, deduplication key, transaction strategy, retry behavior, and a compact Python example. The example must be syntactically valid and include all imports. Do not write files or execute code; provide the example as text only.',
     readOnly: true,
     maxDurationMs: 60_000,
     maxInputTokens: 25_000,

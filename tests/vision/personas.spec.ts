@@ -94,6 +94,24 @@ interface ChatRequestPayload {
   persona?: string;
 }
 
+interface ApprovalAutoDenial {
+  observedAt: string;
+  cardText: string;
+  screenshotPath: string | null;
+  screenshotError: string | null;
+  requestId: string | null;
+  requestUrl: string | null;
+  requestBody: string | null;
+  responseStatus: number | null;
+  responseBody: string | null;
+  transportError: string | null;
+}
+
+interface SendAndCaptureOptions {
+  bodyTimeoutMs: number;
+  approvalScreenshotPrefix: string;
+}
+
 interface WireTurn {
   requestUrl: string;
   requestPayload: ChatRequestPayload;
@@ -104,6 +122,7 @@ interface WireTurn {
   done: Record<string, unknown> | null;
   timedOut: boolean;
   transportError: string | null;
+  approvalAutoDenials: ApprovalAutoDenial[];
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -225,56 +244,239 @@ async function openPersonaChat(page: Page, workspaceId: string): Promise<void> {
   await page.locator('textarea').first().waitFor({ state: 'visible', timeout: 30_000 });
 }
 
-async function sendAndCapture(page: Page, prompt: string): Promise<WireTurn> {
-  const target = page.locator('textarea').first();
-  await target.waitFor({ state: 'visible', timeout: 15_000 });
-  await target.fill(prompt, { timeout: 30_000 });
-
-  const responsePromise = page.waitForResponse(
-    response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/chat',
-    { timeout: 180_000 },
-  );
-  const startedAt = Date.now();
-  const sendButton = page.locator('button[aria-label*="Send" i], button:has-text("Send")').first();
-  if (await sendButton.isEnabled({ timeout: 800 }).catch(() => false)) {
-    await sendButton.click().catch(() => target.press('Enter'));
-  } else {
-    await target.press('Enter');
+function remainingDeadlineMs(deadlineAt: number, operation: string, capMs = Number.MAX_SAFE_INTEGER): number {
+  const remainingMs = deadlineAt - Date.now();
+  if (remainingMs <= 0) {
+    throw new Error(`Chat response body deadline expired while ${operation}.`);
   }
+  return Math.max(1, Math.min(capMs, remainingMs));
+}
 
+async function settleBeforeDeadline<T>(
+  deadlineAt: number,
+  operation: string,
+  run: () => Promise<T>,
+  capMs = Number.MAX_SAFE_INTEGER,
+): Promise<T> {
+  const timeoutMs = remainingDeadlineMs(deadlineAt, operation, capMs);
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`Chat response body deadline expired while ${operation}.`)),
+      timeoutMs,
+    );
+    void run().then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function appendTransportError(denial: ApprovalAutoDenial, message: string): void {
+  denial.transportError = denial.transportError
+    ? `${denial.transportError} ${message}`
+    : message;
+}
+
+async function captureBodyWithApprovalDenials(
+  page: Page,
+  bodyPromise: Promise<Buffer>,
+  deadlineAt: number,
+  screenshotPrefix: string,
+  approvalAutoDenials: ApprovalAutoDenial[],
+): Promise<Buffer> {
+  const settledBody = bodyPromise.then(
+    body => ({ kind: 'body' as const, body }),
+    error => ({ kind: 'error' as const, error }),
+  );
+  const approvalGate = page.locator('[data-testid="chat-approval-gate"]').first();
+
+  while (true) {
+    const remainingMs = remainingDeadlineMs(deadlineAt, 'waiting for stream completion');
+
+    const outcome = await Promise.race([
+      settledBody,
+      page.waitForTimeout(Math.min(100, remainingMs)).then(() => ({ kind: 'poll' as const })),
+    ]);
+    const approvalVisible = await settleBeforeDeadline(
+      deadlineAt,
+      'checking the approval card',
+      () => approvalGate.isVisible(),
+      500,
+    );
+    if (!approvalVisible) {
+      if (outcome.kind === 'body') return outcome.body;
+      if (outcome.kind === 'error') throw outcome.error;
+      continue;
+    }
+
+    await approvalGate.scrollIntoViewIfNeeded({
+      timeout: remainingDeadlineMs(deadlineAt, 'scrolling to the approval card', 1_000),
+    }).catch(() => {});
+    const cardText = (await approvalGate.innerText({
+      timeout: remainingDeadlineMs(deadlineAt, 'reading the approval card', 1_000),
+    }).catch(() => '')).trim();
+    const observedAt = new Date().toISOString();
+    const screenshotPath = `${screenshotPrefix}-${approvalAutoDenials.length + 1}.png`;
+    let capturedPath: string | null = screenshotPath;
+    let screenshotError: string | null = null;
+    try {
+      await page.screenshot({
+        path: screenshotPath,
+        fullPage: true,
+        timeout: remainingDeadlineMs(deadlineAt, 'capturing the approval card', 3_000),
+      });
+    } catch (error) {
+      capturedPath = null;
+      screenshotError = error instanceof Error ? error.message : String(error);
+    }
+
+    const denial: ApprovalAutoDenial = {
+      observedAt,
+      cardText,
+      screenshotPath: capturedPath,
+      screenshotError,
+      requestId: null,
+      requestUrl: null,
+      requestBody: null,
+      responseStatus: null,
+      responseBody: null,
+      transportError: null,
+    };
+    approvalAutoDenials.push(denial);
+    const denialResponsePromise = page.waitForResponse(
+      response => response.request().method() === 'POST'
+        && new URL(response.url()).pathname.startsWith('/api/approval/'),
+      { timeout: remainingDeadlineMs(deadlineAt, 'waiting for the denial receipt', 5_000) },
+    ).catch(() => null);
+    try {
+      await approvalGate.getByRole('button', { name: 'Not now', exact: true }).click({
+        timeout: remainingDeadlineMs(deadlineAt, 'clicking Not now', 3_000),
+      });
+    } catch (error) {
+      appendTransportError(
+        denial,
+        `Approval denial click failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      throw error;
+    }
+    const denialResponse = await denialResponsePromise;
+    const requestUrl = denialResponse?.url() ?? null;
+    const requestId = requestUrl
+      ? decodeURIComponent(new URL(requestUrl).pathname.split('/').filter(Boolean).at(-1) ?? '') || null
+      : null;
+    denial.requestId = requestId;
+    denial.requestUrl = requestUrl;
+    denial.requestBody = denialResponse?.request().postData() ?? null;
+    denial.responseStatus = denialResponse?.status() ?? null;
+    if (denialResponse) {
+      try {
+        denial.responseBody = await settleBeforeDeadline(
+          deadlineAt,
+          'reading the denial receipt',
+          () => denialResponse.text(),
+          3_000,
+        );
+      } catch (error) {
+        appendTransportError(
+          denial,
+          `Approval denial response could not be read: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    } else {
+      appendTransportError(denial, 'No matching approval-denial response was observed.');
+    }
+    await approvalGate.waitFor({
+      state: 'hidden',
+      timeout: remainingDeadlineMs(deadlineAt, 'waiting for the approval card to close', 5_000),
+    }).catch((error) => {
+      appendTransportError(
+        denial,
+        `Approval card did not close: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+  }
+}
+
+async function sendAndCapture(
+  page: Page,
+  prompt: string,
+  options: SendAndCaptureOptions,
+): Promise<WireTurn> {
+  const target = page.locator('textarea').first();
+  const startedAt = Date.now();
+  const deadlineAt = startedAt + options.bodyTimeoutMs;
+  const approvalAutoDenials: ApprovalAutoDenial[] = [];
+  let requestUrl = `${BASE}/api/chat`;
+  let requestPayload: ChatRequestPayload = { message: prompt };
+  let httpStatus = 0;
   try {
-    const response = await responsePromise;
-    const requestPayload = parseRequestPayload(response.request().postData());
+    await target.waitFor({ state: 'visible', timeout: 15_000 });
+    await target.fill(prompt, { timeout: 30_000 });
+    const responseResult = page.waitForResponse(
+      response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/chat',
+      { timeout: remainingDeadlineMs(deadlineAt, 'waiting for chat response headers') },
+    ).then(
+      response => ({ response, error: null }),
+      error => ({ response: null, error }),
+    );
+    const sendButton = page.locator('button[aria-label*="Send" i], button:has-text("Send")').first();
+    if (await sendButton.isEnabled({ timeout: 800 }).catch(() => false)) {
+      await sendButton.click().catch(() => target.press('Enter'));
+    } else {
+      await target.press('Enter');
+    }
+
+    const responseOutcome = await responseResult;
+    if (responseOutcome.error) throw responseOutcome.error;
+    const response = responseOutcome.response;
+    if (!response) throw new Error('Chat response headers were not captured.');
+    requestUrl = response.url();
+    requestPayload = parseRequestPayload(response.request().postData());
+    httpStatus = response.status();
     // Playwright's response.text() can honor a missing/legacy HTTP charset and
     // mojibake UTF-8 punctuation on Windows. The chat wire contract is UTF-8;
     // decode the captured bytes explicitly so wire, UI, and persisted evidence
     // are compared without a test-harness encoding artifact.
-    const body = (await response.body()).toString('utf8');
+    const body = (await captureBodyWithApprovalDenials(
+      page,
+      response.body(),
+      deadlineAt,
+      options.approvalScreenshotPrefix,
+      approvalAutoDenials,
+    )).toString('utf8');
     const completedAt = Date.now();
     const parsed = parseSse(body);
     const doneEvent = [...parsed.events].reverse().find(event => event.event === 'done');
     return {
-      requestUrl: response.url(),
+      requestUrl,
       requestPayload,
-      httpStatus: response.status(),
+      httpStatus,
       durationMs: completedAt - startedAt,
       events: parsed.events,
       parseErrors: parsed.errors,
       done: asRecord(doneEvent?.data),
       timedOut: false,
       transportError: null,
+      approvalAutoDenials,
     };
   } catch (error) {
     return {
-      requestUrl: `${BASE}/api/chat`,
-      requestPayload: { message: prompt },
-      httpStatus: 0,
+      requestUrl,
+      requestPayload,
+      httpStatus,
       durationMs: Date.now() - startedAt,
       events: [],
       parseErrors: [],
       done: null,
       timedOut: true,
       transportError: error instanceof Error ? error.message : String(error),
+      approvalAutoDenials,
     };
   }
 }
@@ -385,6 +587,109 @@ function artifactName(
 test.use({ viewport: { width: 1440, height: 900 } });
 test.describe.configure({ timeout: 300_000, retries: 0 });
 
+test('persona harness safely denies an approval card while the response body is pending', async ({ page }) => {
+  mkdirSync(ARTIFACTS, { recursive: true });
+  await page.route('https://persona.test/api/approval/mock-request', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ ok: true, approved: false }),
+  }));
+  await page.setContent([
+    '<div data-testid="chat-approval-gate">',
+    '<span>Approve before I continue</span>',
+    '<code>run_code</code>',
+    '<button onclick="fetch(\'https://persona.test/api/approval/mock-request\',{method:\'POST\',body:\'{&quot;approved&quot;:false}\'}).then(()=>this.parentElement.remove())">Not now</button>',
+    '</div>',
+  ].join(''));
+
+  const approvalAutoDenials: ApprovalAutoDenial[] = [];
+  const simulatedBody = page.locator('[data-testid="chat-approval-gate"]')
+    .waitFor({ state: 'detached' })
+    .then(() => Buffer.from('event: done\ndata: {"content":"denied safely"}\n\n'));
+  const body = await captureBodyWithApprovalDenials(
+    page,
+    simulatedBody,
+    Date.now() + 3_000,
+    join(ARTIFACTS, 'harness-approval-denied'),
+    approvalAutoDenials,
+  );
+
+  expect(body.toString('utf8')).toContain('denied safely');
+  expect(approvalAutoDenials).toHaveLength(1);
+  expect(approvalAutoDenials[0]).toMatchObject({
+    cardText: expect.stringContaining('run_code'),
+    screenshotError: null,
+    requestId: 'mock-request',
+    requestBody: '{"approved":false}',
+    responseStatus: 200,
+    transportError: null,
+  });
+  expect(approvalAutoDenials[0]?.screenshotPath).toMatch(/harness-approval-denied-1\.png$/);
+});
+
+test('persona harness drains a visible approval card before returning an already-settled body', async ({ page }) => {
+  mkdirSync(ARTIFACTS, { recursive: true });
+  await page.route('https://persona.test/api/approval/settled-request', route => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify({ ok: true, approved: false }),
+  }));
+  await page.setContent([
+    '<div data-testid="chat-approval-gate">',
+    '<code>bash</code>',
+    '<button onclick="fetch(\'https://persona.test/api/approval/settled-request\',{method:\'POST\'}).then(()=>this.parentElement.remove())">Not now</button>',
+    '</div>',
+  ].join(''));
+
+  const approvalAutoDenials: ApprovalAutoDenial[] = [];
+  const body = await captureBodyWithApprovalDenials(
+    page,
+    Promise.resolve(Buffer.from('settled body')),
+    Date.now() + 3_000,
+    join(ARTIFACTS, 'harness-approval-settled'),
+    approvalAutoDenials,
+  );
+
+  expect(body.toString('utf8')).toBe('settled body');
+  expect(approvalAutoDenials).toHaveLength(1);
+  expect(approvalAutoDenials[0]).toMatchObject({
+    requestId: 'settled-request',
+    responseStatus: 200,
+    transportError: null,
+  });
+});
+
+test('persona harness preserves denial evidence and exits at the absolute body deadline', async ({ page }) => {
+  mkdirSync(ARTIFACTS, { recursive: true });
+  await page.setContent([
+    '<div data-testid="chat-approval-gate">',
+    '<code>run_code</code>',
+    '<button onclick="this.parentElement.remove()">Not now</button>',
+    '</div>',
+  ].join(''));
+
+  const approvalAutoDenials: ApprovalAutoDenial[] = [];
+  const startedAt = Date.now();
+  await expect(captureBodyWithApprovalDenials(
+    page,
+    new Promise<Buffer>(() => {}),
+    startedAt + 800,
+    join(ARTIFACTS, 'harness-approval-deadline'),
+    approvalAutoDenials,
+  )).rejects.toThrow(/deadline expired/i);
+
+  expect(Date.now() - startedAt).toBeLessThan(2_000);
+  expect(approvalAutoDenials).toHaveLength(1);
+  expect(approvalAutoDenials[0]).toMatchObject({
+    cardText: expect.stringContaining('run_code'),
+    requestId: null,
+    responseStatus: null,
+    transportError: expect.stringContaining('No matching approval-denial response'),
+  });
+});
+
 test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'} (${REPEATS} repeats each)`, () => {
   test.beforeAll(async ({ request }) => {
     const response = await request.get(`${BASE}/api/personas`);
@@ -406,10 +711,18 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         const screenshotErrors: string[] = [];
         const screenshots: string[] = [];
         const workspace = await createPersonaWorkspace(page, persona, repeat);
+        const stem = artifactName(persona, repeat, testInfo, workspace.workspaceId);
 
         await gotoDesktop(page);
         await openPersonaChat(page, workspace.workspaceId);
-        const wire = await sendAndCapture(page, persona.prompt);
+        const wire = await sendAndCapture(page, persona.prompt, {
+          bodyTimeoutMs: persona.maxDurationMs + 15_000,
+          approvalScreenshotPrefix: join(ARTIFACTS, `${stem}-approval-denied`),
+        });
+        for (const denial of wire.approvalAutoDenials) {
+          if (denial.screenshotPath) screenshots.push(denial.screenshotPath);
+          if (denial.screenshotError) screenshotErrors.push(denial.screenshotError);
+        }
         const requestPrompt = String(wire.requestPayload.message ?? '');
         const sessionId = String(wire.requestPayload.sessionId ?? '');
         const requestPersonaId = typeof wire.requestPayload.persona === 'string'
@@ -473,7 +786,6 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           .filter(snippet => persistedConversation.includes(snippet));
 
         await scrollConversationToEnd(page);
-        const stem = artifactName(persona, repeat, testInfo, workspace.workspaceId);
         const chatScreenshot = await captureScreenshot(
           page,
           join(ARTIFACTS, `${stem}-chat.png`),
@@ -556,7 +868,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         };
         const score = scorePersonaTrial(persona, evidence);
         const artifact = {
-          schemaVersion: 4,
+          schemaVersion: 5,
           runStartedAt,
           runCompletedAt: new Date().toISOString(),
           persona: {
@@ -590,6 +902,10 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             contextMetrics,
             toolsUsed,
             toolEvents,
+            approvalEvents: wire.events.filter(
+              event => event.event === 'approval_required' || event.event === 'approval_request',
+            ),
+            approvalAutoDenials: wire.approvalAutoDenials,
             sseEvents: wire.events,
             parseErrors: wire.parseErrors,
             transportError: wire.transportError,
