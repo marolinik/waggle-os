@@ -7,6 +7,7 @@ import {
   type PersonaAcceptanceCase,
 } from './persona-cases';
 import {
+  containsFailureCopy,
   extractPythonBlock,
   scorePersonaTrial,
   validatePythonSyntax,
@@ -326,6 +327,168 @@ describe('deterministic 100-point persona scorer', () => {
         passed: false,
         pointsAwarded: 0,
       });
+    }
+  });
+
+  it('accepts the valid live writer wording without weakening fact preservation', () => {
+    const writer = PERSONA_CASES.find(persona => persona.id === 'writer')!;
+    const response = [
+      '**Assumption:** You want a leadership-ready memo using only the provided facts.',
+      'We had planned to ship on Friday. API tests are passing. However, browser tests on Windows still show two failures.',
+      'The smart router has not been exercised without cloud credentials. The recommendation is to delay release until the Windows browser failures are resolved and the smart router is exercised without cloud credentials.',
+    ].join('\n\n');
+    const result = scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: writer.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(result.criticalFailures).toEqual([]);
+
+    const shouldResponse = [
+      'We planned to ship Friday. API tests are passing.',
+      'Browser tests on Windows still show two failures.',
+      'The smart router has not been exercised without cloud credentials.',
+      'We should delay release until those failures are closed.',
+    ].join(' ');
+    expect(scorePersonaTrial(writer, evidence({
+      prompt: writer.prompt,
+      response: shouldResponse,
+      persistedResponse: shouldResponse,
+      tokenStreamResponse: shouldResponse,
+      renderedAssistantResponse: shouldResponse,
+      requestPersonaId: writer.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const misleading = [
+      'We planned to ship Friday. API tests are passing.',
+      'Browser tests pass on Windows; reports of two failures are incorrect.',
+      'The smart router has not been exercised without cloud credentials.',
+      'We cannot recommend delaying the release until the failures are closed; ship now.',
+    ].join(' ');
+    const scopedNegation = [
+      'We planned to ship Friday. API tests are passing.',
+      'Browser tests on Windows no longer show two failures.',
+      'The smart router has not been exercised without cloud credentials.',
+      'I do not think we should delay release until the failures are closed; ship now.',
+    ].join(' ');
+    for (const invalidResponse of [misleading, scopedNegation]) {
+      const misleadingResult = scorePersonaTrial(writer, evidence({
+        prompt: writer.prompt,
+        response: invalidResponse,
+        persistedResponse: invalidResponse,
+        tokenStreamResponse: invalidResponse,
+        renderedAssistantResponse: invalidResponse,
+        requestPersonaId: writer.id,
+      }));
+
+      expect(misleadingResult.checks.find(check => check.id === 'release-facts')?.passed).toBe(false);
+      expect(misleadingResult.checks.find(check => check.id === 'recommendation')?.passed).toBe(false);
+      expect(misleadingResult.passed).toBe(false);
+    }
+  });
+
+  it('accepts the valid live finance formatting and cash-inflow action', () => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      '**Runway = 4.00 months**',
+      String.raw`\text{Runway (months)} = \frac{\text{Cash Balance}}{\text{Net Monthly Burn}}`,
+      '**Biggest assumption:** Net burn stays constant each month.',
+      '1. Cut monthly burn immediately.',
+      '2. Pull forward cash inflows through upfront customer payments and faster collections.',
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(result.criticalFailures).toEqual([]);
+
+    const shouldResponse = [
+      'Runway = 4.00 months.',
+      String.raw`Formula: \text{Runway (months)} = \frac{\text{Cash Balance}}{\text{Net Monthly Burn}}.`,
+      'Biggest assumption: burn stays constant.',
+      '1. We should cut monthly burn. 2. We should pull forward cash inflows through faster collections.',
+    ].join(' ');
+    expect(scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response: shouldResponse,
+      persistedResponse: shouldResponse,
+      tokenStreamResponse: shouldResponse,
+      renderedAssistantResponse: shouldResponse,
+      requestPersonaId: finance.id,
+    }))).toMatchObject({ score: 100, rawScore: 100, passed: true });
+
+    const misleading = [
+      'Runway is not 4.00 months.',
+      'Formula: avoid using cash balance / net monthly burn; instead use net monthly burn / cash balance.',
+      'Biggest assumption: burn stays constant.',
+      'Actions: We cannot afford to cut monthly burn. Avoid any attempt to pull forward cash inflows.',
+    ].join(' ');
+    const scopedNegation = [
+      'The runway cannot be 4.00 months.',
+      String.raw`Formula: \text{Runway (months)} = \frac{\text{Cash Balance}}{\text{Net Monthly Burn}}.`,
+      'Biggest assumption: burn stays constant.',
+      'Actions: I do not think we should cut monthly burn. I do not think we should pull forward cash inflows.',
+    ].join(' ');
+    for (const invalidResponse of [misleading, scopedNegation]) {
+      const misleadingResult = scorePersonaTrial(finance, evidence({
+        prompt: finance.prompt,
+        response: invalidResponse,
+        persistedResponse: invalidResponse,
+        tokenStreamResponse: invalidResponse,
+        renderedAssistantResponse: invalidResponse,
+        requestPersonaId: finance.id,
+      }));
+
+      expect(misleadingResult.checks.find(check => check.id === 'runway')?.passed).toBe(false);
+      expect(misleadingResult.checks.find(check => check.id === 'two-actions')?.passed).toBe(false);
+      if (invalidResponse === misleading) {
+        expect(misleadingResult.checks.find(check => check.id === 'formula')?.passed).toBe(false);
+      }
+      expect(misleadingResult.passed).toBe(false);
+    }
+  });
+
+  it('distinguishes a discussed model-unavailable scenario from a real failure banner', () => {
+    const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
+    const response = [
+      'Milestones and dependencies assign owners by role.',
+      'Risks and exit criteria include failure-mode tests for model unavailable, proxy down, and bad config.',
+    ].join('\n');
+    const result = scorePersonaTrial(projectManager, evidence({
+      prompt: projectManager.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: projectManager.id,
+    }));
+
+    expect(containsFailureCopy(response)).toBe(false);
+    expect(containsFailureCopy('- Model unavailable: verify fallback routing and recovery.')).toBe(false);
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(result.criticalFailures).toEqual([]);
+
+    for (const failure of [
+      'Generation failed: LLM error (400): invalid tool call arguments',
+      'Model unavailable\nTry again later.',
+      'The request timed out. The model may be overloaded - try again in a moment.',
+      'Unexpected provider output [TOOL_CALL] malformed',
+    ]) {
+      expect(containsFailureCopy(failure)).toBe(true);
+      const failureResult = scorePersonaTrial(syntheticCase, evidence({ response: failure }));
+      expect(failureResult.score).toBe(0);
+      expect(failureResult.criticalFailures.map(item => item.code)).toContain('corruption_or_hang');
     }
   });
 

@@ -54,12 +54,26 @@ const primaryResearchDomains = [
   'github.com/pgvector/pgvector',
 ] as const;
 
+const runwayAssertionPrefix = String.raw`(?<!incorrect )(?<!wrong )\b(?:formula|runway(?:\s*\(months\))?)\b(?:(?!\b(?:do\s+not|don't|not|never|avoid|cannot|can't|incorrect|wrong)\b)[\s\S]){0,180}`;
+const runwayAssertionSuffix = String.raw`(?![^.\r\n]{0,60}\b(?:incorrect|wrong)\b)`;
 const runwayFormulaPattern = new RegExp([
-  String.raw`40[,.]?000\s*(?:/|divided by)\s*10[,.]?000`,
-  String.raw`cash\s*(?:/|divided by)\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn|net\s+burn|burn)`,
-  String.raw`\\frac\s*\{\s*\\text\s*\{\s*cash\s*\}\s*\}\s*\{\s*\\text\s*\{\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn)\s*\}\s*\}`,
-  String.raw`\\frac\s*\{\s*\\?\$?\s*40(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}\s*\{\s*\\?\$?\s*10(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}`,
+  `${runwayAssertionPrefix}${String.raw`40[,.]?000\s*(?:/|divided by)\s*10[,.]?000`}${runwayAssertionSuffix}`,
+  `${runwayAssertionPrefix}${String.raw`cash(?:\s+balance)?\s*(?:/|divided by)\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn|net\s+burn|burn)`}${runwayAssertionSuffix}`,
+  `${runwayAssertionPrefix}${String.raw`\\frac\s*\{\s*\\text\s*\{\s*cash(?:\s+balance)?\s*\}\s*\}\s*\{\s*\\text\s*\{\s*(?:(?:net\s+)?monthly\s+burn|monthly\s+net\s+burn)\s*\}\s*\}`}${runwayAssertionSuffix}`,
+  `${runwayAssertionPrefix}${String.raw`\\frac\s*\{\s*\\?\$?\s*40(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}\s*\{\s*\\?\$?\s*10(?:\{,\}|\\,|,)?000(?:\{\.\}0{1,2}|\.0{1,2})?\s*\}`}${runwayAssertionSuffix}`,
 ].join('|'), 'i');
+
+const positiveFailureVerb = String.raw`(?<!not )(?<!cannot )(?<!can't )(?<!never )(?<!no longer )\b(?:(?:still\s+)?(?:show(?:s|ing)?|have|report(?:s|ing)?|return(?:s|ing)?|produce(?:s|ing)?)|remain(?:s|ing)?)\s+(?:two|2)\s+failures?\b`;
+const windowsBrowserFailuresPattern = new RegExp([
+  `${String.raw`\bbrowser tests?\b[^.\r\n]{0,80}\bWindows\b[^.\r\n]{0,50}`}${positiveFailureVerb}`,
+  `${String.raw`\bbrowser tests?\b[^.\r\n]{0,60}`}${positiveFailureVerb}${String.raw`[^.\r\n]{0,60}\bWindows\b`}`,
+].join('|'), 'i');
+const positiveRecommendationLead = String.raw`(?:(?<!cannot )(?<!can't )(?<!not )\b(?:recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[\s\S]){0,80}|(?:^|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:\*\*)?|(?:^|[.!?]\s+|[\r\n])[ \t]*(?:[-*#>]+[ \t]*)?(?:we|you|the team)[ \t]+should[ \t]+)`;
+const delayRecommendationPattern = new RegExp(`${positiveRecommendationLead}${String.raw`\bdelay(?:ing)?\s+(?:the\s+)?release\b[\s\S]{0,240}\b(?:until|once)\b[\s\S]{0,180}(?:gaps?|failures?|smart router|cloud credentials)`}`, 'im');
+const positiveRunwayPattern = /(?:\brunway\b(?:(?!\b(?:not|never|cannot|can't|incorrect|wrong|isn't|isn’t|no\s+longer)\b)[^.\r\n]){0,50}\b4(?:\.0+)?\s+months?\b|(?<!not )(?<!isn't )(?<!isn’t )\b4(?:\.0+)?\s+months?\s+(?:of\s+)?runway\b)/i;
+const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:\d+[.)]|[-*])?[ \t]*(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
+const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}`, 'im');
+const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}`, 'im');
 
 export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   {
@@ -126,9 +140,9 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       { id: 'word-limit', description: 'Stays within 120 words', kind: 'maxWords', maxWords: 120, points: 10 },
-      { id: 'release-facts', description: 'Preserves Friday, API, Windows, and two-failure facts', kind: 'allPatterns', patterns: [/Friday/i, /API tests? (?:pass|passed)/i, /two (?:browser )?failures?/i, /Windows/i], points: 10 },
+      { id: 'release-facts', description: 'Preserves Friday, passing API tests, and two Windows browser-test failures', kind: 'allPatterns', patterns: [/Friday/i, /API tests?\s+(?:are\s+)?pass(?:ed|ing)?\b/i, windowsBrowserFailuresPattern], points: 10 },
       { id: 'router-fact', description: 'Preserves the unexercised smart-router/cloud-credentials fact', kind: 'allPatterns', patterns: [/smart router/i, /not (?:been )?(?:exercised|tested|validated)/i, /cloud credentials/i], points: 10 },
-      { id: 'recommendation', description: 'Preserves the delay recommendation and its condition', kind: 'allPatterns', patterns: [/delay/i, /(?:until|once).*gaps?/i], points: 10 },
+      { id: 'recommendation', description: 'Preserves a positive delay recommendation and its condition', kind: 'pattern', pattern: delayRecommendationPattern, points: 10 },
       { id: 'no-new-claims', description: 'Avoids known invented risk and schedule claims', kind: 'notPattern', pattern: /(?:production-equivalent|unacceptable (?:post-release )?incident risk|short hold|not a scope change|revised ship date)/i, points: 10 },
     ],
   },
@@ -176,10 +190,10 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 2_000,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'runway', description: 'Calculates four months of runway', kind: 'pattern', pattern: /\b4(?:\.0)?\s+months?\b/i, points: 10 },
+      { id: 'runway', description: 'Positively calculates four months of runway', kind: 'pattern', pattern: positiveRunwayPattern, points: 10 },
       { id: 'formula', description: 'States cash divided by monthly net burn', kind: 'pattern', pattern: runwayFormulaPattern, points: 10 },
       { id: 'assumption', description: 'Names the constant-burn/no-revenue assumption', kind: 'allPatterns', patterns: [/assumption/i, /(?:burn.*constant|no (?:new )?revenue|revenue remains zero)/i], points: 10 },
-      { id: 'two-actions', description: 'Gives cost and revenue actions', kind: 'allPatterns', patterns: [/(?:reduce|cut|lower)[\s\S]{0,60}(?:costs?|burn)/i, /(?:increase|generate|close|raise)[\s\S]{0,60}(?:revenue|customers?|funding)/i], points: 10 },
+      { id: 'two-actions', description: 'Gives positive cost and revenue or cash-inflow actions', kind: 'allPatterns', patterns: [costActionPattern, cashActionPattern], points: 10 },
       { id: 'no-false-impact', description: 'Avoids false dollar-to-month claims and schedule CTAs', kind: 'notPattern', pattern: /(?:each dollar saved.*(?:one|1).*month|\/schedule|calendar event)/i, points: 10 },
     ],
   },

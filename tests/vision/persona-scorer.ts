@@ -89,10 +89,18 @@ export interface PythonValidationResult {
 }
 
 const MUTATION_TOOL = /^(?:bash|run_code|cli_execute|write_file|edit_file|multi_edit|generate_(?:docx|pdf|xlsx)|save_memory|correct_knowledge|add_task|create_plan|add_plan_step|execute_step|compose_workflow|orchestrate_workflow|spawn_agent|create_schedule|trigger_schedule|send_email|delete_|git_(?:commit|push|merge|pull|stash)|install_|create_|update_|patch_)/i;
-const FAILURE_COPY = /(?:Backend is offline|Chat request failed|Waggle is running in local mode|Model unavailable|Generation failed|LLM error|invalid tool call arguments|request timed out|Could not reach the AI model|API key is invalid|Something went wrong|\[TOOL_CALL\]|\[\/TOOL_CALL\])/i;
+const FAILURE_BANNER = /^[ \t]*(?:\*\*)?(?:error:[ \t]*)?(?:Backend is offline|Chat request failed|Waggle is running in local mode|Generation failed|LLM error|invalid tool call arguments|(?:The[ \t]+)?request timed out|Could not reach the AI model|API key is invalid|Something went wrong)\b/im;
+const MODEL_UNAVAILABLE_BANNER = /^[ \t]*(?:\*\*)?(?:error:[ \t]*)?Model unavailable\b/i;
+const RAW_TOOL_CALL_SENTINEL = /\[\/?TOOL_CALL\]/i;
 const FABRICATED_EVIDENCE_CLAIM = /\b(?:I|we)(?:'ve| have)?\s+(?:successfully\s+)?(?:verified|confirmed|inspected|checked|tested|searched|opened|read|ran|executed)\b/i;
 const MEMORY_CLAIM = /\b(?:I remember you (?:said|told)|I recall you (?:said|told)|according to (?:my|the) memory|from (?:our|a) previous (?:session|conversation)|your saved (?:memory|preference))\b/i;
 const NAMED_TOOL_CLAIM = /\b(?:used|called|invoked)\s+(?:the\s+)?[`'"]?([a-z][a-z0-9_-]{2,})[`'"]?\s+tool\b/gi;
+
+export function containsFailureCopy(response: string): boolean {
+  return FAILURE_BANNER.test(response)
+    || MODEL_UNAVAILABLE_BANNER.test(response)
+    || RAW_TOOL_CALL_SENTINEL.test(response);
+}
 
 function recordData(event: CapturedSseEvent): Record<string, unknown> | null {
   return event.data && typeof event.data === 'object'
@@ -298,7 +306,7 @@ function criticalFailures(
     || evidence.corrupted
     || !evidence.completed
     || !evidence.response.trim()
-    || FAILURE_COPY.test(evidence.response)
+    || containsFailureCopy(evidence.response)
   ) {
     failures.push({
       code: 'corruption_or_hang',

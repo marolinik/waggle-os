@@ -19,6 +19,7 @@ import {
   type PersonaAcceptanceCase,
 } from './persona-cases';
 import {
+  containsFailureCopy,
   scorePersonaTrial,
   validatePythonSyntax,
   type CapturedSseEvent,
@@ -39,7 +40,6 @@ const RUN_MODE = resolvePersonaRunMode(
 );
 const REPEATS = RUN_MODE.repeats;
 const SKIP_PARAMS = 'skipOnboarding=true&skipBoot=true&tier=power&skipBriefing=true';
-const FAILURE_COPY = /(?:Backend is offline|Chat request failed|Waggle is running in local mode|Model unavailable|Generation failed|LLM error|invalid tool call arguments|request timed out|Could not reach the AI model|API key is invalid|Something went wrong|\[TOOL_CALL\]|\[\/TOOL_CALL\])/i;
 const seenWorkspaceIds = new Set<string>();
 const seenSessionIds = new Set<string>();
 const CONTEXT_METRIC_KEYS = [
@@ -860,7 +860,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             || criticalBrowserErrors.length > 0
             || inputTokens <= 0
             || outputTokens <= 0
-            || FAILURE_COPY.test(responseText),
+            || containsFailureCopy(responseText),
           codeValidation: {
             pythonSyntaxValid: pythonValidation.syntaxValid,
             pythonImportsPresent: pythonValidation.importsPresent,
