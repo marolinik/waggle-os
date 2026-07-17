@@ -127,8 +127,13 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     !state.verificationCorrectionUsed &&
     assertsUnverifiedCompletion(content, toolsUsed, userRequest)
   ) {
-    messages.push({ role: 'assistant', content });
-    messages.push({ role: 'system', content: VERIFICATION_GATE_DIRECTIVE });
+    const systemMessage = messages.find(message => message.role === 'system');
+    const internalDirective = `\n\n# Internal verification correction\n${VERIFICATION_GATE_DIRECTIVE}`;
+    if (systemMessage && typeof systemMessage.content === 'string') {
+      systemMessage.content += internalDirective;
+    } else {
+      messages.unshift({ role: 'system', content: internalDirective.trim() });
+    }
     logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
     return {
       fired: true,

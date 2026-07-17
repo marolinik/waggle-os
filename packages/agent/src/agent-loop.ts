@@ -353,11 +353,14 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     }
     const usedBeforeRequest = totalInputTokens + totalOutputTokens;
     let requestMessages = compactToolContextForModel(messages, toolContextBudget);
+    const turnOpenAiTools = gateState.verificationCorrectionUsed
+      ? openaiTools.filter(tool => tool.function.name !== 'save_memory')
+      : openaiTools;
     const estimatedNextRequestTokens = Math.max(
       lastRequestInputTokens,
       Math.ceil((
         JSON.stringify(requestMessages).length
-        + (!synthesisForced && openaiTools.length > 0 ? JSON.stringify(openaiTools).length : 0)
+        + (!synthesisForced && turnOpenAiTools.length > 0 ? JSON.stringify(turnOpenAiTools).length : 0)
       ) / 4),
     );
     if (
@@ -375,8 +378,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       model,
       messages: requestMessages,
     };
-    if (openaiTools.length > 0 && !synthesisForced) {
-      body.tools = openaiTools;
+    if (turnOpenAiTools.length > 0 && !synthesisForced) {
+      body.tools = turnOpenAiTools;
     }
     if (stream) {
       body.stream = true;
@@ -544,8 +547,8 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       }
 
       // Completion-time gates: D3 (verification) + D1 (skill distillation).
-      // See ./loop-gates.ts. If a gate fires, it pushes the corrective
-      // directive into `messages` and returns fired=true → continue loop.
+      // See ./loop-gates.ts. If a gate fires, it amends the internal context
+      // and returns fired=true → continue loop.
       const gate = await maybeFireCompletionGate({
         content,
         toolsUsed,
@@ -608,9 +611,12 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
 
     // Execute each tool call through the explicit middleware chain in
     // `./tool-executor.ts`. Review C2 hook-ordering is preserved there.
+    const turnToolMap = gateState.verificationCorrectionUsed
+      ? new Map([...toolMap].filter(([name]) => name !== 'save_memory'))
+      : toolMap;
     for (const toolCall of assistantMessage.tool_calls) {
       const r = await executeToolCall(toolCall, {
-        toolMap,
+        toolMap: turnToolMap,
         guard,
         hooks,
         capabilityRouter: config.capabilityRouter,

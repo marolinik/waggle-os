@@ -68,14 +68,14 @@ describe('premium contract — D3 + D1 compose at the completion boundary (stand
     const body4 = JSON.parse((fetch.mock.calls[3][1] as RequestInit).body as string).messages as Array<{ role: string; content: string }>;
 
     // D3 fired before turn 3 (verification corrective injected)…
-    expect(body3.some(m => m.role === 'system' && m.content === VERIFICATION_GATE_DIRECTIVE)).toBe(true);
+    expect(body3.some(m => m.role === 'system' && m.content.includes(VERIFICATION_GATE_DIRECTIVE))).toBe(true);
     // …and D1 fired before turn 4 (the real distillation directive injected),
     // i.e. ordering preserved and D3 did NOT swallow D1.
     const expectedDistill = planSkillDistillation(['probe', 'probe', 'probe', 'probe', 'probe'], honest)!;
     expect(expectedDistill).not.toBeNull();
     expect(body4.some(m => m.role === 'user' && m.content === expectedDistill.directive)).toBe(true);
     // D3 directive must NOT reappear in turn 4 (one-shot, not re-fired).
-    expect(body4.filter(m => m.content === VERIFICATION_GATE_DIRECTIVE).length).toBe(1);
+    expect(body4.filter(m => m.content.includes(VERIFICATION_GATE_DIRECTIVE)).length).toBe(1);
 
     // Issue #4 — the D3-corrected honest answer is what the caller gets;
     // D1's distillation runs as a side-effect that does NOT overwrite the
