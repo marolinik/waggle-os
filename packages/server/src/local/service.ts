@@ -222,6 +222,18 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
       : { status: 'error', port: litellmPort, error: 'No provider models available' };
   }
 
+  const managedLiteLLMUrl = `http://localhost:${litellmPort}`;
+  const selfProxyUrl = `http://127.0.0.1:${port}/v1`;
+  let litellmReachable = false;
+  if (!skipLiteLLM) {
+    try {
+      const healthRes = await fetch(`${managedLiteLLMUrl}/health/liveliness`, {
+        signal: AbortSignal.timeout(2000),
+      });
+      litellmReachable = healthRes.ok;
+    } catch { /* not reachable */ }
+  }
+
   // 5. Check port availability before building server
   emit({ phase: 'server', message: 'Checking port availability...', progress: 0.7 });
   const portFree = await checkPortAvailable(port);
@@ -236,9 +248,10 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   const server = await buildLocalServer({
     dataDir,
     port,
-    litellmUrl: `http://localhost:${litellmPort}`,
+    litellmUrl: litellmReachable ? managedLiteLLMUrl : selfProxyUrl,
     manageLiteLLM: !skipLiteLLM,
     managedLiteLLMPort: litellmPort,
+    useBuiltInProxy: !litellmReachable,
   });
 
   // 7. Register self-removing shutdown handlers (must add hook before listen)
@@ -271,15 +284,6 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
   let providerHealth: LlmHealthStatus = 'unavailable';
   let providerDetail = 'No working LLM path';
 
-  // Try LiteLLM first
-  let litellmReachable = false;
-  try {
-    const healthRes = await fetch(`http://localhost:${litellmPort}/health/liveliness`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    litellmReachable = healthRes.ok;
-  } catch { /* not reachable */ }
-
   if (litellmReachable) {
     providerName = 'litellm';
     providerHealth = 'healthy';
@@ -287,9 +291,8 @@ export async function startService(options?: ServiceOptions): Promise<ServiceRes
     log.info(`LLM provider: LiteLLM (http://localhost:${litellmPort})`);
   } else {
     // Fall back to the in-process provider proxy (no Python/Docker required).
-    const selfUrl = `http://127.0.0.1:${port}/v1`;
     server.agentState.litellmApiKey = server.agentState.wsSessionToken;
-    server.localConfig.litellmUrl = selfUrl;
+    server.localConfig.litellmUrl = selfProxyUrl;
     providerName = 'anthropic-proxy';
 
     const configuredProviders = getConfiguredProviderIds(dataDir, server);

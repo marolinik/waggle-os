@@ -179,6 +179,68 @@ describe('Agent Service', () => {
     expect(server.localConfig.manageLiteLLM).toBe(false);
   });
 
+  it('does not probe or adopt an unrelated LiteLLM when explicitly skipped', async () => {
+    const dataDir = makeTmpDir();
+    tmpDirs.push(dataDir);
+    const port = randomPort();
+    const litellmPort = randomPort();
+
+    clearProviderEnv();
+    vi.stubEnv('OPENAI_API_KEY', 'openai-solo-test-key');
+    const workerRequests: Array<{ url: string; authorization: string | null }> = [];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url === `http://127.0.0.1:${port}/v1/chat/completions`) {
+        workerRequests.push({
+          url,
+          authorization: new Headers(init?.headers).get('authorization'),
+        });
+        return new Response(JSON.stringify({
+          choices: [{
+            message: { role: 'assistant', content: 'Isolated sub-agent response.' },
+            finish_reason: 'stop',
+          }],
+          usage: { prompt_tokens: 7, completion_tokens: 4 },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 503 });
+    });
+
+    const { server, litellm } = await startService({ dataDir, port, litellmPort, skipLiteLLM: true });
+    cleanups.push(async () => { await server.close(); });
+
+    expect(litellm).toEqual({ status: 'error', port: litellmPort, error: 'Skipped' });
+    expect(server.agentState.llmProvider).toMatchObject({
+      provider: 'anthropic-proxy',
+      health: 'degraded',
+    });
+    expect(server.localConfig.manageLiteLLM).toBe(false);
+    expect(server.localConfig.useBuiltInProxy).toBe(true);
+    expect(server.localConfig.litellmUrl).toBe(`http://127.0.0.1:${port}/v1`);
+    expect(fetchSpy.mock.calls.some(([input]) => (
+      String(input) === `http://localhost:${litellmPort}/health/liveliness`
+    ))).toBe(false);
+
+    const spawn = server.agentState.allTools.find(tool => tool.name === 'spawn_agent');
+    expect(spawn).toBeDefined();
+    const output = await spawn!.execute({
+      name: 'Isolation verifier',
+      role: 'custom',
+      task: 'Confirm the active provider route.',
+      tools: [],
+      model: 'openrouter/openai/gpt-5.3-codex',
+      max_turns: 1,
+    });
+    expect(output).toContain('Isolated sub-agent response.');
+    expect(workerRequests).toEqual([{
+      url: `http://127.0.0.1:${port}/v1/chat/completions`,
+      authorization: `Bearer ${server.agentState.wsSessionToken}`,
+    }]);
+  });
+
   it('server gracefully shuts down on close', async () => {
     const dataDir = makeTmpDir();
     tmpDirs.push(dataDir);

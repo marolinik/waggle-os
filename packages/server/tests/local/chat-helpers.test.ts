@@ -248,6 +248,24 @@ describe('classifyExplicitTurnMutationPolicy', () => {
       'Remember this preference, but do not create or edit anything.',
     )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
   });
+
+  it('keeps paired contractions actionable instead of treating them as quoted text', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      "Don't create or edit anything because it's unnecessary.",
+    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+    expect(classifyExplicitTurnMutationPolicy(
+      'Don’t create or edit anything.',
+    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+  });
+
+  it('ignores quoted prohibitions even when the quote contains a contraction', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      "Rewrite: 'Don't create or edit anything.'",
+    )).toEqual({ denyAllMutations: false, denyMemoryPersistence: false });
+    expect(classifyExplicitTurnMutationPolicy(
+      'Rewrite: ‘Don’t create or edit anything.’',
+    )).toEqual({ denyAllMutations: false, denyMemoryPersistence: false });
+  });
 });
 
 describe('shouldSuggestSchedule', () => {
@@ -333,8 +351,17 @@ describe('shouldSuggestSchedule', () => {
       'Do not create files or schedules.',
       "Don't suggest a recurring task.",
       'No schedules, just answer the question.',
+      'No scheduling, just answer the question.',
+      'No schedule suggestions, just answer the question.',
       'Answer without creating a calendar event.',
       'Do not suggest /schedule.',
+      'Do not recommend /schedule.',
+      'Do not append /schedule.',
+      'Do not include /schedule.',
+      'Answer without recommending /schedule.',
+      'Answer without appending /schedule.',
+      "Don't suggest /schedule because it's irrelevant.",
+      'Don’t suggest /schedule.',
     ]) {
       expect(shouldSuggestSchedule(response, [], message), message).toBe(false);
     }
@@ -348,6 +375,9 @@ describe('shouldSuggestSchedule', () => {
       'Do not cancel the existing schedule.',
       'There are no schedules yet.',
       'Rewrite: "Do not create schedules."',
+      "Rewrite: 'Do not suggest /schedule.'",
+      "Rewrite: 'Don't suggest /schedule.'",
+      'Rewrite: ‘Don’t suggest /schedule and do not append /schedule.’',
     ]) {
       expect(shouldSuggestSchedule(response, [], message), message).toBe(true);
     }

@@ -89,9 +89,9 @@ export interface TurnMutationPolicy {
 function withoutQuotedText(text: string): string {
   return text
     .replace(/"[^"\r\n]*"/g, ' ')
-    .replace(/'[^'\r\n]*'/g, ' ')
+    .replace(/(?<![\p{L}\p{M}\p{N}_])'(?:[^'\r\n]|(?<=[\p{L}\p{M}\p{N}_])'(?=[\p{L}\p{M}\p{N}_]))*'(?![\p{L}\p{M}\p{N}_])/gu, ' ')
     .replace(/“[^”\r\n]*”/g, ' ')
-    .replace(/‘[^’\r\n]*’/g, ' ');
+    .replace(/‘(?:[^’\r\n]|(?<=[\p{L}\p{M}\p{N}_])’(?=[\p{L}\p{M}\p{N}_]))*’/gu, ' ');
 }
 
 /**
@@ -104,19 +104,19 @@ export function classifyExplicitTurnMutationPolicy(message: string): TurnMutatio
   const actionable = withoutQuotedText(message);
   const mutationVerb = '(?:create|edit|modify|write|save|store|delete|remove|change|update|execute|run)';
   const broadDenial = new RegExp(
-    `\\b(?:do not|don't|never)\\s+${mutationVerb}`
+    `\\b(?:do not|don['’]t|never)\\s+${mutationVerb}`
       + `(?:\\s*(?:,|and|or)\\s*${mutationVerb})*`
       + '\\s+(?:anything(?:\\s+at\\s+all)?|any\\s+changes?)\\b',
     'i',
   ).test(actionable)
     || /\b(?:make|apply|perform)\s+no\s+(?:changes?|edits?|writes?|updates?)\b/i.test(actionable)
     || /\bwithout\s+(?:making|applying|performing)\s+(?:any\s+)?(?:changes?|edits?|updates?)\b/i.test(actionable)
-    || /\b(?:do not|don't|never)\s+take\s+any\s+actions?\b/i.test(actionable)
+    || /\b(?:do not|don['’]t|never)\s+take\s+any\s+actions?\b/i.test(actionable)
     || /\b(?:work|respond|operate|inspect|review)\s+(?:in\s+)?read[- ]only(?:\s+mode)?\b/i.test(actionable);
 
-  const memoryDenial = /\b(?:do not|don't|never)\s+remember\b/i.test(actionable)
-    || /\b(?:do not|don't|never)\s+(?:save|store|persist|write)\b[^.;!?\r\n]{0,60}\b(?:to|in|into)\s+(?:my\s+)?memory\b/i.test(actionable)
-    || /\b(?:do not|don't|never)\s+(?:save|store|persist)\s+(?:this|that|it|anything)\b/i.test(actionable);
+  const memoryDenial = /\b(?:do not|don['’]t|never)\s+remember\b/i.test(actionable)
+    || /\b(?:do not|don['’]t|never)\s+(?:save|store|persist|write)\b[^.;!?\r\n]{0,60}\b(?:to|in|into)\s+(?:my\s+)?memory\b/i.test(actionable)
+    || /\b(?:do not|don['’]t|never)\s+(?:save|store|persist)\s+(?:this|that|it|anything)\b/i.test(actionable);
 
   return {
     denyAllMutations: broadDenial,
@@ -128,18 +128,21 @@ export function classifyExplicitTurnMutationPolicy(message: string): TurnMutatio
 const RECURRING_PATTERNS = /\b(every\s+day|daily|weekly|every\s+week|each\s+morning|every\s+morning|regularly|recurring|scheduled?|every\s+month|monthly)\b/i;
 
 const SCHEDULE_OBJECT = /\b(?:schedules?|scheduling|recurring\s+tasks?|calendar\s+events?)\b|\/schedule\b/i;
-const SCHEDULE_ACTION = /^(?:schedule|create|make|add|set\s+up|suggest|propose|offer|mention|use)\b/i;
+const SCHEDULE_ACTION = /^(?:schedule|create|make|add|set\s+up|suggest|recommend|append|include|propose|offer|mention|use)\b/i;
 const SCHEDULE_NEGATION_ESCAPE = /^(?:forget|avoid|cancel|remove|delete|stop)\b/i;
 
 function hasExplicitScheduleProhibition(userMessage: string): boolean {
   const actionable = withoutQuotedText(userMessage);
-  if (/^\s*no\s+schedules?\b(?:\s*(?:,|$)|[^.;!?\r\n]*\b(?:needed|required|please|just)\b)/i.test(actionable)) {
+  if (/^\s*no\s+schedule\s+suggestions?\b/i.test(actionable)) {
     return true;
   }
-  if (/\bwithout\s+(?:creating|making|adding|setting\s+up|scheduling|suggesting|proposing|offering|mentioning|using)\b[^.;!?\r\n]*\b(?:schedules?|recurring\s+tasks?|calendar\s+events?)\b|\bwithout\s+using\s+\/schedule\b/i.test(actionable)) {
+  if (/^\s*no\s+(?:schedules?|scheduling)\b(?:\s*(?:,|$)|[^.;!?\r\n]*\b(?:needed|required|please|just)\b)/i.test(actionable)) {
     return true;
   }
-  for (const match of actionable.matchAll(/\b(?:do not|don't|never)\s+([^.;!?\r\n]+)/gi)) {
+  if (/\bwithout\s+(?:creating|making|adding|setting\s+up|scheduling|suggesting|recommending|appending|including|proposing|offering|mentioning|using)\b[^.;!?\r\n]*\b(?:schedules?|recurring\s+tasks?|calendar\s+events?)\b|\bwithout\s+(?:using|suggesting|recommending|appending|including)\s+\/schedule\b/i.test(actionable)) {
+    return true;
+  }
+  for (const match of actionable.matchAll(/\b(?:do not|don['’]t|never)\s+([^.;!?\r\n]+)/gi)) {
     const remainder = match[1].trim();
     if (SCHEDULE_NEGATION_ESCAPE.test(remainder)) continue;
     if (SCHEDULE_OBJECT.test(remainder) && SCHEDULE_ACTION.test(remainder)) return true;
