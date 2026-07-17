@@ -213,12 +213,25 @@ describe('Tauri Production Configuration', () => {
     expect(lib).not.toContain('.updater()');
   });
 
-  it('NSIS installer template exists', () => {
+  it('NSIS installer template never deletes profile data', () => {
     const nsis = fs.readFileSync(path.join(TAURI_DIR, 'nsis', 'installer.nsi'), 'utf-8');
+    const conf = JSON.parse(fs.readFileSync(path.join(TAURI_DIR, 'tauri.conf.json'), 'utf-8'));
     expect(nsis).toContain('NSIS_HOOK_PREINSTALL');
-    expect(nsis).toContain('Desktop shortcut');
-    expect(nsis).toContain('Start Menu');
-    expect(nsis).toMatch(/\/SD\s+IDNO\s+IDYES\s+removeData\s+IDNO\s+skipData/);
+    // Data erasure is an authenticated, confirmation-phrase-gated in-app flow.
+    // The package uninstaller must never recursively delete the real profile.
+    expect(nsis).not.toContain('NSIS_HOOK_POSTUNINSTALL');
+    expect(nsis).toContain('NSIS_HOOK_PREUNINSTALL');
+    expect(nsis).toMatch(/StrCpy\s+\$DeleteAppDataCheckboxState\s+0/);
+    expect(nsis).not.toMatch(
+      /\b(?:RMDir|Delete)\b[^\r\n]*(?:\$PROFILE[\\/]+\.waggle|\.waggle)/i,
+    );
+    expect(conf.bundle.windows.nsis.installerHooks).toBe('nsis/installer.nsi');
+    expect(conf.bundle.windows.nsis.installMode).toBe('currentUser');
+    // Tauri owns shortcuts and normal/silent launch behavior. Duplicating those
+    // in POSTINSTALL caused double launches and made repair certificates racy.
+    expect(nsis).not.toContain('NSIS_HOOK_POSTINSTALL');
+    expect(nsis).not.toContain('CreateShortcut');
+    expect(nsis).not.toMatch(/\bExec\s+['"]/);
   });
 
   it('pilot-signed Windows build consumes the generated Tauri override', () => {
@@ -763,7 +776,8 @@ describe('CI/CD Configuration', () => {
     const content = fs.readFileSync(workflow, 'utf-8');
     expect(content).toContain('build-windows');
     expect(content).toContain('build-macos');
-    expect(content).toContain('tauri-action');
+    expect(content).not.toMatch(/uses:\s+tauri-apps\/tauri-action/);
+    expect(content).toContain('Upload macOS verification artifacts');
     expect(content).toContain('aarch64-apple-darwin');
     expect(content).toContain('x86_64-apple-darwin');
     expect(content).toContain('runner: macos-15');
@@ -834,6 +848,234 @@ describe('CI/CD Configuration', () => {
       expect(windowsSteps).toContain('WAGGLE_VERIFY_STAGED_HOOK_RUNTIME');
       expect(windowsSteps).toContain('runs staged Tauri hook lifecycles');
     }
+  });
+
+  it('Windows desktop workflows certify the built NSIS lifecycle before artifact handoff', () => {
+    const workflows = [
+      {
+        name: 'release.yml',
+        windowsJob: '  build-windows:',
+        macJob: '  build-macos:',
+        handoff: 'Publish certified Windows installer',
+      },
+      {
+        name: 'tauri-build-pr.yml',
+        windowsJob: '  verify-windows:',
+        macJob: '  verify-macos:',
+        handoff: 'Upload Windows artifacts',
+      },
+    ];
+
+    for (const { name, windowsJob, macJob, handoff } of workflows) {
+      const workflow = fs.readFileSync(
+        path.join(ROOT, '.github', 'workflows', name),
+        'utf-8',
+      );
+      const windowsSteps = workflow.slice(
+        workflow.indexOf(windowsJob),
+        workflow.indexOf(macJob),
+      );
+      const buildIndex = windowsSteps.indexOf('Build Tauri (Windows)');
+      const certificateIndex = windowsSteps.indexOf('certify-windows-installer.ps1');
+      const signerCleanupIndex = windowsSteps.indexOf('Remove imported Windows code-signing certificates');
+      const receiptIndex = windowsSteps.indexOf('windows-installer-certificate.json');
+      const handoffIndex = windowsSteps.indexOf(handoff);
+      const nextStepIndex = windowsSteps.indexOf('\n      - name:', handoffIndex + handoff.length);
+      const handoffStep = windowsSteps.slice(
+        handoffIndex,
+        nextStepIndex >= 0 ? nextStepIndex : undefined,
+      );
+
+      expect(buildIndex).toBeGreaterThanOrEqual(0);
+      if (name === 'release.yml') {
+        expect(signerCleanupIndex).toBeGreaterThan(buildIndex);
+        expect(signerCleanupIndex).toBeLessThan(certificateIndex);
+      }
+      expect(certificateIndex).toBeGreaterThan(buildIndex);
+      expect(receiptIndex).toBeGreaterThan(certificateIndex);
+      expect(handoffIndex).toBeGreaterThan(certificateIndex);
+      expect(windowsSteps).toContain("-Filter '*-setup.exe'");
+      expect(windowsSteps).toContain("Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse");
+      expect(windowsSteps).toContain('app/src-tauri/target/**/bundle/nsis');
+      expect(windowsSteps).not.toContain("-LiteralPath 'app/src-tauri/target/release/bundle/nsis'");
+      expect(windowsSteps).toContain('--bundles nsis');
+      expect(windowsSteps).not.toContain('bundle/msi');
+      expect(windowsSteps).toContain('npm ci --prefix app --ignore-scripts');
+      expect(windowsSteps).toContain('run: npm ci');
+      expect(windowsSteps).toContain('node node_modules/@tauri-apps/cli/tauri.js build');
+      expect(windowsSteps).not.toContain('npx --yes @tauri-apps/cli@2');
+      expect(windowsSteps).toContain('toolchain: 1.94.0');
+      expect(windowsSteps).toContain('persist-credentials: false');
+      expect(windowsSteps).toContain('-ExpectedSourceRevision $env:GITHUB_SHA');
+      expect(handoffStep).not.toContain('if: always()');
+      if (name === 'release.yml') {
+        expect(windowsSteps.slice(0, certificateIndex)).not.toContain('tagName:');
+        expect(windowsSteps.slice(0, certificateIndex)).not.toContain('releaseDraft:');
+        expect(handoffStep).toContain('if: success()');
+        expect(handoffStep).toContain('Get-FileHash');
+        expect(handoffStep).toContain('receiptData.installer.sha256');
+        expect(workflow).not.toContain('workflow_dispatch:');
+        expect(windowsSteps).toContain('environment: production-windows-signing');
+        expect(windowsSteps).toContain('Validate release tag and app version');
+        expect(windowsSteps).toContain("$expectedTag = \"v$version\"");
+        expect(windowsSteps).toContain('git merge-base --is-ancestor $env:GITHUB_SHA origin/main');
+        expect(workflow).toContain('group: release-${{ github.ref }}');
+        expect(windowsSteps).toContain('Attest certified Windows artifacts');
+        expect(windowsSteps).toContain('attest-build-provenance@');
+        expect(windowsSteps).toContain('WINDOWS_CODESIGN_PFX_BASE64');
+        expect(windowsSteps).toContain('WINDOWS_CODESIGN_APPROVED_THUMBPRINT');
+        expect(windowsSteps).toContain('Import-PfxCertificate');
+        expect(windowsSteps).toContain('WAGGLE_IMPORTED_CERT_THUMBPRINTS');
+        expect(windowsSteps).toContain('X509EnhancedKeyUsageExtension');
+        expect(windowsSteps).toContain('apply-signing-config.mjs');
+        expect(windowsSteps).toContain('tauri.build-override.conf.json');
+        expect(windowsSteps).toContain('-RequireAuthenticodeSignature');
+        expect(windowsSteps).toContain('-ExpectedSignerThumbprint $env:WAGGLE_APPROVED_CODESIGN_THUMBPRINT');
+        expect(handoffStep).toContain('isDraft');
+        expect(handoffStep).toContain('Refusing to modify a published release');
+        expect(handoffStep).toContain('schemaVersion -ne 2');
+        expect(handoffStep).toContain('installedApp.authenticodeStatus');
+        expect(handoffStep).toContain("signatureType -ne 'Authenticode'");
+        expect(handoffStep).toContain('nonPassingChecks');
+        expect(handoffStep).toContain('generatedInstallerScriptSha256');
+        expect(handoffStep).toContain('git ls-remote --tags origin');
+        expect(handoffStep).toContain('--verify-tag');
+        expect(handoffStep).not.toContain('--clobber');
+      } else {
+        expect(windowsSteps).not.toContain('-RequireAuthenticodeSignature');
+      }
+    }
+  });
+
+  it('PR desktop verification runs when either Windows workflow changes', () => {
+    const workflow = fs.readFileSync(
+      path.join(ROOT, '.github', 'workflows', 'tauri-build-pr.yml'),
+      'utf-8',
+    );
+    expect([...workflow.matchAll(/\.github\/workflows\/release\.yml/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/\.github\/workflows\/tauri-build-pr\.yml/g)]).toHaveLength(2);
+  });
+
+  it('desktop workflows pin every third-party action to a full commit SHA', () => {
+    for (const name of ['release.yml', 'tauri-build-pr.yml']) {
+      const workflow = fs.readFileSync(
+        path.join(ROOT, '.github', 'workflows', name),
+        'utf-8',
+      );
+      const actionRefs = [...workflow.matchAll(/uses:\s+[^@\s]+@([^\s#]+)/g)]
+        .map((match) => match[1]);
+      expect(actionRefs.length).toBeGreaterThan(0);
+      for (const actionRef of actionRefs) {
+        expect(actionRef).toMatch(/^[0-9a-f]{40}$/);
+      }
+    }
+  });
+
+  it('Windows installer certificate is fail-closed across isolated boot, repair, and uninstall', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'certify-windows-installer.ps1'),
+      'utf-8',
+    );
+
+    expect(script).toContain('Set-StrictMode -Version Latest');
+    expect(script).toContain('"/S /D=$installDir"');
+    expect(script).toContain("$env:WAGGLE_PORT = '3333'");
+    expect(script).toContain('Assert-TcpPortAvailable 3333');
+    expect(script).toContain("'OPENROUTER_API_KEY'");
+    expect(script).toContain("resources\\node.exe");
+    expect(script).toContain("resources\\service.js");
+    expect(script).toContain('/v1/health/liveliness');
+    expect(script).toContain('/api/auth/session-token');
+    expect(script).toContain("$baseUrl/api/tier");
+    expect(script).toContain('unauthenticatedProtectedRoute');
+    expect(script).toContain("'WAGGLE_TRUST_LOCALHOST'");
+    expect(script).toContain("'WAGGLE_SQLITE_VEC_PATH'");
+    expect(script).toContain("'ONNXRUNTIME_NODE_BINDING_PATH'");
+    expect(script).toContain("'VOYAGE_API_KEY'");
+    expect(script).toContain("'EMBEDDING_PROVIDER'");
+    expect(script).toContain('environmentSnapshot');
+    expect(script).toContain('environmentRestored');
+    expect(script).toContain('/api/embedding/status');
+    expect(script).toContain('/api/local-inference/status');
+    expect(script).toContain('dockerRequired');
+    expect(script).toContain('sameVersionRepair');
+    expect(script).toContain('$firstProcess.HasExited');
+    expect(script).toContain('$secondProcess.HasExited');
+    expect(script).toContain('Wait-ForInstalledRuntimeStop');
+    expect(script).toContain('Assert-NoForeignWaggleProcesses');
+    expect(script).toContain('foreignProcessCollisionGuard');
+    expect(script).not.toMatch(/Get-CimInstance[^\r\n]+-ErrorAction\s+SilentlyContinue/);
+    expect(script).toContain('Stop-StartedProcessTree');
+    expect(script).toContain('"/PID $($Process.Id) /T /F"');
+    expect(script).toContain('repairRegistrations');
+    expect(script).toContain('runRegistryCollisionGuard');
+    expect(script).toContain('UninstallString');
+    expect(script).toContain("Invoke-RawProcess $registeredUninstaller '/S'");
+    expect(script).toContain('Wait-ForPathState $uninstallRegistry $false 30');
+    expect(script).toContain("HKCU:\\Software\\egzakta\\Waggle");
+    expect(script).toContain('Remove-CertificateProductRegistry');
+    expect(script).toContain('Clear-AbandonedCertificateProductRegistry');
+    expect(script).toContain('certificateRegistryCleanup');
+    expect(script).toContain('profileDataDeletionAbsent');
+    expect(script).toContain('baseAppDataDeletionNeutralized');
+    expect(script).toContain('profileDataPathPreserved');
+    expect(script).toContain('configuredDataDirPreserved');
+    expect(script).not.toContain('uninstallPreservedData');
+    expect(script).not.toContain('embeddingModelVerified');
+    expect(script).toContain('RequireAuthenticodeSignature');
+    expect(script).toContain('ExpectedSignerThumbprint');
+    expect(script).toContain('ExpectedSourceRevision');
+    expect(script).toContain('sourceFilesClean');
+    expect(script).toContain('schemaVersion = 2');
+    expect(script).toContain('-UseBasicParsing');
+    expect(script).toContain('authenticodeStatus');
+    expect(script).toContain('signerThumbprint');
+    expect(script).toContain('TimeStamperCertificate');
+    expect(script).toContain('timestampAuthorityThumbprint');
+    expect(script).toContain('SignatureType');
+    expect(script).toContain('portable embedded Authenticode signature');
+    expect(script).toContain('installedAppAuthenticodeSignature');
+    expect(script).toContain('Installed Waggle executable');
+    expect(script).toContain('certifierSha256');
+    expect(script).toContain('installerHookSha256');
+    expect(script).toContain('generatedInstallerScriptSha256');
+    expect(script).toContain('generatedInstallerInclude');
+    expect(script).toContain('$installerHookFile.LastWriteTimeUtc');
+    expect(script).toContain('!macro\\s+NSIS_HOOK_POSTUNINSTALL\\b');
+    expect(script).toContain('!include\\s+"(?<path>[^"]+)"\\s*$');
+    expect(script).not.toContain("$generatedInstallerContent.Contains('NSIS_HOOK_POSTUNINSTALL')");
+    expect(script).not.toContain("$receipt.checks['builtInProxy']");
+    expect(script).not.toContain("$receipt.checks['uninstallCleanup']");
+    expect(script).toContain("$receipt.checks['uninstallerCleanup']");
+    expect(script).toContain('embeddingPayloadReady');
+    expect(script).toContain('sourceRevision');
+    expect(script).toContain('certificateRunId');
+    expect(script).toContain('$desktopShortcut');
+    expect(script).toContain('$startMenuShortcuts');
+    expect(script).toContain('Assert-SafeScratchRoot');
+    expect(script).not.toMatch(/Get-Process\s+(?:-Name\s+)?['"]?waggle/i);
+    expect(script.lastIndexOf('Remove-Item -LiteralPath $scratchRoot -Recurse -Force'))
+      .toBeLessThan(script.lastIndexOf('$receipt | ConvertTo-Json'));
+  });
+
+  it('accepts Tauri generated NSIS hook dispatch while binding the exact custom include', () => {
+    const hookPath = path.join(TAURI_DIR, 'nsis', 'installer.nsi');
+    const generatedFixture = [
+      `!include "${hookPath}"`,
+      '!ifmacrodef NSIS_HOOK_POSTUNINSTALL',
+      '  !insertmacro NSIS_HOOK_POSTUNINSTALL',
+      '!endif',
+      '!ifmacrodef NSIS_HOOK_PREUNINSTALL',
+      '  !insertmacro NSIS_HOOK_PREUNINSTALL',
+      '!endif',
+    ].join('\n');
+    const includes = [...generatedFixture.matchAll(/^\s*!include\s+"([^"]+)"\s*$/gim)]
+      .map((match) => path.resolve(match[1]));
+
+    expect(generatedFixture).toContain('!ifmacrodef NSIS_HOOK_POSTUNINSTALL');
+    expect(generatedFixture).toContain('!ifmacrodef NSIS_HOOK_PREUNINSTALL');
+    expect(includes.filter((candidate) => candidate.toLowerCase() === hookPath.toLowerCase()))
+      .toHaveLength(1);
   });
 
   it('release workflow builds packages before bundling the desktop sidecar', () => {

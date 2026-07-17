@@ -24,6 +24,7 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
+      - '.github/workflows/release.yml'
       - '.github/workflows/tauri-build-pr.yml'
   push:
     branches:
@@ -35,31 +36,43 @@ on:
       - 'scripts/**'
       - 'package.json'
       - 'package-lock.json'
+      - '.github/workflows/release.yml'
+      - '.github/workflows/tauri-build-pr.yml'
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   verify-windows:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: 1.94.0
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: app/src-tauri
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Install locked Tauri CLI
+        run: npm ci --prefix app --ignore-scripts
 
       - name: Build packages (shared → core → agent → server)
         run: npm run build:packages
@@ -85,26 +98,31 @@ jobs:
         run: cd apps/web && npx vite build
 
       - name: Build Tauri (Windows)
-        # @tauri-apps/cli is declared in app/package.json devDeps but is absent
-        # from package-lock.json, so `npm install` never installs it and a bare
-        # `npx tauri` errors "could not determine executable to run". Fetch the
-        # CLI explicitly by package name (npx resolves the win32 binary).
-        run: cd app && npx --yes @tauri-apps/cli@2 build
+        # app/package-lock.json pins the CLI and platform binary. Invoke that
+        # local copy so verification builds cannot drift to a newer 2.x release.
+        run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --bundles nsis
         env:
           # Skip code signing for PR verification — release.yml handles signing
           # only on tag push.
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
 
+      - name: Certify Windows Solo installer lifecycle
+        shell: pwsh
+        run: |
+          $installers = @(Get-ChildItem -LiteralPath 'app/src-tauri/target' -Recurse -Filter '*-setup.exe' -File | Where-Object { $_.DirectoryName -match '[\\/]bundle[\\/]nsis$' })
+          if ($installers.Count -ne 1) { throw "Expected exactly one NSIS setup executable, found $($installers.Count)" }
+          $installer = $installers[0]
+          & ./scripts/certify-windows-installer.ps1 -InstallerPath $installer.FullName -ExpectedSourceRevision $env:GITHUB_SHA
+
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: waggle-windows-${{ github.sha }}
           path: |
-            app/src-tauri/target/release/bundle/nsis/*.exe
-            app/src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: warn
+            app/src-tauri/target/**/bundle/nsis/*.exe
+            app/src-tauri/target/**/bundle/nsis/windows-installer-certificate.json
+          if-no-files-found: error
           retention-days: 7
 
   verify-macos:
@@ -125,10 +143,12 @@ jobs:
     env:
       TARGET_ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: npm
@@ -137,17 +157,21 @@ jobs:
         run: node -e "if (process.arch !== process.env.TARGET_ARCH) { console.error('Expected ' + process.env.TARGET_ARCH + ' runner, got ' + process.arch); process.exit(1); }"
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
+          toolchain: 1.94.0
           targets: ${{ matrix.target }}
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: app/src-tauri
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
+
+      - name: Install locked Tauri CLI
+        run: npm ci --prefix app --ignore-scripts
 
       - name: Build packages (shared → core → agent → server)
         run: npm run build:packages
@@ -168,17 +192,16 @@ jobs:
         run: cd apps/web && npx vite build
 
       - name: Build Tauri (macOS ${{ matrix.target }})
-        # See verify-windows note: fetch @tauri-apps/cli by package name (absent
-        # from the lockfile). Built per-arch — universal is rejected by the
-        # bundle scripts (per-arch native modules), matching release.yml.
-        run: cd app && npx --yes @tauri-apps/cli@2 build --target ${{ matrix.target }}
+        # See verify-windows note: use the app-local lockfile-pinned CLI.
+        # Built per-arch — universal is rejected by the bundle scripts
+        # (per-arch native modules), matching release.yml.
+        run: cd app && node node_modules/@tauri-apps/cli/tauri.js build --target ${{ matrix.target }}
         env:
           TAURI_PRIVATE_KEY: ''
           TAURI_KEY_PASSWORD: ''
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: waggle-macos-${{ matrix.target }}-${{ github.sha }}
           path: |
