@@ -72,9 +72,9 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
         description: 'Links each priority to a relevant decision basis',
         kind: 'allPatterns',
         patterns: [
-          /(?:memory (?:bug|issue)[^\r\n]{0,180}(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust)|(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust)[^\r\n]{0,180}memory (?:bug|issue))/i,
-          /(?:(?:customer|deal)[^\r\n]{0,180}(?:revenue|pipeline|cash|commercial|near[- ]term)|(?:revenue|pipeline|cash|commercial|near[- ]term)[^\r\n]{0,180}(?:customer|deal))/i,
-          /(?:onboarding[^\r\n]{0,180}(?:conversion|retention|activation|drop[- ]?off|sales drag)|(?:conversion|retention|activation|drop[- ]?off|sales drag)[^\r\n]{0,180}onboarding)/i,
+          /(?:memory (?:bug|issue)[\s\S]{0,220}(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius)|(?:risk|reliab(?:ility|le)|stabil(?:ity|ize)|outage|trust|blast radius)[\s\S]{0,220}memory (?:bug|issue))/i,
+          /(?:(?:customer|deal)[\s\S]{0,220}(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date)|(?:revenue|pipeline|cash|commercial|near[- ]term|closable|proof points?|de-risk|signature|close date)[\s\S]{0,220}(?:customer|deal))/i,
+          /(?:onboarding[\s\S]{0,220}(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|support load)|(?:conversion|retention|activation|drop[- ]?off|sales drag|high leverage|less urgent|support load)[\s\S]{0,220}onboarding)/i,
         ],
         points: 10,
       },

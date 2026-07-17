@@ -286,6 +286,47 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
   });
 
+  it('accepts live deal-signature language as a substantive prioritization basis', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Assumption:** The production memory bug is affecting reliability, onboarding friction is reducing activation, and the customer deal is closable this week.',
+      '1. Investigate and contain the production memory bug first. Reliability risk can block both onboarding success and customer close; stabilize trust first.',
+      '2. Repair the highest-friction onboarding step second. Remove the biggest drop-off point to improve activation.',
+      '3. Close one customer third. Use bug containment and onboarding improvement as proof points to de-risk the deal and accelerate signature.',
+      'First action for today: run a 90-minute incident triage on the memory bug now.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
+  it('accepts bounded multiline and comparative-urgency prioritization rationale', () => {
+    const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
+    const response = [
+      '**Assumption:** the production memory bug is impacting reliability, and the customer deal is closable this week.',
+      '1. **Investigate/contain the production memory bug (first)**',
+      'Reliability risk can kill both deal confidence and onboarding improvements; reduce blast radius first.',
+      '2. **Close one customer (second)**',
+      'Once risk is contained, push hard on revenue with a firm close date.',
+      '3. **Repair onboarding friction (third)**',
+      'This is high leverage but less urgent than active production risk and near-term revenue.',
+      '**First action for today:** Run a 90-minute memory bug war-room.',
+    ].join('\n');
+    const result = scorePersonaTrial(generalPurpose, evidence({
+      prompt: generalPurpose.prompt,
+      response,
+      persistedResponse: response,
+      requestPersonaId: generalPurpose.id,
+    }));
+
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+  });
+
   it('accepts an unseen paraphrase that ties every priority to a decision basis', () => {
     const generalPurpose = PERSONA_CASES.find(persona => persona.id === 'general-purpose')!;
     const response = [
