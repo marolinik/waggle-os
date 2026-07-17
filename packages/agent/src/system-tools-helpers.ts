@@ -1,6 +1,7 @@
-import { execFileSync, type ChildProcess } from 'node:child_process';
+import { execFile, execFileSync, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { Worker } from 'node:worker_threads';
 
 /** Image file extensions (binary, should not be read as text) */
 export const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']);
@@ -105,6 +106,266 @@ export function terminateProcessTree(child: ChildProcess): void {
   } catch {
     try { child.kill('SIGKILL'); } catch { /* process already exited */ }
   }
+}
+
+export interface TimedProcessOptions {
+  cwd: string;
+  env: Record<string, string | undefined>;
+  maxBuffer: number;
+  windowsHide?: boolean;
+}
+
+export interface TimedProcessResult {
+  cleanupDegraded: boolean;
+  errorCode: string | number | null;
+  errorMessage: string | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+}
+
+const WINDOWS_PROCESS_WORKER_SOURCE = String.raw`
+void (async () => {
+  const [{ parentPort, workerData }, { execFile, execFileSync }] = await Promise.all([
+    import('node:worker_threads'),
+    import('node:child_process'),
+  ]);
+  if (!parentPort) throw new Error('Windows process supervisor has no parent port');
+
+  let child;
+  let deadlineTimer;
+  let outputDrainTimer;
+  let settlementTimer;
+  let processExited = false;
+  let settled = false;
+  let timedOut = false;
+  let cleanupDegraded = false;
+
+  const finish = (result) => {
+    if (settled) return;
+    settled = true;
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (outputDrainTimer) clearTimeout(outputDrainTimer);
+    if (settlementTimer) clearTimeout(settlementTimer);
+    parentPort.postMessage({ type: 'result', ...result });
+  };
+
+  const killOwnedProcess = () => {
+    if (!child || child.pid === undefined) return 'none';
+    try {
+      execFileSync(workerData.taskkillPath, [
+        '/PID', String(child.pid), '/T', '/F',
+      ], {
+        env: workerData.options.env,
+        stdio: 'ignore',
+        timeout: 5000,
+        windowsHide: true,
+      });
+      return 'tree';
+    } catch {
+      try {
+        return child.kill('SIGKILL') ? 'root' : 'none';
+      } catch {
+        return 'none';
+      }
+    }
+  };
+
+  const recordNaturalExit = () => {
+    if (processExited || timedOut || settled) return;
+    processExited = true;
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    outputDrainTimer = setTimeout(() => {
+      finish({
+        cleanupDegraded: false,
+        errorCode: null,
+        errorMessage: 'Process exited but its output streams did not close; descendant processes may still be running',
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+      });
+    }, 2000);
+  };
+
+  try {
+    child = execFile(workerData.executable, workerData.args, {
+      ...workerData.options,
+      encoding: 'utf8',
+    }, (error, stdout, stderr) => {
+      finish({
+        cleanupDegraded,
+        errorCode: error?.code ?? null,
+        errorMessage: error ? error.message : null,
+        stdout: typeof stdout === 'string' ? stdout : String(stdout ?? ''),
+        stderr: typeof stderr === 'string' ? stderr : String(stderr ?? ''),
+        timedOut,
+      });
+    });
+
+    child.once('exit', recordNaturalExit);
+
+    deadlineTimer = setTimeout(() => {
+      if (settled || processExited) return;
+      if (child.exitCode !== null || child.signalCode !== null) {
+        recordNaturalExit();
+        return;
+      }
+      const termination = killOwnedProcess();
+      if (termination === 'none') {
+        settlementTimer = setTimeout(() => {
+          finish({
+            cleanupDegraded: false,
+            errorCode: null,
+            errorMessage: 'Process timeout could not be enforced',
+            stdout: '',
+            stderr: '',
+            timedOut: false,
+          });
+        }, 1000);
+        return;
+      }
+      timedOut = true;
+      cleanupDegraded = termination === 'root';
+      settlementTimer = setTimeout(() => {
+        finish({
+          cleanupDegraded,
+          errorCode: null,
+          errorMessage: null,
+          stdout: '',
+          stderr: '',
+          timedOut: true,
+        });
+      }, 2000);
+    }, Math.max(0, workerData.timeoutMs));
+  } catch (error) {
+    const termination = child ? killOwnedProcess() : 'none';
+    finish({
+      cleanupDegraded: termination === 'root',
+      errorCode: null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+  }
+})().catch((error) => {
+  void import('node:worker_threads').then(({ parentPort }) => {
+    parentPort?.postMessage({
+      type: 'result',
+      cleanupDegraded: false,
+      errorCode: null,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+  });
+});
+`;
+
+function execFileWithMainThreadTimeout(
+  executable: string,
+  args: string[],
+  options: TimedProcessOptions,
+  timeoutMs: number,
+): Promise<TimedProcessResult> {
+  return new Promise((resolve) => {
+    let timedOut = false;
+    const timeoutState: { timer?: ReturnType<typeof setTimeout> } = {};
+    const child = execFile(executable, args, {
+      ...options,
+      encoding: 'utf8',
+    }, (error, stdout, stderr) => {
+      if (timeoutState.timer) clearTimeout(timeoutState.timer);
+      resolve({
+        cleanupDegraded: false,
+        errorCode: error?.code ?? null,
+        errorMessage: error?.message ?? null,
+        stdout,
+        stderr,
+        timedOut,
+      });
+    });
+    timeoutState.timer = setTimeout(() => {
+      timedOut = true;
+      terminateProcessTree(child);
+    }, timeoutMs);
+  });
+}
+
+/**
+ * Execute a foreground process with a wall-clock timeout. On Windows the
+ * worker owns both the ChildProcess handle and its deadline, so process exit
+ * and timeout are ordered independently of main-event-loop starvation.
+ */
+export function execFileWithTreeTimeout(
+  executable: string,
+  args: string[],
+  options: TimedProcessOptions,
+  timeoutMs: number,
+): Promise<TimedProcessResult> {
+  if (process.platform !== 'win32') {
+    return execFileWithMainThreadTimeout(executable, args, options, timeoutMs);
+  }
+
+  const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR ?? 'C:\\Windows';
+  let worker: Worker;
+  try {
+    worker = new Worker(WINDOWS_PROCESS_WORKER_SOURCE, {
+      eval: true,
+      workerData: {
+        args,
+        executable,
+        options,
+        taskkillPath: path.join(windowsRoot, 'System32', 'taskkill.exe'),
+        timeoutMs,
+      },
+    });
+  } catch (error) {
+    return Promise.resolve({
+      cleanupDegraded: false,
+      errorCode: null,
+      errorMessage: `Windows process supervisor could not start: ${error instanceof Error ? error.message : String(error)}`,
+      stdout: '',
+      stderr: '',
+      timedOut: false,
+    });
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (result: TimedProcessResult) => {
+      if (settled) return;
+      settled = true;
+      worker.removeAllListeners();
+      void worker.terminate().catch(() => { /* worker already exited */ });
+      resolve(result);
+    };
+    worker.once('message', (message: TimedProcessResult & { type?: string }) => {
+      if (message.type !== 'result') return;
+      finish(message);
+    });
+    worker.once('error', (error) => {
+      finish({
+        cleanupDegraded: false,
+        errorCode: null,
+        errorMessage: `Windows process supervisor failed: ${error.message}`,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+      });
+    });
+    worker.once('exit', (code) => {
+      finish({
+        cleanupDegraded: false,
+        errorCode: null,
+        errorMessage: `Windows process supervisor exited with code ${code} before reporting a result`,
+        stdout: '',
+        stderr: '',
+        timedOut: false,
+      });
+    });
+  });
 }
 
 /**

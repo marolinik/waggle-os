@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createSanitizedEnv, createSystemTools } from '../src/system-tools.js';
+import { execFileWithTreeTimeout } from '../src/system-tools-helpers.js';
 import type { ToolDefinition } from '../src/tools.js';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -106,6 +107,25 @@ describe('createSystemTools', () => {
         fs.rmSync(outside, { recursive: true, force: true });
       }
     });
+  });
+
+  it.runIf(process.platform === 'win32')('fails closed when the Windows process supervisor cannot start', async () => {
+    const marker = path.join(workspace, 'unsupervised-command.txt');
+    const result = await execFileWithTreeTimeout(process.execPath, [
+      '-e',
+      `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'started')`,
+    ], {
+      cwd: workspace,
+      env: {
+        ...createSanitizedEnv(),
+        NON_CLONEABLE_TEST_VALUE: (() => {}) as unknown as string,
+      },
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+    }, 1000);
+
+    expect(result.errorMessage).toContain('supervisor could not start');
+    expect(fs.existsSync(marker)).toBe(false);
   });
 
   describe('write_file', () => {
@@ -312,6 +332,165 @@ describe('createSystemTools', () => {
       expect(result.toLowerCase()).toContain('timed out');
       await new Promise((resolve) => setTimeout(resolve, 1800));
       expect(fs.existsSync(marker)).toBe(false);
+    }, 10_000);
+
+    it.runIf(process.platform === 'win32')('kills descendants on time while the main event loop is blocked', async () => {
+      const ready = path.join(workspace, 'descendant-ready.txt');
+      const marker = path.join(workspace, 'starved-timeout-orphan.txt');
+      const childCode = [
+        `const fs = require('node:fs')`,
+        `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+        `setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1600)`,
+        'setTimeout(() => {}, 30000)',
+      ].join(';');
+      const code = [
+        `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' })`,
+        'setTimeout(() => {}, 30000)',
+      ].join(';');
+      const runCode = getTool('run_code');
+      const execution = Promise.resolve(runCode.execute({
+        language: 'javascript',
+        code,
+        timeout: 1000,
+      }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(fs.existsSync(ready)).toBe(true);
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_600);
+      const result = await execution;
+
+      expect(result.toLowerCase()).toContain('timed out');
+      expect(fs.existsSync(marker)).toBe(false);
+    }, 15_000);
+
+    it.runIf(process.platform === 'win32')('does not time out a process that exits while the main event loop is blocked', async () => {
+      const ready = path.join(workspace, 'completion-ready.txt');
+      const finished = path.join(workspace, 'completion-finished.txt');
+      const code = [
+        `const fs = require('node:fs')`,
+        `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+        'setTimeout(() => {',
+        `  fs.writeFileSync(${JSON.stringify(finished)}, 'finished')`,
+        "  console.log('completed-before-deadline')",
+        '}, 200)',
+      ].join(';');
+      const runCode = getTool('run_code');
+      const execution = Promise.resolve(runCode.execute({
+        language: 'javascript',
+        code,
+        timeout: 1000,
+      }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(fs.existsSync(ready)).toBe(true);
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
+      const result = await execution;
+
+      expect(fs.existsSync(finished)).toBe(true);
+      expect(result).toContain('completed-before-deadline');
+      expect(result.toLowerCase()).not.toContain('timed out');
+    }, 10_000);
+
+    it.runIf(process.platform === 'win32')('starts a cold process supervisor while the main event loop is blocked', async () => {
+      const finished = path.join(workspace, 'cold-supervisor-finished.txt');
+      const code = [
+        `const fs = require('node:fs')`,
+        'setTimeout(() => {',
+        `  fs.writeFileSync(${JSON.stringify(finished)}, 'finished')`,
+        "  console.log('cold-supervisor-complete')",
+        '}, 400)',
+      ].join(';');
+      const runCode = getTool('run_code');
+      const execution = Promise.resolve(runCode.execute({
+        language: 'javascript',
+        code,
+        timeout: 1000,
+      }));
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
+      expect(fs.existsSync(finished)).toBe(true);
+      const result = await execution;
+
+      expect(result).toContain('cold-supervisor-complete');
+      expect(result.toLowerCase()).not.toContain('timed out');
+    }, 10_000);
+
+    it.runIf(process.platform === 'win32')('enforces timeout from a cold supervisor while the main event loop is blocked', async () => {
+      const ready = path.join(workspace, 'cold-timeout-ready.txt');
+      const marker = path.join(workspace, 'cold-timeout-orphan.txt');
+      const childCode = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1600)`;
+      const code = [
+        `require('node:fs').writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+        `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childCode)}], { stdio: 'ignore' })`,
+        'setTimeout(() => {}, 30000)',
+      ].join(';');
+      const runCode = getTool('run_code');
+      const execution = Promise.resolve(runCode.execute({
+        language: 'javascript',
+        code,
+        timeout: 1000,
+      }));
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_600);
+      expect(fs.existsSync(ready)).toBe(true);
+      const result = await execution;
+
+      expect(result.toLowerCase()).toContain('timed out');
+      expect(fs.existsSync(marker)).toBe(false);
+    }, 10_000);
+
+    it.runIf(process.platform === 'win32')('does not target a reused PID after the root exits with inherited output open', async () => {
+      const descendantCode = 'setTimeout(() => {}, 2500)';
+      const code = [
+        `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendantCode)}], { detached: true, stdio: ['ignore', 'inherit', 'inherit'] })`,
+        'child.unref()',
+        "console.log('root-exited')",
+      ].join(';');
+      const runCode = getTool('run_code');
+      const result = await runCode.execute({
+        language: 'javascript',
+        code,
+        timeout: 1000,
+      });
+
+      expect(result.toLowerCase()).not.toContain('timed out');
+      expect(result).toContain('descendant processes may still be running');
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }, 10_000);
+
+    it.runIf(process.platform === 'win32')('surfaces degraded cleanup when taskkill is unavailable', async () => {
+      const targetEnv = createSanitizedEnv();
+      const originalSystemRoot = process.env.SystemRoot;
+      const originalWindir = process.env.WINDIR;
+      const unavailableWindowsRoot = path.join(workspace, 'missing-windows-root');
+
+      try {
+        process.env.SystemRoot = unavailableWindowsRoot;
+        process.env.WINDIR = unavailableWindowsRoot;
+        const result = await execFileWithTreeTimeout(process.execPath, [
+          '-e',
+          'setTimeout(() => {}, 30000)',
+        ], {
+          cwd: workspace,
+          env: targetEnv,
+          maxBuffer: 1024 * 1024,
+          windowsHide: true,
+        }, 1000);
+
+        expect(result.timedOut).toBe(true);
+        expect(result.cleanupDegraded).toBe(true);
+      } finally {
+        if (originalSystemRoot === undefined) delete process.env.SystemRoot;
+        else process.env.SystemRoot = originalSystemRoot;
+        if (originalWindir === undefined) delete process.env.WINDIR;
+        else process.env.WINDIR = originalWindir;
+      }
     }, 10_000);
   });
 });

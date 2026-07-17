@@ -9,7 +9,8 @@ import { dedupTextResults, truncateToTokenBudget } from './tool-output-compresso
 import { safeFetch, allowLocalFromEnv, EgressBlockedError } from './url-egress-guard.js';
 import {
   IMAGE_EXTENSIONS, DENIED_BINARIES, SENSITIVE_ENV_VARS, MAX_OUTPUT_SIZE,
-  checkDeniedBinaries, createSanitizedEnv, terminateProcessTree, truncateOutput, resolveSafe,
+  checkDeniedBinaries, createSanitizedEnv, execFileWithTreeTimeout, terminateProcessTree,
+  truncateOutput, resolveSafe,
 } from './system-tools-helpers.js';
 
 /**
@@ -196,32 +197,24 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           return `Background task started. Task ID: ${taskId}`;
         }
 
-        return new Promise<string>((resolve) => {
-          let timedOut = false;
-          const child = execFile(shell, shellArgs, {
-            cwd: workspace,
-            maxBuffer: MAX_OUTPUT_SIZE,
-            env: sanitizedEnv,
-            windowsHide: true,
-          }, (error, stdout, stderr) => {
-            clearTimeout(timer);
-            if (timedOut) {
-              resolve(`Error: Command timeout after ${timeout}ms`);
-              return;
-            }
-            if (error) {
-              // Return stderr + stdout on non-zero exit (truncated)
-              const output = truncateOutput((stderr || '') + (stdout || ''));
-              resolve(output || `Error: ${error.message}`);
-              return;
-            }
-            resolve(truncateOutput(stdout));
-          });
-          const timer = setTimeout(() => {
-            timedOut = true;
-            terminateProcessTree(child);
-          }, timeout);
-        });
+        const result = await execFileWithTreeTimeout(shell, shellArgs, {
+          cwd: workspace,
+          maxBuffer: MAX_OUTPUT_SIZE,
+          env: sanitizedEnv,
+          windowsHide: true,
+        }, timeout);
+        if (result.timedOut) {
+          const cleanupWarning = result.cleanupDegraded
+            ? ' Process-tree cleanup degraded to the root process; descendants may still be running.'
+            : '';
+          return `Error: Command timeout after ${timeout}ms.${cleanupWarning}`;
+        }
+        if (result.errorMessage) {
+          // Return stderr + stdout on non-zero exit (truncated)
+          const output = truncateOutput((result.stderr || '') + (result.stdout || ''));
+          return output || `Error: ${result.errorMessage}`;
+        }
+        return truncateOutput(result.stdout);
       },
     },
 
@@ -951,48 +944,34 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
 
         const sanitizedEnv = createSanitizedEnv();
 
-        return new Promise<string>((resolve) => {
-          let timedOut = false;
-          const child = execFile(executable, runtimeArgs, {
-            cwd: workspace,
-            maxBuffer: MAX_OUTPUT_SIZE,
-            env: sanitizedEnv,
-            windowsHide: true,
-          }, (error, stdout, stderr) => {
-            clearTimeout(timer);
-            const parts: string[] = [];
+        const result = await execFileWithTreeTimeout(executable, runtimeArgs, {
+          cwd: workspace,
+          maxBuffer: MAX_OUTPUT_SIZE,
+          env: sanitizedEnv,
+          windowsHide: true,
+        }, timeout);
+        const parts: string[] = [];
 
-            if (timedOut) {
-              resolve(`Error: Code execution timed out after ${timeout}ms`);
-              return;
-            }
+        if (result.timedOut) {
+          const cleanupWarning = result.cleanupDegraded
+            ? ' Process-tree cleanup degraded to the root process; descendants may still be running.'
+            : '';
+          return `Error: Code execution timed out after ${timeout}ms.${cleanupWarning}`;
+        }
 
-            if (error) {
-              // Check for runtime not found
-              if (error.code === 'ENOENT' || (error.message && error.message.includes('not found'))) {
-                resolve(`Error: ${language} runtime not found. Please ensure ${language === 'python' ? 'python3/python' : 'node'} is installed and on PATH.`);
-                return;
-              }
-            }
+        if (result.errorMessage) {
+          // Check for runtime not found
+          if (result.errorCode === 'ENOENT' || result.errorMessage.includes('not found')) {
+            return `Error: ${language} runtime not found. Please ensure ${language === 'python' ? 'python3/python' : 'node'} is installed and on PATH.`;
+          }
+        }
 
-            if (stdout) parts.push(`--- stdout ---\n${truncateOutput(stdout)}`);
-            if (stderr) parts.push(`--- stderr ---\n${truncateOutput(stderr)}`);
+        if (result.stdout) parts.push(`--- stdout ---\n${truncateOutput(result.stdout)}`);
+        if (result.stderr) parts.push(`--- stderr ---\n${truncateOutput(result.stderr)}`);
 
-            if (parts.length === 0 && error) {
-              resolve(`Error: ${error.message}`);
-              return;
-            }
-            if (parts.length === 0) {
-              resolve('(no output)');
-              return;
-            }
-            resolve(parts.join('\n'));
-          });
-          const timer = setTimeout(() => {
-            timedOut = true;
-            terminateProcessTree(child);
-          }, timeout);
-        });
+        if (parts.length === 0 && result.errorMessage) return `Error: ${result.errorMessage}`;
+        if (parts.length === 0) return '(no output)';
+        return parts.join('\n');
       },
     },
 
