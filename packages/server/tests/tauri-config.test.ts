@@ -18,6 +18,17 @@ const WINDOWS_1252_EXTRA_CODEPOINTS = new Set([
   0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x017e, 0x0178,
 ]);
 const STAGED_DEPENDENCY_ALLOWLIST = new Set(['onnxruntime-web']);
+const FIRST_PARTY_RUNTIME_ENTRIES = new Set([
+  'dist',
+  'LICENSE',
+  'LICENSE.md',
+  'LICENSE.txt',
+  'NOTICE',
+  'NOTICE.md',
+  'NOTICE.txt',
+  'package.json',
+]);
+const SOURCE_ARTIFACT_PATTERN = /(?:\.map|\.(?:[cm]?ts|tsx)|\.tsbuildinfo)$/i;
 
 function isWindows1252PathSafe(value: string) {
   for (const char of value) {
@@ -71,6 +82,25 @@ function resolveWithinStagedResources(fromPackageDir: string, dep: string, resou
     if (parent === current) return false;
     current = parent;
   }
+}
+
+function localWorkspacePackageNames() {
+  const names = new Set<string>();
+  for (const workspaceRoot of ['packages', 'apps'].map((entry) => path.join(ROOT, entry))) {
+    if (!fs.existsSync(workspaceRoot)) continue;
+    for (const entry of fs.readdirSync(workspaceRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      try {
+        const manifest = JSON.parse(
+          fs.readFileSync(path.join(workspaceRoot, entry.name, 'package.json'), 'utf-8'),
+        ) as { name?: unknown };
+        if (typeof manifest.name === 'string') names.add(manifest.name);
+      } catch {
+        // Non-package workspace directories are irrelevant to staged runtime checks.
+      }
+    }
+  }
+  return names;
 }
 
 describe('Tauri Production Configuration', () => {
@@ -278,6 +308,7 @@ describe('Tauri Production Configuration', () => {
         'onnxruntime/onnxruntime_binding.node',
       ];
       const stagedRuntimeFiles = [
+        '@waggle/hive-mind-core/dist/index.js',
         '@waggle/hive-mind-cli/dist/index.js',
         '@waggle/hive-mind-hooks-claude-code/dist/bin/claude-code-hooks-cli.js',
         '@waggle/hive-mind-hooks-claude-desktop/dist/bin/claude-desktop-hooks.js',
@@ -286,6 +317,8 @@ describe('Tauri Production Configuration', () => {
         '@waggle/hive-mind-hooks-cursor/dist/bin/cursor-hooks.js',
         '@waggle/hive-mind-hooks-hermes/dist/bin/hermes-hooks.js',
         '@waggle/hive-mind-hooks-openclaw/dist/bin/openclaw-hooks.js',
+        '@waggle/hive-mind-hooks-openclaw/dist/handler.bundle.cjs',
+        'waggle-test-runtime/dist/index.js',
       ];
       const writeFixtureFile = (base: string, relative: string, content = '') => {
         const target = path.join(base, ...relative.split('/'));
@@ -345,6 +378,54 @@ describe('Tauri Production Configuration', () => {
             entry.endsWith('package.json') ? '{}' : '',
           );
         }
+        const stagedPackageNames = new Set(stagedRuntimeFiles.map((entry) => {
+          const parts = entry.split('/');
+          return entry.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0];
+        }));
+        for (const name of stagedPackageNames) {
+          writeFixtureFile(
+            path.join(fixtureResources, 'node_modules'),
+            `${name}/package.json`,
+            JSON.stringify({ name }),
+          );
+        }
+        writeFixtureFile(
+          fixtureRoot,
+          'packages/test-runtime/package.json',
+          JSON.stringify({ name: 'waggle-test-runtime' }),
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          'waggle-test-runtime/package.json',
+          JSON.stringify({ name: 'waggle-test-runtime', main: 'dist/index.js' }),
+        );
+        const coreManifestPath = path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'hive-mind-core',
+          'package.json',
+        );
+        const coreDistEntry = path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'hive-mind-core',
+          'dist',
+          'index.js',
+        );
+        const writeCoreManifest = (main: string, exports?: Record<string, unknown>) => {
+          fs.writeFileSync(
+            coreManifestPath,
+            JSON.stringify({
+              name: '@waggle/hive-mind-core',
+              main,
+              ...(exports === undefined ? {} : { exports }),
+            }),
+            'utf-8',
+          );
+        };
+        writeCoreManifest('dist/index.js');
 
         const runChecker = () => spawnSync(process.execPath, [fixtureChecker], {
           encoding: 'utf-8',
@@ -395,6 +476,173 @@ describe('Tauri Production Configuration', () => {
         expect(mapResult.stderr).toContain('resources/service.js.map must not be packaged');
         fs.rmSync(path.join(fixtureResources, 'service.js.map'));
 
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@waggle/hive-mind-core/src/evolution-runs.ts',
+          'export const proprietary = true;\n',
+        );
+        const nestedSourceResult = runChecker();
+        expect(nestedSourceResult.status).toBe(1);
+        expect(nestedSourceResult.stderr).toContain(
+          'resources/node_modules/@waggle/hive-mind-core/src/evolution-runs.ts must not be packaged',
+        );
+        fs.rmSync(path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'hive-mind-core',
+          'src',
+        ), { recursive: true });
+
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          'waggle-test-runtime/src/private.ts',
+          'export const privateSource = true;\n',
+        );
+        const unscopedSourceResult = runChecker();
+        expect(unscopedSourceResult.status).toBe(1);
+        expect(unscopedSourceResult.stderr).toContain(
+          'resources/node_modules/waggle-test-runtime/src/private.ts must not be packaged',
+        );
+        fs.rmSync(path.join(
+          fixtureResources,
+          'node_modules',
+          'waggle-test-runtime',
+          'src',
+        ), { recursive: true });
+
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          'vendor/node_modules/@waggle/shared/package.json',
+          JSON.stringify({ name: '@waggle/shared' }),
+        );
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          'vendor/node_modules/@waggle/shared/src/private.ts',
+          'export const privateSource = true;\n',
+        );
+        const nestedPackageResult = runChecker();
+        expect(nestedPackageResult.status).toBe(1);
+        expect(nestedPackageResult.stderr).toContain(
+          'resources/node_modules/vendor/node_modules/@waggle/shared/src/private.ts must not be packaged',
+        );
+        fs.rmSync(path.join(
+          fixtureResources,
+          'node_modules',
+          'vendor',
+        ), { recursive: true });
+
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@waggle/hive-mind-core/README.md',
+          'internal package documentation\n',
+        );
+        const firstPartyPayloadResult = runChecker();
+        expect(firstPartyPayloadResult.status).toBe(1);
+        expect(firstPartyPayloadResult.stderr).toContain(
+          'resources/node_modules/@waggle/hive-mind-core/README.md is not a runtime package entry',
+        );
+        fs.rmSync(path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'hive-mind-core',
+          'README.md',
+        ));
+
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@waggle/missing-manifest/dist/index.js',
+          'export {};\n',
+        );
+        const missingManifestResult = runChecker();
+        expect(missingManifestResult.status).toBe(1);
+        expect(missingManifestResult.stderr).toContain(
+          'resources/node_modules/@waggle/missing-manifest/package.json is missing or invalid',
+        );
+        fs.rmSync(path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'missing-manifest',
+        ), { recursive: true });
+
+        writeFixtureFile(
+          path.join(fixtureResources, 'node_modules'),
+          '@waggle/malformed-manifest/package.json',
+          '{',
+        );
+        const malformedManifestResult = runChecker();
+        expect(malformedManifestResult.status).toBe(1);
+        expect(malformedManifestResult.stderr).toContain(
+          'resources/node_modules/@waggle/malformed-manifest/package.json is missing or invalid',
+        );
+        fs.rmSync(path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'malformed-manifest',
+        ), { recursive: true });
+
+        writeCoreManifest('dist/../package.json');
+        const traversalTargetResult = runChecker();
+        expect(traversalTargetResult.status).toBe(1);
+        expect(traversalTargetResult.stderr).toContain(
+          'has an invalid or missing runtime target: dist/../package.json',
+        );
+
+        const runtimeDirectory = path.join(
+          fixtureResources,
+          'node_modules',
+          '@waggle',
+          'hive-mind-core',
+          'dist',
+          'runtime-directory',
+        );
+        fs.mkdirSync(runtimeDirectory, { recursive: true });
+        writeCoreManifest('dist/runtime-directory');
+        const directoryTargetResult = runChecker();
+        expect(directoryTargetResult.status).toBe(1);
+        expect(directoryTargetResult.stderr).toContain(
+          'has an invalid or missing runtime target: dist/runtime-directory',
+        );
+        fs.rmSync(runtimeDirectory, { recursive: true });
+
+        const coreDistDir = path.dirname(coreDistEntry);
+        const outsideDistDir = path.join(fixtureRoot, 'outside-runtime-dist');
+        writeFixtureFile(outsideDistDir, 'index.js', 'export {};\n');
+        fs.rmSync(coreDistDir, { recursive: true });
+        fs.symlinkSync(outsideDistDir, coreDistDir, 'junction');
+        writeCoreManifest('dist/index.js');
+        const junctionTargetResult = runChecker();
+        expect(junctionTargetResult.status).toBe(1);
+        expect(junctionTargetResult.stderr).toContain(
+          'has an invalid or missing runtime target: dist/index.js',
+        );
+        fs.rmSync(coreDistDir, { recursive: true });
+        fs.mkdirSync(coreDistDir, { recursive: true });
+        fs.writeFileSync(coreDistEntry, 'export {};\n', 'utf-8');
+
+        writeCoreManifest('dist/index.js', {
+          '.': {
+            types: './dist/index.d.ts',
+            import: './dist/index.js',
+          },
+        });
+        expect(runChecker().status).toBe(0);
+
+        fs.writeFileSync(
+          coreDistEntry,
+          'export {};\n//# sourceMappingURL=index.js.map\n',
+          'utf-8',
+        );
+        const nestedInlineMapResult = runChecker();
+        expect(nestedInlineMapResult.status).toBe(1);
+        expect(nestedInlineMapResult.stderr).toContain(
+          'resources/node_modules/@waggle/hive-mind-core/dist/index.js contains a sourceMappingURL directive',
+        );
+        fs.writeFileSync(coreDistEntry, 'export {};\n', 'utf-8');
+
         fs.writeFileSync(
           path.join(fixtureResources, 'service.js'),
           'console.log("sidecar");\n//# sourceMappingURL=data:application/json;base64,e30=\n',
@@ -409,7 +657,7 @@ describe('Tauri Production Configuration', () => {
         fs.rmSync(fixtureRoot, { recursive: true, force: true });
       }
     },
-    15_000,
+    60_000,
   );
 
   it('staged sidecar resources have Windows MSI codepage-safe relative paths', () => {
@@ -445,6 +693,66 @@ describe('Tauri Production Configuration', () => {
 
     expect(missing).toEqual([]);
   });
+
+  it.runIf(fs.existsSync(path.join(TAURI_DIR, 'resources', 'node_modules')))(
+    'stages only runtime payloads for first-party packages',
+    () => {
+      const resources = path.join(TAURI_DIR, 'resources');
+      const nodeModules = path.join(resources, 'node_modules');
+      const firstPartyRoot = path.join(resources, 'node_modules', '@waggle');
+      const firstPartyPackageDirs = new Set<string>();
+      const workspacePackageNames = localWorkspacePackageNames();
+      const unexpected: string[] = [];
+
+      if (fs.existsSync(firstPartyRoot)) {
+        for (const packageEntry of fs.readdirSync(firstPartyRoot, { withFileTypes: true })) {
+          if (packageEntry.isDirectory()) {
+            firstPartyPackageDirs.add(path.join(firstPartyRoot, packageEntry.name));
+          }
+        }
+      }
+      for (const name of workspacePackageNames) {
+        const directPackageDir = path.join(nodeModules, ...name.split('/'));
+        if (fs.existsSync(directPackageDir)) firstPartyPackageDirs.add(directPackageDir);
+      }
+      for (const packageDir of listPackageDirs(nodeModules)) {
+        try {
+          const manifest = JSON.parse(
+            fs.readFileSync(path.join(packageDir, 'package.json'), 'utf-8'),
+          ) as { name?: unknown };
+          if (
+            typeof manifest.name === 'string'
+            && (manifest.name.startsWith('@waggle/') || workspacePackageNames.has(manifest.name))
+          ) {
+            firstPartyPackageDirs.add(packageDir);
+          }
+        } catch {
+          // The executable checker reports malformed first-party manifests.
+        }
+      }
+
+      for (const packageDir of firstPartyPackageDirs) {
+        for (const entry of fs.readdirSync(packageDir, { withFileTypes: true })) {
+          if (!FIRST_PARTY_RUNTIME_ENTRIES.has(entry.name)) {
+            unexpected.push(path.relative(resources, path.join(packageDir, entry.name)));
+          }
+        }
+        for (const file of listFiles(packageDir)) {
+          if (SOURCE_ARTIFACT_PATTERN.test(file)) {
+            unexpected.push(path.relative(resources, file));
+          }
+          if (
+            /\.(?:[cm]?js)$/i.test(file)
+            && /(?:\/\/|\/\*)[#@]\s*sourceMappingURL\s*=/.test(fs.readFileSync(file, 'utf-8'))
+          ) {
+            unexpected.push(`${path.relative(resources, file)} -> sourceMappingURL`);
+          }
+        }
+      }
+
+      expect(unexpected).toEqual([]);
+    },
+  );
 });
 
 describe('CI/CD Configuration', () => {
