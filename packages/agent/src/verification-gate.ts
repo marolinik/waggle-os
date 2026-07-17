@@ -41,7 +41,8 @@ const SOURCE_TRANSFORM_REQUEST = /\b(?:rewrite|rephrase|summari[sz]e|translate|p
 
 /** Context that makes a success phrase a future condition rather than a completion claim. */
 const PLANNING_CONTEXT = /(?:\b(?:exit|acceptance|release|completion|success|quality)\s+(?:criteria|criterion|gate)\b|\bdefinition of done\b|\b(?:if|when|once|until|unless)\b|\b(?:must|should|needs? to|required|requires?|target|goal|planned|plan to|will)\b)/i;
-const PLANNING_HEADER = /(?:criteria|criterion|gate|definition of done|requirements?|target|goal)/i;
+const PLANNING_HEADER = /(?:criteria|criterion|gate|definition of done|requirements?|target|goal|next checks?)/i;
+const TABLE_PLANNING_HEADER = /(?:pass conditions?|next checks?|exit criteria|acceptance criteria|requirements?)/i;
 const ATTRIBUTED_CONTEXT = /\b(?:you (?:said|reported|stated|provided)|according to (?:you|your message)|the supplied (?:text|claim)|reported|claimed)\b/i;
 
 function normalizeAssertion(value: string): string {
@@ -60,13 +61,104 @@ function assertionContext(content: string, index: number): { line: string; previ
   };
 }
 
+interface MarkdownTableCell {
+  text: string;
+  start: number;
+  end: number;
+}
+
+function isEscapedDelimiter(line: string, index: number): boolean {
+  let backslashes = 0;
+  for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor--) backslashes++;
+  return backslashes % 2 === 1;
+}
+
+function markdownTableCells(line: string): MarkdownTableCell[] | null {
+  const delimiters: number[] = [];
+  for (let index = 0; index < line.length; index++) {
+    if (line[index] === '|' && !isEscapedDelimiter(line, index)) delimiters.push(index);
+  }
+  if (delimiters.length === 0) return null;
+
+  const boundaries = [-1, ...delimiters, line.length];
+  const cells: MarkdownTableCell[] = [];
+  for (let index = 0; index < boundaries.length - 1; index++) {
+    const start = boundaries[index] + 1;
+    const end = boundaries[index + 1];
+    cells.push({
+      text: line.slice(start, end).trim().replace(/\\\|/g, '|'),
+      start,
+      end,
+    });
+  }
+  if (cells[0]?.text === '') cells.shift();
+  if (cells.at(-1)?.text === '') cells.pop();
+  return cells.length >= 2 ? cells : null;
+}
+
+function tableAssertionContext(
+  content: string,
+  line: string,
+  lineStart: number,
+  assertionIndex: number,
+): { cell: string; header: string } | null {
+  const cells = markdownTableCells(line);
+  if (!cells) return null;
+  const relativeIndex = Math.max(0, assertionIndex - lineStart);
+  const columnIndex = cells.findIndex(cell => relativeIndex >= cell.start && relativeIndex < cell.end);
+  if (columnIndex < 0) return null;
+
+  const priorLines = content.slice(0, lineStart).split('\n');
+  let cursor = priorLines.length - 1;
+  if (priorLines[cursor] === '') cursor--;
+  let header = '';
+  for (; cursor >= 1; cursor--) {
+    const rowCells = markdownTableCells(priorLines[cursor]);
+    if (!rowCells) break;
+    if (rowCells.every(cell => /^:?-{3,}:?$/.test(cell.text))) {
+      const headerCells = markdownTableCells(priorLines[cursor - 1]);
+      if (!headerCells || headerCells.length !== cells.length || rowCells.length !== cells.length) return null;
+      header = headerCells[columnIndex]?.text ?? '';
+      break;
+    }
+  }
+
+  return { cell: cells[columnIndex]?.text ?? '', header };
+}
+
+function isPlanningListSection(content: string, lineStart: number): boolean {
+  const headingStack: Array<{ level: number; text: string }> = [];
+  let colonLabel = '';
+  for (const line of content.slice(0, lineStart).split('\n')) {
+    const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*$/);
+    if (heading) {
+      const level = heading[1].length;
+      while (headingStack.at(-1)?.level !== undefined && headingStack.at(-1)!.level >= level) {
+        headingStack.pop();
+      }
+      headingStack.push({ level, text: heading[2] });
+      colonLabel = '';
+      continue;
+    }
+    if (!/^\s*(?:[-*]|\d+[.)])\s+/.test(line) && /^\s*[^|#\r\n]{1,120}:\s*$/.test(line)) {
+      colonLabel = line;
+    }
+  }
+  return headingStack.some(heading => PLANNING_HEADER.test(heading.text))
+    || PLANNING_HEADER.test(colonLabel);
+}
+
 function isPlanningCondition(content: string, index: number): boolean {
-  const { line, previousLine } = assertionContext(content, index);
-  if (PLANNING_CONTEXT.test(line)) return true;
-  if (!/^\s*(?:[-*]|\d+[.)])\s+/.test(line)) return false;
+  const { line } = assertionContext(content, index);
+  const isListItem = /^\s*(?:[-*]|\d+[.)])\s+/.test(line);
   const lineStart = content.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
-  const sectionLead = content.slice(Math.max(0, lineStart - 240), lineStart);
-  return PLANNING_HEADER.test(previousLine) || PLANNING_HEADER.test(sectionLead);
+  const tableContext = tableAssertionContext(content, line, lineStart, index);
+  if (tableContext) {
+    return PLANNING_CONTEXT.test(tableContext.cell) || TABLE_PLANNING_HEADER.test(tableContext.header);
+  }
+  if (PLANNING_CONTEXT.test(line)) return true;
+  if (!isListItem) return false;
+  return isPlanningListSection(content, lineStart);
 }
 
 function isSuppliedClaim(

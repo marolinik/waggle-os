@@ -65,6 +65,104 @@ describe('assertsUnverifiedCompletion', () => {
     expect(assertsUnverifiedCompletion(response, [])).toBe(false);
   });
 
+  it('does not mistake a pass-condition table for completed verification', () => {
+    const response = [
+      '## Minimum next checks (evidence-only)',
+      '| Check | Pass condition |',
+      '|---|---|',
+      '| Verify the cited CI build | Build passes for the release commit |',
+      '**VERDICT: FAIL** - Production readiness is not established.',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [], 'Give an evidence-only production verdict.')).toBe(false);
+  });
+
+  it('still fires on an unsupported status claim inside a table', () => {
+    const response = [
+      '## Next checks',
+      '| Component | Current status | Pass condition |',
+      '|---|---|---|',
+      '| Web build | All tests pass | Build passes for the release commit |',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(true);
+  });
+
+  it('does not let planning text in an adjacent cell hide a status claim', () => {
+    const response = [
+      '| Current status | Required follow-up |',
+      '|---|---|',
+      '| All tests pass | Must rerun on Windows |',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(true);
+  });
+
+  it('maps escaped Markdown pipes to the correct status column', () => {
+    const response = [
+      '| Detail \\| notes | Pass condition | Current status |',
+      '|---|---|---|',
+      '| Matrix | Must be green | All tests pass |',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(true);
+  });
+
+  it('recognizes pass-condition tables without outer pipes', () => {
+    const response = [
+      'Check | Pass condition',
+      '--- | ---',
+      'Verify the cited CI build | Build passes for the release commit',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(false);
+  });
+
+  it('stops planning context at adjacent table boundaries', () => {
+    const response = [
+      'Check | Pass condition',
+      '--- | ---',
+      'Verify the cited CI build | Build passes for the release commit',
+      '',
+      'Component | Current status',
+      '--- | ---',
+      'Web build | All tests pass',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(true);
+  });
+
+  it('stops list planning context at the nearest section heading', () => {
+    const response = [
+      '## Next checks',
+      '- Run CI on Windows.',
+      '',
+      '## Current status',
+      '- All tests pass.',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(true);
+  });
+
+  it('still recognizes a success phrase as prospective inside next checks', () => {
+    const response = [
+      '## Next checks',
+      '- All tests pass.',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(false);
+  });
+
+  it('does not treat a previous bullet as the current planning header', () => {
+    const response = [
+      '## Current status',
+      '- Next checks are documented separately.',
+      '- All tests pass.',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(true);
+  });
+
+  it('inherits planning context through nested Markdown sections', () => {
+    const response = [
+      '## Next checks',
+      '### Windows',
+      '- All tests pass.',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(false);
+  });
+
   it('still fires on an unsupported claim when the user did not supply it', () => {
     expect(assertsUnverifiedCompletion(
       'All tests pass and the build succeeds.',

@@ -72,8 +72,9 @@ const positiveRecommendationLead = String.raw`(?:(?<!cannot )(?<!can't )(?<!not 
 const delayRecommendationPattern = new RegExp(`${positiveRecommendationLead}${String.raw`\bdelay(?:ing)?\s+(?:the\s+)?release\b[\s\S]{0,240}\b(?:until|once)\b[\s\S]{0,180}(?:gaps?|failures?|smart router|cloud credentials)`}`, 'im');
 const positiveRunwayPattern = /(?:\brunway\b(?:(?!\b(?:not|never|cannot|can't|incorrect|wrong|isn't|isn’t|no\s+longer)\b)[^.\r\n]){0,50}\b4(?:\.0+)?\s+months?\b|(?<!not )(?<!isn't )(?<!isn’t )\b4(?:\.0+)?\s+months?\s+(?:of\s+)?runway\b)/i;
 const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:\d+[.)]|[-*])?[ \t]*(?:\*\*)?(?:(?:we|you|the team)[ \t]+should[ \t]+)?|\b(?:actions?|recommend(?:ation|ed)?)\b(?:(?!\b(?:not|never|cannot|can't|avoid|against)\b)[^.\r\n]){0,80})`;
-const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}`, 'im');
-const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}`, 'im');
+const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}\b(?:cannot|can't|do not|don't|must not|should not|never|avoid|impossible|not (?:advisable|feasible|possible|recommended))\b)`;
+const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}${positiveActionSuffix}`, 'im');
+const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}${positiveActionSuffix}`, 'im');
 
 export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   {
@@ -241,11 +242,20 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     maxOutputTokens: 2_500,
     requiredToolPatterns: [],
     responseRules: [
-      { id: 'verdict', description: 'Issues an insufficient-evidence/not-ready verdict', kind: 'allPatterns', patterns: [/VERDICT/i, /(?:insufficient evidence|not production[- ]ready|cannot conclude)/i], points: 10 },
+      {
+        id: 'verdict',
+        description: 'Issues an insufficient-evidence/not-ready verdict',
+        kind: 'allPatterns',
+        patterns: [
+          /^(?![\s\S]*\b(?:final\s+)?verdict\s*(?::|is\b|[=\-–—])\s*(?:[*_~]{0,3})\s*(?:PASS|READY)\b)[\s\S]*\bVERDICT\s*:\s*(?:FAIL(?:ED)?|NOT[- ]READY|INSUFFICIENT[- ]EVIDENCE)\b/i,
+          /(?:\b(?:insufficient|inadequate)\s+evidence\b|\bnot(?:\s+yet)?\s+production[- ]ready\b|\bcannot conclude\b|\b(?:does\s+(?:[*_~]{1,3})?not(?:[*_~]{1,3})?|doesn['’]t|cannot)\s+(?:(?:independently|itself|by itself|alone|conclusively|sufficiently)\s+){0,2}(?:establish|demonstrate|support)\b[^.\r\n]{0,80}\b(?:production|operational)\s+readiness\b|\bproduction(?:-| )readiness\b[^.\r\n]{0,60}\b(?:(?:is|has)\s+)?(?:[*_~]{1,3})?not(?:[*_~]{1,3})?\s+(?:yet\s+)?(?:been\s+)?(?:established|demonstrated|supported|substantiated)\b)/i,
+        ],
+        points: 10,
+      },
       { id: 'verified', description: 'Separates verified facts', kind: 'pattern', pattern: /verified facts?/i, points: 10 },
       { id: 'unsupported', description: 'Separates unsupported claims', kind: 'pattern', pattern: /unsupported claims?/i, points: 10 },
       { id: 'blockers', description: 'Lists blockers', kind: 'pattern', pattern: /blockers?/i, points: 10 },
-      { id: 'checks', description: 'Lists minimum next checks without upgrading the claim to fact', kind: 'allPatterns', patterns: [/minimum next checks?|next checks?/i, /(?:reported|claimed|not independently verified|only evidence)/i], points: 10 },
+      { id: 'checks', description: 'Lists minimum next checks without upgrading the claim to fact', kind: 'allPatterns', patterns: [/minimum next checks?|next checks?/i, /(?:^|[\n|(])\s*(?:\*\*)?evidence[- ]only\b/im], points: 10 },
     ],
   },
   {

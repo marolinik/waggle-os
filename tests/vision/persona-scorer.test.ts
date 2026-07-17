@@ -459,6 +459,137 @@ describe('deterministic 100-point persona scorer', () => {
     }
   });
 
+  it.each([
+    ['Create near-term cash inflow', true],
+    ['Add near-term revenue', true],
+    ['Do not create near-term cash inflow', false],
+    ['Never add near-term revenue', false],
+    ['Create near-term cash inflow is not recommended', false],
+    ['Add near-term revenue is impossible', false],
+    ['Add near-term revenue - never recommended', false],
+    ['Create near-term cash inflow never works', false],
+    ['The memo mentions "create near-term cash inflow"', false],
+    ['We discussed whether to add near-term revenue', false],
+  ])('classifies the finance cash action %j', (cashAction, expected) => {
+    const finance = PERSONA_CASES.find(persona => persona.id === 'finance-owner')!;
+    const response = [
+      'Runway = 4.00 months.',
+      String.raw`Formula: \text{Runway (months)} = \frac{\text{Cash Balance}}{\text{Net Monthly Burn}}.`,
+      'Biggest assumption: burn stays constant.',
+      '1. Cut monthly burn.',
+      `2. ${cashAction}.`,
+    ].join('\n');
+    const result = scorePersonaTrial(finance, evidence({
+      prompt: finance.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: finance.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(expected);
+  });
+
+  it('accepts evidence-only VERDICT: FAIL output while preserving strict performance scoring', () => {
+    const verifier = PERSONA_CASES.find(persona => persona.id === 'verifier')!;
+    const responses = [
+      [
+        '## Adversarial Assessment (Evidence-only)',
+        '## Verified facts',
+        'A teammate made the claim.',
+        '## Unsupported claims',
+        'Production readiness is not demonstrated by the provided evidence.',
+        '## Blockers',
+        'No release artifact was supplied.',
+        '## Minimum next checks',
+        'Verify the cited build artifact.',
+        '**VERDICT: FAIL**',
+      ].join('\n'),
+      [
+        '| Method | Evidence-only review |',
+        '## Verified facts',
+        'Only the attributed claim is verified.',
+        '## Unsupported claims',
+        'A passing web build alone does not establish operational readiness.',
+        '## Blockers',
+        'Runtime evidence is missing.',
+        '## Minimum next checks',
+        'Run a production-like smoke test.',
+        '**VERDICT: FAIL**',
+      ].join('\n'),
+      [
+        '### Verification checks (evidence-only)',
+        '## Verified facts',
+        'The claim was made.',
+        '## Unsupported claims',
+        'Build success does **not** establish operational readiness.',
+        '## Blockers',
+        'No rollback evidence exists.',
+        '## Minimum next checks',
+        '- [ ] Verify the release candidate.',
+        '**VERDICT: FAIL**',
+      ].join('\n'),
+    ];
+
+    for (const response of responses) {
+      const result = scorePersonaTrial(verifier, evidence({
+        prompt: verifier.prompt,
+        response,
+        persistedResponse: response,
+        tokenStreamResponse: response,
+        renderedAssistantResponse: response,
+        requestPersonaId: verifier.id,
+      }));
+      expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    }
+
+    const slow = responses[0];
+    const slowResult = scorePersonaTrial(verifier, evidence({
+      prompt: verifier.prompt,
+      response: slow,
+      persistedResponse: slow,
+      tokenStreamResponse: slow,
+      renderedAssistantResponse: slow,
+      requestPersonaId: verifier.id,
+      durationMs: 30_524,
+      inputTokens: 16_256,
+      outputTokens: 1_964,
+    }));
+    expect(slowResult.checks.find(check => check.id === 'performance-budgets')?.passed).toBe(false);
+    expect(slowResult).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it.each([
+    'VERDICT: PASS. Production readiness is established.',
+    'VERDICT: FAIL. Production readiness is established.',
+    'VERDICT: FAIL. A passing build does not fail to establish production readiness.',
+    'VERDICT: FAIL. Production readiness is not established. VERDICT: PASS.',
+    'VERDICT: FAIL. Production readiness is not established. VERDICT: READY.',
+    'VERDICT: FAIL. Production readiness is not established. Final verdict is PASS.',
+    'VERDICT: FAIL. Production readiness is not established. Final verdict = **READY**.',
+  ])('rejects an unsupported verifier verdict: %s', (claim) => {
+    const verifier = PERSONA_CASES.find(persona => persona.id === 'verifier')!;
+    const response = [
+      'Evidence-only review.',
+      'Verified facts.',
+      'Unsupported claims.',
+      'Blockers.',
+      'Minimum next checks.',
+      claim,
+    ].join('\n');
+    const result = scorePersonaTrial(verifier, evidence({
+      prompt: verifier.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: verifier.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'verdict')?.passed).toBe(false);
+  });
+
   it('distinguishes a discussed model-unavailable scenario from a real failure banner', () => {
     const projectManager = PERSONA_CASES.find(persona => persona.id === 'project-manager')!;
     const response = [
