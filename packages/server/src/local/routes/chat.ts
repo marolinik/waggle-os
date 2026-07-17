@@ -36,7 +36,7 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { classifyExplicitTurnMutationPolicy, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
+import { buildTemplateWelcomePrompt, classifyExplicitTurnMutationPolicy, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
@@ -1310,10 +1310,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             const { BUILT_IN_TEMPLATES } = await import('./workspace-templates.js');
             const tpl = BUILT_IN_TEMPLATES?.find?.((t) => t.id === wsTemplateId);
             if (tpl) {
-              templateContext = `\n\n# Workspace Template: ${tpl.name}\nThis workspace uses the "${tpl.name}" template. ${tpl.description ?? ''}\nGreet the user with a warm, template-appropriate welcome that shows you understand their domain.\n`;
-              if (tpl.starterMemory?.length) {
-                templateContext += '\nStarter context:\n' + tpl.starterMemory.map((m: string) => `- ${m}`).join('\n') + '\n';
-              }
+              templateContext = buildTemplateWelcomePrompt(tpl);
             }
           }
         }

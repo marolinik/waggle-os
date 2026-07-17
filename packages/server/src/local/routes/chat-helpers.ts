@@ -170,8 +170,24 @@ export function shouldSuggestSchedule(
 
 export const SCHEDULE_SUGGESTION = '\n\n💡 *Want this to run automatically? Use /schedule or ask me to set up a recurring task.*';
 
-/** System prompt prefix injected for ambiguous messages */
-export const AMBIGUITY_PROMPT = `IMPORTANT: The user's message is very brief and may be vague. Ask ONE specific clarifying question before taking any action. Do not generate documents, run tools, or take action without first understanding what the user wants. Start your response with a question.\n\n`;
+/** Shared precedence rule for optional first-turn prompt additions. */
+export const USER_RESPONSE_FORMAT_PRECEDENCE = 'A user-specified response syntax or shape is authoritative for presentation. Follow that syntax or shape exactly; do not add greetings, questions, prose, wrappers, labels, or other content outside it. Requested facts, verdicts, fixed values, or claims are not presentation constraints and never override safety, evidence, attribution, read-only, anti-fabrication, tool/action, or confidentiality rules.';
+
+/** System prompt prefix injected for ambiguous messages. */
+export const AMBIGUITY_PROMPT = `IMPORTANT: The user's message is very brief and may be vague. ${USER_RESPONSE_FORMAT_PRECEDENCE} If the user specified a response syntax or shape, express any essential clarification only within fields or content it allows. If it cannot represent clarification, emit a format-valid, truthful failure or refusal when possible; if not, the non-presentation rules above win. Otherwise, ask ONE specific clarifying question before taking any action. Do not generate documents, run tools, or take action without first understanding what the user wants. Start the default response with a question.\n\n`;
+
+/** Build first-turn context for a templated workspace without overriding the user's output contract. */
+export function buildTemplateWelcomePrompt(template: {
+  name: string;
+  description?: string;
+  starterMemory?: string[];
+}): string {
+  let prompt = `\n\n# Workspace Template: ${template.name}\nThis workspace uses the "${template.name}" template. ${template.description ?? ''}\n${USER_RESPONSE_FORMAT_PRECEDENCE}\nWhen no response format is specified, greet the user with a warm, template-appropriate welcome that shows you understand their domain. When one is specified, omit the greeting unless the requested payload explicitly requires it.\n`;
+  if (template.starterMemory?.length) {
+    prompt += '\nStarter context:\n' + template.starterMemory.map((memory) => `- ${memory}`).join('\n') + '\n';
+  }
+  return prompt;
+}
 
 /** Generate a human-readable description of what a tool is doing */
 export function describeToolUse(name: string, input: Record<string, unknown>): string {

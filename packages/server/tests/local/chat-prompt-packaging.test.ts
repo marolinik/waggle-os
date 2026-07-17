@@ -6,6 +6,11 @@ import {
   selectChatPromptPackageMode,
 } from '../../src/local/routes/chat-prompt-packaging.js';
 import {
+  AMBIGUITY_PROMPT,
+  USER_RESPONSE_FORMAT_PRECEDENCE,
+  buildTemplateWelcomePrompt,
+} from '../../src/local/routes/chat-helpers.js';
+import {
   filterPluginToolsForConversationalTurn,
   isExplicitGatedToolRequest,
 } from '../../src/local/routes/chat.js';
@@ -91,7 +96,29 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/never (?:invent|fabricate)/i);
     expect(compact).toMatch(/do not claim.*tool/i);
     expect(compact).toMatch(/regulated topics/i);
+    expect(compact).toContain('unless the user specified a response syntax or shape that does not permit it');
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
+  });
+
+  it('keeps optional first-turn questions and greetings conditional in assembled compact prompts', () => {
+    const compact = behavioralRulesForPromptPackage(BEHAVIORAL_SPEC, 'compact');
+    const system = `# Identity\nWaggle\n\n${compact}`;
+    const base = composeChatPromptTail(system, {
+      persona: null,
+      workspaceTone: undefined,
+      assembled: assembled(system, null),
+    });
+    const template = buildTemplateWelcomePrompt({
+      name: 'Sales Pipeline',
+      description: 'Track leads and draft outreach.',
+    });
+    const prompt = AMBIGUITY_PROMPT + base + template;
+
+    expect(prompt.split(USER_RESPONSE_FORMAT_PRECEDENCE)).toHaveLength(3);
+    expect(prompt).toContain('unless the user specified a response syntax or shape that does not permit it');
+    expect(prompt).toContain('When no response format is specified, greet the user');
+    expect(prompt).not.toContain('Start your response with a question.');
+    expect(prompt).not.toContain('\nGreet the user with a warm');
   });
 
   it('does not append persona instructions or a response scaffold already packaged by the assembler', () => {
