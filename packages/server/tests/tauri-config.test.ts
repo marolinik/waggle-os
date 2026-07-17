@@ -318,6 +318,7 @@ describe('Tauri Production Configuration', () => {
         '@waggle/hive-mind-hooks-hermes/dist/bin/hermes-hooks.js',
         '@waggle/hive-mind-hooks-openclaw/dist/bin/openclaw-hooks.js',
         '@waggle/hive-mind-hooks-openclaw/dist/handler.bundle.cjs',
+        'waggle-memory-mcp/dist/index.js',
         'waggle-test-runtime/dist/index.js',
       ];
       const writeFixtureFile = (base: string, relative: string, content = '') => {

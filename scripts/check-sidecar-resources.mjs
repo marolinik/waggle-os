@@ -385,6 +385,7 @@ const hookRuntimeEntries = [
   '@waggle/hive-mind-hooks-hermes/dist/bin/hermes-hooks.js',
   '@waggle/hive-mind-hooks-openclaw/dist/bin/openclaw-hooks.js',
   '@waggle/hive-mind-hooks-openclaw/dist/handler.bundle.cjs',
+  'waggle-memory-mcp/dist/index.js',
 ];
 for (const entry of hookRuntimeEntries) {
   if (!fs.existsSync(path.join(stagedDepsDir, ...entry.split('/')))) {

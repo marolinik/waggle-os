@@ -49,6 +49,7 @@ const HOOK_RUNTIME_ROOTS = new Set([
   '@waggle/hive-mind-hooks-cursor',
   '@waggle/hive-mind-hooks-hermes',
   '@waggle/hive-mind-hooks-openclaw',
+  'waggle-memory-mcp',
 ]);
 
 const platform = process.platform;

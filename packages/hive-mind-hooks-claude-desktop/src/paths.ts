@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { homedir } from 'node:os';
-import { delimiter, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { delimiter, join, resolve } from 'node:path';
+
+const requireFromHook = createRequire(import.meta.url);
 
 export interface ClaudeDesktopPaths {
   claudeConfigDir: string;
@@ -47,21 +49,20 @@ export function resolveMcpEntry(opts: { mcpEntry?: string } = {}): string | unde
     return trimmed.length > 0 ? resolve(trimmed) : undefined;
   }
 
+  try {
+    const installedEntry = requireFromHook.resolve('waggle-memory-mcp');
+    if (existsSync(installedEntry)) return installedEntry;
+  } catch {
+    // Fall through to explicit NODE_PATH/current-directory compatibility roots.
+  }
+
   const nodePathRoots = (process.env.NODE_PATH ?? '')
     .split(delimiter)
     .map((root) => root.trim())
     .filter((root) => root.length > 0);
-  const moduleNodeModules = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    '..',
-    'node_modules',
-  );
   const roots = [
     ...nodePathRoots,
     join(process.cwd(), 'node_modules'),
-    moduleNodeModules,
   ];
 
   for (const root of roots) {
