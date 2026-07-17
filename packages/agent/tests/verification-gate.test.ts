@@ -52,7 +52,7 @@ describe('assertsUnverifiedCompletion', () => {
 
   it('preserves success claims supplied by a closed-world rewrite request', () => {
     const request = 'Rewrite this and preserve the facts: API tests pass. Browser tests have two failures.';
-    const response = 'API tests pass. Browser tests still have two failures.';
+    const response = 'API tests are passing. Browser tests still have two failures.';
     expect(assertsUnverifiedCompletion(response, [], request)).toBe(false);
   });
 
@@ -68,6 +68,14 @@ describe('assertsUnverifiedCompletion', () => {
   it('still fires on an unsupported claim when the user did not supply it', () => {
     expect(assertsUnverifiedCompletion(
       'All tests pass and the build succeeds.',
+      [],
+      'Fix the failing tests.',
+    )).toBe(true);
+  });
+
+  it('does not let narrative use of "after" hide an unsupported completion claim', () => {
+    expect(assertsUnverifiedCompletion(
+      'After the fix, all tests pass.',
       [],
       'Fix the failing tests.',
     )).toBe(true);

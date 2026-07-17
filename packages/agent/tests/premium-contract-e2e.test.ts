@@ -68,7 +68,7 @@ describe('premium contract — D3 + D1 compose at the completion boundary (stand
     const body4 = JSON.parse((fetch.mock.calls[3][1] as RequestInit).body as string).messages as Array<{ role: string; content: string }>;
 
     // D3 fired before turn 3 (verification corrective injected)…
-    expect(body3.some(m => m.role === 'user' && m.content === VERIFICATION_GATE_DIRECTIVE)).toBe(true);
+    expect(body3.some(m => m.role === 'system' && m.content === VERIFICATION_GATE_DIRECTIVE)).toBe(true);
     // …and D1 fired before turn 4 (the real distillation directive injected),
     // i.e. ordering preserved and D3 did NOT swallow D1.
     const expectedDistill = planSkillDistillation(['probe', 'probe', 'probe', 'probe', 'probe'], honest)!;

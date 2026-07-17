@@ -128,7 +128,7 @@ export async function maybeFireCompletionGate(args: MaybeFireCompletionGateArgs)
     assertsUnverifiedCompletion(content, toolsUsed, userRequest)
   ) {
     messages.push({ role: 'assistant', content });
-    messages.push({ role: 'user', content: VERIFICATION_GATE_DIRECTIVE });
+    messages.push({ role: 'system', content: VERIFICATION_GATE_DIRECTIVE });
     logTurnEvent(turnId, { stage: 'agent-loop.verification-gate.fired', contentChars: content.length });
     return {
       fired: true,

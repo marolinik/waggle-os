@@ -38,8 +38,10 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
     expect(fetch).toHaveBeenCalledTimes(2); // the claim was rejected, loop continued
     const secondBody = JSON.parse((fetch.mock.calls[1][1] as RequestInit).body as string);
     const injected = (secondBody.messages as Array<{ role: string; content: string }>)
-      .find(m => m.role === 'user' && m.content === VERIFICATION_GATE_DIRECTIVE);
+      .find(m => m.role === 'system' && m.content === VERIFICATION_GATE_DIRECTIVE);
     expect(injected, 'corrective directive must be injected before completion').toBeDefined();
+    expect((secondBody.messages as Array<{ role: string; content: string }>)
+      .some(m => m.role === 'user' && m.content === VERIFICATION_GATE_DIRECTIVE)).toBe(false);
     expect(result.content).toBe('UNVERIFIED — I cannot run the suite here; not checked.');
   });
 
@@ -61,7 +63,7 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
   });
 
   it('does not rewrite facts preserved from the current user request', async () => {
-    const response = 'API tests pass. Browser tests still have two failures on Windows.';
+    const response = 'API tests are passing. Browser tests still have two failures on Windows.';
     const fetch = mockFetch([response]);
     const result = await runAgentLoop(cfg(fetch, {
       messages: [{

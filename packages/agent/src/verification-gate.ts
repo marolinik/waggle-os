@@ -26,7 +26,7 @@ const VERIFICATION_TOOL = /test|build|\brun\b|run_|verif|lint|typecheck|tsc|pyte
 
 /** Explicit "the work is verified / passing / working" success assertions. */
 const SUCCESS_ASSERTION: RegExp[] = [
-  /\b(?:all\s+)?(?:tests?|suite|specs?)\s+(?:pass(?:ed|ing)?|are\s+green|is\s+green)\b/i,
+  /\b(?:all\s+)?(?:tests?|suite|specs?)\s+(?:(?:are|is)\s+)?(?:pass(?:ed|ing)?|green)\b/i,
   /\b\d+\s+tests?\s+(?:pass(?:ed|ing)?|green)\b/i,
   /\bbuild\s+(?:succeed(?:s|ed)?|passes|is\s+green)\b/i,
   /\bit\s+(?:now\s+)?compiles?\b|\beverything\s+compiles\b/i,
@@ -40,7 +40,7 @@ const SUCCESS_ASSERTION: RegExp[] = [
 const SOURCE_TRANSFORM_REQUEST = /\b(?:rewrite|rephrase|summari[sz]e|translate|preserve|quote|extract|polish|edit this|turn this into)\b/i;
 
 /** Context that makes a success phrase a future condition rather than a completion claim. */
-const PLANNING_CONTEXT = /(?:\b(?:exit|acceptance|release|completion|success|quality)\s+(?:criteria|criterion|gate)\b|\bdefinition of done\b|\b(?:if|when|once|until|unless|before|after)\b|\b(?:must|should|needs? to|required|requires?|target|goal|planned|plan to|will)\b)/i;
+const PLANNING_CONTEXT = /(?:\b(?:exit|acceptance|release|completion|success|quality)\s+(?:criteria|criterion|gate)\b|\bdefinition of done\b|\b(?:if|when|once|until|unless)\b|\b(?:must|should|needs? to|required|requires?|target|goal|planned|plan to|will)\b)/i;
 const PLANNING_HEADER = /(?:criteria|criterion|gate|definition of done|requirements?|target|goal)/i;
 const ATTRIBUTED_CONTEXT = /\b(?:you (?:said|reported|stated|provided)|according to (?:you|your message)|the supplied (?:text|claim)|reported|claimed)\b/i;
 
@@ -70,14 +70,18 @@ function isPlanningCondition(content: string, index: number): boolean {
 }
 
 function isSuppliedClaim(
+  assertion: RegExp,
   matchText: string,
   content: string,
   index: number,
   userRequest: string,
 ): boolean {
+  if (SOURCE_TRANSFORM_REQUEST.test(userRequest)) {
+    const flags = assertion.flags.replaceAll('g', '');
+    if (new RegExp(assertion.source, flags).test(userRequest)) return true;
+  }
   const normalizedMatch = normalizeAssertion(matchText);
   if (!normalizedMatch || !normalizeAssertion(userRequest).includes(normalizedMatch)) return false;
-  if (SOURCE_TRANSFORM_REQUEST.test(userRequest)) return true;
   return ATTRIBUTED_CONTEXT.test(assertionContext(content, index).line);
 }
 
@@ -99,7 +103,7 @@ export function assertsUnverifiedCompletion(
     for (const match of content.matchAll(new RegExp(assertion.source, flags))) {
       const index = match.index ?? 0;
       if (isPlanningCondition(content, index)) continue;
-      if (isSuppliedClaim(match[0], content, index, userRequest)) continue;
+      if (isSuppliedClaim(assertion, match[0], content, index, userRequest)) continue;
       return true;
     }
   }
