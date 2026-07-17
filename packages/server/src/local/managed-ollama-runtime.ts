@@ -1,4 +1,6 @@
-import { createHash } from 'node:crypto';
+import Database from 'better-sqlite3';
+import type { Database as DatabaseType } from 'better-sqlite3';
+import { createHash, randomUUID } from 'node:crypto';
 import { spawn, execFile, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import {
   chmodSync,
@@ -14,13 +16,19 @@ import path from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
+import { createLogger } from './logger.js';
 
 const execFileAsync = promisify(execFile);
+const log = createLogger('managed-ollama');
 const OLLAMA_VERSION = '0.32.0';
 const RELEASE_ROOT = `https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}`;
 const DOWNLOAD_TIMEOUT_MS = 45 * 60_000;
 const START_TIMEOUT_MS = 45_000;
 const STOP_TIMEOUT_MS = 5_000;
+const INSTALL_LOCK_WAIT_MS = DOWNLOAD_TIMEOUT_MS + 15 * 60_000;
+const INSTALL_LOCK_BUSY_TIMEOUT_MS = 0;
+const INSTALL_LOCK_RETRY_MIN_MS = 200;
+const INSTALL_LOCK_RETRY_MAX_MS = 1_000;
 
 /**
  * The desktop shell terminates the Node sidecar directly on exit, which bypasses
@@ -143,6 +151,10 @@ interface InstallMetadata {
   installedAt: string;
 }
 
+interface InstallLockClaim {
+  database: DatabaseType;
+}
+
 export interface ManagedOllamaStatus {
   source: 'waggle-managed';
   supported: boolean;
@@ -172,6 +184,9 @@ interface RuntimeDependencies {
   ) => Promise<void>;
   spawnImpl?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   probe?: (baseUrl: string) => Promise<boolean>;
+  renameImpl?: typeof rename;
+  rmImpl?: typeof rm;
+  warn?: (message: string, error: unknown) => void;
   artifact?: OllamaRuntimeArtifact | null;
   platform?: NodeJS.Platform;
   arch?: string;
@@ -240,11 +255,36 @@ function inside(root: string, candidate: string): boolean {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
-async function removeWithin(root: string, target: string): Promise<void> {
+const TRANSIENT_FILESYSTEM_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const FILESYSTEM_ATTEMPTS = 4;
+const PROCESS_INSTALLS = new Map<string, Promise<{ executable: string; installedNow: boolean }>>();
+
+function isTransientFilesystemError(error: unknown): boolean {
+  return TRANSIENT_FILESYSTEM_CODES.has((error as NodeJS.ErrnoException)?.code ?? '');
+}
+
+async function waitForFilesystemRetry(attempt: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 25 * attempt));
+}
+
+async function removeWithin(root: string, target: string, rmImpl: typeof rm = rm): Promise<void> {
   if (!inside(root, target) || path.resolve(root) === path.resolve(target)) {
     throw new Error(`Refusing to remove path outside managed runtime root: ${target}`);
   }
-  await rm(target, { recursive: true, force: true });
+  for (let attempt = 1; attempt <= FILESYSTEM_ATTEMPTS; attempt += 1) {
+    try {
+      await rmImpl(target, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (!isTransientFilesystemError(error) || attempt === FILESYSTEM_ATTEMPTS) throw error;
+      await waitForFilesystemRetry(attempt);
+    }
+  }
+}
+
+function isSqliteBusyError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 'SQLITE_BUSY' || code === 'SQLITE_BUSY_SNAPSHOT' || code === 'SQLITE_LOCKED';
 }
 
 async function findExecutable(root: string, executableName: string): Promise<string> {
@@ -277,6 +317,9 @@ export class ManagedOllamaRuntime {
   private readonly extractArchive: NonNullable<RuntimeDependencies['extractArchive']>;
   private readonly spawnImpl: NonNullable<RuntimeDependencies['spawnImpl']>;
   private readonly probe: NonNullable<RuntimeDependencies['probe']>;
+  private readonly renameImpl: NonNullable<RuntimeDependencies['renameImpl']>;
+  private readonly rmImpl: NonNullable<RuntimeDependencies['rmImpl']>;
+  private readonly warn: NonNullable<RuntimeDependencies['warn']>;
   private installPromise: Promise<{ executable: string; installedNow: boolean }> | null = null;
   private startPromise: Promise<boolean> | null = null;
   private child: ChildProcess | null = null;
@@ -297,6 +340,12 @@ export class ManagedOllamaRuntime {
     this.extractArchive = dependencies.extractArchive ?? defaultExtract;
     this.spawnImpl = dependencies.spawnImpl ?? ((file, args, options) => spawn(file, args, options));
     this.probe = dependencies.probe ?? defaultProbe;
+    this.renameImpl = dependencies.renameImpl ?? rename;
+    this.rmImpl = dependencies.rmImpl ?? rm;
+    this.warn = dependencies.warn ?? ((message, error) => log.warn(message, {
+      error: error instanceof Error ? error.message : String(error),
+      code: (error as { code?: unknown } | null)?.code ?? null,
+    }));
   }
 
   getStatus(): ManagedOllamaStatus {
@@ -324,6 +373,14 @@ export class ManagedOllamaRuntime {
     return this.artifact ? path.join(this.root, this.artifact.version) : null;
   }
 
+  private installVersionKey(): string {
+    return createHash('sha256').update(this.artifact!.version).digest('hex');
+  }
+
+  private installLockDatabasePath(): string {
+    return path.join(this.root, `.install-lock-${this.installVersionKey()}.sqlite`);
+  }
+
   private getInstalledExecutable(): string | null {
     const versionDir = this.versionDir();
     if (!versionDir) return null;
@@ -343,8 +400,94 @@ export class ManagedOllamaRuntime {
     const existing = this.getInstalledExecutable();
     if (existing) return { executable: existing, installedNow: false };
     if (this.installPromise) return this.installPromise;
-    this.installPromise = this.installInternal().finally(() => { this.installPromise = null; });
+    const coordinationKey = this.installLockDatabasePath();
+    const processInstall = PROCESS_INSTALLS.get(coordinationKey);
+    if (processInstall) {
+      const result = await processInstall;
+      return { executable: result.executable, installedNow: false };
+    }
+    const installation = this.installInternal();
+    PROCESS_INSTALLS.set(coordinationKey, installation);
+    this.installPromise = installation.finally(() => {
+      if (PROCESS_INSTALLS.get(coordinationKey) === installation) PROCESS_INSTALLS.delete(coordinationKey);
+      this.installPromise = null;
+    });
     return this.installPromise;
+  }
+
+  private reportWarning(message: string, error: unknown): void {
+    try {
+      this.warn(message, error);
+    } catch {
+      // Diagnostics must never change runtime availability.
+    }
+  }
+
+  private async acquireInstallLock(): Promise<InstallLockClaim> {
+    const database = new Database(this.installLockDatabasePath(), { timeout: INSTALL_LOCK_BUSY_TIMEOUT_MS });
+    const deadline = Date.now() + INSTALL_LOCK_WAIT_MS;
+    let retryDelay = INSTALL_LOCK_RETRY_MIN_MS;
+    while (Date.now() < deadline) {
+      try {
+        database.exec('BEGIN EXCLUSIVE');
+        return { database };
+      } catch (error) {
+        if (!isSqliteBusyError(error)) {
+          try {
+            database.close();
+          } catch (closeError) {
+            this.reportWarning('Could not close the managed Ollama install coordinator', closeError);
+          }
+          throw error;
+        }
+      }
+      const jitter = Math.floor(Math.random() * Math.min(100, retryDelay / 4));
+      await new Promise((resolve) => setTimeout(resolve, retryDelay + jitter));
+      retryDelay = Math.min(retryDelay * 2, INSTALL_LOCK_RETRY_MAX_MS);
+    }
+    try {
+      database.close();
+    } catch (error) {
+      this.reportWarning('Could not close the timed-out managed Ollama install coordinator', error);
+    }
+    throw new Error(`Timed out waiting for the managed Ollama ${this.artifact!.version} installation coordinator`);
+  }
+
+  private async releaseInstallLock(claim: InstallLockClaim): Promise<void> {
+    try {
+      if (claim.database.inTransaction) claim.database.exec('ROLLBACK');
+    } catch (error) {
+      this.reportWarning('Could not roll back the managed Ollama install coordinator', error);
+    } finally {
+      try {
+        claim.database.close();
+      } catch (error) {
+        this.reportWarning('Could not close the managed Ollama install coordinator', error);
+      }
+    }
+  }
+
+  private async cleanupInstallAttempt(targets: readonly string[]): Promise<void> {
+    for (const target of targets) {
+      try {
+        await removeWithin(this.root, target, this.rmImpl);
+      } catch (error) {
+        this.reportWarning(`Could not remove managed Ollama install artifact ${path.basename(target)}`, error);
+      }
+    }
+  }
+
+  private async removeOrphanedInstallAttempts(): Promise<void> {
+    const versionKey = this.installVersionKey();
+    const stagingPrefix = `.install-attempt-${versionKey}.`;
+    const archivePrefix = `.${this.artifact!.filename}.${versionKey}.`;
+    const entries = await readdir(this.root, { withFileTypes: true });
+    for (const entry of entries) {
+      const isStaging = entry.name.startsWith(stagingPrefix);
+      const isArchive = entry.name.startsWith(archivePrefix) && entry.name.endsWith('.part');
+      if (!isStaging && !isArchive) continue;
+      await removeWithin(this.root, path.join(this.root, entry.name), this.rmImpl);
+    }
   }
 
   private async installInternal(): Promise<{ executable: string; installedNow: boolean }> {
@@ -352,66 +495,104 @@ export class ManagedOllamaRuntime {
     if (!isLoopbackEndpoint(this.baseUrl)) throw new Error('Managed Ollama requires a loopback OLLAMA_HOST');
 
     await mkdir(this.root, { recursive: true });
-    const finalDir = this.versionDir()!;
-    if (existsSync(finalDir)) await removeWithin(this.root, finalDir);
-    const staging = path.join(this.root, `.install-${this.artifact.version}-${process.pid}-${Date.now()}`);
-    const archive = path.join(this.root, `.${this.artifact.filename}.${process.pid}.${Date.now()}.part`);
-    await mkdir(staging, { recursive: true });
-
+    const lock = await this.acquireInstallLock();
     try {
-      const response = await this.fetchImpl(this.artifact.url, {
-        redirect: 'follow',
-        signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-      });
-      if (!response.ok || !response.body) {
-        throw new Error(`Official Ollama runtime download failed with HTTP ${response.status}`);
-      }
-      const declaredSize = Number(response.headers.get('content-length'));
-      if (Number.isFinite(declaredSize) && declaredSize !== this.artifact.sizeBytes) {
-        throw new Error(`Official Ollama runtime size mismatch: expected ${this.artifact.sizeBytes}, got ${declaredSize}`);
-      }
+      const concurrentlyInstalled = this.getInstalledExecutable();
+      if (concurrentlyInstalled) return { executable: concurrentlyInstalled, installedNow: false };
+      await this.removeOrphanedInstallAttempts();
+      const finalDir = this.versionDir()!;
+      if (existsSync(finalDir)) await removeWithin(this.root, finalDir, this.rmImpl);
+      const attemptId = `${process.pid}-${randomUUID()}`;
+      const versionKey = this.installVersionKey();
+      const staging = path.join(this.root, `.install-attempt-${versionKey}.${attemptId}`);
+      const archive = path.join(this.root, `.${this.artifact.filename}.${versionKey}.${attemptId}.part`);
+      await mkdir(staging, { recursive: true });
 
-      const digest = createHash('sha256');
-      let downloaded = 0;
-      const expectedBytes = this.artifact.sizeBytes;
-      const verifier = new Transform({
-        transform(chunk: Buffer, _encoding, callback) {
-          downloaded += chunk.length;
-          if (downloaded > expectedBytes) {
-            callback(new Error(`Official Ollama runtime exceeded the expected ${expectedBytes} bytes`));
-            return;
-          }
-          digest.update(chunk);
-          callback(null, chunk);
-        },
-      });
-      const body = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
-      await pipeline(body, verifier, createWriteStream(archive, { flags: 'wx' }));
-      if (downloaded !== this.artifact.sizeBytes) {
-        throw new Error(`Official Ollama runtime size mismatch: expected ${this.artifact.sizeBytes}, got ${downloaded}`);
-      }
-      const actualDigest = digest.digest('hex');
-      if (actualDigest !== this.artifact.sha256) {
-        throw new Error('Official Ollama runtime checksum verification failed');
-      }
+      try {
+        const response = await this.fetchImpl(this.artifact.url, {
+          redirect: 'follow',
+          signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+        });
+        if (!response.ok || !response.body) {
+          throw new Error(`Official Ollama runtime download failed with HTTP ${response.status}`);
+        }
+        const declaredSize = Number(response.headers.get('content-length'));
+        if (Number.isFinite(declaredSize) && declaredSize !== this.artifact.sizeBytes) {
+          throw new Error(`Official Ollama runtime size mismatch: expected ${this.artifact.sizeBytes}, got ${declaredSize}`);
+        }
 
-      await this.extractArchive(archive, staging, this.artifact);
-      const executable = await findExecutable(staging, this.artifact.executableName);
-      if (this.artifact.platform !== 'win32') chmodSync(executable, 0o755);
-      const relativeExecutable = path.relative(staging, executable);
-      const metadata: InstallMetadata = {
-        version: this.artifact.version,
-        sha256: this.artifact.sha256,
-        executable: relativeExecutable,
-        installedAt: new Date().toISOString(),
-      };
-      writeFileSync(path.join(staging, 'install.json'), `${JSON.stringify(metadata, null, 2)}\n`, { flag: 'wx' });
-      await rename(staging, finalDir);
-      return { executable: path.join(finalDir, relativeExecutable), installedNow: true };
+        const digest = createHash('sha256');
+        let downloaded = 0;
+        const expectedBytes = this.artifact.sizeBytes;
+        const verifier = new Transform({
+          transform(chunk: Buffer, _encoding, callback) {
+            downloaded += chunk.length;
+            if (downloaded > expectedBytes) {
+              callback(new Error(`Official Ollama runtime exceeded the expected ${expectedBytes} bytes`));
+              return;
+            }
+            digest.update(chunk);
+            callback(null, chunk);
+          },
+        });
+        const body = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+        await pipeline(body, verifier, createWriteStream(archive, { flags: 'wx' }));
+        if (downloaded !== this.artifact.sizeBytes) {
+          throw new Error(`Official Ollama runtime size mismatch: expected ${this.artifact.sizeBytes}, got ${downloaded}`);
+        }
+        const actualDigest = digest.digest('hex');
+        if (actualDigest !== this.artifact.sha256) {
+          throw new Error('Official Ollama runtime checksum verification failed');
+        }
+
+        await this.extractArchive(archive, staging, this.artifact);
+        const executable = await findExecutable(staging, this.artifact.executableName);
+        if (this.artifact.platform !== 'win32') chmodSync(executable, 0o755);
+        const relativeExecutable = path.relative(staging, executable);
+        const metadata: InstallMetadata = {
+          version: this.artifact.version,
+          sha256: this.artifact.sha256,
+          executable: relativeExecutable,
+          installedAt: new Date().toISOString(),
+        };
+        writeFileSync(path.join(staging, 'install.json'), `${JSON.stringify(metadata, null, 2)}\n`, { flag: 'wx' });
+        return await this.publishInstall(staging, finalDir);
+      } finally {
+        await this.cleanupInstallAttempt([archive, staging]);
+      }
     } finally {
-      await rm(archive, { force: true });
-      if (existsSync(staging)) await removeWithin(this.root, staging);
+      await this.releaseInstallLock(lock);
     }
+  }
+
+  private async waitForInstalledExecutable(): Promise<string | null> {
+    for (let attempt = 1; attempt <= FILESYSTEM_ATTEMPTS; attempt += 1) {
+      const executable = this.getInstalledExecutable();
+      if (executable) return executable;
+      if (attempt < FILESYSTEM_ATTEMPTS) await waitForFilesystemRetry(attempt);
+    }
+    return null;
+  }
+
+  private async publishInstall(
+    staging: string,
+    finalDir: string,
+  ): Promise<{ executable: string; installedNow: boolean }> {
+    for (let attempt = 1; attempt <= FILESYSTEM_ATTEMPTS; attempt += 1) {
+      try {
+        await this.renameImpl(staging, finalDir);
+      } catch (error) {
+        const winner = existsSync(finalDir) ? await this.waitForInstalledExecutable() : null;
+        if (winner) return { executable: winner, installedNow: false };
+        if (!isTransientFilesystemError(error) || attempt === FILESYSTEM_ATTEMPTS) throw error;
+        await waitForFilesystemRetry(attempt);
+        continue;
+      }
+      const executable = await this.waitForInstalledExecutable();
+      if (!executable) throw new Error('Published Ollama runtime failed install metadata validation');
+      return { executable, installedNow: true };
+    }
+    throw new Error('Managed Ollama runtime publication exhausted all retry attempts');
   }
 
   async ensureReady(): Promise<ManagedOllamaReadyResult> {

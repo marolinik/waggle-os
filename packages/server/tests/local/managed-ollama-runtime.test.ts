@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -34,6 +34,19 @@ function fixtureArtifact(bytes: Buffer, sha256 = createHash('sha256').update(byt
     sizeBytes: bytes.length,
     executableName: 'ollama.exe',
   };
+}
+
+function installVersionKey(version = 'test-1.0.0'): string {
+  return createHash('sha256').update(version).digest('hex');
+}
+
+function installCoordinatorPath(dataDir: string, version = 'test-1.0.0'): string {
+  return path.join(dataDir, 'runtimes', 'ollama', `.install-lock-${installVersionKey(version)}.sqlite`);
+}
+
+async function expectNoInstallAttemptResidue(dataDir: string): Promise<void> {
+  const entries = await readdir(path.join(dataDir, 'runtimes', 'ollama'));
+  expect(entries.filter((entry) => entry.startsWith('.install-attempt-') || entry.endsWith('.part'))).toEqual([]);
 }
 
 afterEach(async () => {
@@ -157,6 +170,424 @@ describe('ManagedOllamaRuntime', () => {
     const [first, second] = await Promise.all([runtime.install(), runtime.install()]);
     expect(first.executable).toBe(second.executable);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('serializes separate runtime instances behind one cross-process installation lock', async () => {
+    const bytes = Buffer.from('cross-instance publication');
+    const dataDir = await temporaryDataDir();
+    const runtimeRoot = path.join(dataDir, 'runtimes', 'ollama');
+    const invalidFinalDir = path.join(runtimeRoot, 'test-1.0.0');
+    await mkdir(invalidFinalDir, { recursive: true });
+    await writeFile(path.join(invalidFinalDir, 'install.json'), '{"invalid":true}');
+    const fetchImpl = vi.fn(async () => new Response(bytes, {
+      status: 200,
+      headers: { 'content-length': String(bytes.length) },
+    }));
+    const destinations: string[] = [];
+    let extractionStarted!: () => void;
+    const started = new Promise<void>((resolve) => { extractionStarted = resolve; });
+    let releaseExtraction!: () => void;
+    const released = new Promise<void>((resolve) => { releaseExtraction = resolve; });
+    const extractArchive = async (_archive: string, destination: string) => {
+      destinations.push(destination);
+      await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      extractionStarted();
+      await released;
+    };
+    const dependencies = {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: fetchImpl as typeof fetch,
+      extractArchive,
+      probe: async () => false,
+    };
+    const firstRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', dependencies);
+    const secondRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', dependencies);
+
+    const firstInstall = firstRuntime.install();
+    await started;
+    const secondInstall = secondRuntime.install();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    releaseExtraction();
+    const results = await Promise.all([firstInstall, secondInstall]);
+
+    expect(destinations).toHaveLength(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(new Set(results.map((result) => result.executable)).size).toBe(1);
+    expect(results.map((result) => Number(result.installedNow)).sort()).toEqual([0, 1]);
+    expect(results.every((result) => existsSync(result.executable))).toBe(true);
+    expect(firstRuntime.getStatus().installed).toBe(true);
+    expect(secondRuntime.getStatus().installed).toBe(true);
+    expect(await readdir(runtimeRoot)).toEqual([path.basename(installCoordinatorPath(dataDir)), 'test-1.0.0']);
+    await expectNoInstallAttemptResidue(dataDir);
+  });
+
+  it('keeps live attempt files isolated while different runtime versions install concurrently', async () => {
+    const firstBytes = Buffer.from('prerelease archive');
+    const secondBytes = Buffer.from('stable archive');
+    const dataDir = await temporaryDataDir();
+    const firstArtifact = { ...fixtureArtifact(firstBytes), version: 'test-1.0.0-rc.1' };
+    const secondArtifact = { ...fixtureArtifact(secondBytes), version: 'test-1.0.0' };
+    let firstArchive = '';
+    let firstExtractionStarted!: () => void;
+    const extractionStarted = new Promise<void>((resolve) => { firstExtractionStarted = resolve; });
+    let releaseFirstExtraction!: () => void;
+    const extractionReleased = new Promise<void>((resolve) => { releaseFirstExtraction = resolve; });
+    const firstRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: firstArtifact,
+      fetchImpl: (async () => new Response(firstBytes, {
+        status: 200,
+        headers: { 'content-length': String(firstBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (archive, destination) => {
+        firstArchive = archive;
+        firstExtractionStarted();
+        await extractionReleased;
+        await readFile(archive);
+        await writeFile(path.join(destination, 'ollama.exe'), 'prerelease executable');
+      },
+      probe: async () => false,
+    });
+    const secondRuntime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: secondArtifact,
+      fetchImpl: (async () => new Response(secondBytes, {
+        status: 200,
+        headers: { 'content-length': String(secondBytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (archive, destination) => {
+        await readFile(archive);
+        await writeFile(path.join(destination, 'ollama.exe'), 'stable executable');
+      },
+      probe: async () => false,
+    });
+
+    const firstInstall = firstRuntime.install();
+    await extractionStarted;
+    const secondResult = await secondRuntime.install();
+    const firstArchiveSurvived = existsSync(firstArchive);
+    releaseFirstExtraction();
+    const firstResult = await firstInstall;
+
+    expect(firstArchiveSurvived).toBe(true);
+    expect(firstResult.installedNow).toBe(true);
+    expect(secondResult.installedNow).toBe(true);
+    expect(existsSync(firstResult.executable)).toBe(true);
+    expect(existsSync(secondResult.executable)).toBe(true);
+    await expectNoInstallAttemptResidue(dataDir);
+  });
+
+  it('continues after a foreign installation coordinator process terminates', async () => {
+    const bytes = Buffer.from('foreign process coordinator recovery');
+    const dataDir = await temporaryDataDir();
+    const runtimeRoot = path.join(dataDir, 'runtimes', 'ollama');
+    await mkdir(runtimeRoot, { recursive: true });
+    const versionKey = installVersionKey();
+    const coordinator = spawn(process.execPath, ['-e', String.raw`
+const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const path = require('node:path');
+const database = new Database(process.argv[1], { timeout: 50 });
+database.exec('BEGIN EXCLUSIVE');
+fs.writeFileSync(path.join(process.argv[2], '.ollama-test.zip.' + process.argv[3] + '.crashed.part'), 'partial');
+fs.mkdirSync(path.join(process.argv[2], '.install-attempt-' + process.argv[3] + '.crashed'));
+if (process.send) process.send('locked');
+process.on('message', (message) => { if (message === 'terminate') process.exit(99); });
+setInterval(() => {}, 1000);
+`, installCoordinatorPath(dataDir), runtimeRoot, versionKey], {
+      cwd: process.cwd(),
+      windowsHide: true,
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    });
+    const waitForCoordinatorExit = (): Promise<void> => {
+      if (coordinator.exitCode !== null || coordinator.signalCode !== null) return Promise.resolve();
+      return new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          coordinator.off('exit', onExit);
+          reject(new Error('foreign coordinator did not exit within 2 seconds'));
+        }, 2_000);
+        const onExit = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        coordinator.once('exit', onExit);
+      });
+    };
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timeout);
+          coordinator.off('message', onMessage);
+          coordinator.off('error', onError);
+          coordinator.off('exit', onExit);
+        };
+        const onMessage = (message: unknown) => {
+          if (message !== 'locked') return;
+          cleanup();
+          resolve();
+        };
+        const onError = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
+        const onExit = (code: number | null) => {
+          cleanup();
+          reject(new Error(`foreign coordinator exited before acquiring the lock (${code})`));
+        };
+        const timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('foreign coordinator did not acquire the lock'));
+        }, 5_000);
+        coordinator.on('message', onMessage);
+        coordinator.once('error', onError);
+        coordinator.once('exit', onExit);
+      });
+      const fetchImpl = vi.fn(async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      }));
+      const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+        artifact: fixtureArtifact(bytes),
+        fetchImpl: fetchImpl as typeof fetch,
+        extractArchive: async (_archive, destination) => {
+          await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+        },
+        probe: async () => false,
+      });
+      const waitStartedAt = performance.now();
+      const installation = runtime.install();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(performance.now() - waitStartedAt).toBeLessThan(500);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      const exited = waitForCoordinatorExit();
+      coordinator.send('terminate');
+      await exited;
+      const result = await installation;
+
+      expect(result.installedNow).toBe(true);
+      expect(existsSync(result.executable)).toBe(true);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      await expectNoInstallAttemptResidue(dataDir);
+    } finally {
+      if (coordinator.exitCode === null && coordinator.signalCode === null) {
+        const exited = waitForCoordinatorExit();
+        coordinator.kill();
+        await exited;
+      }
+    }
+  });
+
+  it('uses unique staging and archive paths across same-clock retry attempts', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_234_567_890);
+    const bytes = Buffer.from('unique retry paths');
+    const dataDir = await temporaryDataDir();
+    const archives: string[] = [];
+    const destinations: string[] = [];
+    let extractionAttempts = 0;
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (archive, destination) => {
+        archives.push(archive);
+        destinations.push(destination);
+        extractionAttempts += 1;
+        if (extractionAttempts === 1) throw new Error('simulated extraction failure');
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      probe: async () => false,
+    });
+
+    await expect(runtime.install()).rejects.toThrow('simulated extraction failure');
+    const result = await runtime.install();
+
+    expect(result.installedNow).toBe(true);
+    expect(new Set(archives).size).toBe(2);
+    expect(new Set(destinations).size).toBe(2);
+  });
+
+  it.each(['EPERM', 'EACCES', 'EBUSY'] as const)(
+    'retries a transient Windows %s publication lock before succeeding',
+    async (code) => {
+      const bytes = Buffer.from(`transient publication lock ${code}`);
+      const dataDir = await temporaryDataDir();
+      const renameImpl = vi.fn(async (source: string, destination: string) => rename(source, destination))
+        .mockRejectedValueOnce(Object.assign(new Error('locked'), { code }));
+      const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+        artifact: fixtureArtifact(bytes),
+        fetchImpl: (async () => new Response(bytes, {
+          status: 200,
+          headers: { 'content-length': String(bytes.length) },
+        })) as typeof fetch,
+        extractArchive: async (_archive, destination) => {
+          await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+        },
+        renameImpl: renameImpl as typeof rename,
+        probe: async () => false,
+      });
+
+      const result = await runtime.install();
+
+      expect(result.installedNow).toBe(true);
+      expect(renameImpl).toHaveBeenCalledTimes(2);
+      expect(existsSync(result.executable)).toBe(true);
+      await expectNoInstallAttemptResidue(dataDir);
+    },
+  );
+
+  it('retries validation after a successful publish is temporarily unreadable', async () => {
+    const bytes = Buffer.from('temporarily unreadable published metadata');
+    const dataDir = await temporaryDataDir();
+    const renameImpl = vi.fn(async (source: string, destination: string) => {
+      await rename(source, destination);
+      const metadata = path.join(destination, 'install.json');
+      const hidden = path.join(destination, '.install.json.hidden');
+      await rename(metadata, hidden);
+      setTimeout(() => { void rename(hidden, metadata).catch(() => undefined); }, 40);
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      renameImpl: renameImpl as typeof rename,
+      probe: async () => false,
+    });
+
+    const result = await runtime.install();
+
+    expect(result.installedNow).toBe(true);
+    expect(renameImpl).toHaveBeenCalledTimes(1);
+    expect(existsSync(result.executable)).toBe(true);
+  });
+
+  it('bounds persistent publication-lock retries and removes attempt residue', async () => {
+    const bytes = Buffer.from('persistent publication lock');
+    const dataDir = await temporaryDataDir();
+    const locked = Object.assign(new Error('persistently locked'), { code: 'EBUSY' });
+    const renameImpl = vi.fn(async () => { throw locked; });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      renameImpl: renameImpl as typeof rename,
+      probe: async () => false,
+    });
+
+    await expect(runtime.install()).rejects.toBe(locked);
+    expect(renameImpl).toHaveBeenCalledTimes(4);
+    expect(existsSync(path.join(dataDir, 'runtimes', 'ollama', 'test-1.0.0'))).toBe(false);
+    await expectNoInstallAttemptResidue(dataDir);
+  });
+
+  it('never accepts a concurrently published directory unless its metadata and executable validate', async () => {
+    const bytes = Buffer.from('invalid publication winner');
+    const dataDir = await temporaryDataDir();
+    const renameImpl = vi.fn(async (_source: string, destination: string) => {
+      await mkdir(destination, { recursive: true });
+      await writeFile(path.join(destination, 'ollama.exe'), 'untrusted executable');
+      await writeFile(path.join(destination, 'install.json'), JSON.stringify({
+        version: 'test-1.0.0',
+        sha256: '0'.repeat(64),
+        executable: 'ollama.exe',
+        installedAt: new Date().toISOString(),
+      }));
+      throw Object.assign(new Error('occupied by invalid install'), { code: 'EEXIST' });
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      renameImpl: renameImpl as typeof rename,
+      probe: async () => false,
+    });
+
+    await expect(runtime.install()).rejects.toThrow('occupied by invalid install');
+    expect(renameImpl).toHaveBeenCalledTimes(1);
+    expect(runtime.getStatus().installed).toBe(false);
+  });
+
+  it('keeps a verified install available when artifact cleanup exhausts retries', async () => {
+    const bytes = Buffer.from('cleanup failure after success');
+    const dataDir = await temporaryDataDir();
+    const cleanupError = Object.assign(new Error('scanner holds archive'), { code: 'EPERM' });
+    const warn = vi.fn();
+    const rmImpl = vi.fn(async (target: string, options: { recursive?: boolean; force?: boolean }) => {
+      if (target.endsWith('.part')) throw cleanupError;
+      await rm(target, options);
+    });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      rmImpl: rmImpl as typeof rm,
+      warn,
+      probe: async () => false,
+    });
+
+    const result = await runtime.install();
+
+    expect(result.installedNow).toBe(true);
+    expect(existsSync(result.executable)).toBe(true);
+    expect(rmImpl).toHaveBeenCalledTimes(5);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]?.[0]).toMatch(/install artifact .*\.part/i);
+  });
+
+  it('preserves the primary verification error when cleanup also fails', async () => {
+    const bytes = Buffer.from('primary and cleanup failure');
+    const dataDir = await temporaryDataDir();
+    const cleanupError = Object.assign(new Error('scanner holds attempt files'), { code: 'EBUSY' });
+    const warn = vi.fn();
+    const rmImpl = vi.fn(async () => { throw cleanupError; });
+    const runtime = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes, '0'.repeat(64)),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: vi.fn(),
+      rmImpl: rmImpl as typeof rm,
+      warn,
+      probe: async () => false,
+    });
+
+    await expect(runtime.install()).rejects.toThrow(/checksum verification failed/i);
+    expect(warn).toHaveBeenCalledTimes(2);
+    const successor = new ManagedOllamaRuntime(dataDir, 'http://127.0.0.1:11434', {
+      artifact: fixtureArtifact(bytes),
+      fetchImpl: (async () => new Response(bytes, {
+        status: 200,
+        headers: { 'content-length': String(bytes.length) },
+      })) as typeof fetch,
+      extractArchive: async (_archive, destination) => {
+        await writeFile(path.join(destination, 'ollama.exe'), 'fixture executable');
+      },
+      probe: async () => false,
+    });
+    expect((await successor.install()).installedNow).toBe(true);
+    await expectNoInstallAttemptResidue(dataDir);
   });
 
   it('starts the verified executable without a shell and waits for loopback health', async () => {
