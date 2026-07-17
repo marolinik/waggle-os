@@ -54,12 +54,12 @@ jobs:
 
     steps:
       - name: Checkout waggle-os
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: waggle-os
 
       - name: Checkout hive-mind master
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: marolinik/hive-mind
           ref: master

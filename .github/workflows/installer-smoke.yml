@@ -26,7 +26,7 @@ jobs:
     env:
       WAGGLE_PORT: "3947"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The `runner` context is not available in job-level env, so the scratch
       # paths (isolated from the checkout to exercise the real "copy + fresh

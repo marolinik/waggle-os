@@ -72,7 +72,7 @@ jobs:
 
     steps:
       - name: Checkout waggle-os (full history for the diff)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -159,7 +159,7 @@ jobs:
 
       - name: Checkout hive-mind for patch application
         if: steps.diff.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: marolinik/hive-mind
           ref: master
