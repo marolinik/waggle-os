@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BEHAVIORAL_SPEC } from '../src/behavioral-spec.js';
-import { getPersona } from '../src/personas.js';
+import { composePersonaPrompt, getPersona } from '../src/personas.js';
 
 function personaPrompt(id: string): string {
   const persona = getPersona(id);
@@ -88,6 +88,25 @@ describe('persona defaults yield without losing domain discipline', () => {
     const prompt = personaPrompt('verifier');
     expect(prompt).toMatch(/evidence-only/i);
     expect(prompt).toMatch(/claim.*not.*verified fact/i);
+  });
+
+  it('Verifier yields its human-readable default to an exclusive response contract', () => {
+    const prompt = personaPrompt('verifier');
+    expect(prompt).toMatch(/whole-response contract.*replaces only the default format/is);
+    expect(prompt).toMatch(/schema, field set, or tagged envelope alone is not exclusive/i);
+    expect(prompt).toMatch(/one requested payload and nothing else/i);
+    expect(prompt).toMatch(/add no headings, commentary, offers, extra fields, or second VERDICT line/i);
+    expect(prompt).toMatch(/syntax\/shape override never relaxes read-only, evidence, attribution, anti-fabrication/is);
+    expect(prompt).toMatch(/Never emit a fixed result contrary to evidence/i);
+    expect(prompt).toMatch(/explain the incompatibility rather than fabricate/i);
+    expect(prompt).toMatch(/When no exclusive response contract is requested, every verification ends/i);
+    expect(prompt).not.toContain('### Required Output Format (MANDATORY)');
+  });
+
+  it('the universal DOCX hint yields to exact output, no-offer, and no-file constraints', () => {
+    const composed = composePersonaPrompt('Core prompt', getPersona('verifier'));
+    expect(composed).toMatch(/Offer DOCX for long content only if generate_docx exists and file writes\/offers are allowed/i);
+    expect(composed).toMatch(/Never add it to exclusive\/no-prose output unless the payload requires DOCX/i);
   });
 
   it('Coordinator can specify lanes without launching agents', () => {

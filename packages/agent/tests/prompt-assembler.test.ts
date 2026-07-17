@@ -83,6 +83,10 @@ function baseInput(overrides: Partial<AssembleInput> = {}): AssembleInput {
   };
 }
 
+function defaultScaffold(body: string): string {
+  return `If the user specifies a response format, follow it exactly. Otherwise: ${body}`;
+}
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 describe('PromptAssembler.assemble', () => {
@@ -135,7 +139,7 @@ describe('PromptAssembler.assemble', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'mid', taskShape: shape('plan-execute', 0.8) }),
     );
-    expect(out.responseScaffold).toBe('State plan. Execute. Report.');
+    expect(out.responseScaffold).toBe(defaultScaffold('State plan. Execute. Report.'));
     expect(out.system).toContain('# Response format');
     expect(out.debug.scaffoldApplied).toBe(true);
   });
@@ -145,8 +149,62 @@ describe('PromptAssembler.assemble', () => {
       baseInput({ tier: 'small', taskShape: shape('compare', 0.7) }),
     );
     expect(out.responseScaffold).toBe(
-      'State the assumption. List the trade-offs. Give the recommendation.',
+      defaultScaffold('State the assumption. List the trade-offs. Give the recommendation.'),
     );
+  });
+
+  it('makes every generic review scaffold explicitly subordinate to the user response format', () => {
+    for (const tier of ['small', 'mid'] as const) {
+      for (const scaffoldStyle of ['compression', 'expansion'] as const) {
+        const out = assembler.assemble(
+          baseInput({
+            query: 'Review this release decision and explain the issues.',
+            tier,
+            taskShape: shape('review', 0.9),
+          }),
+          { scaffoldStyle },
+        );
+        expect(out.responseScaffold).toMatch(
+          /^If the user specifies a response format, follow it exactly\. Otherwise:/,
+        );
+        expect(out.debug.scaffoldApplied).toBe(true);
+        expect(out.debug.exclusiveResponseContract).toBe(false);
+        expect(out.debug.scaffoldSuppressed).toBe(false);
+      }
+    }
+  });
+
+  it.each([
+    'Return JSON only.',
+    'Return only the code.',
+    'Reply with exactly "PASS" and nothing else.',
+    'Only use JSON.parse and explain the result.',
+    'Never answer with only JSON; include a narrative.',
+  ])('does not infer free-form language and keeps the scaffold safely conditional: %s', (query) => {
+    const out = assembler.assemble(
+      baseInput({ query, tier: 'small', taskShape: shape('review', 0.9) }),
+    );
+
+    expect(out.responseScaffold).toMatch(
+      /^If the user specifies a response format, follow it exactly\. Otherwise:/,
+    );
+    expect(out.debug.exclusiveResponseContract).toBe(false);
+    expect(out.debug.scaffoldSuppressed).toBe(false);
+  });
+
+  it('lets code-owned contracts explicitly suppress a scaffold without magic prompt wording', () => {
+    const out = assembler.assemble(
+      baseInput({
+        query: 'Review the release evidence.',
+        tier: 'small',
+        taskShape: shape('review', 0.9),
+      }),
+      { exclusiveResponseContract: true },
+    );
+
+    expect(out.responseScaffold).toBeNull();
+    expect(out.debug.exclusiveResponseContract).toBe(true);
+    expect(out.debug.scaffoldSuppressed).toBe(true);
   });
 
   it('draft shape emits no scaffold at any tier', () => {
@@ -182,7 +240,7 @@ describe('PromptAssembler.assemble', () => {
       { confidenceThreshold: 0.15 },
     );
     expect(out.responseScaffold).toBe(
-      'Cite the frame. Quote the relevant fragment. Answer directly.',
+      defaultScaffold('Cite the frame. Quote the relevant fragment. Answer directly.'),
     );
   });
 
@@ -362,32 +420,31 @@ describe('PromptAssembler.assemble — v5 scaffoldStyle', () => {
     expect(noStyle.system).toBe(explicit.system);
   });
 
-  it('compression + small + compare matches v4 text exactly (snapshot)', () => {
+  it('compression + small + compare preserves the v4 body after the safety qualifier', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'small', taskShape: shape('compare', 0.8) }),
       { scaffoldStyle: 'compression' },
     );
-    // Byte-identical to v4 (now COMPRESSION_SCAFFOLDS[compare][small]).
     expect(out.responseScaffold).toBe(
-      'State the assumption. List the trade-offs. Give the recommendation.',
+      defaultScaffold('State the assumption. List the trade-offs. Give the recommendation.'),
     );
   });
 
-  it('compression + mid + plan-execute matches v4 text exactly (snapshot)', () => {
+  it('compression + mid + plan-execute preserves the v4 body after the safety qualifier', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'mid', taskShape: shape('plan-execute', 0.8) }),
       { scaffoldStyle: 'compression' },
     );
-    expect(out.responseScaffold).toBe('State plan. Execute. Report.');
+    expect(out.responseScaffold).toBe(defaultScaffold('State plan. Execute. Report.'));
   });
 
-  it('compression + small + research matches v4 text exactly (snapshot)', () => {
+  it('compression + small + research preserves the v4 body after the safety qualifier', () => {
     const out = assembler.assemble(
       baseInput({ tier: 'small', taskShape: shape('research', 0.8) }),
       { scaffoldStyle: 'compression' },
     );
     expect(out.responseScaffold).toBe(
-      'Cite the frame. Quote the relevant fragment. Answer directly.',
+      defaultScaffold('Cite the frame. Quote the relevant fragment. Answer directly.'),
     );
   });
 

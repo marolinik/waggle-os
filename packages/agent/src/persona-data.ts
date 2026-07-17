@@ -680,14 +680,19 @@ For evidence-only reviews, an attributed teammate or user claim proves only that
 4. Check resource assumptions — does the plan assume capabilities that do not exist?
 5. Check permitted context for contradictions with established prior decisions
 
-### Required Output Format (MANDATORY)
-Every verification ends with exactly one of:
+### Output Contract Precedence
+An explicit whole-response contract (JSON/XML only; one tagged envelope with nothing outside; one literal token; or no surrounding prose) replaces only the default format below. A schema, field set, or tagged envelope alone is not exclusive unless the whole reply must match it or surrounding content is forbidden.
+Emit one requested payload and nothing else. Put verdict, checks, evidence, blockers, and limitations only in allowed fields; add no headings, commentary, offers, extra fields, or second VERDICT line.
+This syntax/shape override never relaxes read-only, evidence, attribution, anti-fabrication, or honest blocker-reporting rules. Never emit a fixed result contrary to evidence. If the payload cannot represent mandatory blockers/limitations, use a valid failure/refusal when possible; otherwise explain the incompatibility rather than fabricate.
+
+### Default Human-Readable Output Format
+When no exclusive response contract is requested, every verification ends with exactly one of:
 
 **VERDICT: PASS** — All checks passed. State what was verified.
 **VERDICT: FAIL** — Critical issues found. List each with evidence.
 **VERDICT: PARTIAL** — Some checks passed, others failed or could not be verified. Full breakdown.
 
-Each check MUST include: what was checked, the supplied artifact or permitted tool used (or that no check was permitted), what was found, Pass/Fail.`,
+In this default human-readable format, each check MUST include: what was checked, the supplied artifact or permitted tool used (or that no check was permitted), what was found, Pass/Fail.`,
     modelPreference: 'claude-sonnet-4-6',
     tools: [
       'read_file', 'search_files', 'search_content',

@@ -55,6 +55,10 @@ export interface AssembledPromptDebug {
   taskShape: TaskShapeType | null;
   taskShapeConfidence: number;
   scaffoldApplied: boolean;
+  /** Always returned; optional in the type for backward-compatible external mocks. */
+  exclusiveResponseContract?: boolean;
+  /** Always returned; optional in the type for backward-compatible external mocks. */
+  scaffoldSuppressed?: boolean;
   /** v5: which scaffold style was used (compression = v4 default, expansion = v5 opt-in). */
   scaffoldStyle: ScaffoldStyle;
   sectionsIncluded: string[];
@@ -88,8 +92,8 @@ export interface AssembleOptions {
   /** Minimum task-shape confidence for scaffold emission. Default 0.3. */
   confidenceThreshold?: number;
   /**
-   * v5: scaffold variant. Default 'compression' — preserves v4 behavior
-   * byte-identically when unset or explicitly 'compression'.
+   * v5: scaffold variant. Default 'compression' preserves the v4 scaffold
+   * body; the assembler adds a response-format precedence qualifier.
    */
   scaffoldStyle?: ScaffoldStyle;
   /**
@@ -100,12 +104,18 @@ export interface AssembleOptions {
   recalledText?: string;
   /** H-AUDIT-1: per-turn trace ID (UUID v4). Logs prompt-assembly stage. */
   turnId?: string;
+  /**
+   * Force exclusive-output handling for code-owned prompts with a typed output
+   * contract. Free-form user language is deliberately not inferred here.
+   */
+  exclusiveResponseContract?: boolean;
 }
 
 // ── Constants ────────────────────────────────────────────────────────
 
 const DEFAULT_MAX_CHARS = 32_000;
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.3;
+const DEFAULT_SCAFFOLD_QUALIFIER = 'If the user specifies a response format, follow it exactly. Otherwise:';
 
 /** Frames retained per tier — assembler caps top-N after upstream retrieval. */
 const FRAME_LIMITS: Record<ModelTier, number> = {
@@ -325,7 +335,7 @@ export class PromptAssembler {
     const maxChars = opts.maxSystemChars ?? DEFAULT_MAX_CHARS;
     const confThreshold = opts.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
     const tier = opts.tierOverride ?? input.tier;
-    // v5 brief §7.2: default 'compression' preserves v4 behavior byte-identically.
+    // v5 brief §7.2: default 'compression' preserves the v4 scaffold body.
     const scaffoldStyle: ScaffoldStyle = opts.scaffoldStyle ?? 'compression';
     // Brief §10: derive task shape from query when caller hasn't supplied one.
     const taskShape = opts.taskShape ?? input.taskShape ?? detectTaskShape(input.query);
@@ -413,7 +423,12 @@ export class PromptAssembler {
     }
 
     // ── Response format (scaffold) — gated ──
-    const scaffold = selectScaffold(tier, taskShape, confThreshold, scaffoldStyle);
+    const candidateScaffold = selectScaffold(tier, taskShape, confThreshold, scaffoldStyle);
+    const exclusiveResponseContract = opts.exclusiveResponseContract === true;
+    const scaffold = exclusiveResponseContract || candidateScaffold === null
+      ? null
+      : `${DEFAULT_SCAFFOLD_QUALIFIER} ${candidateScaffold}`;
+    const scaffoldSuppressed = exclusiveResponseContract && candidateScaffold !== null;
     if (scaffold) {
       sections.push({
         name: 'Response format',
@@ -446,6 +461,8 @@ export class PromptAssembler {
       tier,
       taskShape: taskShape?.type ?? null,
       scaffoldApplied: scaffold !== null,
+      exclusiveResponseContract,
+      scaffoldSuppressed,
       scaffoldStyle,
       sectionsIncluded,
       framesUsed,
@@ -461,6 +478,8 @@ export class PromptAssembler {
         taskShape: taskShape?.type ?? null,
         taskShapeConfidence: taskShape?.confidence ?? 0,
         scaffoldApplied: scaffold !== null,
+        exclusiveResponseContract,
+        scaffoldSuppressed,
         scaffoldStyle,
         sectionsIncluded,
         framesUsed,
