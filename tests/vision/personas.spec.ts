@@ -12,7 +12,7 @@
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import {
   PERSONA_CASES,
   resolvePersonaRunMode,
@@ -33,7 +33,13 @@ import {
   type ConsoleCapture,
 } from './_helpers';
 
-const ARTIFACTS = join(process.cwd(), 'output', 'playwright', 'personas');
+const ARTIFACTS = resolve(
+  process.env.WAGGLE_PERSONA_ARTIFACT_DIR
+    ?? join(process.cwd(), 'output', 'playwright', 'personas'),
+);
+const ACCEPTANCE_RUN_ID = process.env.WAGGLE_PERSONA_RUN_ID?.trim() || null;
+const EXPECTED_LLM_PROVIDER = process.env.WAGGLE_PERSONA_EXPECTED_LLM_PROVIDER?.trim() || null;
+const EXPECTED_LLM_DETAIL = process.env.WAGGLE_PERSONA_EXPECTED_LLM_DETAIL?.trim() || null;
 const RUN_MODE = resolvePersonaRunMode(
   process.env.WAGGLE_PERSONA_NON_GATING_DEBUG,
   process.env.WAGGLE_PERSONA_REPEATS,
@@ -765,6 +771,17 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           : '';
         const toolEvents = wire.events.filter(event => event.event === 'tool' || event.event === 'tool_result');
 
+        const runtimeHealthResponse = await page.request.get(`${BASE}/health`).catch(() => null);
+        const runtimeHealth = runtimeHealthResponse?.ok()
+          ? await runtimeHealthResponse.json().catch(() => null) as Record<string, unknown> | null
+          : null;
+        const runtimeLlm = asRecord(runtimeHealth?.llm);
+        const runtimeLlmHealthy = runtimeHealthResponse?.ok() === true
+          && runtimeLlm?.health === 'healthy'
+          && (!EXPECTED_LLM_PROVIDER || runtimeLlm?.provider === EXPECTED_LLM_PROVIDER)
+          && (!EXPECTED_LLM_DETAIL
+            || String(runtimeLlm?.detail ?? '').includes(EXPECTED_LLM_DETAIL));
+
         const historyResponse = responseText
           ? await waitForPersistedResponse(
             page,
@@ -826,9 +843,13 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         const sessionCount = numeric(contextStats?.sessionCount ?? workspaceContext?.sessionCount);
 
         const pythonValidation = validatePythonSyntax(responseText);
+        const criticalNetworkFailures = consoleCapture.networkFailures.filter(
+          failure => !/net::ERR_ABORTED/i.test(failure),
+        );
         const criticalBrowserErrors = [
           ...consoleCapture.critical(),
           ...consoleCapture.pageErrors,
+          ...criticalNetworkFailures,
           ...screenshotErrors,
         ];
         const evidence: PersonaTrialEvidence = {
@@ -858,6 +879,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
           corrupted: wire.httpStatus !== 200
             || wire.parseErrors.length > 0
             || criticalBrowserErrors.length > 0
+            || !runtimeLlmHealthy
             || inputTokens <= 0
             || outputTokens <= 0
             || containsFailureCopy(responseText),
@@ -868,7 +890,8 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         };
         const score = scorePersonaTrial(persona, evidence);
         const artifact = {
-          schemaVersion: 5,
+          schemaVersion: 6,
+          runId: ACCEPTANCE_RUN_ID,
           runStartedAt,
           runCompletedAt: new Date().toISOString(),
           persona: {
@@ -910,6 +933,13 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             parseErrors: wire.parseErrors,
             transportError: wire.transportError,
           },
+          runtime: {
+            healthStatus: runtimeHealthResponse?.status() ?? null,
+            health: runtimeHealth,
+            llmHealthy: runtimeLlmHealthy,
+            expectedProvider: EXPECTED_LLM_PROVIDER,
+            expectedDetail: EXPECTED_LLM_DETAIL,
+          },
           journey: {
             renderedConversation,
             history,
@@ -927,6 +957,7 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
             criticalConsoleErrors: consoleCapture.critical(),
             pageErrors: consoleCapture.pageErrors,
             networkFailures: consoleCapture.networkFailures,
+            criticalNetworkFailures,
             screenshotErrors,
           },
           score,
@@ -941,6 +972,17 @@ test.describe(`10-persona ${RUN_MODE.gating ? 'acceptance' : 'NON-GATING DEBUG'}
         expect(wire.httpStatus, 'chat request succeeded').toBe(200);
         expect(wire.timedOut, 'chat request completed before the timeout').toBe(false);
         expect(wire.parseErrors, 'every SSE event was valid JSON').toEqual([]);
+        expect(runtimeHealthResponse?.ok(), 'runtime health endpoint responded after the provider turn').toBe(true);
+        expect(runtimeLlm?.health, 'runtime LLM health is verified after the provider turn').toBe('healthy');
+        if (EXPECTED_LLM_PROVIDER) {
+          expect(runtimeLlm?.provider, 'runtime used the required LLM provider path')
+            .toBe(EXPECTED_LLM_PROVIDER);
+        }
+        if (EXPECTED_LLM_DETAIL) {
+          expect(String(runtimeLlm?.detail ?? ''), 'runtime verified the required provider detail')
+            .toContain(EXPECTED_LLM_DETAIL);
+        }
+        expect(criticalNetworkFailures, 'browser had no non-aborted network failures').toEqual([]);
         expect(doneEventCount, 'SSE stream emitted exactly one done event').toBe(1);
         expect(normalizeText(tokenStreamResponse), 'SSE token stream was non-empty').not.toBe('');
         expect(

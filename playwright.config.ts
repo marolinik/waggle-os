@@ -36,6 +36,7 @@ const e2ePort = Number.parseInt(
   10,
 ) || 3333;
 const e2eSkipLiteLLM = process.env.WAGGLE_E2E_SKIP_LITELLM !== '0';
+const e2eReuseExistingServer = process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER !== '0';
 const e2eEnv = { ...process.env };
 // Keep the test runner's terminal quiet without changing production logging.
 e2eEnv.FORCE_COLOR = undefined;
@@ -78,14 +79,15 @@ export default defineConfig({
    * so Playwright always runs against current package and web source. `reuseExisting-
    * Server: true` skips this when a dev server is already running on :3333
    * (developer runs `npm run dev` in another terminal + `npx playwright test`;
-   * the config notices the port is occupied and skips build+start).
+   * the config notices the port is occupied and skips build+start). Set
+   * WAGGLE_E2E_REUSE_EXISTING_SERVER=0 for isolated acceptance runs.
    *
    * The server auto-detects <root>/dist per packages/server/src/local/
    * index.ts — no WAGGLE_FRONTEND_DIR override needed. */
   webServer: {
     command: `npm run build:all && npx tsx packages/server/src/local/start.ts${e2eSkipLiteLLM ? ' --skip-litellm' : ''}`,
     port: e2ePort,
-    reuseExistingServer: true,
+    reuseExistingServer: e2eReuseExistingServer,
     timeout: 300_000, // Full workspace build + cold tsx sidecar import can exceed 3 min on Windows
     stdout: 'pipe',
     stderr: 'pipe',
