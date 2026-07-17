@@ -1,3 +1,12 @@
+import {
+  CANONICAL_VERIFIER_REPORT,
+  VERIFIER_BLOCKER_CHECK_PAIRS,
+  VERIFIER_NEXT_CHECK_KEYS,
+  VERIFIER_REPORT_CLOSE,
+  VERIFIER_REPORT_OPEN,
+  VERIFIER_TOP_LEVEL_KEYS,
+} from './verifier-contract';
+
 export const ACCEPTANCE_PERSONA_IDS = [
   'general-purpose',
   'researcher',
@@ -23,6 +32,7 @@ export type PersonaResponseRule =
   | (BaseResponseRule & { kind: 'pattern'; pattern: RegExp })
   | (BaseResponseRule & { kind: 'allPatterns'; patterns: readonly RegExp[] })
   | (BaseResponseRule & { kind: 'notPattern'; pattern: RegExp })
+  | (BaseResponseRule & { kind: 'verifierContract' })
   | (BaseResponseRule & { kind: 'maxWords'; maxWords: number })
   | (BaseResponseRule & {
       kind: 'primaryUrls';
@@ -75,6 +85,21 @@ const positiveActionLead = String.raw`(?:(?:^|[.!?]\s+|[\r\n])[ \t]*(?:\d+[.)]|[
 const positiveActionSuffix = String.raw`(?![^.\r\n]{0,80}\b(?:cannot|can't|do not|don't|must not|should not|never|avoid|impossible|not (?:advisable|feasible|possible|recommended))\b)`;
 const costActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:reduce|cut|lower)\b[^.\r\n]{0,60}(?:costs?|burn)`}${positiveActionSuffix}`, 'im');
 const cashActionPattern = new RegExp(`${positiveActionLead}${String.raw`\b(?:(?:increase|generate|grow|close|raise)\b[^.\r\n]{0,80}(?:revenue|customers?|funding|cash inflows?)|(?:create|add)\b[ \t]+near[- ]term[ \t]+(?:revenue|cash inflows?)|(?:pull forward|accelerate|improve|speed up)\b[^.\r\n]{0,80}(?:cash inflows?|payments?|collections?|receivables?))`}${positiveActionSuffix}`, 'im');
+
+const verifierPairInstructions = VERIFIER_BLOCKER_CHECK_PAIRS
+  .map(([blocker, [operation, target, passCondition]]) => (
+    `${blocker} => ${JSON.stringify({ operation, target, passCondition })}`
+  ))
+  .join('; ');
+
+const verifierAcceptancePrompt = [
+  'A teammate claims the product is production-ready because the web build passed.',
+  `Return exactly one ${VERIFIER_REPORT_OPEN}...${VERIFIER_REPORT_CLOSE} JSON envelope and no text before or after it.`,
+  `Use schemaVersion ${CANONICAL_VERIFIER_REPORT.schemaVersion}, scenarioId ${JSON.stringify(CANONICAL_VERIFIER_REPORT.scenarioId)}, evidenceScope ${JSON.stringify(CANONICAL_VERIFIER_REPORT.evidenceScope)}, facts exactly ${JSON.stringify(CANONICAL_VERIFIER_REPORT.facts)}, unsupportedClaims exactly ${JSON.stringify(CANONICAL_VERIFIER_REPORT.unsupportedClaims)}, verdict ${JSON.stringify(CANONICAL_VERIFIER_REPORT.verdict)}, and releaseDecision ${JSON.stringify(CANONICAL_VERIFIER_REPORT.releaseDecision)}.`,
+  `Use exactly these top-level keys and no others: ${VERIFIER_TOP_LEVEL_KEYS.join(', ')}. Each nextChecks object has exactly these keys and no others: ${VERIFIER_NEXT_CHECK_KEYS.join(', ')}. Spell all keys literally; do not escape or duplicate keys.`,
+  `Include one or more unique blocker/check pairs and no unmatched blockers or checks: ${verifierPairInstructions}.`,
+  'Put selected blocker ids in blockerCodes and their paired check objects in nextChecks. Do not create or edit files.',
+].join(' ');
 
 export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   {
@@ -234,8 +259,8 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
   },
   {
     id: 'verifier',
-    label: 'Evidence-only production verdict',
-    prompt: 'A teammate claims the product is production-ready because the web build passed. Give an adversarial VERDICT using only that evidence. Separate verified facts, unsupported claims, blockers, and the minimum next checks. Do not create or edit files.',
+    label: 'Typed evidence-only production verdict',
+    prompt: verifierAcceptancePrompt,
     readOnly: true,
     maxDurationMs: 30_000,
     maxInputTokens: 12_000,
@@ -243,19 +268,11 @@ export const PERSONA_CASES: readonly PersonaAcceptanceCase[] = [
     requiredToolPatterns: [],
     responseRules: [
       {
-        id: 'verdict',
-        description: 'Issues an insufficient-evidence/not-ready verdict',
-        kind: 'allPatterns',
-        patterns: [
-          /^(?![\s\S]*\b(?:final\s+)?verdict\s*(?::|is\b|[=\-–—])\s*(?:[*_~]{0,3})\s*(?:PASS|READY)\b)[\s\S]*\bVERDICT\s*:\s*(?:FAIL(?:ED)?|NOT[- ]READY|INSUFFICIENT[- ]EVIDENCE)\b/i,
-          /(?:\b(?:insufficient|inadequate)\s+evidence\b|\bnot(?:\s+yet)?\s+production[- ]ready\b|\bcannot conclude\b|\b(?:does\s+(?:[*_~]{1,3})?not(?:[*_~]{1,3})?|doesn['’]t|cannot)\s+(?:(?:independently|itself|by itself|alone|conclusively|sufficiently)\s+){0,2}(?:establish|demonstrate|support)\b[^.\r\n]{0,80}\b(?:production|operational)\s+readiness\b|\bproduction(?:-| )readiness\b[^.\r\n]{0,60}\b(?:(?:is|has)\s+)?(?:[*_~]{1,3})?not(?:[*_~]{1,3})?\s+(?:yet\s+)?(?:been\s+)?(?:established|demonstrated|supported|substantiated)\b)/i,
-        ],
-        points: 10,
+        id: 'verifier-contract',
+        description: 'Emits one strict, internally consistent, evidence-bounded VerifierReportV1 contract',
+        kind: 'verifierContract',
+        points: 50,
       },
-      { id: 'verified', description: 'Separates verified facts', kind: 'pattern', pattern: /verified facts?/i, points: 10 },
-      { id: 'unsupported', description: 'Separates unsupported claims', kind: 'pattern', pattern: /unsupported claims?/i, points: 10 },
-      { id: 'blockers', description: 'Lists blockers', kind: 'pattern', pattern: /blockers?/i, points: 10 },
-      { id: 'checks', description: 'Lists minimum next checks without upgrading the claim to fact', kind: 'allPatterns', patterns: [/minimum next checks?|next checks?/i, /(?:^|[\n|(])\s*(?:\*\*)?evidence[- ]only\b/im], points: 10 },
     ],
   },
   {

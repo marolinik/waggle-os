@@ -3,6 +3,7 @@ import type {
   PersonaAcceptanceCase,
   PersonaResponseRule,
 } from './persona-cases';
+import { evaluateVerifierContract } from './verifier-contract';
 
 export interface CapturedSseEvent {
   event: string;
@@ -173,6 +174,8 @@ function evaluateResponseRule(
       return rule.patterns.every(pattern => pattern.test(evidence.response));
     case 'notPattern':
       return !rule.pattern.test(evidence.response);
+    case 'verifierContract':
+      return evaluateVerifierContract(evidence.response).passed;
     case 'maxWords':
       return responseWordCount(evidence.response) <= rule.maxWords;
     case 'primaryUrls':

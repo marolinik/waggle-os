@@ -13,6 +13,10 @@ import {
   validatePythonSyntax,
   type PersonaTrialEvidence,
 } from './persona-scorer';
+import {
+  CANONICAL_VERIFIER_REPORT,
+  renderVerifierReportEnvelope,
+} from './verifier-contract';
 
 const syntheticCase: PersonaAcceptanceCase = {
   id: 'general-purpose',
@@ -491,93 +495,9 @@ describe('deterministic 100-point persona scorer', () => {
     expect(result.checks.find(check => check.id === 'two-actions')?.passed).toBe(expected);
   });
 
-  it('accepts evidence-only VERDICT: FAIL output while preserving strict performance scoring', () => {
+  it('accepts one strict verifier contract while preserving performance gates', () => {
     const verifier = PERSONA_CASES.find(persona => persona.id === 'verifier')!;
-    const responses = [
-      [
-        '## Adversarial Assessment (Evidence-only)',
-        '## Verified facts',
-        'A teammate made the claim.',
-        '## Unsupported claims',
-        'Production readiness is not demonstrated by the provided evidence.',
-        '## Blockers',
-        'No release artifact was supplied.',
-        '## Minimum next checks',
-        'Verify the cited build artifact.',
-        '**VERDICT: FAIL**',
-      ].join('\n'),
-      [
-        '| Method | Evidence-only review |',
-        '## Verified facts',
-        'Only the attributed claim is verified.',
-        '## Unsupported claims',
-        'A passing web build alone does not establish operational readiness.',
-        '## Blockers',
-        'Runtime evidence is missing.',
-        '## Minimum next checks',
-        'Run a production-like smoke test.',
-        '**VERDICT: FAIL**',
-      ].join('\n'),
-      [
-        '### Verification checks (evidence-only)',
-        '## Verified facts',
-        'The claim was made.',
-        '## Unsupported claims',
-        'Build success does **not** establish operational readiness.',
-        '## Blockers',
-        'No rollback evidence exists.',
-        '## Minimum next checks',
-        '- [ ] Verify the release candidate.',
-        '**VERDICT: FAIL**',
-      ].join('\n'),
-    ];
-
-    for (const response of responses) {
-      const result = scorePersonaTrial(verifier, evidence({
-        prompt: verifier.prompt,
-        response,
-        persistedResponse: response,
-        tokenStreamResponse: response,
-        renderedAssistantResponse: response,
-        requestPersonaId: verifier.id,
-      }));
-      expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
-    }
-
-    const slow = responses[0];
-    const slowResult = scorePersonaTrial(verifier, evidence({
-      prompt: verifier.prompt,
-      response: slow,
-      persistedResponse: slow,
-      tokenStreamResponse: slow,
-      renderedAssistantResponse: slow,
-      requestPersonaId: verifier.id,
-      durationMs: 30_524,
-      inputTokens: 16_256,
-      outputTokens: 1_964,
-    }));
-    expect(slowResult.checks.find(check => check.id === 'performance-budgets')?.passed).toBe(false);
-    expect(slowResult).toMatchObject({ score: 90, rawScore: 90, passed: false });
-  });
-
-  it.each([
-    'VERDICT: PASS. Production readiness is established.',
-    'VERDICT: FAIL. Production readiness is established.',
-    'VERDICT: FAIL. A passing build does not fail to establish production readiness.',
-    'VERDICT: FAIL. Production readiness is not established. VERDICT: PASS.',
-    'VERDICT: FAIL. Production readiness is not established. VERDICT: READY.',
-    'VERDICT: FAIL. Production readiness is not established. Final verdict is PASS.',
-    'VERDICT: FAIL. Production readiness is not established. Final verdict = **READY**.',
-  ])('rejects an unsupported verifier verdict: %s', (claim) => {
-    const verifier = PERSONA_CASES.find(persona => persona.id === 'verifier')!;
-    const response = [
-      'Evidence-only review.',
-      'Verified facts.',
-      'Unsupported claims.',
-      'Blockers.',
-      'Minimum next checks.',
-      claim,
-    ].join('\n');
+    const response = renderVerifierReportEnvelope(CANONICAL_VERIFIER_REPORT);
     const result = scorePersonaTrial(verifier, evidence({
       prompt: verifier.prompt,
       response,
@@ -587,7 +507,60 @@ describe('deterministic 100-point persona scorer', () => {
       requestPersonaId: verifier.id,
     }));
 
-    expect(result.checks.find(check => check.id === 'verdict')?.passed).toBe(false);
+    expect(result).toMatchObject({ score: 100, rawScore: 100, passed: true });
+    expect(result.checks.find(check => check.id === 'verifier-contract')).toMatchObject({
+      passed: true,
+      pointsAwarded: 50,
+      maxPoints: 50,
+    });
+
+    const slowResult = scorePersonaTrial(verifier, evidence({
+      prompt: verifier.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: verifier.id,
+      durationMs: verifier.maxDurationMs + 1,
+    }));
+    expect(slowResult).toMatchObject({ score: 90, rawScore: 90, passed: false });
+  });
+
+  it.each([
+    ['free-form prose', 'VERDICT: FAIL. Production readiness is unsupported.'],
+    [
+      'prose beside the envelope',
+      `Advisory note\n${renderVerifierReportEnvelope(CANONICAL_VERIFIER_REPORT)}`,
+    ],
+    [
+      'approving release decision',
+      renderVerifierReportEnvelope(CANONICAL_VERIFIER_REPORT)
+        .replace('"releaseDecision": "block"', '"releaseDecision": "approve"'),
+    ],
+    [
+      'invented verified fact',
+      renderVerifierReportEnvelope(CANONICAL_VERIFIER_REPORT)
+        .replace('"web_build_pass_reported"', '"web_build_pass_verified"'),
+    ],
+    [
+      'duplicate schema key',
+      renderVerifierReportEnvelope(CANONICAL_VERIFIER_REPORT)
+        .replace('"schemaVersion": 1,', '"schemaVersion": 1,\n  "schemaVersion": 1,'),
+    ],
+  ])('rejects an invalid verifier contract: %s', (_name, response) => {
+    const verifier = PERSONA_CASES.find(persona => persona.id === 'verifier')!;
+    const result = scorePersonaTrial(verifier, evidence({
+      prompt: verifier.prompt,
+      response,
+      persistedResponse: response,
+      tokenStreamResponse: response,
+      renderedAssistantResponse: response,
+      requestPersonaId: verifier.id,
+    }));
+
+    expect(result.checks.find(check => check.id === 'verifier-contract')?.passed).toBe(false);
+    expect(result.passed).toBe(false);
+    expect(result.score).toBeLessThan(95);
   });
 
   it('distinguishes a discussed model-unavailable scenario from a real failure banner', () => {
