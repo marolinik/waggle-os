@@ -61,6 +61,7 @@ function isValidOllamaModelRef(model: string): boolean {
 export interface LocalInferenceRuntimeController {
   getStatus(): ManagedOllamaStatus;
   ensureReady(): Promise<ManagedOllamaReadyResult>;
+  startInstalled(): Promise<ManagedOllamaReadyResult>;
   stop(): Promise<void>;
 }
 
@@ -121,9 +122,41 @@ export async function localInferenceRoutes(
     ?? new ManagedOllamaRuntime(dataDir, OLLAMA_URL);
   const probeOllama = options.ollamaProbe ?? checkOllama;
   const probeVllm = options.vllmProbe ?? checkVllm;
+  let closing = false;
+  let restartTask: Promise<void> | null = null;
 
   fastify.addHook('onClose', async () => {
+    closing = true;
+    const pendingRestart = restartTask;
     await runtime.stop();
+    if (pendingRestart) {
+      void pendingRestart
+        .then(() => runtime.stop())
+        .catch((error) => fastify.log.warn(
+          { err: error },
+          'Could not stop the Waggle-managed Ollama runtime after sidecar close',
+        ));
+    }
+  });
+
+  fastify.addHook('onReady', () => {
+    const status = runtime.getStatus();
+    if (!status.supported || !status.installed || status.running) return;
+
+    // The desktop watchdog deliberately stops the managed daemon with the
+    // sidecar. Recover a previously verified installation in the background,
+    // without delaying sidecar health or allowing a first-run download.
+    restartTask = runtime.startInstalled()
+      .then(() => undefined)
+      .catch((error) => {
+        if (!closing) {
+          fastify.log.warn(
+            { err: error },
+            'Could not restart the installed Waggle-managed Ollama runtime',
+          );
+        }
+      })
+      .finally(() => { restartTask = null; });
   });
 
   // GET /api/local-inference/hardware — in-process clean-room scan (no external binary)

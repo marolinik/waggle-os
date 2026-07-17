@@ -70,10 +70,13 @@ describe('local-inference route — Waggle-managed runtime', () => {
   it('advertises a Docker-free managed bootstrap instead of requiring a system Ollama install', async () => {
     const server = Fastify({ logger: false });
     const stop = vi.fn(async () => undefined);
+    const ensureReady = vi.fn();
+    const startInstalled = vi.fn();
     await server.register(localInferenceRoutes, {
       runtimeFactory: () => ({
         getStatus: () => managedStatus(),
-        ensureReady: vi.fn(),
+        ensureReady,
+        startInstalled,
         stop,
       }),
       ollamaProbe: async () => unavailableOllama,
@@ -90,8 +93,124 @@ describe('local-inference route — Waggle-managed runtime', () => {
       managedRuntime: { supported: true, downloadRequired: true, dockerRequired: false },
     });
     expect(response.json().setupMessage).toMatch(/system Ollama install (?:is|are) not required/i);
+    expect(ensureReady).not.toHaveBeenCalled();
+    expect(startInstalled).not.toHaveBeenCalled();
     await server.close();
     expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('restarts an already-installed managed runtime when the sidecar starts', async () => {
+    const server = Fastify({ logger: false });
+    const installedStatus = {
+      ...managedStatus(),
+      installed: true,
+      running: false,
+      downloadRequired: false,
+    };
+    const runningStatus = { ...installedStatus, running: true };
+    const startInstalled = vi.fn(async () => ({
+      installedNow: false,
+      startedNow: true,
+      endpoint: 'http://127.0.0.1:11434',
+      status: runningStatus,
+    }));
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => installedStatus,
+        ensureReady: vi.fn(),
+        startInstalled,
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => unavailableOllama,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    await server.ready();
+    expect(startInstalled).toHaveBeenCalledOnce();
+    await expect(startInstalled.mock.results[0]?.value).resolves.toMatchObject({
+      installedNow: false,
+      startedNow: true,
+    });
+    await server.close();
+  });
+
+  it('keeps the sidecar available when an installed runtime cannot restart', async () => {
+    const server = Fastify({ logger: false });
+    const installedStatus = {
+      ...managedStatus(),
+      installed: true,
+      running: false,
+      downloadRequired: false,
+    };
+    const ensureReady = vi.fn();
+    const startInstalled = vi.fn(async () => {
+      throw new Error('runtime blocked by quarantine');
+    });
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => installedStatus,
+        ensureReady,
+        startInstalled,
+        stop: async () => undefined,
+      }),
+      ollamaProbe: async () => unavailableOllama,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const response = await server.inject({ method: 'GET', url: '/api/local-inference/status' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      ollamaInstalled: true,
+      ollamaRunning: false,
+      offlineReady: false,
+    });
+    expect(startInstalled).toHaveBeenCalledOnce();
+    expect(ensureReady).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it('does not delay sidecar readiness and stops again after a close during restart', async () => {
+    const server = Fastify({ logger: false });
+    const installedStatus = {
+      ...managedStatus(),
+      installed: true,
+      running: false,
+      downloadRequired: false,
+    };
+    let finishRestart!: () => void;
+    const restartReleased = new Promise<void>((resolve) => { finishRestart = resolve; });
+    const startInstalled = vi.fn(async () => {
+      await restartReleased;
+      return {
+        installedNow: false,
+        startedNow: true,
+        endpoint: 'http://127.0.0.1:11434',
+        status: { ...installedStatus, running: true },
+      };
+    });
+    const stop = vi.fn(async () => undefined);
+    await server.register(localInferenceRoutes, {
+      runtimeFactory: () => ({
+        getStatus: () => installedStatus,
+        ensureReady: vi.fn(),
+        startInstalled,
+        stop,
+      }),
+      ollamaProbe: async () => unavailableOllama,
+      vllmProbe: async () => unavailableVllm,
+    });
+
+    const readyOutcome = await Promise.race([
+      server.ready().then(() => 'ready' as const),
+      new Promise<'blocked'>((resolve) => setTimeout(() => resolve('blocked'), 500)),
+    ]);
+    expect(readyOutcome).toBe('ready');
+    expect(startInstalled).toHaveBeenCalledOnce();
+
+    await server.close();
+    expect(stop).toHaveBeenCalledOnce();
+    finishRestart();
+    await vi.waitFor(() => expect(stop).toHaveBeenCalledTimes(2));
   });
 
   it('installs, starts, and health-checks the managed runtime through one bootstrap route', async () => {
@@ -112,7 +231,12 @@ describe('local-inference route — Waggle-managed runtime', () => {
         version: 'test-1.0.0',
       });
     await server.register(localInferenceRoutes, {
-      runtimeFactory: () => ({ getStatus: () => readyStatus, ensureReady, stop: async () => undefined }),
+      runtimeFactory: () => ({
+        getStatus: () => managedStatus(),
+        ensureReady,
+        startInstalled: vi.fn(),
+        stop: async () => undefined,
+      }),
       ollamaProbe,
       vllmProbe: async () => unavailableVllm,
     });
@@ -138,6 +262,7 @@ describe('local-inference route — Waggle-managed runtime', () => {
       runtimeFactory: () => ({
         getStatus: () => managedStatus(false),
         ensureReady,
+        startInstalled: vi.fn(),
         stop: async () => undefined,
       }),
       ollamaProbe: async () => unavailableOllama,
@@ -162,6 +287,7 @@ describe('local-inference route — verified model installation', () => {
       runtimeFactory: () => ({
         getStatus: () => ({ ...managedStatus(), installed: true, running: true, downloadRequired: false }),
         ensureReady: vi.fn(),
+        startInstalled: vi.fn(),
         stop: async () => undefined,
       }),
       ollamaProbe: async () => ({

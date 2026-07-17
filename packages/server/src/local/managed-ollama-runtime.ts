@@ -595,6 +595,23 @@ export class ManagedOllamaRuntime {
     throw new Error('Managed Ollama runtime publication exhausted all retry attempts');
   }
 
+  async startInstalled(): Promise<ManagedOllamaReadyResult> {
+    if (await this.probe(this.baseUrl)) {
+      return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };
+    }
+    const executable = this.getInstalledExecutable();
+    if (!executable) {
+      throw new Error('Verified Waggle-managed Ollama runtime is not installed');
+    }
+    const startedNow = await this.start(executable);
+    return {
+      installedNow: false,
+      startedNow,
+      endpoint: this.baseUrl,
+      status: this.getStatus(),
+    };
+  }
+
   async ensureReady(): Promise<ManagedOllamaReadyResult> {
     if (await this.probe(this.baseUrl)) {
       return { installedNow: false, startedNow: false, endpoint: this.baseUrl, status: this.getStatus() };

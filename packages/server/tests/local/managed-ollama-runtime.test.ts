@@ -94,6 +94,24 @@ describe('managed Ollama supply-chain manifest', () => {
 });
 
 describe('ManagedOllamaRuntime', () => {
+  it('never downloads when asked to start an installed-only runtime that is missing', async () => {
+    const bytes = Buffer.from('must not download');
+    const fetchImpl = vi.fn();
+    const runtime = new ManagedOllamaRuntime(
+      await temporaryDataDir(),
+      'http://127.0.0.1:11434',
+      {
+        artifact: fixtureArtifact(bytes),
+        fetchImpl: fetchImpl as typeof fetch,
+        probe: async () => false,
+      },
+    );
+
+    await expect(runtime.startInstalled()).rejects.toThrow(/not installed/i);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(runtime.getStatus().installed).toBe(false);
+  });
+
   it('downloads, verifies, extracts, and records an official runtime atomically', async () => {
     const bytes = Buffer.from('trusted fixture archive');
     const dataDir = await temporaryDataDir();
