@@ -81,8 +81,71 @@ export function isAmbiguousMessage(text: string): boolean {
 
 // ── Contextual Cron Suggestion (IMP-004) ──────────────────────────────
 
+export interface TurnMutationPolicy {
+  denyAllMutations: boolean;
+  denyMemoryPersistence: boolean;
+}
+
+function withoutQuotedText(text: string): string {
+  return text
+    .replace(/"[^"\r\n]*"/g, ' ')
+    .replace(/'[^'\r\n]*'/g, ' ')
+    .replace(/“[^”\r\n]*”/g, ' ')
+    .replace(/‘[^’\r\n]*’/g, ' ');
+}
+
+/**
+ * Detect explicit user constraints that make a turn advisory/read-only.
+ * Broad no-change clauses deny every agent mutation; a memory-specific clause
+ * only denies durable memory writes. Quoted examples and object-scoped limits
+ * such as "do not create a calendar event" are intentionally not broadened.
+ */
+export function classifyExplicitTurnMutationPolicy(message: string): TurnMutationPolicy {
+  const actionable = withoutQuotedText(message);
+  const mutationVerb = '(?:create|edit|modify|write|save|store|delete|remove|change|update|execute|run)';
+  const broadDenial = new RegExp(
+    `\\b(?:do not|don't|never)\\s+${mutationVerb}`
+      + `(?:\\s*(?:,|and|or)\\s*${mutationVerb})*`
+      + '\\s+(?:anything(?:\\s+at\\s+all)?|any\\s+changes?)\\b',
+    'i',
+  ).test(actionable)
+    || /\b(?:make|apply|perform)\s+no\s+(?:changes?|edits?|writes?|updates?)\b/i.test(actionable)
+    || /\bwithout\s+(?:making|applying|performing)\s+(?:any\s+)?(?:changes?|edits?|updates?)\b/i.test(actionable)
+    || /\b(?:do not|don't|never)\s+take\s+any\s+actions?\b/i.test(actionable)
+    || /\b(?:work|respond|operate|inspect|review)\s+(?:in\s+)?read[- ]only(?:\s+mode)?\b/i.test(actionable);
+
+  const memoryDenial = /\b(?:do not|don't|never)\s+remember\b/i.test(actionable)
+    || /\b(?:do not|don't|never)\s+(?:save|store|persist|write)\b[^.;!?\r\n]{0,60}\b(?:to|in|into)\s+(?:my\s+)?memory\b/i.test(actionable)
+    || /\b(?:do not|don't|never)\s+(?:save|store|persist)\s+(?:this|that|it|anything)\b/i.test(actionable);
+
+  return {
+    denyAllMutations: broadDenial,
+    denyMemoryPersistence: broadDenial || memoryDenial,
+  };
+}
+
 /** Patterns indicating the user or agent discussed recurring/scheduled work */
 const RECURRING_PATTERNS = /\b(every\s+day|daily|weekly|every\s+week|each\s+morning|every\s+morning|regularly|recurring|scheduled?|every\s+month|monthly)\b/i;
+
+const SCHEDULE_OBJECT = /\b(?:schedules?|scheduling|recurring\s+tasks?|calendar\s+events?)\b|\/schedule\b/i;
+const SCHEDULE_ACTION = /^(?:schedule|create|make|add|set\s+up|suggest|propose|offer|mention|use)\b/i;
+const SCHEDULE_NEGATION_ESCAPE = /^(?:forget|avoid|cancel|remove|delete|stop)\b/i;
+
+function hasExplicitScheduleProhibition(userMessage: string): boolean {
+  const actionable = withoutQuotedText(userMessage);
+  if (/^\s*no\s+schedules?\b(?:\s*(?:,|$)|[^.;!?\r\n]*\b(?:needed|required|please|just)\b)/i.test(actionable)) {
+    return true;
+  }
+  if (/\bwithout\s+(?:creating|making|adding|setting\s+up|scheduling|suggesting|proposing|offering|mentioning|using)\b[^.;!?\r\n]*\b(?:schedules?|recurring\s+tasks?|calendar\s+events?)\b|\bwithout\s+using\s+\/schedule\b/i.test(actionable)) {
+    return true;
+  }
+  for (const match of actionable.matchAll(/\b(?:do not|don't|never)\s+([^.;!?\r\n]+)/gi)) {
+    const remainder = match[1].trim();
+    if (SCHEDULE_NEGATION_ESCAPE.test(remainder)) continue;
+    if (SCHEDULE_OBJECT.test(remainder) && SCHEDULE_ACTION.test(remainder)) return true;
+  }
+  return false;
+}
 
 /**
  * Check whether the agent response should get a scheduling suggestion appended.
@@ -91,8 +154,13 @@ const RECURRING_PATTERNS = /\b(every\s+day|daily|weekly|every\s+week|each\s+morn
  *
  * Exported for testing.
  */
-export function shouldSuggestSchedule(responseText: string, toolsUsed: string[]): boolean {
+export function shouldSuggestSchedule(
+  responseText: string,
+  toolsUsed: string[],
+  userMessage: string,
+): boolean {
   if (!responseText) return false;
+  if (hasExplicitScheduleProhibition(userMessage)) return false;
   if (toolsUsed.some(t => t.includes('schedule') || t.includes('cron'))) return false;
   return RECURRING_PATTERNS.test(responseText);
 }

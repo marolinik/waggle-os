@@ -8,6 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import {
+  classifyExplicitTurnMutationPolicy,
   isRegulatedContent,
   isRetryableError,
   shouldSuggestSchedule,
@@ -204,81 +205,152 @@ describe('isRetryableError', () => {
 
 // ─── shouldSuggestSchedule ───────────────────────────────────────────
 
+describe('classifyExplicitTurnMutationPolicy', () => {
+  it('denies tools and memory for the canonical broad no-change instruction', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      'Turn this goal into milestones and exit criteria. Do not create or edit anything.',
+    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+  });
+
+  it('recognizes equivalent broad read-only instructions', () => {
+    for (const message of [
+      'Inspect this in read-only mode; make no changes.',
+      'Review the proposal without making any changes.',
+      'Summarize it, but do not take any actions.',
+    ]) {
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual({
+        denyAllMutations: true,
+        denyMemoryPersistence: true,
+      });
+    }
+  });
+
+  it('can prohibit memory without disabling unrelated requested actions', () => {
+    expect(classifyExplicitTurnMutationPolicy('Write the report, but do not save this to memory.'))
+      .toEqual({ denyAllMutations: false, denyMemoryPersistence: true });
+  });
+
+  it('does not broaden object-scoped or quoted constraints', () => {
+    for (const message of [
+      'Do not create a calendar event; remember this preference.',
+      'Do not create files or schedules.',
+      'Explain why the phrase "do not create or edit anything" is ambiguous.',
+    ]) {
+      expect(classifyExplicitTurnMutationPolicy(message), message).toEqual({
+        denyAllMutations: false,
+        denyMemoryPersistence: false,
+      });
+    }
+  });
+
+  it('lets a broad denial win over a conflicting memory request', () => {
+    expect(classifyExplicitTurnMutationPolicy(
+      'Remember this preference, but do not create or edit anything.',
+    )).toEqual({ denyAllMutations: true, denyMemoryPersistence: true });
+  });
+});
+
 describe('shouldSuggestSchedule', () => {
   // ── Positive: recurring patterns in text, no scheduling tools ─────
 
   it('returns true when response mentions "every day" and no schedule tool used', () => {
-    expect(shouldSuggestSchedule('I can check this every day for you.', [])).toBe(true);
+    expect(shouldSuggestSchedule('I can check this every day for you.', [], '')).toBe(true);
   });
 
   it('returns true for "daily" pattern', () => {
-    expect(shouldSuggestSchedule('This task runs daily.', [])).toBe(true);
+    expect(shouldSuggestSchedule('This task runs daily.', [], '')).toBe(true);
   });
 
   it('returns true for "weekly" pattern', () => {
-    expect(shouldSuggestSchedule('I recommend a weekly review.', [])).toBe(true);
+    expect(shouldSuggestSchedule('I recommend a weekly review.', [], '')).toBe(true);
   });
 
   it('returns true for "every week" pattern', () => {
-    expect(shouldSuggestSchedule('Let me do this every week.', [])).toBe(true);
+    expect(shouldSuggestSchedule('Let me do this every week.', [], '')).toBe(true);
   });
 
   it('returns true for "each morning" pattern', () => {
-    expect(shouldSuggestSchedule('We can run reports each morning.', [])).toBe(true);
+    expect(shouldSuggestSchedule('We can run reports each morning.', [], '')).toBe(true);
   });
 
   it('returns true for "every morning" pattern', () => {
-    expect(shouldSuggestSchedule('I will check every morning.', [])).toBe(true);
+    expect(shouldSuggestSchedule('I will check every morning.', [], '')).toBe(true);
   });
 
   it('returns true for "regularly" pattern', () => {
-    expect(shouldSuggestSchedule('This should be done regularly.', [])).toBe(true);
+    expect(shouldSuggestSchedule('This should be done regularly.', [], '')).toBe(true);
   });
 
   it('returns true for "recurring" pattern', () => {
-    expect(shouldSuggestSchedule('This is a recurring task.', [])).toBe(true);
+    expect(shouldSuggestSchedule('This is a recurring task.', [], '')).toBe(true);
   });
 
   it('returns true for "scheduled" pattern', () => {
-    expect(shouldSuggestSchedule('The meeting is already scheduled for then.', [])).toBe(true);
+    expect(shouldSuggestSchedule('The meeting is already scheduled for then.', [], '')).toBe(true);
   });
 
   it('returns true for "every month" pattern', () => {
-    expect(shouldSuggestSchedule('We generate reports every month.', [])).toBe(true);
+    expect(shouldSuggestSchedule('We generate reports every month.', [], '')).toBe(true);
   });
 
   it('returns true for "monthly" pattern', () => {
-    expect(shouldSuggestSchedule('The monthly review is due.', [])).toBe(true);
+    expect(shouldSuggestSchedule('The monthly review is due.', [], '')).toBe(true);
   });
 
   // ── Negative: scheduling tool already used ────────────────────────
 
   it('returns false when a schedule tool was already used', () => {
-    expect(shouldSuggestSchedule('Run this daily.', ['schedule_task'])).toBe(false);
+    expect(shouldSuggestSchedule('Run this daily.', ['schedule_task'], '')).toBe(false);
   });
 
   it('returns false when a cron tool was already used', () => {
-    expect(shouldSuggestSchedule('This runs every week.', ['create_cron'])).toBe(false);
+    expect(shouldSuggestSchedule('This runs every week.', ['create_cron'], '')).toBe(false);
   });
 
   it('returns false when tool name contains "schedule" anywhere', () => {
-    expect(shouldSuggestSchedule('Do this weekly.', ['my_schedule_helper'])).toBe(false);
+    expect(shouldSuggestSchedule('Do this weekly.', ['my_schedule_helper'], '')).toBe(false);
   });
 
   // ── Negative: no recurring patterns ───────────────────────────────
 
   it('returns false when response has no recurring patterns', () => {
-    expect(shouldSuggestSchedule('Here is the report you asked for.', [])).toBe(false);
+    expect(shouldSuggestSchedule('Here is the report you asked for.', [], '')).toBe(false);
   });
 
   it('returns false for empty response text', () => {
-    expect(shouldSuggestSchedule('', [])).toBe(false);
+    expect(shouldSuggestSchedule('', [], '')).toBe(false);
   });
 
   // ── Case insensitivity ────────────────────────────────────────────
 
   it('matches patterns case-insensitively', () => {
-    expect(shouldSuggestSchedule('Run DAILY checks.', [])).toBe(true);
+    expect(shouldSuggestSchedule('Run DAILY checks.', [], '')).toBe(true);
+  });
+
+  it('honors explicit schedule prohibitions, including the Finance live prompt', () => {
+    const response = 'Runway equals cash divided by net monthly burn.';
+    for (const message of [
+      'Do not create files or schedules.',
+      "Don't suggest a recurring task.",
+      'No schedules, just answer the question.',
+      'Answer without creating a calendar event.',
+      'Do not suggest /schedule.',
+    ]) {
+      expect(shouldSuggestSchedule(response, [], message), message).toBe(false);
+    }
+  });
+
+  it('does not mistake descriptive or double-negated schedule text for a prohibition', () => {
+    const response = 'A monthly review would help.';
+    for (const message of [
+      "Don't forget to create a weekly schedule.",
+      'Do not avoid scheduling the monthly review.',
+      'Do not cancel the existing schedule.',
+      'There are no schedules yet.',
+      'Rewrite: "Do not create schedules."',
+    ]) {
+      expect(shouldSuggestSchedule(response, [], message), message).toBe(true);
+    }
   });
 });
 

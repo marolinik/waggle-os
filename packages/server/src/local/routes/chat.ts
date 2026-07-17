@@ -6,7 +6,7 @@ import { performance } from 'node:perf_hooks';
 import type { FastifyPluginAsync } from 'fastify';
 import { createLogger } from '../logger.js';
 const log = createLogger('chat');
-import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, type TraceHandle } from '@waggle/agent';
+import { runAgentLoop, needsConfirmation, needsConfirmationWithAutonomy, classifyGatedToolRisk, CapabilityRouter, analyzeAndRecordCorrection, recordCapabilityGap, lintMemoryWrite, assessTrust, formatTrustSummary, scanForInjection, AGENT_LOOP_REROUTE_PREFIX, extractEntities, IterationBudget, routeMessage, compressConversation, createDefaultCompressionConfig, computeInputTokenBudget, getModelContextWindow, CredentialPool, loadCredentialPool, extractStatusCode, filterAvailableTools, shouldSuggestCapture, planSkillDistillation, selectAgentRunBudget, TraceRecorder, generateTurnId, logTurnEvent, checkGrounding, READONLY_TOOLS, type TraceHandle } from '@waggle/agent';
 import type { AgentLoopConfig, AgentResponse, Orchestrator, AutonomyLevel, HookRegistry } from '@waggle/agent';
 import type { WorkspaceSession } from '../workspace-sessions.js';
 import { buildWorkspaceNowBlock, formatWorkspaceNowPrompt } from './workspace-context.js';
@@ -36,7 +36,7 @@ function resolvePersona(id: string) {
 import { TeamSync, WaggleConfig, type CronStore, type SavePendingActionInput } from '@waggle/core';
 
 // ── Extracted modules ──────────────────────────────────────────────────
-import { isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse } from './chat-helpers.js';
+import { classifyExplicitTurnMutationPolicy, isRegulatedContent, isRetryableError, isAmbiguousMessage, shouldSuggestSchedule, SCHEDULE_SUGGESTION, AMBIGUITY_PROMPT, describeToolUse, type TurnMutationPolicy } from './chat-helpers.js';
 import { persistMessage, loadSessionMessages, stripTrailingFailedPair } from './chat-persistence.js';
 import { MAX_CONTEXT_MESSAGES, applyContextWindow, buildSkillPromptSection } from './chat-context.js';
 import {
@@ -125,6 +125,7 @@ const CONVERSATIONAL_GATED_TOOL_NAMES = new Set([
   'list_workspace_files',
   'read_other_workspace_file',
 ]);
+const EXPLICIT_READ_ONLY_TOOL_NAMES = new Set([...READONLY_TOOLS, 'read_skill']);
 
 /**
  * AI-OS #6 — resolve the durable goal-ancestry for a chat turn. `project` is the
@@ -141,6 +142,7 @@ export function resolveChatAncestry(
 }
 
 export function isExplicitGatedToolRequest(message: string): boolean {
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
   return /\b(write|read|edit|modify|create|make|generate|export|download|file|docx|document|artifact|commit|push|pull|merge|branch|terminal|shell|bash|command|run|execute|install|delete|remove|inspect|review|analy[sz]e|fix|debug|test|validate|verify|check|build|compile|typecheck|lint|refactor|implement|draft|prepare|plan|schedule|send|delegate|coordinate|orchestrate|browse|navigate|open|click|fill|query|calculate|calculator|compute|cross-workspace|other workspace)\b/i.test(message)
     || /\b(?:use|using|call|invoke|run)\s+(?:the\s+)?[a-z][\w.:-]*(?:\s+[a-z][\w.:-]*){0,2}\s+(?:tool|plugin|mcp)\b/i.test(message)
     || /\b(search|research|investigate)\b[^.?!]*\b(file|code|repo(?:sitory)?|sql|etl|pipeline)\b/i.test(message)
@@ -164,6 +166,7 @@ export function shouldNarrowToolsForConversationalTurn(
   message: string,
   autonomyLevel: AutonomyLevel,
 ): boolean {
+  if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return true;
   return autonomyLevel === 'normal' && !isExplicitGatedToolRequest(message);
 }
 
@@ -171,18 +174,26 @@ export function filterGatedToolsForConversationalTurn<T extends { name: string }
   tools: T[],
   message: string,
   autonomyLevel: AutonomyLevel,
+  mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): T[] {
-  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return tools;
+  let eligibleTools = mutationPolicy.denyMemoryPersistence
+    ? tools.filter(tool => tool.name !== 'save_memory')
+    : tools;
+  if (mutationPolicy.denyAllMutations) {
+    return eligibleTools.filter(tool => EXPLICIT_READ_ONLY_TOOL_NAMES.has(tool.name));
+  }
+  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return eligibleTools;
   const allowMemorySearch = isExplicitMemoryRecallRequest(message);
   const allowMemorySave = isExplicitMemorySaveRequest(message);
   const allowExternalResearch = isExplicitExternalResearchRequest(message);
-  return tools.filter((tool) => {
+  eligibleTools = eligibleTools.filter((tool) => {
     if (CONVERSATIONAL_GATED_TOOL_NAMES.has(tool.name)) return false;
     if (tool.name === 'search_memory' && !allowMemorySearch) return false;
     if (tool.name === 'save_memory' && !allowMemorySave) return false;
     if ((tool.name === 'web_search' || tool.name === 'web_fetch') && !allowExternalResearch) return false;
     return true;
   });
+  return eligibleTools;
 }
 
 type PluginToolProvider = NonNullable<AgentLoopConfig['pluginTools']>;
@@ -192,8 +203,11 @@ export function filterPluginToolsForConversationalTurn(
   message: string,
   autonomyLevel: AutonomyLevel,
   onWithheld?: (count: number) => void,
+  mutationPolicy: TurnMutationPolicy = classifyExplicitTurnMutationPolicy(message),
 ): PluginToolProvider {
-  if (!shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
+  if (!mutationPolicy.denyAllMutations
+    && !mutationPolicy.denyMemoryPersistence
+    && !shouldNarrowToolsForConversationalTurn(message, autonomyLevel)) return provider;
 
   return {
     getAllTools: () => {
@@ -201,7 +215,11 @@ export function filterPluginToolsForConversationalTurn(
       // Plugin capabilities are external and may mutate remote state. On a
       // conversational turn there is no safe static allowlist for arbitrary
       // plugin names, so defer all of them until the user requests an action.
-      const filtered: typeof pluginTools = [];
+      const filtered = mutationPolicy.denyAllMutations
+        ? []
+        : mutationPolicy.denyMemoryPersistence
+          ? pluginTools.filter(tool => tool.name !== 'save_memory')
+          : [];
       if (filtered.length !== pluginTools.length) {
         onWithheld?.(pluginTools.length - filtered.length);
       }
@@ -757,6 +775,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
     if (message.length > MAX_MESSAGE_LENGTH) {
       return reply.status(400).send({ error: `Message too long (${message.length} chars, max ${MAX_MESSAGE_LENGTH})`, code: 'MESSAGE_TOO_LONG' });
     }
+    const turnMutationPolicy = classifyExplicitTurnMutationPolicy(message);
+    const allowMemoryPersistence = !isAutomatedTurn && !turnMutationPolicy.denyMemoryPersistence;
+    const allowDerivedPersistence = !isAutomatedTurn && !turnMutationPolicy.denyAllMutations;
 
     // R6-001: path-traversal guard on the session-persistence path segments.
     // `workspace` and the resolved session alias come straight from the request body and are
@@ -1686,7 +1707,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
               // tool/connector output, so scan it before it can enter durable
               // memory; fail-soft with the W4A closed-DB guard so persistence
               // never fails the turn.
-              if (!hasCustomRunner && !isAutomatedTurn) {
+              if (!hasCustomRunner && allowMemoryPersistence) {
                 const summaryScan = scanForInjection(compressionResult.summary, 'tool_output');
                 if (summaryScan.score >= 0.7) {
                   log.warn(`[context-compression] summary NOT persisted — injection score ${summaryScan.score} (session=${sessionId})`);
@@ -1749,7 +1770,12 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
           spawnAllowedToolNames = new Set(spawnAvailableTools.map(tool => tool.name));
 
           const beforeNarrowing = effectiveTools.length;
-          effectiveTools = filterGatedToolsForConversationalTurn(effectiveTools, agentMessage, autonomyLevel);
+          effectiveTools = filterGatedToolsForConversationalTurn(
+            effectiveTools,
+            agentMessage,
+            autonomyLevel,
+            turnMutationPolicy,
+          );
           if (effectiveTools.length !== beforeNarrowing) {
             log.info(`[chat] conversational turn: withheld ${beforeNarrowing - effectiveTools.length} deferred tools until explicitly requested`);
           }
@@ -1793,7 +1819,9 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
             recentMessages,
             recentToolNames: previousToolSequence,
             preferredToolNames: activePersona?.tools ?? [],
-            mandatoryToolNames: isExplicitGatedToolRequest(agentMessage) && !activePersona?.isReadOnly
+            mandatoryToolNames: isExplicitGatedToolRequest(agentMessage)
+              && !turnMutationPolicy.denyAllMutations
+              && !activePersona?.isReadOnly
               ? ['search_skills', 'create_skill']
               : [],
             externalToolNames: [...externalToolNames],
@@ -2193,7 +2221,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // contains save-worthy content and auto-save it.
         // #13: skipped for automated turns — a headless re-analysis of an old
         // transcript must not re-save its decision patterns as fresh memory.
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        if (!hasCustomRunner && allowMemoryPersistence) {
           const agentAlreadySaved = (result.toolsUsed ?? []).includes('save_memory');
           if (!agentAlreadySaved) {
             try {
@@ -2231,7 +2259,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // is recorded idempotently (skill_promotion) so recurring workflows
         // bubble up through the existing actionable-signal substrate.
         // #13: skipped for automated turns (no real workflow to distill).
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        if (!hasCustomRunner && allowDerivedPersistence) {
           const distillPlan = planSkillDistillation(result.toolsUsed ?? [], result.content ?? '');
           if (distillPlan) {
             sendEvent('step', { content: distillPlan.directive });
@@ -2254,7 +2282,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // Non-blocking — KG enrichment never fails the response.
         // #13: skipped for automated turns — review-turn output re-mentions
         // transcript entities; re-extracting them inflates the graph.
-        if (!hasCustomRunner && !isAutomatedTurn && result.content && result.content.length > 100) {
+        if (!hasCustomRunner && allowDerivedPersistence && result.content && result.content.length > 100) {
           try {
             const knowledge = sessionOrch.getKnowledge();
             const entities = extractEntities(result.content);
@@ -2289,7 +2317,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         // #13: skipped for automated turns — a review instruction embedding a
         // transcript's old "no, that's wrong" lines would re-fire as fresh
         // correction signals against the agent.
-        if (!hasCustomRunner && !isAutomatedTurn) {
+        if (!hasCustomRunner && allowDerivedPersistence) {
           try {
             const signalStore = sessionOrch.getImprovementSignals();
             analyzeAndRecordCorrection(signalStore, message);
@@ -2370,7 +2398,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         }
 
         // IMP-004: Contextual cron suggestion — nudge user about /schedule when response discusses recurring work
-        if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [])) {
+        if (!hasCustomRunner && finalContent && shouldSuggestSchedule(finalContent, result.toolsUsed ?? [], message)) {
           finalContent += SCHEDULE_SUGGESTION;
         }
 
@@ -2549,7 +2577,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
       // likely to fail on context_length; persisting that here as a
       // 'user_stated' frame would dump the transcript into memory at highest
       // trust, exactly the pollution #13 exists to stop.
-      if (activeSessionOrch && !isAutomatedTurn && message.trim().length >= 8) {
+      if (activeSessionOrch && allowMemoryPersistence && message.trim().length >= 8) {
         try {
           const frames = activeSessionOrch.getFrames();
           const sessions = activeSessionOrch.getSessions();

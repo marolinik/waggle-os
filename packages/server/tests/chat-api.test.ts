@@ -277,6 +277,33 @@ describe('Chat Streaming API', () => {
     expect(persisted!.content).toContain('my horse is named Comet');
   });
 
+  it('keeps a failed broad no-change request in chat history without writing it to memory', async () => {
+    resetRateLimiter(server);
+    const originalRunner = server.agentRunner;
+    const sessionId = `no-mutation-failure-${Date.now()}`;
+    const seed = `Analyze this release plan (${Date.now()}). Do not create or edit anything.`;
+    server.agentRunner = async () => {
+      throw new Error('LiteLLM is not available');
+    };
+
+    try {
+      const res = await injectWithAuth(server, {
+        method: 'POST',
+        url: '/api/chat',
+        payload: { message: seed, workspace: 'default', session: sessionId },
+      });
+
+      expect(parseSSE(res.body).filter(event => event.event === 'error')).toHaveLength(1);
+      expect(server.agentState.orchestrator.getFrames().findDuplicate(seed)).toBeNull();
+      const transcript = loadSessionMessages(tmpDir, 'default', sessionId);
+      expect(transcript[0]).toEqual({ role: 'user', content: seed });
+      expect(transcript[1].role).toBe('assistant');
+      expect(transcript[1].content).toContain('Generation failed: LiteLLM is not available');
+    } finally {
+      server.agentRunner = originalRunner;
+    }
+  });
+
   // #4: a locally-selected Ollama model must route to Ollama's OpenAI-compatible
   // endpoint (graceful degradation / sovereignty), NOT LiteLLM which doesn't have
   // it — and the 'ollama/' routing prefix must be stripped to the bare tag.
@@ -714,6 +741,41 @@ describe('conversational gated tool filtering', () => {
     ).map(t => t.name);
 
     expect(filtered).toEqual(tools.map(t => t.name));
+  });
+
+  it('treats a broad no-change clause as authoritative at every autonomy level', () => {
+    const message = 'Turn this goal into milestones and exit criteria. Do not create or edit anything.';
+    expect(isExplicitGatedToolRequest(message)).toBe(false);
+    for (const autonomy of ['normal', 'trusted', 'yolo'] as const) {
+      const filtered = filterGatedToolsForConversationalTurn(tools, message, autonomy)
+        .map(tool => tool.name);
+      expect(filtered, autonomy).toContain('search_memory');
+      expect(filtered, autonomy).toContain('git_log');
+      for (const mutation of ['save_memory', 'write_file', 'bash', 'git_push', 'create_plan', 'spawn_agent']) {
+        expect(filtered, `${autonomy}:${mutation}`).not.toContain(mutation);
+      }
+    }
+  });
+
+  it('can deny memory persistence without blocking another explicit action', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Write this as a file, but do not save this to memory.',
+      'normal',
+    ).map(tool => tool.name);
+
+    expect(filtered).toContain('write_file');
+    expect(filtered).not.toContain('save_memory');
+  });
+
+  it('does not broaden a calendar-only prohibition into a memory ban', () => {
+    const filtered = filterGatedToolsForConversationalTurn(
+      tools,
+      'Remember this preference, but do not create a calendar event.',
+      'normal',
+    ).map(tool => tool.name);
+
+    expect(filtered).toContain('save_memory');
   });
 
   it('keeps gated tools when elevated autonomy is active', () => {
