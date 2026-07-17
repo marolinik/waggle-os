@@ -265,6 +265,10 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     ? [...configTools, ...pluginToolProvider.getAllTools()]
     : configTools;
 
+  const userRequest = [...inputMessages]
+    .reverse()
+    .find(message => message.role === 'user')?.content ?? '';
+
   // Build messages array with system prompt + input messages
   const messages: AgentMessage[] = [
     { role: 'system', content: systemPrompt },
@@ -546,6 +550,7 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
         content,
         toolsUsed,
         messages,
+        userRequest,
         state: gateState,
         enableVerification: verificationGate,
         enableSkillDistillation: skillDistillationGate,

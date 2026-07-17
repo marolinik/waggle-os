@@ -60,6 +60,20 @@ describe('D3 — verification-before-completion gate (structural, locked)', () =
     expect(result.content).toBe('I updated the config as you asked.');
   });
 
+  it('does not rewrite facts preserved from the current user request', async () => {
+    const response = 'API tests pass. Browser tests still have two failures on Windows.';
+    const fetch = mockFetch([response]);
+    const result = await runAgentLoop(cfg(fetch, {
+      messages: [{
+        role: 'user',
+        content: 'Rewrite this and preserve the facts: API tests pass. Browser tests still have two failures on Windows.',
+      }],
+    }));
+
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(result.content).toBe(response);
+  });
+
   it('honors the opt-out (verificationGate:false)', async () => {
     const fetch = mockFetch(['All tests pass and the build succeeds.']);
     const result = await runAgentLoop(cfg(fetch, { verificationGate: false }));

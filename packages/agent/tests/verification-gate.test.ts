@@ -50,6 +50,37 @@ describe('assertsUnverifiedCompletion', () => {
     }
   });
 
+  it('preserves success claims supplied by a closed-world rewrite request', () => {
+    const request = 'Rewrite this and preserve the facts: API tests pass. Browser tests have two failures.';
+    const response = 'API tests pass. Browser tests still have two failures.';
+    expect(assertsUnverifiedCompletion(response, [], request)).toBe(false);
+  });
+
+  it('does not mistake future exit criteria for completed verification', () => {
+    const response = [
+      'Exit criteria:',
+      '- All tests pass.',
+      '- The build succeeds.',
+    ].join('\n');
+    expect(assertsUnverifiedCompletion(response, [])).toBe(false);
+  });
+
+  it('still fires on an unsupported claim when the user did not supply it', () => {
+    expect(assertsUnverifiedCompletion(
+      'All tests pass and the build succeeds.',
+      [],
+      'Fix the failing tests.',
+    )).toBe(true);
+  });
+
+  it('accepts an honestly attributed user claim without upgrading it', () => {
+    expect(assertsUnverifiedCompletion(
+      'You reported that all tests pass; I have not independently verified that claim.',
+      [],
+      'All tests pass.',
+    )).toBe(false);
+  });
+
   it('ignores trivially short content', () => {
     expect(assertsUnverifiedCompletion('', [])).toBe(false);
     expect(assertsUnverifiedCompletion('ok', [])).toBe(false);

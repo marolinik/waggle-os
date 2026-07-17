@@ -36,16 +36,74 @@ const SUCCESS_ASSERTION: RegExp[] = [
   /\b(?:confirmed|validated)\s+(?:it|the|that)\b[^.]*\b(?:works?|passes?|correct)\b/i,
 ];
 
+/** Requests whose output is expected to preserve claims supplied by the user. */
+const SOURCE_TRANSFORM_REQUEST = /\b(?:rewrite|rephrase|summari[sz]e|translate|preserve|quote|extract|polish|edit this|turn this into)\b/i;
+
+/** Context that makes a success phrase a future condition rather than a completion claim. */
+const PLANNING_CONTEXT = /(?:\b(?:exit|acceptance|release|completion|success|quality)\s+(?:criteria|criterion|gate)\b|\bdefinition of done\b|\b(?:if|when|once|until|unless|before|after)\b|\b(?:must|should|needs? to|required|requires?|target|goal|planned|plan to|will)\b)/i;
+const PLANNING_HEADER = /(?:criteria|criterion|gate|definition of done|requirements?|target|goal)/i;
+const ATTRIBUTED_CONTEXT = /\b(?:you (?:said|reported|stated|provided)|according to (?:you|your message)|the supplied (?:text|claim)|reported|claimed)\b/i;
+
+function normalizeAssertion(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function assertionContext(content: string, index: number): { line: string; previousLine: string } {
+  const lineStart = content.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
+  const lineEndMatch = content.indexOf('\n', index);
+  const lineEnd = lineEndMatch === -1 ? content.length : lineEndMatch;
+  const previousEnd = Math.max(0, lineStart - 1);
+  const previousStart = content.lastIndexOf('\n', Math.max(0, previousEnd - 1)) + 1;
+  return {
+    line: content.slice(lineStart, lineEnd),
+    previousLine: content.slice(previousStart, previousEnd),
+  };
+}
+
+function isPlanningCondition(content: string, index: number): boolean {
+  const { line, previousLine } = assertionContext(content, index);
+  if (PLANNING_CONTEXT.test(line)) return true;
+  if (!/^\s*(?:[-*]|\d+[.)])\s+/.test(line)) return false;
+  const lineStart = content.lastIndexOf('\n', Math.max(0, index - 1)) + 1;
+  const sectionLead = content.slice(Math.max(0, lineStart - 240), lineStart);
+  return PLANNING_HEADER.test(previousLine) || PLANNING_HEADER.test(sectionLead);
+}
+
+function isSuppliedClaim(
+  matchText: string,
+  content: string,
+  index: number,
+  userRequest: string,
+): boolean {
+  const normalizedMatch = normalizeAssertion(matchText);
+  if (!normalizedMatch || !normalizeAssertion(userRequest).includes(normalizedMatch)) return false;
+  if (SOURCE_TRANSFORM_REQUEST.test(userRequest)) return true;
+  return ATTRIBUTED_CONTEXT.test(assertionContext(content, index).line);
+}
+
 /**
  * True when `content` asserts verified/passing/working completion but
  * none of `toolsUsed` is a verification-class tool — an unverified
  * completion claim that must not be accepted as "done".
  */
-export function assertsUnverifiedCompletion(content: string, toolsUsed: readonly string[]): boolean {
+export function assertsUnverifiedCompletion(
+  content: string,
+  toolsUsed: readonly string[],
+  userRequest = '',
+): boolean {
   if (!content || content.length < 12) return false;
   // A check actually ran this turn → the claim is grounded; do not fire.
   if (toolsUsed.some(t => VERIFICATION_TOOL.test(t))) return false;
-  return SUCCESS_ASSERTION.some(re => re.test(content));
+  for (const assertion of SUCCESS_ASSERTION) {
+    const flags = assertion.flags.includes('g') ? assertion.flags : `${assertion.flags}g`;
+    for (const match of content.matchAll(new RegExp(assertion.source, flags))) {
+      const index = match.index ?? 0;
+      if (isPlanningCondition(content, index)) continue;
+      if (isSuppliedClaim(match[0], content, index, userRequest)) continue;
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
