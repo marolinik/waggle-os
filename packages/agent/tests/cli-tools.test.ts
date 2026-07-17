@@ -155,7 +155,7 @@ describe('cli_execute', () => {
     }));
 
     expect(result.success).toBe(false);
-    // Node.js will throw on non-zero exit code via execFile
+    expect(result.exitCode).toBe(42);
     expect(result.error).toBeTruthy();
   });
 
@@ -266,4 +266,114 @@ describe('cli_execute', () => {
       rmSync(marker, { force: true });
     }
   });
+
+  it.runIf(process.platform === 'win32')('terminates descendants before rejecting oversized CLI output', async () => {
+    const marker = join(tmpdir(), `waggle-cli-maxbuffer-orphan-${process.pid}-${Date.now()}.txt`);
+    const childScript = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphan'), 1200)`;
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      `const child = spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { detached: true, stdio: 'ignore' })`,
+      'child.unref()',
+      "process.stdout.write('x'.repeat(2 * 1024 * 1024))",
+      'setInterval(() => {}, 1000)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const result = JSON.parse(await execute.execute({
+        program: 'node',
+        args: ['-e', parentScript],
+        timeout: 10,
+      }));
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(-1);
+      expect(result.error).toContain('maxBuffer');
+      expect(result.stdout.length).toBeLessThanOrEqual(1024 * 1024);
+      await new Promise(resolve => setTimeout(resolve, 1650));
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(marker, { force: true });
+    }
+  }, 10_000);
+
+  it.runIf(process.platform === 'win32')('terminates descendants on time while the main event loop is blocked', async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const ready = join(tmpdir(), `waggle-cli-ready-${suffix}.txt`);
+    const marker = join(tmpdir(), `waggle-cli-starved-orphan-${suffix}.txt`);
+    const childScript = [
+      `const fs = require('node:fs')`,
+      `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+      `setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'orphan'), 1600)`,
+      'setTimeout(() => {}, 30000)',
+    ].join(';');
+    const parentScript = [
+      `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(childScript)}], { stdio: 'ignore' })`,
+      'setTimeout(() => {}, 30000)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const execution = Promise.resolve(execute.execute({
+        program: 'node',
+        args: ['-e', parentScript],
+        timeout: 1,
+      }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(existsSync(ready)).toBe(true);
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2_600);
+      const result = JSON.parse(await execution);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('timeout');
+      expect(existsSync(marker)).toBe(false);
+    } finally {
+      rmSync(ready, { force: true });
+      rmSync(marker, { force: true });
+    }
+  }, 15_000);
+
+  it.runIf(process.platform === 'win32')('preserves CLI success when completion delivery is event-loop blocked', async () => {
+    const suffix = `${process.pid}-${Date.now()}`;
+    const ready = join(tmpdir(), `waggle-cli-completion-ready-${suffix}.txt`);
+    const finished = join(tmpdir(), `waggle-cli-completion-finished-${suffix}.txt`);
+    const script = [
+      `const fs = require('node:fs')`,
+      `fs.writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+      'setTimeout(() => {',
+      `  fs.writeFileSync(${JSON.stringify(finished)}, 'finished')`,
+      "  console.log('cli-completed-before-deadline')",
+      '}, 200)',
+    ].join(';');
+    const tools = createCliTools({ allowlist: ['node'] });
+    const execute = tools.find(t => t.name === 'cli_execute')!;
+
+    try {
+      const execution = Promise.resolve(execute.execute({
+        program: 'node',
+        args: ['-e', script],
+        timeout: 1,
+      }));
+      const readyDeadline = Date.now() + 5_000;
+      while (!existsSync(ready) && Date.now() < readyDeadline) {
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+      expect(existsSync(ready)).toBe(true);
+
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
+      const result = JSON.parse(await execution);
+
+      expect(existsSync(finished)).toBe(true);
+      expect(result.success).toBe(true);
+      expect(result.stdout).toContain('cli-completed-before-deadline');
+    } finally {
+      rmSync(ready, { force: true });
+      rmSync(finished, { force: true });
+    }
+  }, 10_000);
 });

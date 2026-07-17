@@ -113,6 +113,7 @@ export interface TimedProcessOptions {
   env: Record<string, string | undefined>;
   maxBuffer: number;
   windowsHide?: boolean;
+  windowsVerbatimArguments?: boolean;
 }
 
 export interface TimedProcessResult {
@@ -140,6 +141,12 @@ void (async () => {
   let settled = false;
   let timedOut = false;
   let cleanupDegraded = false;
+  let outputLimitError;
+  const requestedMaxBuffer = Math.max(1, Number(workerData.options.maxBuffer) || 1024 * 1024);
+  const outputState = {
+    stdout: { chunks: [], capturedBytes: 0, totalBytes: 0 },
+    stderr: { chunks: [], capturedBytes: 0, totalBytes: 0 },
+  };
 
   const finish = (result) => {
     if (settled) return;
@@ -151,7 +158,13 @@ void (async () => {
   };
 
   const killOwnedProcess = () => {
-    if (!child || child.pid === undefined) return 'none';
+    if (
+      !child
+      || child.pid === undefined
+      || child.exitCode !== null
+      || child.signalCode !== null
+      || processExited
+    ) return 'none';
     try {
       execFileSync(workerData.taskkillPath, [
         '/PID', String(child.pid), '/T', '/F',
@@ -171,10 +184,50 @@ void (async () => {
     }
   };
 
+  const capturedOutput = (streamName) => Buffer.concat(outputState[streamName].chunks).toString('utf8');
+
+  const captureOutput = (streamName, chunk) => {
+    const state = outputState[streamName];
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    state.totalBytes += buffer.length;
+    const remaining = requestedMaxBuffer - state.capturedBytes;
+    if (remaining > 0) {
+      const captured = buffer.subarray(0, remaining);
+      state.chunks.push(captured);
+      state.capturedBytes += captured.length;
+    }
+    if (
+      state.totalBytes <= requestedMaxBuffer
+      || outputLimitError
+      || processExited
+      || settled
+      || timedOut
+    ) return;
+
+    outputLimitError = {
+      code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+      message: streamName + ' maxBuffer length exceeded',
+    };
+    if (deadlineTimer) clearTimeout(deadlineTimer);
+    const termination = killOwnedProcess();
+    cleanupDegraded = termination !== 'tree';
+    settlementTimer = setTimeout(() => {
+      finish({
+        cleanupDegraded,
+        errorCode: outputLimitError.code,
+        errorMessage: outputLimitError.message,
+        stdout: capturedOutput('stdout'),
+        stderr: capturedOutput('stderr'),
+        timedOut: false,
+      });
+    }, 2000);
+  };
+
   const recordNaturalExit = () => {
     if (processExited || timedOut || settled) return;
     processExited = true;
     if (deadlineTimer) clearTimeout(deadlineTimer);
+    if (outputLimitError) return;
     outputDrainTimer = setTimeout(() => {
       finish({
         cleanupDegraded: false,
@@ -191,40 +244,49 @@ void (async () => {
     child = execFile(workerData.executable, workerData.args, {
       ...workerData.options,
       encoding: 'utf8',
-    }, (error, stdout, stderr) => {
+      maxBuffer: requestedMaxBuffer * 2,
+    }, (error) => {
+      if (
+        !outputLimitError
+        && processExited
+        && error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+      ) return;
       finish({
         cleanupDegraded,
-        errorCode: error?.code ?? null,
-        errorMessage: error ? error.message : null,
-        stdout: typeof stdout === 'string' ? stdout : String(stdout ?? ''),
-        stderr: typeof stderr === 'string' ? stderr : String(stderr ?? ''),
+        errorCode: outputLimitError?.code ?? error?.code ?? null,
+        errorMessage: outputLimitError?.message ?? (error ? error.message : null),
+        stdout: capturedOutput('stdout'),
+        stderr: capturedOutput('stderr'),
         timedOut,
       });
     });
 
+    child.stdout?.on('data', (chunk) => captureOutput('stdout', chunk));
+    child.stderr?.on('data', (chunk) => captureOutput('stderr', chunk));
     child.once('exit', recordNaturalExit);
 
     deadlineTimer = setTimeout(() => {
-      if (settled || processExited) return;
+      if (settled || processExited || outputLimitError) return;
       if (child.exitCode !== null || child.signalCode !== null) {
         recordNaturalExit();
         return;
       }
+      timedOut = true;
       const termination = killOwnedProcess();
       if (termination === 'none') {
+        cleanupDegraded = true;
         settlementTimer = setTimeout(() => {
           finish({
-            cleanupDegraded: false,
+            cleanupDegraded,
             errorCode: null,
             errorMessage: 'Process timeout could not be enforced',
             stdout: '',
             stderr: '',
-            timedOut: false,
+            timedOut,
           });
         }, 1000);
         return;
       }
-      timedOut = true;
       cleanupDegraded = termination === 'root';
       settlementTimer = setTimeout(() => {
         finish({
@@ -271,12 +333,16 @@ function execFileWithMainThreadTimeout(
 ): Promise<TimedProcessResult> {
   return new Promise((resolve) => {
     let timedOut = false;
-    const timeoutState: { timer?: ReturnType<typeof setTimeout> } = {};
+    const timeoutState: {
+      forceKillTimer?: ReturnType<typeof setTimeout>;
+      timer?: ReturnType<typeof setTimeout>;
+    } = {};
     const child = execFile(executable, args, {
       ...options,
       encoding: 'utf8',
     }, (error, stdout, stderr) => {
       if (timeoutState.timer) clearTimeout(timeoutState.timer);
+      if (timeoutState.forceKillTimer) clearTimeout(timeoutState.forceKillTimer);
       resolve({
         cleanupDegraded: false,
         errorCode: error?.code ?? null,
@@ -289,6 +355,10 @@ function execFileWithMainThreadTimeout(
     timeoutState.timer = setTimeout(() => {
       timedOut = true;
       terminateProcessTree(child);
+      timeoutState.forceKillTimer = setTimeout(() => {
+        if (child.exitCode !== null || child.signalCode !== null) return;
+        try { child.kill('SIGKILL'); } catch { /* process already exited */ }
+      }, 2000);
     }, timeoutMs);
   });
 }

@@ -128,6 +128,31 @@ describe('createSystemTools', () => {
     expect(fs.existsSync(marker)).toBe(false);
   });
 
+  it.runIf(process.platform !== 'win32')('force-kills a process that ignores the cooperative timeout signal', async () => {
+    const ready = path.join(workspace, 'sigterm-handler-ready.txt');
+    const code = [
+      `require('node:fs').writeFileSync(${JSON.stringify(ready)}, 'ready')`,
+      "process.on('SIGTERM', () => {})",
+      'setInterval(() => {}, 30000)',
+    ].join(';');
+    const startedAt = Date.now();
+    const execution = execFileWithTreeTimeout(process.execPath, ['-e', code], {
+      cwd: workspace,
+      env: createSanitizedEnv(),
+      maxBuffer: 1024 * 1024,
+    }, 500);
+    const readyDeadline = Date.now() + 5_000;
+    while (!fs.existsSync(ready) && Date.now() < readyDeadline) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    expect(fs.existsSync(ready)).toBe(true);
+
+    const result = await execution;
+
+    expect(result.timedOut).toBe(true);
+    expect(Date.now() - startedAt).toBeLessThan(4_000);
+  }, 10_000);
+
   describe('write_file', () => {
     it('creates a new file', async () => {
       const writeFile = getTool('write_file');
@@ -323,6 +348,18 @@ describe('createSystemTools', () => {
       }
     });
 
+    it('reports output-limit failures instead of presenting partial output as success', async () => {
+      const runCode = getTool('run_code');
+      const result = await runCode.execute({
+        language: 'javascript',
+        code: "process.stdout.write('x'.repeat(2 * 1024 * 1024)); setTimeout(() => {}, 30000)",
+        timeout: 10_000,
+      });
+
+      expect(result).toContain('maxBuffer');
+      expect(result).toContain('--- error ---');
+    }, 10_000);
+
     it.runIf(process.platform === 'win32')('kills descendant processes when execution times out', async () => {
       const marker = path.join(workspace, 'orphan-marker.txt');
       const childCode = `setTimeout(() => require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'orphaned'), 1500)`;
@@ -446,7 +483,10 @@ describe('createSystemTools', () => {
     }, 10_000);
 
     it.runIf(process.platform === 'win32')('does not target a reused PID after the root exits with inherited output open', async () => {
-      const descendantCode = 'setTimeout(() => {}, 2500)';
+      const descendantCode = [
+        "setTimeout(() => process.stdout.write('x'.repeat(2 * 1024 * 1024)), 200)",
+        'setTimeout(() => {}, 2500)',
+      ].join(';');
       const code = [
         `const child = require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(descendantCode)}], { detached: true, stdio: ['ignore', 'inherit', 'inherit'] })`,
         'child.unref()',
@@ -460,6 +500,7 @@ describe('createSystemTools', () => {
       });
 
       expect(result.toLowerCase()).not.toContain('timed out');
+      expect(result).not.toContain('maxBuffer');
       expect(result).toContain('descendant processes may still be running');
       await new Promise((resolve) => setTimeout(resolve, 700));
     }, 10_000);

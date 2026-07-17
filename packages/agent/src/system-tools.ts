@@ -212,6 +212,12 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
         if (result.errorMessage) {
           // Return stderr + stdout on non-zero exit (truncated)
           const output = truncateOutput((result.stderr || '') + (result.stdout || ''));
+          if (result.errorCode === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || result.cleanupDegraded) {
+            const cleanupWarning = result.cleanupDegraded
+              ? ' Process-tree cleanup was incomplete; descendants may still be running.'
+              : '';
+            return `Error: ${result.errorMessage}.${cleanupWarning}${output ? `\n${output}` : ''}`;
+          }
           return output || `Error: ${result.errorMessage}`;
         }
         return truncateOutput(result.stdout);
@@ -963,6 +969,12 @@ export function createSystemTools(wsOrDeps: string | SystemToolDeps): ToolDefini
           // Check for runtime not found
           if (result.errorCode === 'ENOENT' || result.errorMessage.includes('not found')) {
             return `Error: ${language} runtime not found. Please ensure ${language === 'python' ? 'python3/python' : 'node'} is installed and on PATH.`;
+          }
+          if (result.errorCode === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' || result.cleanupDegraded) {
+            const cleanupWarning = result.cleanupDegraded
+              ? ' Process-tree cleanup was incomplete; descendants may still be running.'
+              : '';
+            parts.push(`--- error ---\n${result.errorMessage}.${cleanupWarning}`);
           }
         }
 
