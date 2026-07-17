@@ -245,6 +245,22 @@ describe('Tauri Production Configuration', () => {
     );
     expect(script).toContain('process.versions.modules');
     expect(script).toContain('execFileSync(nodePath');
+    expect(script).toContain('const database = new Database');
+    expect(script).toContain('SELECT 1 AS ok');
+    expect(script).toContain('SELECT vec_version() AS version');
+    expect(script).toContain('const onnx = require(process.argv[4])');
+    expect(script).toContain('process.arch !== process.argv[2]');
+  });
+
+  it('native bundling is fatal on missing payloads and validates target Mach-O architecture', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'bundle-native-deps.mjs'),
+      'utf-8',
+    );
+    expect(script).toContain("execFileSync('/usr/bin/lipo'");
+    expect(script).toContain('required native dependency');
+    expect(script).toContain('sqlite-vec-${vecOs}-${arch}');
+    expect(script).not.toContain("arch === 'arm64' ? 'aarch64'");
   });
 
   it.runIf(process.platform === 'win32')(
@@ -262,7 +278,6 @@ describe('Tauri Production Configuration', () => {
         'onnxruntime/onnxruntime_binding.node',
       ];
       const stagedRuntimeFiles = [
-        'better-sqlite3/package.json',
         '@waggle/hive-mind-cli/dist/index.js',
         '@waggle/hive-mind-hooks-claude-code/dist/bin/claude-code-hooks-cli.js',
         '@waggle/hive-mind-hooks-claude-desktop/dist/bin/claude-desktop-hooks.js',
@@ -289,8 +304,39 @@ describe('Tauri Production Configuration', () => {
         fs.copyFileSync(process.execPath, path.join(fixtureResources, 'node.exe'));
         writeFixtureFile(fixtureResources, 'service.js', 'console.log("sidecar");\n');
 
+        const installedBetterSqlite = path.join(ROOT, 'node_modules', 'better-sqlite3');
+        const fixtureBetterSqlite = path.join(fixtureResources, 'node_modules', 'better-sqlite3');
+        fs.mkdirSync(path.dirname(fixtureBetterSqlite), { recursive: true });
+        fs.cpSync(installedBetterSqlite, fixtureBetterSqlite, { recursive: true });
+        for (const packageName of ['bindings', 'file-uri-to-path']) {
+          fs.cpSync(
+            path.join(ROOT, 'node_modules', packageName),
+            path.join(fixtureResources, 'node_modules', packageName),
+            { recursive: true },
+          );
+        }
+        const installedBinding = path.join(installedBetterSqlite, 'build', 'Release', 'better_sqlite3.node');
+        const installedVec = path.join(ROOT, 'node_modules', 'sqlite-vec-windows-x64', 'vec0.dll');
+        const installedOnnx = path.join(ROOT, 'node_modules', 'onnxruntime-node');
+        const fixtureOnnx = path.join(fixtureResources, 'node_modules', 'onnxruntime-node');
+        fs.mkdirSync(fixtureOnnx, { recursive: true });
+        fs.copyFileSync(path.join(installedOnnx, 'package.json'), path.join(fixtureOnnx, 'package.json'));
+        fs.cpSync(path.join(installedOnnx, 'dist'), path.join(fixtureOnnx, 'dist'), { recursive: true });
+        const installedOnnxBin = path.join(installedOnnx, 'bin', 'napi-v3', 'win32', 'x64');
+        const fixtureOnnxBin = path.join(fixtureOnnx, 'bin', 'napi-v3', 'win32', 'x64');
+        fs.cpSync(installedOnnxBin, fixtureOnnxBin, { recursive: true });
+        fs.cpSync(
+          path.join(ROOT, 'node_modules', 'onnxruntime-common'),
+          path.join(fixtureResources, 'node_modules', 'onnxruntime-common'),
+          { recursive: true },
+        );
+        const installedOnnxBinding = path.join(installedOnnxBin, 'onnxruntime_binding.node');
+
         for (const entry of requiredNativeFiles) {
-          writeFixtureFile(path.join(fixtureResources, 'native'), entry);
+          const target = writeFixtureFile(path.join(fixtureResources, 'native'), entry);
+          if (entry === 'better_sqlite3.node') fs.copyFileSync(installedBinding, target);
+          if (entry === 'vec0.dll') fs.copyFileSync(installedVec, target);
+          if (entry === 'onnxruntime/onnxruntime_binding.node') fs.copyFileSync(installedOnnxBinding, target);
         }
         for (const entry of stagedRuntimeFiles) {
           writeFixtureFile(
@@ -306,19 +352,37 @@ describe('Tauri Production Configuration', () => {
 
         expect(runChecker().status).toBe(0);
 
+        const stagedBinding = path.join(
+          fixtureBetterSqlite,
+          'build',
+          'Release',
+          'better_sqlite3.node',
+        );
+        const stagedOnnxBinding = path.join(fixtureOnnxBin, 'onnxruntime_binding.node');
+        const fixtureVec = path.join(fixtureResources, 'native', 'vec0.dll');
+        for (const target of [stagedBinding, stagedOnnxBinding, fixtureVec]) {
+          const original = fs.readFileSync(target);
+          fs.writeFileSync(target, 'not a native payload');
+          const invalidRuntimeResult = runChecker();
+          expect(invalidRuntimeResult.status).toBe(1);
+          expect(invalidRuntimeResult.stderr).toContain('resources native runtime probe failed');
+          fs.writeFileSync(target, original);
+        }
+
         for (const entry of requiredNativeFiles) {
           const target = path.join(
             fixtureResources,
             'native',
             ...entry.split('/'),
           );
+          const original = fs.readFileSync(target);
           fs.rmSync(target);
 
           const result = runChecker();
           expect(result.status).toBe(1);
           expect(result.stderr).toContain(`resources/native/${entry}`);
 
-          fs.writeFileSync(target, '', 'utf-8');
+          fs.writeFileSync(target, original);
         }
 
         writeFixtureFile(
@@ -393,6 +457,26 @@ describe('CI/CD Configuration', () => {
     expect(content).toContain('tauri-action');
     expect(content).toContain('aarch64-apple-darwin');
     expect(content).toContain('x86_64-apple-darwin');
+    expect(content).toContain('runner: macos-15');
+    expect(content).toContain('runner: macos-15-intel');
+    expect(content).toContain('runs-on: ${{ matrix.runner }}');
+    expect(content).toContain('TARGET_ARCH: ${{ matrix.arch }}');
+  });
+
+  it('release and PR macOS builds pin each target to a matching runner architecture', () => {
+    for (const workflowName of ['release.yml', 'tauri-build-pr.yml']) {
+      const workflow = fs.readFileSync(
+        path.join(ROOT, '.github', 'workflows', workflowName),
+        'utf-8',
+      );
+      expect(workflow).toContain('target: aarch64-apple-darwin');
+      expect(workflow).toContain('arch: arm64');
+      expect(workflow).toContain('runner: macos-15');
+      expect(workflow).toContain('target: x86_64-apple-darwin');
+      expect(workflow).toContain('arch: x64');
+      expect(workflow).toContain('runner: macos-15-intel');
+      expect(workflow).toContain('Verify runner architecture');
+    }
   });
 
   it('release workflow does NOT publish a broken (empty-signature) updater manifest', () => {

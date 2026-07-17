@@ -71,10 +71,18 @@ jobs:
           prerelease: false
 
   build-macos:
-    runs-on: macos-latest
     strategy:
       matrix:
-        target: [aarch64-apple-darwin, x86_64-apple-darwin]
+        include:
+          - target: aarch64-apple-darwin
+            arch: arm64
+            runner: macos-15
+          - target: x86_64-apple-darwin
+            arch: x64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    env:
+      TARGET_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -83,6 +91,9 @@ jobs:
         with:
           node-version: 20
           cache: npm
+
+      - name: Verify runner architecture
+        run: node -e "if (process.arch !== process.env.TARGET_ARCH) { console.error('Expected ' + process.env.TARGET_ARCH + ' runner, got ' + process.arch); process.exit(1); }"
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -105,18 +116,12 @@ jobs:
 
       - name: Bundle native dependencies
         run: node scripts/bundle-native-deps.mjs
-        env:
-          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
 
       - name: Bundle Node.js runtime
         run: node scripts/bundle-node.mjs
-        env:
-          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
 
       - name: Stage sidecar dependencies
         run: node scripts/stage-sidecar-deps.mjs
-        env:
-          TARGET_ARCH: ${{ matrix.target == 'aarch64-apple-darwin' && 'arm64' || 'x64' }}
 
       - name: Build frontend
         run: cd apps/web && npx vite build

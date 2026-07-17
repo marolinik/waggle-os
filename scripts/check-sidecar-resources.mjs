@@ -22,6 +22,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');
 const resourcesDir = path.join(root, 'app', 'src-tauri', 'resources');
+const stagedDepsDir = path.join(resourcesDir, 'node_modules');
+const targetArch = process.env.TARGET_ARCH || process.arch;
 
 const missing = [];
 const unsafe = [];
@@ -51,15 +53,23 @@ if (!fs.existsSync(nodePath)) {
   missing.push(`resources/${nodeBinary} (run: node scripts/bundle-node.mjs)`);
 } else {
   try {
-    const bundledAbi = execFileSync(nodePath, ['-p', 'process.versions.modules'], {
+    const bundledRuntime = JSON.parse(execFileSync(nodePath, [
+      '-p',
+      'JSON.stringify({ arch: process.arch, modules: process.versions.modules })',
+    ], {
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
+    }).trim());
     const currentAbi = process.versions.modules;
-    if (bundledAbi !== currentAbi) {
+    if (bundledRuntime.modules !== currentAbi) {
       missing.push(
-        `resources/${nodeBinary} ABI ${bundledAbi} does not match current Node ABI ${currentAbi} ` +
+        `resources/${nodeBinary} ABI ${bundledRuntime.modules} does not match current Node ABI ${currentAbi} ` +
         '(run: node scripts/bundle-node.mjs with the same Node used for npm install/stage-sidecar-deps)',
+      );
+    }
+    if (bundledRuntime.arch !== targetArch) {
+      missing.push(
+        `resources/${nodeBinary} architecture ${bundledRuntime.arch} does not match target ${targetArch}`,
       );
     }
   } catch (err) {
@@ -84,6 +94,23 @@ if (process.platform === 'win32') {
       );
     }
   }
+} else if (process.platform === 'darwin') {
+  const requiredMacNativeFiles = [
+    'better_sqlite3.node',
+    'vec0.dylib',
+    'onnxruntime/onnxruntime_binding.node',
+  ];
+  for (const entry of requiredMacNativeFiles) {
+    if (!fs.existsSync(path.join(nativeDir, ...entry.split('/')))) {
+      missing.push(`resources/native/${entry} (run: node scripts/bundle-native-deps.mjs)`);
+    }
+  }
+  const onnxDir = path.join(nativeDir, 'onnxruntime');
+  const hasOnnxLibrary = fs.existsSync(onnxDir)
+    && fs.readdirSync(onnxDir).some((entry) => entry.endsWith('.dylib'));
+  if (!hasOnnxLibrary) {
+    missing.push('resources/native/onnxruntime/*.dylib (run: node scripts/bundle-native-deps.mjs)');
+  }
 } else if (nativeEntries.length === 0) {
   missing.push('resources/native/* (run: node scripts/bundle-native-deps.mjs)');
 }
@@ -95,9 +122,56 @@ if (process.platform === 'win32') {
 // npm scripts / CI (stage-sidecar-deps.mjs), NOT the arch-blind beforeBuildCommand
 // hook — so a raw `npx tauri build` that skips those would package a sidecar that
 // dies with MODULE_NOT_FOUND on first boot. Probe a canonical external.
-const stagedDepsDir = path.join(resourcesDir, 'node_modules');
-if (!fs.existsSync(path.join(stagedDepsDir, 'better-sqlite3', 'package.json'))) {
+const stagedBetterSqlite = path.join(stagedDepsDir, 'better-sqlite3');
+const stagedOnnxRuntime = path.join(stagedDepsDir, 'onnxruntime-node');
+const vecExtension = path.join(
+  nativeDir,
+  `vec0.${process.platform === 'win32' ? 'dll' : process.platform === 'darwin' ? 'dylib' : 'so'}`,
+);
+if (!fs.existsSync(path.join(stagedBetterSqlite, 'package.json'))) {
   missing.push('resources/node_modules/* (run: node scripts/stage-sidecar-deps.mjs)');
+}
+if (!fs.existsSync(path.join(stagedOnnxRuntime, 'package.json'))) {
+  missing.push('resources/node_modules/onnxruntime-node (run: node scripts/stage-sidecar-deps.mjs)');
+}
+if (
+  fs.existsSync(nodePath)
+  && fs.existsSync(path.join(stagedBetterSqlite, 'package.json'))
+  && fs.existsSync(path.join(stagedOnnxRuntime, 'package.json'))
+  && fs.existsSync(vecExtension)
+) {
+  try {
+    const probe = [
+      'const Database = require(process.argv[1]);',
+      'if (process.arch !== process.argv[2]) throw new Error(`architecture ${process.arch}`);',
+      'const database = new Database(\':memory:\');',
+      'database.loadExtension(process.argv[3]);',
+      'const row = database.prepare(\'SELECT 1 AS ok\').get();',
+      'const vec = database.prepare(\'SELECT vec_version() AS version\').get();',
+      'database.close();',
+      'if (row.ok !== 1) throw new Error(\'SQLite query failed\');',
+      'if (typeof vec.version !== \'string\' || vec.version.length === 0) throw new Error(\'sqlite-vec query failed\');',
+      'const onnx = require(process.argv[4]);',
+      'if (typeof onnx.InferenceSession !== \'function\') throw new Error(\'ONNX binding failed\');',
+    ].join('');
+    execFileSync(nodePath, [
+      '-e',
+      probe,
+      stagedBetterSqlite,
+      targetArch,
+      vecExtension,
+      stagedOnnxRuntime,
+    ], {
+      cwd: resourcesDir,
+      env: { ...process.env, NODE_PATH: stagedDepsDir },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch {
+    missing.push(
+      `resources native runtime probe failed for better-sqlite3, sqlite-vec, or onnxruntime-node `
+      + `using bundled ${nodeBinary} for ${targetArch}`,
+    );
+  }
 }
 
 // External agents and hook management run directly from this staged payload;
