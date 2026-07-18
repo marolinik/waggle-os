@@ -14,6 +14,7 @@ import {
   conversationalToolPolicyPrompt,
   filterGatedToolsForConversationalTurn,
   filterPluginToolsForConversationalTurn,
+  hasRegulatedDisclaimer,
   isExplicitGatedToolRequest,
 } from '../../src/local/routes/chat.js';
 import { selectToolsForTurn } from '../../src/local/persona-tool-filter.js';
@@ -112,6 +113,33 @@ describe('chat prompt packaging', () => {
     expect(compact).toMatch(/regulated topics/i);
     expect(compact).toContain('unless the user specified a response syntax or shape that does not permit it');
     expect(compact).toContain(BEHAVIORAL_SPEC.qualityRules);
+  });
+
+  it.each([
+    'This is not financial advice.',
+    'This is not financial or investment advice.',
+    'This is not investment advice.',
+    'This is not legal advice.',
+    'Verify with your accountant or financial advisor.',
+    'Consult your legal team before acting.',
+    'You should consult a financial advisor before acting.',
+  ])('recognizes an existing regulated disclaimer: %s', (content) => {
+    expect(hasRegulatedDisclaimer(content)).toBe(true);
+  });
+
+  it.each([
+    'Revenue is zero and runway is four months.',
+    'A financial advisor charges 1% annually.',
+    'Your legal team approved this policy.',
+    'Attorney-client privilege may apply to these records.',
+    "Review the financial advisor's fee schedule.",
+    'The review says the financial advisor charges 1%.',
+    'Check whether the legal team approved this policy.',
+    'I did consult the legal team yesterday.',
+    'They consult the financial advisor about every trade.',
+    'They check with the legal team every Friday.',
+  ])('does not treat ordinary regulated-domain wording as a disclaimer: %s', (content) => {
+    expect(hasRegulatedDisclaimer(content)).toBe(false);
   });
 
   it('gives a literal plain-text contract when selection leaves no tools', () => {

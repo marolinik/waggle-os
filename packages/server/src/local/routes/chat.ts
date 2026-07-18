@@ -143,6 +143,17 @@ export function resolveChatAncestry(
   return name ? { project: name } : {};
 }
 
+export function hasRegulatedDisclaimer(content: string): boolean {
+  const normalized = content.toLowerCase();
+  const regulatedAdvisor = '(?:accountant|financial advisor|legal team)';
+  const recommendationLead = '(?:^|[.!?;\\r\\n]\\s*|,\\s*|[-*]\\s+)(?:(?:please|you should|you may want to|(?:i|we) recommend (?:that )?you)\\s+)?';
+  return normalized.includes('not legal advice')
+    || /\bnot (?:financial(?: or investment)?|investment(?: or financial)?) advice\b/.test(normalized)
+    || new RegExp(`${recommendationLead}consult\\s+(?:(?:with\\s+)?(?:your|a|an|the)\\s+)?(?:licensed\\s+)?${regulatedAdvisor}\\b(?!['’]s\\b)`).test(normalized)
+    || new RegExp(`${recommendationLead}(?:verify|check|confirm|review|discuss)(?:\\s+(?:this|it|these|those|the (?:figures?|analysis|advice|decision|matter|plan)))?\\s+with\\s+(?:(?:your|a|an|the)\\s+)?${regulatedAdvisor}\\b(?!['’]s\\b)`).test(normalized)
+    || /\b(?:does not|will not|not intended to) create (?:an? )?attorney-client relationship\b/.test(normalized);
+}
+
 export function isExplicitGatedToolRequest(message: string): boolean {
   if (classifyExplicitTurnMutationPolicy(message).denyAllMutations) return false;
   if (isExclusiveSuppliedOnlyResponseRequest(message)) return false;
@@ -2560,12 +2571,7 @@ ${wsConfig?.templateId ? `- Workspace template: ${wsConfig.templateId} — tailo
         };
         if (activePersonaId && REGULATED_DISCLAIMER_MAP[activePersonaId] && finalContent) {
           if (isRegulatedContent(finalContent, activePersonaId)) {
-            const hasDisclaimer = finalContent.toLowerCase().includes('not legal advice') ||
-              finalContent.toLowerCase().includes('attorney-client') ||
-              finalContent.toLowerCase().includes('verify with your accountant') ||
-              finalContent.toLowerCase().includes('financial advisor') ||
-              finalContent.toLowerCase().includes('legal team');
-            if (!hasDisclaimer) {
+            if (!hasRegulatedDisclaimer(finalContent)) {
               finalContent += REGULATED_DISCLAIMER_MAP[activePersonaId];
             }
           }
