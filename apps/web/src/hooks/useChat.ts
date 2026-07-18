@@ -95,7 +95,11 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
   // auto-send waits on this so its optimistic turn isn't clobbered by the
   // history-replace that fires when the session id resolves.
   const [historyLoaded, setHistoryLoaded] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
+  const activeDispatchRef = useRef<{
+    controller: AbortController;
+    workspaceId: string;
+    sessionId: string;
+  } | null>(null);
 
   // Lane C (Pillar 2.2/2.5): a send fired while a reply is still streaming must
   // NOT lock the composer or spawn a second concurrent SSE stream. Such sends
@@ -110,7 +114,7 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
 
   // Cancel any in-flight stream on unmount
   useEffect(() => {
-    return () => { abortRef.current?.abort(); };
+    return () => { activeDispatchRef.current?.controller.abort(); };
   }, []);
 
   // Load history when session changes
@@ -211,13 +215,17 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
     }
     setIsLoading(true);
 
-    abortRef.current?.abort();
+    activeDispatchRef.current?.controller.abort();
     // Lane S2 (Pillar 3.1): capture THIS stream's controller locally. The break
-    // guard below reads the local `controller`, not the shared `abortRef.current`
-    // — so a stop (or a fresh dispatch that reassigns abortRef) reliably halts
-    // THIS loop instead of racing whatever the ref now points at.
+    // guard below reads the local `controller`, while activeDispatch records
+    // which request owns the shared loading/queue state and server-side cancel.
     const controller = new AbortController();
-    abortRef.current = controller;
+    const activeDispatch = {
+      controller,
+      workspaceId,
+      sessionId: sessionId ?? '',
+    };
+    activeDispatchRef.current = activeDispatch;
 
     try {
       // Phase B.5: only forward autonomy when elevated — Normal is the
@@ -225,7 +233,14 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
       const autonomyPayload = autonomy && autonomy.level !== 'normal'
         ? { level: autonomy.level, expiresAt: autonomy.expiresAt ?? undefined }
         : undefined;
-      for await (const event of adapter.sendMessage(workspaceId, content, sessionId || undefined, persona, autonomyPayload, opts?.retry)) {
+      for await (const event of adapter.sendMessage(
+        workspaceId,
+        content,
+        sessionId || undefined,
+        persona,
+        autonomyPayload,
+        opts?.retry,
+      )) {
         if (controller.signal.aborted) break;
         const evt = event as StreamEvent;
         const data = evt.data as Record<string, unknown>;
@@ -376,6 +391,11 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         });
       }
     } catch (e) {
+      if (controller.signal.aborted || (e instanceof Error && e.name === 'AbortError')) {
+        // User Stop is a successful cancellation, not a backend outage. Preserve
+        // the partial answer and let finally release the composer/queue.
+        return true;
+      }
       failed = true;
       // P1b D3: sendMessage now THROWS AdapterHttpError on HTTP failure (it
       // used to parse the error body as an empty SSE stream — silent dead
@@ -407,11 +427,16 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
         );
       });
     } finally {
-      setIsLoading(false);
-      inFlightRef.current = false;
-      // Flush the next queued send (FIFO) now that the stream has ended.
-      const next = queueRef.current.shift();
-      if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id);
+      // A stopped request may settle after its replacement has started. Only
+      // the dispatch that still owns the shared state may release or flush it.
+      if (activeDispatchRef.current === activeDispatch) {
+        activeDispatchRef.current = null;
+        setIsLoading(false);
+        inFlightRef.current = false;
+        // Flush the next queued send (FIFO) now that the stream has ended.
+        const next = queueRef.current.shift();
+        if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id);
+      }
     }
     return !failed;
   }, [workspaceId, sessionId, persona, autonomy]);
@@ -460,16 +485,22 @@ export const useChat = ({ workspaceId, sessionId, persona, autonomy }: UseChatOp
   // agent loop to stop. The partial answer already rendered stays untouched — no
   // rollback. Idempotent: the stream's own `finally` also clears these.
   const stopStreaming = useCallback(() => {
-    if (!inFlightRef.current) return;
-    abortRef.current?.abort();
+    const activeDispatch = activeDispatchRef.current;
+    if (!inFlightRef.current || !activeDispatch) return;
+    activeDispatch.controller.abort();
     inFlightRef.current = false;
     setIsLoading(false);
-    if (workspaceId) {
-      try {
-        void Promise.resolve(adapter.abortAgent(workspaceId)).catch(() => { /* best-effort */ });
-      } catch { /* adapter unavailable */ }
-    }
-  }, [workspaceId]);
+    try {
+      void Promise.resolve(adapter.abortAgent(
+        activeDispatch.workspaceId,
+        activeDispatch.sessionId,
+      )).catch(() => { /* best-effort */ });
+    } catch { /* adapter unavailable */ }
+    // Preserve user-entered order: if a turn was already queued, promote it
+    // before a newly typed send can bypass the queue after Stop releases input.
+    const next = queueRef.current.shift();
+    if (next) void runDispatchRef.current(next.content, { retry: next.retry }, next.id);
+  }, []);
 
   const clearHistory = useCallback(async () => {
     if (sessionId) {

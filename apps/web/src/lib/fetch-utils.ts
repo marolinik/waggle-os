@@ -12,6 +12,29 @@ export class NetworkError extends Error {
   }
 }
 
+function combineAbortSignals(signals: AbortSignal[]): {
+  signal: AbortSignal;
+  cleanup: () => void;
+} {
+  if (typeof AbortSignal.any === 'function') {
+    return { signal: AbortSignal.any(signals), cleanup: () => {} };
+  }
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signals.some(signal => signal.aborted)) {
+    abort();
+  } else {
+    for (const signal of signals) signal.addEventListener('abort', abort, { once: true });
+  }
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      for (const signal of signals) signal.removeEventListener('abort', abort);
+    },
+  };
+}
+
 export async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -19,14 +42,14 @@ export async function fetchWithTimeout(
 ): Promise<Response> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, controller.signal])
-    : controller.signal;
+  const combined = options.signal
+    ? combineAbortSignals([options.signal, controller.signal])
+    : { signal: controller.signal, cleanup: () => {} };
 
   try {
     const response = await fetch(url, {
       ...options,
-      signal,
+      signal: combined.signal,
     });
     return response;
   } catch (err: unknown) {
@@ -39,5 +62,6 @@ export async function fetchWithTimeout(
     throw new NetworkError(url, err instanceof Error ? err : undefined);
   } finally {
     clearTimeout(timeout);
+    combined.cleanup();
   }
 }

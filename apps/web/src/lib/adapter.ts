@@ -278,8 +278,12 @@ class LocalAdapter {
   private ws: WebSocket | null = null;
   /** P1b-SSE: one ref-counted reconnecting stream per (path, eventName). */
   private sseStreams = new Map<string, { close: () => void; listeners: Set<(data: unknown) => void> }>();
-  /** Active chat requests, grouped by the workspace-level Stop contract. */
+  /** Active chat requests, session-scoped with workspace-wide Stop fallback. */
   private activeChatControllers = new Map<string, Set<AbortController>>();
+
+  private chatControllerKey(workspaceId: string, sessionId?: string): string {
+    return `${workspaceId}\u0000${sessionId ?? ''}`;
+  }
   private _connected = false;
   private _connectAttempted = false;
   // P1b D3 gate state. _connectPromise doubles as the deferral gate: kept
@@ -829,10 +833,11 @@ class LocalAdapter {
     // change with no client redeploy needed.
     const shape = getSelectedShape();
     const controller = new AbortController();
-    let controllers = this.activeChatControllers.get(workspaceId);
+    const chatControllerKey = this.chatControllerKey(workspaceId, sessionId);
+    let controllers = this.activeChatControllers.get(chatControllerKey);
     if (!controllers) {
       controllers = new Set();
-      this.activeChatControllers.set(workspaceId, controllers);
+      this.activeChatControllers.set(chatControllerKey, controllers);
     }
     controllers.add(controller);
     let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -880,8 +885,8 @@ class LocalAdapter {
     } finally {
       controller.abort();
       controllers.delete(controller);
-      if (controllers.size === 0 && this.activeChatControllers.get(workspaceId) === controllers) {
-        this.activeChatControllers.delete(workspaceId);
+      if (controllers.size === 0 && this.activeChatControllers.get(chatControllerKey) === controllers) {
+        this.activeChatControllers.delete(chatControllerKey);
       }
       if (reader) {
         try { await reader.cancel(); } catch { /* stream already closed */ }
@@ -890,11 +895,18 @@ class LocalAdapter {
     }
   }
 
-  async abortAgent(workspaceId: string): Promise<void> {
-    const controllers = this.activeChatControllers.get(workspaceId);
-    if (!controllers) return;
-    this.activeChatControllers.delete(workspaceId);
-    for (const controller of controllers) controller.abort();
+  async abortAgent(workspaceId: string, sessionId?: string): Promise<void> {
+    const controllerKeys = sessionId !== undefined
+      ? [this.chatControllerKey(workspaceId, sessionId)]
+      : [...this.activeChatControllers.keys()].filter(
+          key => key.startsWith(`${workspaceId}\u0000`),
+        );
+    for (const controllerKey of controllerKeys) {
+      const controllers = this.activeChatControllers.get(controllerKey);
+      if (!controllers) continue;
+      this.activeChatControllers.delete(controllerKey);
+      for (const controller of controllers) controller.abort();
+    }
   }
 
   async clearHistory(sessionId: string): Promise<void> {

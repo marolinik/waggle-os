@@ -73,7 +73,7 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     const gate = deferred<void>();
     mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
       yield { type: 'token', data: { content: 'partial answer' } };
-      await gate.promise; // hold the stream open until (never) released
+      await gate.promise;
       yield { type: 'done', data: {} };
     });
 
@@ -96,8 +96,8 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
     expect(result.current.isLoading).toBe(false);
     const afterStop = result.current.messages.find(m => m.role === 'assistant');
     expect(afterStop?.content).toBe('partial answer');
-    // Best-effort server-side cancel fired for this workspace.
-    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1');
+    // The adapter targets only this exact workspace/session stream.
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-1');
 
     // Send is re-enabled: a fresh send dispatches a new stream (not queued).
     mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
@@ -108,6 +108,110 @@ describe('useChat — stopStreaming (halt in-flight, keep partial, re-enable sen
 
     gate.resolve(); // let the abandoned first generator settle
     await act(async () => { await firstPromise?.catch(() => {}); });
+  });
+
+  it('does not report a user-aborted stream as a backend outage', async () => {
+    const gate = deferred<void>();
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'token', data: { content: 'partial answer' } };
+      await gate.promise;
+    });
+    mocks.adapter.abortAgent.mockImplementationOnce(async () => {
+      gate.reject(new DOMException('The operation was aborted', 'AbortError'));
+    });
+
+    const { result } = await mountChat();
+    let sendPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      sendPromise = result.current.sendMessage('question');
+      await flush();
+    });
+
+    await act(async () => {
+      result.current.stopStreaming();
+      await sendPromise;
+      await flush();
+    });
+
+    const assistant = result.current.messages.find(m => m.role === 'assistant');
+    expect(assistant?.content).toBe('partial answer');
+    expect(assistant?.blocks?.some(block => block.type === 'error')).toBe(false);
+  });
+
+  it('preserves queued FIFO when a stopped stream is replaced and settles late', async () => {
+    const firstGate = deferred<void>();
+    const secondGate = deferred<void>();
+    mocks.adapter.sendMessage
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'first partial' } };
+        await firstGate.promise;
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'token', data: { content: 'second partial' } };
+        await secondGate.promise;
+      })
+      .mockImplementationOnce(async function* () {
+        yield { type: 'done', data: { content: 'third' } };
+      });
+
+    const { result } = await mountChat();
+    let firstPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      firstPromise = result.current.sendMessage('first');
+      await flush();
+      await result.current.sendMessage('second');
+      await flush();
+    });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      result.current.stopStreaming();
+      await flush();
+    });
+    expect(result.current.isLoading).toBe(true);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+    expect(mocks.adapter.sendMessage.mock.calls[1]?.[1]).toBe('second');
+
+    await act(async () => { await result.current.sendMessage('third'); await flush(); });
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+
+    firstGate.resolve();
+    await act(async () => { await firstPromise; await flush(); });
+    expect(result.current.isLoading).toBe(true);
+    expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(2);
+
+    secondGate.resolve();
+    await act(async () => { await flush(); });
+    await vi.waitFor(() => expect(mocks.adapter.sendMessage).toHaveBeenCalledTimes(3));
+    expect(mocks.adapter.sendMessage.mock.calls[2]?.[1]).toBe('third');
+  });
+
+  it('stops the originating session after the hook switches to another session', async () => {
+    const gate = deferred<void>();
+    mocks.adapter.sendMessage.mockImplementationOnce(async function* () {
+      yield { type: 'token', data: { content: 'session A partial' } };
+      await gate.promise;
+    });
+    const { useChat } = await import('@/hooks/useChat');
+    const hook = renderHook(
+      ({ activeSession }: { activeSession: string }) => useChat({
+        workspaceId: 'ws-1',
+        sessionId: activeSession,
+      }),
+      { initialProps: { activeSession: 'sess-a' } },
+    );
+
+    let sendPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      sendPromise = hook.result.current.sendMessage('question');
+      await flush();
+    });
+    await act(async () => { hook.rerender({ activeSession: 'sess-b' }); await flush(); });
+    await act(async () => { hook.result.current.stopStreaming(); await flush(); });
+
+    expect(mocks.adapter.abortAgent).toHaveBeenCalledWith('ws-1', 'sess-a');
+    gate.resolve();
+    await act(async () => { await sendPromise; });
   });
 
   it('is a no-op when nothing is streaming', async () => {
