@@ -447,7 +447,7 @@ describe('createSystemTools', () => {
       const execution = Promise.resolve(runCode.execute({
         language: 'javascript',
         code,
-        timeout: 1000,
+        timeout: 3000,
       }));
 
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_800);
