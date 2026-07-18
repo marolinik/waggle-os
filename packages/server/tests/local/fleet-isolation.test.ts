@@ -3,7 +3,7 @@ import Fastify from 'fastify';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentResponse, ToolDefinition } from '@waggle/agent';
+import type { AgentLoopConfig, AgentResponse, ToolDefinition } from '@waggle/agent';
 import { fleetRoutes } from '../../src/local/routes/fleet.js';
 import { AgentRunRegistry } from '../../src/local/agent-run-registry.js';
 import {
@@ -135,7 +135,7 @@ describe('isolated Fleet execution', () => {
       availabilityCheck,
     );
     const fullPool = [...relevantTools, ...irrelevantTools, unavailableTool];
-    let capturedTools: ToolDefinition[] | null = null;
+    let capturedConfig: AgentLoopConfig | null = null;
 
     const server = Fastify({ logger: false });
     server.decorate('localConfig', { dataDir, port: 0, host: '127.0.0.1', litellmUrl: 'http://llm.test' });
@@ -159,8 +159,8 @@ describe('isolated Fleet execution', () => {
       }),
       buildToolsForSession: () => fullPool,
     } as never);
-    server.decorate('agentRunner', async (config: { tools: ToolDefinition[] }) => {
-      capturedTools = config.tools;
+    server.decorate('agentRunner', async (config: AgentLoopConfig) => {
+      capturedConfig = config;
       return { content: 'Done', toolsUsed: [], usage: { inputTokens: 1, outputTokens: 1 } };
     });
     server.decorate('fleetResultRecorder', async ({ run }) => ({
@@ -181,15 +181,26 @@ describe('isolated Fleet execution', () => {
     });
     expect(response.statusCode).toBe(202);
     const { runId } = response.json() as { runId: string };
-    await waitFor(() => capturedTools !== null, 'Fleet runner did not receive its selected tool context');
+    await waitFor(() => capturedConfig !== null, 'Fleet runner did not receive its selected tool context');
 
-    const selected = capturedTools ?? [];
+    const selected = capturedConfig?.tools ?? [];
     expect(availabilityCheck).toHaveBeenCalledOnce();
     expect(selected).toHaveLength(DEFAULT_TURN_TOOL_LIMIT);
     expect(selected.map((tool) => tool.name)).toEqual(
       relevantTools.slice(0, DEFAULT_TURN_TOOL_LIMIT).map((tool) => tool.name),
     );
     expect(measureOpenAiToolSchemaChars(selected)).toBeLessThanOrEqual(DEFAULT_TURN_SCHEMA_CHAR_LIMIT);
+    expect(capturedConfig).toMatchObject({
+      maxTurns: 9,
+      maxToolRounds: 8,
+      maxTokenBudget: 80_000,
+      synthesisReserveTokens: 14_000,
+      toolContextBudget: {
+        maxSingleResultChars: 8_000,
+        recentResultCount: 2,
+        historicalResultChars: 750,
+      },
+    });
     await waitFor(() => registry.get(runId)?.status === 'completed', 'bounded Fleet run did not complete');
     await server.close();
   });

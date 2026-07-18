@@ -8,6 +8,7 @@ import {
   isEnabled,
   listPersonas,
   runAgentLoop,
+  selectAgentRunBudget,
   type AgentResponse,
 } from '@waggle/agent';
 import type {
@@ -217,10 +218,15 @@ async function executeFleetRun(
       message: task,
       preferredToolNames: persona?.tools ?? [],
     }).tools;
+    const taskShape = detectTaskShape(task);
+    const runBudget = selectAgentRunBudget({
+      taskShape: taskShape.type,
+      complexity: taskShape.complexity,
+      selectedToolNames: tools.map(tool => tool.name),
+    });
     orchestrator.setGoalAncestry(buildFleetAncestry(server.workspaceManager.get(run.workspaceId)?.name, goal));
     let systemPrompt: string;
     if (isEnabled('PROMPT_ASSEMBLER')) {
-      const taskShape = detectTaskShape(task);
       const assembled = await orchestrator.buildAssembledPrompt(task, persona, { taskShape });
       systemPrompt = assembled.system + (assembled.responseScaffold ? `\n\n## Response shape\n${assembled.responseScaffold}` : '');
     } else {
@@ -257,7 +263,7 @@ async function executeFleetRun(
       systemPrompt,
       tools,
       messages: [{ role: 'user', content: task }],
-      maxTurns: 10,
+      ...runBudget,
       signal: controller.signal,
       ...(traceRecorder && traceId !== undefined ? {
         traceRecording: { recorder: traceRecorder, handle: { id: traceId, startedAt: Date.now() } },
