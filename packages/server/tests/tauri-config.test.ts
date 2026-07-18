@@ -1026,6 +1026,9 @@ describe('CI/CD Configuration', () => {
     expect(script).toContain('ExpectedSignerThumbprint');
     expect(script).toContain('ExpectedSourceRevision');
     expect(script).toContain('sourceFilesClean');
+    expect(script).toMatch(
+      /\$gitCommand\s*=\s*Get-Command git -CommandType Application -ErrorAction SilentlyContinue\s*\|\s*Select-Object -First 1/,
+    );
     expect(script).toContain('schemaVersion = 2');
     expect(script).toContain('-UseBasicParsing');
     expect(script).toContain('authenticodeStatus');

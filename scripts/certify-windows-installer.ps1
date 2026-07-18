@@ -573,7 +573,8 @@ try {
     $normalizedExpectedSourceRevision = $ExpectedSourceRevision.Trim().ToLowerInvariant()
     Assert-True ($normalizedExpectedSourceRevision -match '^[0-9a-f]{40}$') `
       'Expected source revision must be exactly 40 hexadecimal characters.'
-    $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue
+    $gitCommand = Get-Command git -CommandType Application -ErrorAction SilentlyContinue |
+      Select-Object -First 1
     Assert-True ($null -ne $gitCommand) 'git is required to bind the installer receipt to source.'
     $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
     $revisionOutput = @(& $gitCommand.Source -C $repositoryRoot rev-parse HEAD 2>$null)
