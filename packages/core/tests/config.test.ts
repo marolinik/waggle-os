@@ -169,6 +169,75 @@ describe('WaggleConfig', () => {
     });
   });
 
+  describe('embedding config', () => {
+    const envNames = [
+      'EMBEDDING_PROVIDER',
+      'EMBEDDING_MODEL',
+      'OLLAMA_HOST',
+      'OLLAMA_EMBED_MODEL',
+    ] as const;
+    const originalEnv = new Map<string, string | undefined>();
+
+    beforeEach(() => {
+      originalEnv.clear();
+      for (const name of envNames) {
+        originalEnv.set(name, process.env[name]);
+        delete process.env[name];
+      }
+    });
+
+    afterEach(() => {
+      for (const name of envNames) {
+        const value = originalEnv.get(name);
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    });
+
+    it.each(['', '   '])('treats blank provider override %j as unset', override => {
+      process.env.EMBEDDING_PROVIDER = override;
+      const config = new WaggleConfig(makeTempDir());
+
+      expect(config.getEmbeddingConfig().provider).toBe('auto');
+
+      config.setEmbeddingProvider('inprocess');
+      expect(config.getEmbeddingConfig().provider).toBe('inprocess');
+    });
+
+    it('trims a valid provider override and keeps it authoritative', () => {
+      process.env.EMBEDDING_PROVIDER = ' inprocess ';
+      const config = new WaggleConfig(makeTempDir());
+      config.setEmbeddingProvider('ollama');
+
+      expect(config.getEmbeddingConfig().provider).toBe('inprocess');
+    });
+
+    it('treats blank embedding model and Ollama overrides as unset', () => {
+      const configDir = makeTempDir();
+      fs.writeFileSync(path.join(configDir, 'config.json'), JSON.stringify({
+        defaultModel: 'claude-sonnet-4-6',
+        providers: {},
+        embedding: {
+          provider: 'auto',
+          inprocessModel: 'persisted-inprocess-model',
+          ollamaUrl: 'http://127.0.0.1:11434',
+          ollamaModel: 'persisted-ollama-model',
+        },
+      }));
+      process.env.EMBEDDING_MODEL = ' ';
+      process.env.OLLAMA_HOST = '';
+      process.env.OLLAMA_EMBED_MODEL = '   ';
+
+      expect(new WaggleConfig(configDir).getEmbeddingConfig()).toMatchObject({
+        inprocess: { model: 'persisted-inprocess-model' },
+        ollama: {
+          baseUrl: 'http://127.0.0.1:11434',
+          model: 'persisted-ollama-model',
+        },
+      });
+    });
+  });
+
   describe('Model Pilot config fields', () => {
     let tmpDir: string;
 
