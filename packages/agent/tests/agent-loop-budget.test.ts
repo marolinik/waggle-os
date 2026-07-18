@@ -21,6 +21,16 @@ function jsonResponse(
   } as unknown as Response;
 }
 
+function jsonResponseWithoutUsage(message: Record<string, unknown>): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => ({
+      choices: [{ message, finish_reason: message.tool_calls ? 'tool_calls' : 'stop' }],
+    }),
+  } as unknown as Response;
+}
+
 function researchConfig(
   fetchFn: typeof fetch,
   tool: ToolDefinition,
@@ -247,5 +257,279 @@ describe('bounded agent loop synthesis', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
     expect(result.content).toBe('Budget-aware synthesis.');
     expect(result.usage.inputTokens).toBe(36_000);
+  });
+});
+
+describe('hard request dispatch budget', () => {
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid maxTokenBudget=%s before any provider call',
+    async (maxTokenBudget) => {
+      const fetchFn = vi.fn() as unknown as typeof fetch;
+
+      await expect(runAgentLoop({
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        model: 'test-model',
+        systemPrompt: 'Be concise.',
+        messages: [{ role: 'user', content: 'Answer.' }],
+        tools: [],
+        fetch: fetchFn,
+        maxTokenBudget,
+      })).rejects.toThrow(/maxTokenBudget must be a positive finite number/i);
+
+      expect(fetchFn).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid maxOutputTokens=%s before any provider call',
+    async (maxOutputTokens) => {
+      const fetchFn = vi.fn() as unknown as typeof fetch;
+
+      await expect(runAgentLoop({
+        litellmUrl: 'http://localhost:4000',
+        litellmApiKey: 'test-key',
+        model: 'test-model',
+        systemPrompt: 'Be concise.',
+        messages: [{ role: 'user', content: 'Answer.' }],
+        tools: [],
+        fetch: fetchFn,
+        maxOutputTokens,
+      })).rejects.toThrow(/maxOutputTokens must be a positive finite number/i);
+
+      expect(fetchFn).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects an oversized initial request before any provider call', async () => {
+    const fetchFn = vi.fn() as unknown as typeof fetch;
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'x'.repeat(2_000),
+      messages: [{ role: 'user', content: 'Answer briefly.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxTurns: 3,
+      maxTokenBudget: 100,
+      synthesisReserveTokens: 50,
+      verificationGate: false,
+      skillDistillationGate: false,
+    });
+
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(result.content).toMatch(/token budget/i);
+  });
+
+  it('caps every provider response to the remaining dispatch allowance', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      requestBodies.push(body);
+      if (requestBodies.length === 1) {
+        return jsonResponse({
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            id: 'read_1',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{}' },
+          }],
+        }, 50, 10);
+      }
+      return jsonResponse({ role: 'assistant', content: 'Done.' }, 70, 20);
+    }) as unknown as typeof fetch;
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'short result'),
+    };
+
+    await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Be concise.',
+      messages: [{ role: 'user', content: 'Read the file and answer.' }],
+      tools: [readFile],
+      fetch: fetchFn,
+      maxTurns: 3,
+      maxTokenBudget: 1_000,
+      maxOutputTokens: 900,
+      verificationGate: false,
+      skillDistillationGate: false,
+    });
+
+    const caps = requestBodies.map(body => Number(body.max_tokens));
+    expect(caps).toHaveLength(2);
+    expect(caps.every(cap => Number.isInteger(cap) && cap > 0 && cap <= 900)).toBe(true);
+    expect(caps[1]).toBeLessThan(caps[0]);
+  });
+
+  it('accounts conservatively when the provider omits usage', async () => {
+    const requestBodies: Array<Record<string, unknown>> = [];
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      requestBodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (requestBodies.length === 1) {
+        return jsonResponseWithoutUsage({
+          role: 'assistant',
+          content: '',
+          tool_calls: [{
+            id: 'read_without_usage',
+            type: 'function',
+            function: { name: 'read_file', arguments: '{}' },
+          }],
+        });
+      }
+      return jsonResponseWithoutUsage({ role: 'assistant', content: 'Done without usage.' });
+    }) as unknown as typeof fetch;
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'short result'),
+    };
+
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'S'.repeat(400),
+      messages: [{ role: 'user', content: 'Read the file and answer.' }],
+      tools: [readFile],
+      fetch: fetchFn,
+      maxTurns: 3,
+      maxTokenBudget: 1_000,
+      maxOutputTokens: 800,
+      verificationGate: false,
+      skillDistillationGate: false,
+    });
+
+    const caps = requestBodies.map(body => Number(body.max_tokens));
+    expect(caps).toHaveLength(2);
+    expect(caps[1]).toBeLessThan(caps[0]);
+    expect(result.usage.inputTokens).toBeGreaterThan(0);
+    expect(result.usage.outputTokens).toBeGreaterThan(0);
+  });
+
+  it('does not execute pending tools or issue synthesis after reported usage exhausts the budget', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({
+      role: 'assistant',
+      content: '',
+      tool_calls: [{
+        id: 'must_not_run',
+        type: 'function',
+        function: { name: 'read_file', arguments: '{}' },
+      }],
+    }, 300, 150)) as unknown as typeof fetch;
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'secret'),
+    };
+
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Use evidence.',
+      messages: [{ role: 'user', content: 'Read the file.' }],
+      tools: [readFile],
+      fetch: fetchFn,
+      maxTurns: 5,
+      maxTokenBudget: 400,
+      synthesisReserveTokens: 100,
+      verificationGate: true,
+      skillDistillationGate: true,
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(readFile.execute).not.toHaveBeenCalled();
+    expect(result.content).toMatch(/budget|evidence/i);
+  });
+
+  it('preserves a usable final answer after provider-reported overshoot', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse(
+      { role: 'assistant', content: 'Usable final answer.' },
+      300,
+      150,
+    )) as unknown as typeof fetch;
+
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Answer directly.',
+      messages: [{ role: 'user', content: 'Answer.' }],
+      tools: [],
+      fetch: fetchFn,
+      maxTurns: 3,
+      maxTokenBudget: 400,
+      synthesisReserveTokens: 100,
+      verificationGate: true,
+      skillDistillationGate: true,
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(result.content).toBe('Usable final answer.');
+  });
+
+  it('preserves forced synthesis prose when an exhausted provider adds a phantom tool call', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({
+      role: 'assistant',
+      content: 'Usable forced synthesis.',
+      tool_calls: [{
+        id: 'phantom_after_synthesis',
+        type: 'function',
+        function: { name: 'read_file', arguments: '{}' },
+      }],
+    }, 300, 100)) as unknown as typeof fetch;
+    const readFile: ToolDefinition = {
+      name: 'read_file',
+      description: 'Read a file.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'must not run'),
+    };
+
+    const result = await runAgentLoop({
+      litellmUrl: 'http://localhost:4000',
+      litellmApiKey: 'test-key',
+      model: 'test-model',
+      systemPrompt: 'Answer directly.',
+      messages: [{ role: 'user', content: 'Synthesize.' }],
+      tools: [readFile],
+      fetch: fetchFn,
+      maxTurns: 2,
+      maxToolRounds: 0,
+      maxTokenBudget: 400,
+      synthesisReserveTokens: 100,
+      verificationGate: false,
+      skillDistillationGate: false,
+    });
+
+    expect(fetchFn).toHaveBeenCalledOnce();
+    expect(readFile.execute).not.toHaveBeenCalled();
+    expect(result.content).toBe('Usable forced synthesis.');
+  });
+
+  it('keeps the normal research output cap above the persona acceptance ceiling', async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return jsonResponse({ role: 'assistant', content: 'Research answer.' }, 8_000, 100);
+    }) as unknown as typeof fetch;
+    const webFetch: ToolDefinition = {
+      name: 'web_fetch',
+      description: 'Fetch evidence.',
+      parameters: { type: 'object', properties: {} },
+      execute: vi.fn(async () => 'evidence'),
+    };
+
+    await runAgentLoop(researchConfig(fetchFn, webFetch));
+
+    expect(Number(requestBody?.max_tokens)).toBeGreaterThanOrEqual(8_000);
   });
 });

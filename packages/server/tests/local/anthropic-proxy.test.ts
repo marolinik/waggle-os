@@ -325,6 +325,98 @@ describe('Anthropic Proxy Routes', () => {
     });
   });
 
+  describe('max token forwarding', () => {
+    it.each([
+      {
+        label: 'Anthropic',
+        model: 'anthropic/claude-sonnet-4-6',
+        providerId: 'anthropic',
+        response: {
+          content: [{ type: 'text', text: 'ok' }],
+          model: 'claude-sonnet-4-6',
+          stop_reason: 'end_turn',
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+      {
+        label: 'OpenRouter',
+        model: 'openrouter/openai/gpt-5.4',
+        providerId: 'openrouter',
+        response: {
+          choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        },
+      },
+      {
+        label: 'Gemini',
+        model: 'google/gemini-3.5-flash',
+        providerId: 'google',
+        response: {
+          choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        },
+      },
+      {
+        label: 'non-reasoning direct OpenAI',
+        model: 'openai/gpt-4.1',
+        providerId: 'openai',
+        response: {
+          choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        },
+      },
+    ])('keeps max_tokens for $label requests', async ({ model, providerId, response }) => {
+      server = createTestServer({
+        vaultProviders: { [providerId]: { value: `${providerId}-vault-key` } },
+      });
+      globalThis.fetch = vi.fn(async () => new Response(JSON.stringify(response), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })) as unknown as typeof globalThis.fetch;
+
+      const res = await server.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        payload: {
+          model,
+          messages: [{ role: 'user', content: 'test' }],
+          max_tokens: 321,
+          stream: false,
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      const outbound = JSON.parse(String(vi.mocked(globalThis.fetch).mock.calls[0][1]?.body));
+      expect(outbound.max_tokens).toBe(321);
+      expect(outbound).not.toHaveProperty('max_completion_tokens');
+    });
+
+    it.each(['gpt-5.4', 'openai/o3-mini', 'openai/codex-mini-latest'])(
+      'translates max_tokens for direct OpenAI reasoning model %s',
+      async (model) => {
+        server = createTestServer({
+          vaultProviders: { openai: { value: 'openai-vault-key' } },
+        });
+        globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+          choices: [{ message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }],
+        }), { status: 200, headers: { 'content-type': 'application/json' } })) as unknown as typeof globalThis.fetch;
+
+        const res = await server.inject({
+          method: 'POST',
+          url: '/v1/chat/completions',
+          payload: {
+            model,
+            messages: [{ role: 'user', content: 'test' }],
+            max_tokens: 321,
+            stream: false,
+          },
+        });
+
+        expect(res.statusCode).toBe(200);
+        const outbound = JSON.parse(String(vi.mocked(globalThis.fetch).mock.calls[0][1]?.body));
+        expect(outbound.max_completion_tokens).toBe(321);
+        expect(outbound).not.toHaveProperty('max_tokens');
+      },
+    );
+  });
+
   describe('Docker-independent provider routing', () => {
     it('forwards OpenAI-compatible models directly without LiteLLM', async () => {
       server = createTestServer({

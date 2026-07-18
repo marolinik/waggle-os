@@ -127,6 +127,15 @@ async function forwardCompatibleProvider(
   }
 
   const url = completionEndpoint(directProviderBaseUrl(server, route.providerId));
+  const outboundBody: Record<string, unknown> = { ...body, model: route.model };
+  if (
+    route.providerId === 'openai'
+    && body.max_tokens !== undefined
+    && /^(?:gpt-5|o\d|codex-mini-)/i.test(route.model)
+  ) {
+    outboundBody.max_completion_tokens = body.max_tokens;
+    delete outboundBody.max_tokens;
+  }
   let upstream: Response | null = null;
   let credentialRejected = false;
   for (let index = 0; index < apiKeys.length; index += 1) {
@@ -139,7 +148,7 @@ async function forwardCompatibleProvider(
           Authorization: `Bearer ${apiKey}`,
           ...(body.stream ? { Accept: 'text/event-stream' } : {}),
         },
-        body: JSON.stringify({ ...body, model: route.model }),
+        body: JSON.stringify(outboundBody),
       });
     } catch (error) {
       return reply.status(502).send({

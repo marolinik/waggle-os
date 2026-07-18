@@ -13,6 +13,7 @@ import {
   compactToolContextForModel,
   type ToolContextBudget,
 } from './agent-run-budget.js';
+import { estimateTokens as estimateTextTokens } from './tool-output-compressor.js';
 
 /** Minimal interface for plugin runtime integration (from @waggle/sdk) */
 export interface PluginToolProvider {
@@ -64,6 +65,8 @@ export interface AgentLoopConfig {
   pluginTools?: PluginToolProvider;
   /** Optional maximum token budget (input + output combined). Loop terminates gracefully when exceeded. */
   maxTokenBudget?: number;
+  /** Maximum completion tokens requested from the provider on any one dispatch. */
+  maxOutputTokens?: number;
   /** Optional abort signal — when aborted, the agent loop exits between turns */
   signal?: AbortSignal;
   /** Team governance policies — blocked tools and allowed sources.
@@ -214,6 +217,19 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     onSkillDistillationFire,
   } = config;
 
+  if (
+    config.maxTokenBudget !== undefined
+    && (!Number.isFinite(config.maxTokenBudget) || config.maxTokenBudget < 1)
+  ) {
+    throw new RangeError('maxTokenBudget must be a positive finite number');
+  }
+  if (
+    config.maxOutputTokens !== undefined
+    && (!Number.isFinite(config.maxOutputTokens) || config.maxOutputTokens < 1)
+  ) {
+    throw new RangeError('maxOutputTokens must be a positive finite number');
+  }
+
   logTurnEvent(turnId, {
     stage: 'agent-loop.enter',
     model,
@@ -317,8 +333,37 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
   let toolRoundCount = 0;
   let synthesisForced = false;
   let lastRequestInputTokens = 0;
+  const maxTokenBudget = typeof config.maxTokenBudget === 'number'
+    && Number.isFinite(config.maxTokenBudget)
+    && config.maxTokenBudget > 0
+    ? Math.floor(config.maxTokenBudget)
+    : undefined;
+  const configuredOutputCeiling = config.maxOutputTokens ?? synthesisReserveTokens ?? 8_192;
+  const outputTokenCeiling = Number.isFinite(configuredOutputCeiling) && configuredOutputCeiling > 0
+    ? Math.floor(configuredOutputCeiling)
+    : 8_192;
 
-  const forceSynthesis = (reason: 'tool-round-limit' | 'token-reserve' | 'token-limit'): void => {
+  const budgetStopResponse = (usableContent?: string): AgentResponse => {
+    const used = totalInputTokens + totalOutputTokens;
+    const content = gateState.preservedAnswerForDistillation
+      ?? usableContent?.trim()
+      ?? `Token budget exhausted before another safe provider request (used ${used} tokens, limit ${maxTokenBudget}).`;
+    logTurnEvent(turnId, {
+      stage: 'agent-loop.exit',
+      reason: 'token-budget-exhausted',
+      contentChars: content.length,
+      toolsUsed,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+    });
+    return {
+      content,
+      toolsUsed,
+      usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
+    };
+  };
+
+  const forceSynthesis = (reason: 'tool-round-limit' | 'token-reserve'): void => {
     if (synthesisForced) return;
     synthesisForced = true;
     messages.push({
@@ -356,27 +401,40 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
     const turnOpenAiTools = gateState.verificationCorrectionUsed
       ? openaiTools.filter(tool => tool.function.name !== 'save_memory')
       : openaiTools;
-    const estimatedNextRequestTokens = Math.max(
-      lastRequestInputTokens,
-      Math.ceil((
-        JSON.stringify(requestMessages).length
-        + (!synthesisForced && turnOpenAiTools.length > 0 ? JSON.stringify(turnOpenAiTools).length : 0)
-      ) / 4),
-    );
+    const estimateNextRequestTokens = (): number => {
+      const serializedEstimate = estimateTextTokens(
+        JSON.stringify(requestMessages)
+        + (!synthesisForced && turnOpenAiTools.length > 0 ? JSON.stringify(turnOpenAiTools) : ''),
+      );
+      return synthesisForced
+        ? serializedEstimate
+        : Math.max(lastRequestInputTokens, serializedEstimate);
+    };
+    let estimatedNextRequestTokens = estimateNextRequestTokens();
     if (
       !synthesisForced
       && toolRoundCount > 0
-      && config.maxTokenBudget
+      && maxTokenBudget
       && synthesisReserveTokens
-      && usedBeforeRequest + estimatedNextRequestTokens + synthesisReserveTokens >= config.maxTokenBudget
+      && usedBeforeRequest + estimatedNextRequestTokens + synthesisReserveTokens >= maxTokenBudget
     ) {
       forceSynthesis('token-reserve');
       requestMessages = compactToolContextForModel(messages, toolContextBudget);
+      estimatedNextRequestTokens = estimateNextRequestTokens();
     }
+
+    const outputTokenLimit = maxTokenBudget === undefined
+      ? outputTokenCeiling
+      : Math.min(
+          outputTokenCeiling,
+          Math.floor(maxTokenBudget - usedBeforeRequest - estimatedNextRequestTokens),
+        );
+    if (outputTokenLimit < 1) return budgetStopResponse();
 
     const body: Record<string, unknown> = {
       model,
       messages: requestMessages,
+      max_tokens: outputTokenLimit,
     };
     if (turnOpenAiTools.length > 0 && !synthesisForced) {
       body.tools = turnOpenAiTools;
@@ -489,42 +547,34 @@ export async function runAgentLoop(config: AgentLoopConfig): Promise<AgentRespon
       };
     }
 
+    // Some OpenAI-compatible providers omit usage entirely. Do not interpret
+    // missing counters as free work: fall back to the pre-dispatch input
+    // estimate and a conservative serialization estimate for the response.
+    if (turnInputTokens <= 0) turnInputTokens = estimatedNextRequestTokens;
+    if (turnOutputTokens <= 0) {
+      turnOutputTokens = estimateTextTokens(JSON.stringify(assistantMessage));
+    }
+
     totalInputTokens += turnInputTokens;
     totalOutputTokens += turnOutputTokens;
     lastRequestInputTokens = turnInputTokens;
     retryState = initialRetryState(); // Reset retry counters on success
 
-    // Legacy callers without a synthesis reserve retain the original hard-stop
-    // behavior. Bounded runs reserve a final synthesis request instead of
-    // surfacing an internal budget/max-turn error to the user.
-    if (config.maxTokenBudget && (totalInputTokens + totalOutputTokens) > config.maxTokenBudget) {
-      const used = totalInputTokens + totalOutputTokens;
-      if (synthesisReserveTokens) {
-        if (!synthesisForced && turn + 1 < maxTurns) {
-          forceSynthesis('token-limit');
-          continue;
-        }
-        // Provider usage is known only after a request. Accept a final synthesis
-        // that slightly crosses the estimate; never replace it with an internal
-        // token-budget failure.
-        if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-          return {
-            content: (gateState.preservedAnswerForDistillation ?? allStreamedContent)
-              || 'I gathered evidence but could not complete a reliable synthesis. Please retry the final synthesis.',
-            toolsUsed,
-            usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
-          };
-        }
-      } else {
-        // Issue #4 — if D1 has already fired, the user's answer is the deliverable;
-        // surface it rather than swallowing it under a budget message.
-        return {
-          content: gateState.preservedAnswerForDistillation
-            ?? `Token budget exceeded (used ${used} tokens, limit ${config.maxTokenBudget}).`,
-          toolsUsed,
-          usage: { inputTokens: totalInputTokens, outputTokens: totalOutputTokens },
-        };
-      }
+    // Provider usage is authoritative and known only after the response. Once
+    // the hard budget is exhausted, do not execute pending tools, completion
+    // gates, or a second synthesis request.
+    if (maxTokenBudget !== undefined && (totalInputTokens + totalOutputTokens) >= maxTokenBudget) {
+      const usableContent = assistantMessage.tool_calls?.length && !synthesisForced
+        ? undefined
+        : ((assistantMessage.content ?? '').trim() || allStreamedContent.trim() || undefined);
+      const result = budgetStopResponse(
+        usableContent
+          ?? (synthesisReserveTokens
+            ? 'I gathered evidence but the token budget was exhausted before a reliable final synthesis.'
+            : `Token budget exceeded (used ${totalInputTokens + totalOutputTokens} tokens, limit ${maxTokenBudget}).`),
+      );
+      if (!stream && onToken && result.content) onToken(result.content);
+      return result;
     }
 
     // No tool calls — return the final response
