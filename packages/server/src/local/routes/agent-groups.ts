@@ -21,6 +21,7 @@ import {
 } from '@waggle/agent';
 import type { AgentRunner } from './chat.js';
 import { buildWorkflowFromGroup } from '../../services/agent-group-executor.js';
+import { applyPersonaToolFilter } from '../persona-tool-filter.js';
 import { resolveWorkspaceExecutionRoot } from '../workspace-execution-root.js';
 
 interface AgentGroupMember {
@@ -299,18 +300,6 @@ async function executeGroup(
       }, { once: true });
     }
 
-    const members = group.members.map((member) => {
-      const persona = resolvePersona(member.agentId)!;
-      return {
-        ...member,
-        name: persona.name,
-        role: member.roleInGroup,
-        systemPrompt: persona.systemPrompt,
-        model: persona.modelPreference,
-        tools: persona.tools,
-      };
-    });
-    const workflow: WorkflowTemplate = buildWorkflowFromGroup({ ...group, members }, task);
     const runLoop: AgentRunner = server.agentRunner ?? runAgentLoop;
     let availableTools = server.agentState.allTools;
     let sessionOrchestrator: ReturnType<FastifyInstance['agentState']['createSessionOrchestrator']> | undefined;
@@ -325,6 +314,19 @@ async function executeGroup(
         runContext.workspaceId,
       );
     }
+    const members = group.members.map((member) => {
+      const persona = resolvePersona(member.agentId)!;
+      return {
+        ...member,
+        name: persona.name,
+        role: member.roleInGroup,
+        systemPrompt: persona.systemPrompt,
+        model: persona.modelPreference,
+        tools: applyPersonaToolFilter(availableTools, persona)
+          .map((tool) => tool.name),
+      };
+    });
+    const workflow: WorkflowTemplate = buildWorkflowFromGroup({ ...group, members }, task);
     const orchestrator = new SubagentOrchestrator({
       availableTools,
       runLoop,
