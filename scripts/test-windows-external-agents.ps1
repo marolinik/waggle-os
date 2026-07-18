@@ -15,7 +15,9 @@ $profileVariables = @('USERPROFILE', 'HOME', 'APPDATA', 'LOCALAPPDATA')
 $secretVariables = @(
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
   'OPENAI_API_KEY',
+  'OPENAI_ACCESS_TOKEN',
   'OPENROUTER_API_KEY',
   'GOOGLE_API_KEY',
   'GEMINI_API_KEY',
@@ -28,7 +30,30 @@ $secretVariables = @(
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
   'AWS_SESSION_TOKEN',
-  'HF_TOKEN'
+  'AWS_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'CLOUDSDK_CONFIG',
+  'AZURE_CONFIG_DIR',
+  'KUBECONFIG',
+  'DOCKER_CONFIG',
+  'DOCKER_HOST',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'STRIPE_SECRET_KEY',
+  'DATABASE_URL',
+  'NPM_TOKEN',
+  'HF_TOKEN',
+  'HUGGING_FACE_HUB_TOKEN',
+  'SSH_AUTH_SOCK',
+  'GIT_ASKPASS',
+  'SSH_ASKPASS',
+  'GIT_SSH_COMMAND',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NODE_OPTIONS'
 )
 $runnerVariables = @(
   'WAGGLE_E2E_REAL_HOOKS',
@@ -38,7 +63,8 @@ $runnerVariables = @(
   'WAGGLE_E2E_DATA_DIR',
   'WAGGLE_E2E_PORT',
   'WAGGLE_E2E_BASE_URL',
-  'WAGGLE_E2E_SKIP_LITELLM'
+  'WAGGLE_E2E_SKIP_LITELLM',
+  'WAGGLE_E2E_REUSE_EXISTING_SERVER'
 )
 $environmentToRestore = @($profileVariables + $secretVariables + $runnerVariables | Select-Object -Unique)
 
@@ -106,6 +132,7 @@ try {
   $null = New-Item -ItemType Directory -Path $hookProfile -Force
   foreach ($name in $secretVariables) { Set-ProcessEnvironment -Name $name -Value $null }
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_SKIP_LITELLM' -Value '1'
+  Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'
   Set-ProcessEnvironment -Name 'WAGGLE_E2E_TEMP_ROOT' -Value $runRoot
 
   Push-Location $repoRoot

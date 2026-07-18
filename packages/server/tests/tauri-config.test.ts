@@ -1084,6 +1084,27 @@ describe('CI/CD Configuration', () => {
       .toHaveLength(1);
   });
 
+  it('guards the real Windows external-agent lane from ambient authority and server reuse', () => {
+    const script = fs.readFileSync(
+      path.join(ROOT, 'scripts', 'test-windows-external-agents.ps1'),
+      'utf-8',
+    );
+
+    for (const name of [
+      'CLAUDE_CODE_OAUTH_TOKEN', 'OPENAI_ACCESS_TOKEN', 'GITHUB_TOKEN',
+      'STRIPE_SECRET_KEY', 'DATABASE_URL', 'SSH_AUTH_SOCK', 'GIT_ASKPASS',
+      'HTTPS_PROXY', 'AWS_SHARED_CREDENTIALS_FILE',
+      'GOOGLE_APPLICATION_CREDENTIALS', 'KUBECONFIG', 'DOCKER_CONFIG',
+      'NODE_OPTIONS',
+    ]) {
+      expect(script, name).toContain(`'${name}'`);
+    }
+    expect(script).toContain("'WAGGLE_E2E_REUSE_EXISTING_SERVER'");
+    expect(script).toContain(
+      "Set-ProcessEnvironment -Name 'WAGGLE_E2E_REUSE_EXISTING_SERVER' -Value '0'",
+    );
+  });
+
   it('release workflow builds packages before bundling the desktop sidecar', () => {
     // Release builds must follow the same package -> sidecar ordering as the
     // PR Tauri verification lane, otherwise tag artifacts can ship stale or

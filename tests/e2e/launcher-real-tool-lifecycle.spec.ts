@@ -14,7 +14,9 @@ const SAFE_VERSION_ARGS: Partial<Record<typeof TOOL_IDS[number], string[]>> = {
 const SECRET_ENV_NAMES = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
+  'CLAUDE_CODE_OAUTH_TOKEN',
   'OPENAI_API_KEY',
+  'OPENAI_ACCESS_TOKEN',
   'OPENROUTER_API_KEY',
   'GOOGLE_API_KEY',
   'GEMINI_API_KEY',
@@ -27,7 +29,30 @@ const SECRET_ENV_NAMES = [
   'AWS_ACCESS_KEY_ID',
   'AWS_SECRET_ACCESS_KEY',
   'AWS_SESSION_TOKEN',
+  'AWS_PROFILE',
+  'AWS_CONFIG_FILE',
+  'AWS_SHARED_CREDENTIALS_FILE',
+  'GOOGLE_APPLICATION_CREDENTIALS',
+  'CLOUDSDK_CONFIG',
+  'AZURE_CONFIG_DIR',
+  'KUBECONFIG',
+  'DOCKER_CONFIG',
+  'DOCKER_HOST',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'STRIPE_SECRET_KEY',
+  'DATABASE_URL',
+  'NPM_TOKEN',
   'HF_TOKEN',
+  'HUGGING_FACE_HUB_TOKEN',
+  'SSH_AUTH_SOCK',
+  'GIT_ASKPASS',
+  'SSH_ASKPASS',
+  'GIT_SSH_COMMAND',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'ALL_PROXY',
+  'NODE_OPTIONS',
 ] as const;
 
 type DetectedTool = {
@@ -179,6 +204,10 @@ test.describe('Launcher real Windows supported-route lifecycle', () => {
       'Use scripts/test-windows-external-agents.ps1 to run the guarded real-tool lane.',
     );
     assertTemporaryDataDir();
+    expect(
+      process.env.WAGGLE_E2E_REUSE_EXISTING_SERVER,
+      'guarded runner must forbid reuse of a pre-existing app server',
+    ).toBe('0');
     expect(
       SECRET_ENV_NAMES.filter(name => Boolean(process.env[name])),
       'provider and cloud credentials must be scrubbed by the guarded runner',
